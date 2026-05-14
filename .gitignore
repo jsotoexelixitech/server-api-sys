@@ -1,0 +1,34 @@
+# Dependencias
+node_modules/
+
+# Compilado
+dist/
+
+# Logs
+logs/
+*.log
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+
+# Variables de entorno (NUNCA subir)
+.env
+.env.local
+.env.*.local
+
+# Cobertura de tests
+coverage/
+.nyc_output/
+
+# Archivos de OS
+.DS_Store
+Thumbs.db
+
+# IDE
+.vscode/*
+!.vscode/extensions.json
+.idea/
+
+# Temporales
+*.tmp
+*.temp

@@ -1,0 +1,75 @@
+### =============================================
+### POST /api/v1/valrep/planes/v2
+### Equivale al endpoint Express: POST /api/v1/valrep/planes/v2
+### Corre el NestJS en :3001 antes de usar estos ejemplos
+### =============================================
+
+### 1. Caso base: ramo + productor + tipo + usuario (sin item ni entidad)
+POST http://localhost:3001/api/v1/valrep/planes/v2
+Content-Type: application/json
+
+{
+  "cramo": 6,
+  "cproductor": 12345,
+  "ctipo": 1,
+  "cusuario": "355"
+}
+
+###
+
+### 2. Con placa nacional (bnacional = true porque iplaca = 'B')
+POST http://localhost:3001/api/v1/valrep/planes/v2
+Content-Type: application/json
+
+{
+  "cramo": 6,
+  "cproductor": 12345,
+  "ctipo": 1,
+  "cusuario": "355",
+  "iplaca": "B"
+}
+
+###
+
+### 3. Filtrado por item + entidad
+POST http://localhost:3001/api/v1/valrep/planes/v2
+Content-Type: application/json
+
+{
+  "cramo": 18,
+  "cproductor": 99999,
+  "ctipo": 2,
+  "cusuario": "355",
+  "citem": "001",
+  "centidad": "LA"
+}
+
+###
+
+### 4. Entidad general (centidad = 'G' → citem y centidad van null al SP)
+POST http://localhost:3001/api/v1/valrep/planes/v2
+Content-Type: application/json
+
+{
+  "cramo": 6,
+  "cproductor": 12345,
+  "ctipo": 1,
+  "cusuario": "355",
+  "centidad": "G"
+}
+
+###
+
+### 5. Validación: body inválido (falta cramo, cusuario) → debe responder 400
+POST http://localhost:3001/api/v1/valrep/planes/v2
+Content-Type: application/json
+
+{
+  "cproductor": 12345,
+  "ctipo": 1
+}
+
+###
+
+### Ver Swagger
+GET http://localhost:3001/docs

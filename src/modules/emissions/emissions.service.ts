@@ -1,0 +1,207 @@
+import {
+  Injectable,
+  InternalServerErrorException,
+  Logger,
+  BadRequestException,
+  UnauthorizedException,
+} from '@nestjs/common';
+import { MssqlService } from '../../database/mssql.service';
+
+@Injectable()
+export class EmissionsService {
+  private readonly logger = new Logger(EmissionsService.name);
+
+  constructor(private readonly db: MssqlService) {}
+
+  // ── Búsqueda de vehículo en vhcerti ──────────────────────────────────────
+
+  private async searchVehicle(field: 'xplaca' | 'xsercar', value: string) {
+    const T = this.db.types;
+
+    const req = this.db.request();
+    req.input('value', T.VarChar(60), value.trim().toUpperCase());
+    const result = await req.query(`
+      SELECT TOP 1 *
+      FROM vhcerti
+      WHERE ${field} = @value
+        AND istatcer != 'A'
+    `);
+
+    const vehicle = result.recordset ?? [];
+    if (vehicle.length === 0) return { status: false };
+
+    // Verificar vigencia en adpoliza
+    const polReq = this.db.request();
+    polReq.input('cnpoliza', T.VarChar(20), String(vehicle[0]['cnpoliza'] ?? ''));
+    const polResult = await polReq.query(`
+      SELECT TOP 1 fhasta, cnpoliza
+      FROM adpoliza
+      WHERE cnpoliza = @cnpoliza
+        AND (iestado != 'N' OR istatpol != 'A')
+    `);
+
+    if (polResult.recordset.length > 0) {
+      vehicle[0] = { ...vehicle[0], fhasta: polResult.recordset[0]['fhasta'] };
+      return {
+        status: true,
+        message: `El vehículo ya tiene una póliza vigente (${field === 'xplaca' ? 'PLACA' : 'SERIAL DE CARROCERÍA'})`,
+        vehicle: vehicle[0],
+      };
+    }
+
+    return { status: false, vehicle: vehicle[0] };
+  }
+
+  // ── POST /api/v1/emissions/automobile/vehicle ─────────────────────────────
+
+  async searchByPlate(xplaca: string) {
+    try {
+      return await this.searchVehicle('xplaca', xplaca);
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : String(err);
+      this.logger.error(`searchByPlate: ${msg}`);
+      throw new InternalServerErrorException('Error al buscar vehículo por placa.');
+    }
+  }
+
+  // ── POST /api/v1/emissions/automobile/serial ──────────────────────────────
+
+  async searchBySerial(xsercar: string) {
+    try {
+      return await this.searchVehicle('xsercar', xsercar);
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : String(err);
+      this.logger.error(`searchBySerial: ${msg}`);
+      throw new InternalServerErrorException('Error al buscar vehículo por serial.');
+    }
+  }
+
+  // ── POST /api/v1/external/validateEmissionPerson ─────────────────────────
+
+  async validateEmissionPerson(body: Record<string, unknown>) {
+    const req = this.db.request();
+    const T = this.db.types;
+    req.input('cramo',        T.Int,          body.cramo);
+    req.input('cplan',        T.VarChar(10),  body.plan);
+    req.input('femision',     T.Date,         body.femision);
+    req.input('xrif_titular', T.Numeric(9),   body.rif_titular);
+    req.input('fnac_titular', T.DateTime,     body.fnac_titular);
+    try {
+      await req.execute('speeValidatePersonGeneral');
+      return { status: true, message: 'Persona válida para emisión.' };
+    } catch (err) {
+      // El SP puede lanzar error de negocio — lo devolvemos como status:false (no como 500)
+      const msg = err instanceof Error ? err.message : String(err);
+      this.logger.warn(`validateEmissionPerson (SP validation error): ${msg}`);
+      return { status: false, error: msg };
+    }
+  }
+
+  // ── POST /api/v1/external/validateEmissionAuto ────────────────────────────
+
+  async validateEmissionAuto(body: Record<string, unknown>) {
+    const req = this.db.request();
+    const T = this.db.types;
+    req.input('cplan',   T.VarChar(10), body.plan);
+    req.input('xplaca',  T.VarChar(15), body.placa);
+    req.input('xsercar', T.VarChar(60), body.serial_carroceria);
+    req.input('xsermot', T.VarChar(60), body.serial_motor);
+    try {
+      await req.execute('speeValidateAutomovilGeneral');
+      return { status: true, message: 'Vehículo válido para emisión.' };
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : String(err);
+      this.logger.warn(`validateEmissionAuto (SP validation error): ${msg}`);
+      return { status: false, error: msg };
+    }
+  }
+
+  // ── POST /api/v1/external/createEmissionAuto ──────────────────────────────
+
+  async createEmissionAuto(apikey: string, body: Record<string, unknown>) {
+    try {
+      const T = this.db.types;
+
+      // 1. Autenticar token contra maclient_api
+      const authReq = this.db.request();
+      authReq.input('xtoken', T.VarChar(100), apikey);
+      const authResult = await authReq.query(`
+        SELECT TOP 1 * FROM maclient_api WHERE xtoken = @xtoken
+      `);
+      if (!authResult.recordset.length) {
+        throw new UnauthorizedException('Token no encontrado.');
+      }
+      const canal = authResult.recordset[0];
+
+      // 2. INSERT parametrizado en eePoliza_Automovil_RCV2
+      const ins = this.db.request();
+      const b = body as Record<string, unknown>;
+
+      const fields: Record<string, { type: unknown; value: unknown }> = {
+        cnpoliza_rel:      { type: T.VarChar(20),    value: b.cnpoliza_rel ?? null },
+        cramo:             { type: T.Int,             value: b.cramo ?? 18 },
+        cplan:             { type: T.VarChar(10),     value: b.cplan ?? b.plan },
+        femision:          { type: T.Date,            value: b.femision },
+        fdesde:            { type: T.Date,            value: b.fdesde },
+        fhasta:            { type: T.Date,            value: b.fhasta },
+        // Tomador
+        xrif_tomador:      { type: T.VarChar(15),     value: b.xrif_tomador ?? b.rif_tomador },
+        xnombre_tomador:   { type: T.VarChar(60),     value: b.xnombre_tomador },
+        xapellido_tomador: { type: T.VarChar(60),     value: b.xapellido_tomador },
+        isexo_tomador:     { type: T.Char(1),         value: b.isexo_tomador },
+        fnac_tomador:      { type: T.Date,            value: b.fnac_tomador },
+        iestado_civil_tomador: { type: T.Char(1),     value: b.iestado_civil_tomador },
+        // Titular
+        xrif_titular:      { type: T.VarChar(15),     value: b.xrif_titular ?? b.rif_titular },
+        xnombre_titular:   { type: T.VarChar(60),     value: b.xnombre_titular },
+        xapellido_titular: { type: T.VarChar(60),     value: b.xapellido_titular },
+        isexo_titular:     { type: T.Char(1),         value: b.isexo_titular },
+        fnac_titular:      { type: T.DateTime,        value: b.fnac_titular },
+        // Vehículo
+        cmarca:            { type: T.VarChar(4),      value: b.cmarca ?? b.marca },
+        cmodelo:           { type: T.VarChar(4),      value: b.cmodelo ?? b.modelo },
+        cversion:          { type: T.VarChar(4),      value: b.cversion ?? b.version },
+        cano:              { type: T.Int,             value: b.cano ?? b.fano },
+        xplaca:            { type: T.VarChar(15),     value: b.xplaca ?? b.placa },
+        xsercar:           { type: T.VarChar(60),     value: b.xsercar ?? b.serial_carroceria },
+        xsermot:           { type: T.VarChar(60),     value: b.xsermot ?? b.serial_motor },
+        xcolor:            { type: T.VarChar(30),     value: b.xcolor ?? b.color },
+        ccategoria_uso:    { type: T.Int,             value: b.ccategoria_uso },
+        // Financiero
+        mprima:            { type: T.Numeric(18, 2),  value: b.mprima },
+        mprima_ext:        { type: T.Numeric(18, 2),  value: b.mprima_ext ?? b.mprimaext },
+        ptasa:             { type: T.Numeric(18, 4),  value: b.ptasa },
+        // Canal / origen
+        ifuente:           { type: T.VarChar(10),     value: b.ifuente ?? canal['ifuente'] ?? 'API' },
+        cprog:             { type: T.VarChar(10),     value: b.cprog ?? canal['cprog'] ?? null },
+        api:               { type: T.VarChar(100),    value: b.api ?? null },
+        method:            { type: T.VarChar(10),     value: b.method ?? 'POST' },
+        fingreso:          { type: T.DateTime,        value: new Date() },
+      };
+
+      const cols = Object.keys(fields);
+      cols.forEach((col) => ins.input(col, (fields[col] as any).type, (fields[col] as any).value));
+
+      const colList = cols.join(', ');
+      const valList = cols.map((c) => `@${c}`).join(', ');
+      const insertResult = await ins.query(`
+        INSERT INTO eePoliza_Automovil_RCV2 (${colList})
+        OUTPUT INSERTED.cnpoliza, INSERTED.fanopol, INSERTED.fmespol
+        VALUES (${valList})
+      `);
+
+      const row = insertResult.recordset?.[0] ?? {};
+      return {
+        message: 'Emisión registrada exitosamente.',
+        cnpoliza:  row['cnpoliza'],
+        fanopol:   row['fanopol'],
+        fmespol:   row['fmespol'],
+      };
+    } catch (err) {
+      if (err instanceof UnauthorizedException) throw err;
+      const msg = err instanceof Error ? err.message : String(err);
+      this.logger.error(`createEmissionAuto: ${msg}`);
+      throw new InternalServerErrorException('Error al crear emisión.');
+    }
+  }
+}
