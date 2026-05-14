@@ -13,12 +13,12 @@ module.exports = {
       instances:  1,
 
       // ── Entorno de producción ────────────────────────────────────────────
-      // Las credenciales de BD y demás viven en el archivo .env del servidor.
-      // Aquí solo sobreescribimos lo que cambia entre dev y prod.
+      // PORT, credenciales de BD y demás viven en el archivo .env del servidor.
+      // ecosystem.config.js solo fuerza NODE_ENV=production para no hardcodear
+      // el puerto aquí (cambiarlo en .env es suficiente).
       env_production: {
-        NODE_ENV:      'production',
-        PORT:          3001,
-        SWAGGER_PATH:  'docs',         // vacío ('') para deshabilitar Swagger en prod
+        NODE_ENV:     'production',
+        SWAGGER_PATH: 'docs',   // vacío ('') para deshabilitar Swagger en prod
       },
 
       // ── Comportamiento ante caídas ───────────────────────────────────────
