@@ -316,6 +316,67 @@ export class ValrepService {
     return planes;
   }
 
+  // ── getLists ───────────────────────────────────────────────────────────────
+  // Replica el endpoint POST /api/v1/valrep/getLists de La Mundial.
+  // PARENTESCOS se lee de maparent; el resto son valores fijos del dominio.
+
+  private static readonly STATIC_LISTS: Record<string, { cvalor: string; xdescripcion: string }[]> = {
+    SEXO: [
+      { cvalor: 'M', xdescripcion: 'Masculino' },
+      { cvalor: 'F', xdescripcion: 'Femenino' },
+    ],
+    EDOCIVIL: [
+      { cvalor: 'S', xdescripcion: 'Soltero(a)' },
+      { cvalor: 'C', xdescripcion: 'Casado(a)' },
+      { cvalor: 'D', xdescripcion: 'Divorciado(a)' },
+      { cvalor: 'V', xdescripcion: 'Viudo(a)' },
+      { cvalor: 'U', xdescripcion: 'Unión Estable de Hecho' },
+    ],
+    FRECUENCIAS: [
+      { cvalor: 'A', xdescripcion: 'Anual' },
+      { cvalor: 'S', xdescripcion: 'Semestral' },
+      { cvalor: 'T', xdescripcion: 'Trimestral' },
+      { cvalor: 'M', xdescripcion: 'Mensual' },
+    ],
+    MATIPCANAL: [
+      { cvalor: '1', xdescripcion: 'Directo' },
+      { cvalor: '2', xdescripcion: 'Broker' },
+      { cvalor: '3', xdescripcion: 'Banca-Seguros' },
+    ],
+  };
+
+  async getLists(cdominio: string): Promise<{ cvalor: string; xdescripcion: string }[]> {
+    const domain = cdominio.toUpperCase().trim();
+
+    // PARENTESCOS: viene de la BD (maparent)
+    if (domain === 'PARENTESCOS') {
+      try {
+        const req = this.db.request();
+        const result = await req.query<{ cvalor: string; xdescripcion: string }>(`
+          SELECT
+            TRIM(cparentesco)  AS cvalor,
+            TRIM(xparentesco)  AS xdescripcion
+          FROM maparent
+          ORDER BY cparentesco
+        `);
+        return result.recordset ?? [];
+      } catch (err) {
+        const msg = err instanceof Error ? err.message : String(err);
+        this.logger.error(`getLists PARENTESCOS: ${msg}`);
+        throw new InternalServerErrorException('Error al obtener parentescos.');
+      }
+    }
+
+    // Resto: listas estáticas del dominio de seguros
+    const static_list = ValrepService.STATIC_LISTS[domain];
+    if (!static_list) {
+      throw new BadRequestException(
+        `Dominio no permitido: ${domain}. Dominios válidos: SEXO, EDOCIVIL, PARENTESCOS, FRECUENCIAS, MATIPCANAL`,
+      );
+    }
+    return static_list;
+  }
+
   private async enrichWithCoberturas(planes: PlanItem[]): Promise<PlanItem[]> {
     for (const plan of planes) {
       try {

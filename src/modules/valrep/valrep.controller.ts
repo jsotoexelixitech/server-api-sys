@@ -62,6 +62,48 @@ export class ValrepController {
     return { status: true, data: { cities } };
   }
 
+  // ── POST /api/v1/valrep/getLists ───────────────────────────────────────
+
+  @Post('getLists')
+  @HttpCode(HttpStatus.OK)
+  @ApiOperation({
+    summary: 'Lista de catálogo genérico',
+    description:
+      'Replica el endpoint `POST /api/v1/valrep/getLists` de La Mundial. ' +
+      'PARENTESCOS se lee de `maparent` en Sis2000. ' +
+      'SEXO, EDOCIVIL, FRECUENCIAS y MATIPCANAL son valores fijos del dominio de seguros.',
+  })
+  @ApiBody({
+    schema: {
+      example: { cdominio: 'SEXO', xtipo_orden: 'ASC' },
+      properties: {
+        cdominio:    { type: 'string', enum: ['SEXO', 'EDOCIVIL', 'PARENTESCOS', 'FRECUENCIAS', 'MATIPCANAL'] },
+        xtipo_orden: { type: 'string', enum: ['ASC', 'DESC'], description: 'Ignorado (siempre ASC)' },
+      },
+      required: ['cdominio'],
+    },
+  })
+  @ApiResponse({
+    status: 200,
+    schema: {
+      example: {
+        status: true,
+        data: {
+          listas: [
+            { cvalor: 'M', xdescripcion: 'Masculino' },
+            { cvalor: 'F', xdescripcion: 'Femenino' },
+          ],
+        },
+      },
+    },
+  })
+  @ApiResponse({ status: 400, description: 'Dominio no permitido' })
+  @Api500()
+  async getLists(@Body() body: { cdominio?: string; xtipo_orden?: string }) {
+    const listas = await this.valrepService.getLists(body.cdominio ?? '');
+    return { status: true, data: { listas } };
+  }
+
   // ── POST /api/v1/valrep/planes/v2 ──────────────────────────────────────
 
   @Post('planes/v2')
