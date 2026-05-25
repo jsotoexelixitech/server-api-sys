@@ -317,10 +317,12 @@ export class ValrepService {
   }
 
   // ── getLists ───────────────────────────────────────────────────────────────
-  // Replica el endpoint POST /api/v1/valrep/getLists de La Mundial.
-  // PARENTESCOS se lee de maparent; el resto son valores fijos del dominio.
+  // Proxy hacia La Mundial QA. Si La Mundial falla, usa fallback de Sis2000
+  // (PARENTESCOS) o valores fijos del dominio (SEXO, EDOCIVIL, FRECUENCIAS).
 
-  private static readonly STATIC_LISTS: Record<string, { cvalor: string; xdescripcion: string }[]> = {
+  private static readonly ALLOWED_DOMAINS = ['SEXO', 'EDOCIVIL', 'PARENTESCOS', 'FRECUENCIAS', 'MATIPCANAL'];
+
+  private static readonly FALLBACK_LISTS: Record<string, { cvalor: string; xdescripcion: string }[]> = {
     SEXO: [
       { cvalor: 'M', xdescripcion: 'Masculino' },
       { cvalor: 'F', xdescripcion: 'Femenino' },
@@ -348,33 +350,77 @@ export class ValrepService {
   async getLists(cdominio: string): Promise<{ cvalor: string; xdescripcion: string }[]> {
     const domain = cdominio.toUpperCase().trim();
 
-    // PARENTESCOS: viene de la BD (maparent)
-    if (domain === 'PARENTESCOS') {
-      try {
-        const req = this.db.request();
-        const result = await req.query<{ cvalor: string; xdescripcion: string }>(`
-          SELECT
-            TRIM(cparentesco)  AS cvalor,
-            TRIM(xparentesco)  AS xdescripcion
-          FROM maparent
-          ORDER BY cparentesco
-        `);
-        return result.recordset ?? [];
-      } catch (err) {
-        const msg = err instanceof Error ? err.message : String(err);
-        this.logger.error(`getLists PARENTESCOS: ${msg}`);
-        throw new InternalServerErrorException('Error al obtener parentescos.');
-      }
-    }
-
-    // Resto: listas estáticas del dominio de seguros
-    const static_list = ValrepService.STATIC_LISTS[domain];
-    if (!static_list) {
+    if (!ValrepService.ALLOWED_DOMAINS.includes(domain)) {
       throw new BadRequestException(
-        `Dominio no permitido: ${domain}. Dominios válidos: SEXO, EDOCIVIL, PARENTESCOS, FRECUENCIAS, MATIPCANAL`,
+        `Dominio no permitido: ${domain}. Válidos: ${ValrepService.ALLOWED_DOMAINS.join(', ')}`,
       );
     }
-    return static_list;
+
+    // 1. Intentar La Mundial QA primero
+    const baseUrl = (process.env.LAMUNDIAL_BASE_URL ?? 'https://qaapisys2000.lamundialdeseguros.com').replace(/\/$/, '');
+    const apikey  = process.env.LAMUNDIAL_APIKEY ?? '';
+
+    try {
+      const res = await fetch(`${baseUrl}/api/v1/valrep/getLists`, {
+        method:  'POST',
+        headers: { 'Content-Type': 'application/json', ...(apikey ? { apikey } : {}) },
+        body:    JSON.stringify({ cdominio: domain, xtipo_orden: 'ASC' }),
+        signal:  AbortSignal.timeout(10_000),
+      });
+
+      if (!res.ok) throw new Error(`La Mundial respondió HTTP ${res.status}`);
+
+      const json: any = await res.json();
+
+      // La Mundial puede responder con data.listas, data.list, data.items o data directo
+      const raw: any[] = json?.data?.listas ?? json?.data?.list ?? json?.data?.items ?? json?.data ?? [];
+
+      const items = (Array.isArray(raw) ? raw : [])
+        .map((i: any) => ({
+          cvalor:       String(i?.cvalor ?? i?.citem ?? i?.codigo ?? i?.cdominio_item ?? ''),
+          xdescripcion: String(i?.xdescripcion ?? i?.xitem ?? i?.descripcion ?? i?.xdescripcion_l ?? ''),
+        }))
+        .filter((i) => i.cvalor !== '' && i.xdescripcion !== '');
+
+      if (items.length > 0) {
+        this.logger.log(`getLists ${domain}: ${items.length} items de La Mundial`);
+        return items;
+      }
+
+      throw new Error('La Mundial devolvió lista vacía');
+
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : String(err);
+      this.logger.warn(`getLists ${domain}: La Mundial no disponible (${msg}), usando fallback`);
+
+      // 2. Fallback PARENTESCOS → Sis2000 (maparent)
+      if (domain === 'PARENTESCOS') {
+        try {
+          const req = this.db.request();
+          const result = await req.query<{ cvalor: string; xdescripcion: string }>(`
+            SELECT TRIM(cparentesco) AS cvalor, TRIM(xparentesco) AS xdescripcion
+            FROM maparent ORDER BY cparentesco
+          `);
+          const rows = result.recordset ?? [];
+          if (rows.length > 0) {
+            this.logger.log(`getLists PARENTESCOS: ${rows.length} items de Sis2000 (fallback)`);
+            return rows;
+          }
+        } catch (dbErr) {
+          const dbMsg = dbErr instanceof Error ? dbErr.message : String(dbErr);
+          this.logger.error(`getLists PARENTESCOS fallback DB: ${dbMsg}`);
+        }
+      }
+
+      // 3. Fallback estático
+      const fallback = ValrepService.FALLBACK_LISTS[domain];
+      if (fallback) {
+        this.logger.warn(`getLists ${domain}: usando valores fijos como último recurso`);
+        return fallback;
+      }
+
+      throw new InternalServerErrorException(`No se pudo obtener la lista ${domain}.`);
+    }
   }
 
   private async enrichWithCoberturas(planes: PlanItem[]): Promise<PlanItem[]> {
