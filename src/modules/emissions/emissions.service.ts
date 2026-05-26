@@ -2,7 +2,6 @@ import {
   Injectable,
   InternalServerErrorException,
   Logger,
-  UnauthorizedException,
 } from '@nestjs/common';
 import { MssqlService } from '../../database/mssql.service';
 
@@ -120,16 +119,27 @@ export class EmissionsService {
     try {
       const T = this.db.types;
 
-      // 1. Autenticar token contra maclient_api
+      // 1. Buscar token en maclient_api para obtener metadatos del canal.
+      //    Si no existe, se usan valores por defecto (el token puede ser el
+      //    LAMUNDIAL_APIKEY externo que no está registrado localmente).
       const authReq = this.db.request();
       authReq.input('xtoken', T.VarChar(100), apikey);
       const authResult = await authReq.query(`
         SELECT TOP 1 * FROM maclient_api WHERE xtoken = @xtoken
       `);
-      if (!authResult.recordset.length) {
-        throw new UnauthorizedException('Token no encontrado.');
-      }
-      const canal = authResult.recordset[0];
+      const canal: Record<string, unknown> = authResult.recordset.length
+        ? authResult.recordset[0]
+        : {
+            cproductor:   parseInt(process.env.LAMUNDIAL_PRODUCTOR ?? '80080', 10),
+            xcanal_venta: 'ExelixiTech-RCV',
+            corigen_rel:  'WE',
+            ifuente_api:  'API',
+            ifuente:      'API',
+            cprog:        'eePoliza_AutoGe',
+            ctipocanal:   null,
+            ccanalalt:    null,
+            cscanalalt:   null,
+          };
 
       const b = body;
 
@@ -240,7 +250,6 @@ export class EmissionsService {
         fmespol,
       };
     } catch (err) {
-      if (err instanceof UnauthorizedException) throw err;
       const msg = err instanceof Error ? err.message : String(err);
       this.logger.error(`createEmissionAuto: ${msg}`);
       throw new InternalServerErrorException(`Error al crear emisión: ${msg}`);
