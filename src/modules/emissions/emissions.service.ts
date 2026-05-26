@@ -234,7 +234,9 @@ export class EmissionsService {
       const ncuota    = (row['qcuotas'] ?? row['ncuota']) as number | undefined;
 
       const pdfBase   = (process.env.POLICY_PDF_URL ?? '').replace(/\/$/, '');
-      const urlpoliza = cnpoliza && fanopol != null && fmespol != null
+      // Solo construir la URL si la base está configurada; sin base se retorna vacío
+      // para que el frontend no intente abrir una URL relativa rota.
+      const urlpoliza = pdfBase && cnpoliza && fanopol != null && fmespol != null
         ? `${pdfBase}/${cnpoliza}/${fanopol}/${fmespol}/`
         : '';
 
