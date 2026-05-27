@@ -1,4 +1,5 @@
 import {
+  BadRequestException,
   Injectable,
   InternalServerErrorException,
   Logger,
@@ -143,6 +144,46 @@ export class EmissionsService {
 
       const b = body;
 
+      // 1.1 Validaciones de negocio alineadas con QA La Mundial:
+      // evitar emisión con campos críticos faltantes.
+      const requiredFields: Array<[string, unknown]> = [
+        ['plan', b['cplan'] ?? b['plan']],
+        ['fecha_emision', b['fecha_emision'] ?? b['femision']],
+        ['fdesde', b['fdesde']],
+        ['fhasta', b['fhasta']],
+        ['fnac_tomador', b['fnac_tomador']],
+        ['cestado_tomador', b['estado_tomador'] ?? b['cestado_tomador']],
+        ['cciudad_tomador', b['ciudad_tomador'] ?? b['cciudad_tomador']],
+        ['iplaca', b['iplaca']],
+        ['iestado_civil_tomador', b['iestado_civil_tomador'] ?? b['estado_civil_tomador']],
+      ];
+
+      const missing = requiredFields
+        .filter(([, value]) => value == null || String(value).trim() === '')
+        .map(([name]) => name);
+
+      if (missing.length > 0) {
+        throw new BadRequestException(
+          `Parámetros de entrada inválidos. Faltan: ${missing.join(', ')}`,
+        );
+      }
+
+      const isoDate = /^\d{4}-\d{2}-\d{2}$/;
+      const dateChecks: Array<[string, unknown]> = [
+        ['fecha_emision', b['fecha_emision'] ?? b['femision']],
+        ['fdesde', b['fdesde']],
+        ['fhasta', b['fhasta']],
+        ['fnac_tomador', b['fnac_tomador']],
+      ];
+      const badDates = dateChecks
+        .filter(([, value]) => typeof value !== 'string' || !isoDate.test(value))
+        .map(([name]) => name);
+      if (badDates.length > 0) {
+        throw new BadRequestException(
+          `Formato de fecha inválido (YYYY-MM-DD): ${badDates.join(', ')}`,
+        );
+      }
+
       // 2. Si el canal es de tipo 'A', tomar datos del canal del token
       const ctipocanal = (b['ctipocanal'] ?? (canal['ctipocanal'] === 'A' ? canal['ctipocanal'] : null)) as string | null;
       const ccanalalt  = (b['ccanalalt']  ?? (canal['ctipocanal'] === 'A' ? canal['ccanalalt']  : null)) as number | null;
@@ -161,7 +202,7 @@ export class EmissionsService {
         xnombre_tomador:       { type: T.NVarChar(250),   value: b['nombre_tomador'] },
         xapellido_tomador:     { type: T.NVarChar(250),   value: b['apellido_tomador'] },
         isexo_tomador:         { type: T.Char(1),         value: b['sexo_tomador'] ?? b['isexo_tomador'] },
-        iestado_civil_tomador: { type: T.Char(1),         value: b['estado_civil_tomador'] ?? null },
+        iestado_civil_tomador: { type: T.Char(1),         value: b['iestado_civil_tomador'] ?? b['estado_civil_tomador'] ?? null },
         fnac_tomador:          { type: T.Date,            value: b['fnac_tomador'] },
         cestado_tomador:       { type: T.NVarChar(100),   value: b['estado_tomador']  != null ? String(b['estado_tomador'])  : null },
         cciudad_tomador:       { type: T.NVarChar(100),   value: b['ciudad_tomador']  != null ? String(b['ciudad_tomador'])  : null },
@@ -173,7 +214,7 @@ export class EmissionsService {
         xnombre_titular:       { type: T.NVarChar(250),   value: b['nombre_titular'] },
         xapellido_titular:     { type: T.NVarChar(250),   value: b['apellido_titular'] },
         isexo_titular:         { type: T.Char(1),         value: b['sexo_titular'] ?? b['isexo_titular'] },
-        iestado_civil_titular: { type: T.Char(1),         value: b['estado_civil_titular'] ?? null },
+        iestado_civil_titular: { type: T.Char(1),         value: b['iestado_civil_titular'] ?? b['estado_civil_titular'] ?? null },
         fnac_titular:          { type: T.DateTime,        value: b['fnac_titular'] ?? null },
         cestado_titular:       { type: T.NVarChar(100),   value: b['estado_titular']  != null ? String(b['estado_titular'])  : null },
         cciudad_titular:       { type: T.NVarChar(100),   value: b['ciudad_titular']  != null ? String(b['ciudad_titular'])  : null },
@@ -199,7 +240,7 @@ export class EmissionsService {
         // mprimaext = monto en divisas (USD); en el original se llama 'prima' en el body
         mprimaext:             { type: T.Numeric(18, 2),  value: b['mprimaext'] ?? b['prima'] ?? b['mprima_ext'] },
         ifrecuencia:           { type: T.Char(1),         value: b['frecuencia'] },
-        femision:              { type: T.DateTime,        value: b['fecha_emision'] },
+        femision:              { type: T.DateTime,        value: b['femision'] ?? b['fecha_emision'] },
         xcanal_venta:          { type: T.NVarChar(250),   value: canal['xcanal_venta'] ?? null },
         corigen_rel:           { type: T.Char(2),         value: canal['corigen_rel'] ?? null },
         api:                   { type: T.NVarChar(100),   value: 'createEmissionAutoRCV' },
