@@ -64,6 +64,12 @@ export class CreateEmissionAutoDto {
   @IsString()
   estado_civil_tomador?: string;
 
+  /** Alias usado por emision-api / Sis2000 (mismo valor que estado_civil_tomador) */
+  @ApiPropertyOptional({ example: 'S', enum: ['S', 'C', 'V', 'D'] })
+  @IsOptional()
+  @IsString()
+  iestado_civil_tomador?: string;
+
   @ApiProperty({ example: '1996-10-13', description: 'Fecha de nacimiento del tomador (YYYY-MM-DD)' })
   @IsDateString()
   fnac_tomador: string;
@@ -114,6 +120,11 @@ export class CreateEmissionAutoDto {
   @IsOptional()
   @IsString()
   estado_civil_titular?: string;
+
+  @ApiPropertyOptional({ example: 'S', enum: ['S', 'C', 'V', 'D'] })
+  @IsOptional()
+  @IsString()
+  iestado_civil_titular?: string;
 
   @ApiPropertyOptional({ example: '1996-10-13', description: 'Fecha de nacimiento del titular (YYYY-MM-DD)' })
   @IsOptional()
@@ -215,6 +226,21 @@ export class CreateEmissionAutoDto {
   @ApiProperty({ example: '2025-06-30', description: 'Fecha de emisión (YYYY-MM-DD)' })
   @IsDateString()
   fecha_emision: string;
+
+  @ApiPropertyOptional({ example: '2025-06-30', description: 'Fecha emisión (alias femision)' })
+  @IsOptional()
+  @IsDateString()
+  femision?: string;
+
+  @ApiPropertyOptional({ example: '2025-06-30', description: 'Vigencia desde (YYYY-MM-DD)' })
+  @IsOptional()
+  @IsDateString()
+  fdesde?: string;
+
+  @ApiPropertyOptional({ example: '2026-06-29', description: 'Vigencia hasta (YYYY-MM-DD)' })
+  @IsOptional()
+  @IsDateString()
+  fhasta?: string;
 
   @ApiPropertyOptional({ example: '25221952', description: 'Código del usuario que emite' })
   @IsOptional()

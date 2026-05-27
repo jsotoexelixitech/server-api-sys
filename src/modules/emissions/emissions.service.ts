@@ -142,10 +142,43 @@ export class EmissionsService {
             cscanalalt:   null,
           };
 
-      const b = body;
+      const b: Record<string, unknown> = { ...body };
 
-      // 1.1 Validaciones de negocio alineadas con QA La Mundial:
-      // evitar emisión con campos críticos faltantes.
+      // 1.1 Normalizar fechas y defaults (emision-api puede enviar femision/fdesde/fhasta;
+      // si faltan, se calculan desde fecha_emision como en policyService).
+      const fechaEmision = String(b['fecha_emision'] ?? b['femision'] ?? '').trim();
+      if (fechaEmision) {
+        if (!b['femision']) b['femision'] = fechaEmision;
+        if (!b['fdesde']) b['fdesde'] = fechaEmision;
+        if (!b['fhasta']) {
+          const dHasta = new Date(`${fechaEmision}T00:00:00Z`);
+          dHasta.setUTCFullYear(dHasta.getUTCFullYear() + 1);
+          dHasta.setUTCDate(dHasta.getUTCDate() - 1);
+          b['fhasta'] = dHasta.toISOString().slice(0, 10);
+        }
+      }
+
+      const estadoCivilTom =
+        b['iestado_civil_tomador'] ?? b['estado_civil_tomador'];
+      if (estadoCivilTom != null && String(estadoCivilTom).trim() !== '') {
+        b['iestado_civil_tomador'] = String(estadoCivilTom).trim().charAt(0).toUpperCase();
+      } else {
+        b['iestado_civil_tomador'] = 'S';
+      }
+
+      const estadoCivilTit =
+        b['iestado_civil_titular'] ?? b['estado_civil_titular'];
+      if (estadoCivilTit != null && String(estadoCivilTit).trim() !== '') {
+        b['iestado_civil_titular'] = String(estadoCivilTit).trim().charAt(0).toUpperCase();
+      } else {
+        b['iestado_civil_titular'] = b['iestado_civil_tomador'];
+      }
+
+      if (!b['iplaca'] || String(b['iplaca']).trim() === '') {
+        b['iplaca'] = 'N';
+      }
+
+      // 1.2 Validaciones de negocio alineadas con QA La Mundial.
       const requiredFields: Array<[string, unknown]> = [
         ['plan', b['cplan'] ?? b['plan']],
         ['fecha_emision', b['fecha_emision'] ?? b['femision']],
@@ -155,7 +188,7 @@ export class EmissionsService {
         ['cestado_tomador', b['estado_tomador'] ?? b['cestado_tomador']],
         ['cciudad_tomador', b['ciudad_tomador'] ?? b['cciudad_tomador']],
         ['iplaca', b['iplaca']],
-        ['iestado_civil_tomador', b['iestado_civil_tomador'] ?? b['estado_civil_tomador']],
+        ['iestado_civil_tomador', b['iestado_civil_tomador']],
       ];
 
       const missing = requiredFields
@@ -293,7 +326,16 @@ export class EmissionsService {
         fmespol,
       };
     } catch (err) {
+      if (err instanceof BadRequestException) throw err;
       const msg = err instanceof Error ? err.message : String(err);
+      const lower = msg.toLowerCase();
+      if (
+        lower.includes('poliza vigente') ||
+        lower.includes('póliza vigente') ||
+        lower.includes('serial carrocer')
+      ) {
+        throw new BadRequestException(msg);
+      }
       this.logger.error(`createEmissionAuto: ${msg}`);
       throw new InternalServerErrorException(`Error al crear emisión: ${msg}`);
     }
