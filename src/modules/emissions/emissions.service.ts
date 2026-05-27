@@ -307,12 +307,17 @@ export class EmissionsService {
       const fmespol   = row['fmespol']  as number | undefined;
       const ncuota    = (row['qcuotas'] ?? row['ncuota']) as number | undefined;
 
-      const pdfBase   = (process.env.POLICY_PDF_URL ?? '').replace(/\/$/, '');
-      // Solo construir la URL si la base está configurada; sin base se retorna vacío
-      // para que el frontend no intente abrir una URL relativa rota.
-      const urlpoliza = pdfBase && cnpoliza && fanopol != null && fmespol != null
-        ? `${pdfBase}/${cnpoliza}/${fanopol}/${fmespol}/`
-        : '';
+      // Misma variable que el backend Express (URLPoliza); POLICY_PDF_URL es alias nuevo.
+      const pdfBase = (process.env.POLICY_PDF_URL ?? process.env.URLPoliza ?? '')
+        .trim()
+        .replace(/\/$/, '');
+      let urlpoliza = '';
+      if (pdfBase && cnpoliza) {
+        urlpoliza =
+          fanopol != null && fmespol != null
+            ? `${pdfBase}/${cnpoliza}/${fanopol}/${fmespol}/`
+            : `${pdfBase}/${cnpoliza}/`;
+      }
 
       this.logger.log(`createEmissionAuto: OK cnpoliza=${cnpoliza} cnrecibo=${cnrecibo}`);
 
