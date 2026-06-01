@@ -7,6 +7,7 @@ import { InmaModule } from './modules/inma/inma.module';
 import { ClientModule } from './modules/client/client.module';
 import { EmissionsModule } from './modules/emissions/emissions.module';
 import { ChangesModule } from './modules/changes/changes.module';
+import { PersonasModule } from './modules/personas/personas.module';
 
 @Module({
   imports: [
@@ -25,6 +26,7 @@ import { ChangesModule } from './modules/changes/changes.module';
     ClientModule,
     EmissionsModule,
     ChangesModule,
+    PersonasModule,
   ],
 })
 export class AppModule {}
