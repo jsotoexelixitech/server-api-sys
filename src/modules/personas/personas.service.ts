@@ -39,38 +39,45 @@ export class PersonasService {
 
   // ── Planes de personas (spBuscaPlan, ramo 9) ──────────────────────────────
 
-  async getPlanesPer(cramo?: number, ctipo?: number | null): Promise<PlanPerItem[]> {
+  async getPlanesPer(cramo?: number, _ctipo?: number | null): Promise<PlanPerItem[]> {
     try {
       const T = this.db.types;
       const ramo = cramo ?? this.defaultRamo;
-      const cproductor = this.config.get<number>('LAMUNDIAL_PRODUCTOR', 80080);
-      const cusuario = String(this.config.get<string>('LAMUNDIAL_CUSUARIO', '4'));
+
+      // Los planes de personas viven en la tabla MAPLANES_PER (no en spBuscaPlan,
+      // que es para auto/general). Réplica parametrizada del getPlanesPer legacy.
+      const mapRows = (rs: Record<string, unknown>[]): PlanPerItem[] =>
+        rs
+          .map((p) => ({
+            cplan: String(p['cplan'] ?? '').trim(),
+            xplan: String(p['xplan'] ?? '').trim(),
+            cramo: Number(p['cramo'] ?? ramo),
+            cmoneda: undefined as string | undefined,
+          }))
+          .filter((p) => p.cplan);
 
       const req = this.db.request();
       req.input('cramo', T.Int, ramo);
-      req.input('cproductor', T.Numeric(17), cproductor);
-      req.input('ctipo', T.Numeric(4), ctipo ?? null);
-      req.input('cusuario', T.NVarChar(60), cusuario);
-      req.input('citem', T.NVarChar(50), null);
-      req.input('centidad', T.NVarChar(6), null);
-      req.input('bnacional', T.Bit, false);
-      req.output('mensaje', T.NVarChar(500), '');
+      const result = await req.query<Record<string, unknown>>(`
+        SELECT TRIM(cplan) AS cplan, TRIM(xplan) AS xplan, cramo
+        FROM maplanes_per
+        WHERE iestado = 'V' AND cramo = @cramo
+      `);
 
-      const result = await req.execute('spBuscaPlan');
-      const mensaje: string = result.output?.['mensaje'] ?? '';
-      if (mensaje && !mensaje.toLowerCase().includes('encontrad')) {
-        this.logger.warn(`getPlanesPer spBuscaPlan mensaje: ${mensaje}`);
+      let planes = mapRows((result.recordset ?? []) as Record<string, unknown>[]);
+
+      // Fallback: si el ramo no trae filas, devuelve todos los planes vigentes
+      // (mismo comportamiento que el endpoint legacy /planesPer) para no quedar vacío.
+      if (planes.length === 0) {
+        this.logger.warn(`getPlanesPer: sin planes para cramo=${ramo}; usando todos los vigentes (maplanes_per).`);
+        const allReq = this.db.request();
+        const allResult = await allReq.query<Record<string, unknown>>(`
+          SELECT TRIM(cplan) AS cplan, TRIM(xplan) AS xplan, cramo
+          FROM maplanes_per
+          WHERE iestado = 'V'
+        `);
+        planes = mapRows((allResult.recordset ?? []) as Record<string, unknown>[]);
       }
-
-      const recordset = (result.recordset ?? []) as Record<string, unknown>[];
-      const planes: PlanPerItem[] = recordset
-        .map((p) => ({
-          cplan: String(p['cplan'] ?? '').trim(),
-          xplan: String(p['xplan'] ?? p['xplan_c'] ?? '').trim(),
-          cramo: Number(p['cramo'] ?? ramo),
-          cmoneda: String(p['cmoneda'] ?? '').trim() || undefined,
-        }))
-        .filter((p) => p.cplan);
 
       return await this.enrichWithParentescos(planes);
     } catch (err) {
