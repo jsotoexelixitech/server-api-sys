@@ -37,7 +37,19 @@ export class PersonasService {
     return this.config.get<number>('LAMUNDIAL_RAMO_PERSON', 9);
   }
 
-  // ── Planes de personas (spBuscaPlan, ramo 9) ──────────────────────────────
+  // Lista blanca de planes funerarios individuales a exponer (catálogo oficial de
+  // producción para cproducto=57: 4/6/7/8). En QA esos planes existen en
+  // maplanes_per (ramo 9, vigentes) aunque con cproducto distinto, por eso se
+  // filtran por cplan explícito y no por cproducto. Configurable por env.
+  private get funeralPlanCodes(): string[] {
+    return this.config
+      .get<string>('LAMUNDIAL_PLANES_FUNERARIO', '4,6,7,8')
+      .split(',')
+      .map((s) => s.trim())
+      .filter(Boolean);
+  }
+
+  // ── Planes de personas (maplanes_per, ramo 9 + lista blanca) ───────────────
 
   async getPlanesPer(cramo?: number, _ctipo?: number | null): Promise<PlanPerItem[]> {
     try {
@@ -52,29 +64,36 @@ export class PersonasService {
             cplan: String(p['cplan'] ?? '').trim(),
             xplan: String(p['xplan'] ?? '').trim(),
             cramo: Number(p['cramo'] ?? ramo),
-            cmoneda: undefined as string | undefined,
+            cmoneda: String(p['cmoneda'] ?? '').trim() || undefined,
           }))
           .filter((p) => p.cplan);
 
+      const codes = this.funeralPlanCodes;
       const req = this.db.request();
       req.input('cramo', T.Int, ramo);
+      let whereClause = `iestado = 'V' AND cramo = @cramo`;
+      if (codes.length > 0) {
+        codes.forEach((c, i) => req.input(`pl${i}`, T.VarChar(10), c));
+        whereClause += ` AND TRIM(cplan) IN (${codes.map((_, i) => `@pl${i}`).join(', ')})`;
+      }
       const result = await req.query<Record<string, unknown>>(`
-        SELECT TRIM(cplan) AS cplan, TRIM(xplan) AS xplan, cramo
+        SELECT TRIM(cplan) AS cplan, TRIM(xplan) AS xplan, cramo, TRIM(cmoneda) AS cmoneda
         FROM maplanes_per
-        WHERE iestado = 'V' AND cramo = @cramo
+        WHERE ${whereClause}
       `);
 
       let planes = mapRows((result.recordset ?? []) as Record<string, unknown>[]);
 
-      // Fallback: si el ramo no trae filas, devuelve todos los planes vigentes
-      // (mismo comportamiento que el endpoint legacy /planesPer) para no quedar vacío.
+      // Fallback: si la lista blanca no trae filas, devuelve todos los planes del
+      // ramo (comportamiento previo) para no quedar vacío.
       if (planes.length === 0) {
-        this.logger.warn(`getPlanesPer: sin planes para cramo=${ramo}; usando todos los vigentes (maplanes_per).`);
+        this.logger.warn(`getPlanesPer: sin planes para cramo=${ramo} codes=[${codes.join(',')}]; usando todos los vigentes del ramo.`);
         const allReq = this.db.request();
+        allReq.input('cramo', T.Int, ramo);
         const allResult = await allReq.query<Record<string, unknown>>(`
-          SELECT TRIM(cplan) AS cplan, TRIM(xplan) AS xplan, cramo
+          SELECT TRIM(cplan) AS cplan, TRIM(xplan) AS xplan, cramo, TRIM(cmoneda) AS cmoneda
           FROM maplanes_per
-          WHERE iestado = 'V'
+          WHERE iestado = 'V' AND cramo = @cramo
         `);
         planes = mapRows((allResult.recordset ?? []) as Record<string, unknown>[]);
       }
