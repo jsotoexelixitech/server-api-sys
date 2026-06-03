@@ -267,7 +267,6 @@ export class PersonasService {
       const ccanalalt = (b['ccanalalt'] ?? (canal['ctipocanal'] === 'A' ? canal['ccanalalt'] : null)) as number | null;
       const cscanalalt = (b['cscanalalt'] ?? (canal['ctipocanal'] === 'A' ? canal['cscanalalt'] : null)) as number | null;
 
-      const ins = this.db.request();
       const fields: Record<string, { type: unknown; value: unknown }> = {
         cnpoliza_rel:          { type: T.NVarChar(30),   value: b['poliza'] ? String(b['poliza']) : null },
         cramo:                 { type: T.Int,            value: b['cramo'] },
@@ -325,10 +324,13 @@ export class PersonasService {
       };
 
       // 4. Utilizar transacción para asegurar mismo SPID y visibilidad para el trigger
+      const colList = Object.keys(fields).join(', ');
+      const valList = Object.keys(fields).map((c) => `@${c}`).join(', ');
+
       const tx = this.db.transaction();
       await tx.begin();
       try {
-        const reqTrunc = new T.Request(tx);
+        const reqTrunc = tx.request();
         await reqTrunc.query(`
           TRUNCATE TABLE eePoliza_Salud_Ben;
           TRUNCATE TABLE eePoliza_Salud_Aseg;
@@ -350,9 +352,9 @@ export class PersonasService {
 
         const asegurados = Array.isArray(b['asegurados']) ? b['asegurados'] : (b['funeral'] && typeof b['funeral'] === 'object' && Array.isArray((b['funeral'] as any)['asegurados']) ? (b['funeral'] as any)['asegurados'] : []);
         this.logger.log(`createEmissionPerson: asegurados count = ${asegurados.length}`);
-        
+
         for (const a of asegurados as Record<string, any>[]) {
-          const reqAseg = new T.Request(tx);
+          const reqAseg = tx.request();
           reqAseg.input('icedula_asegurado', T.Char(1), a.icedula_asegurado ?? a.tipoDoc ?? 'V');
           reqAseg.input('xrif_asegurado', T.Numeric(13, 0), a.xrif_asegurado ?? a.identificacion);
           reqAseg.input('xnombre_asegurado', T.NVarChar(120), a.xnombre_asegurado ?? a.nombre);
@@ -363,10 +365,10 @@ export class PersonasService {
           reqAseg.input('iestado_civil_asegurado', T.Char(1), a.iestado_civil_asegurado ?? a.estadoCivil ?? 'S');
           await reqAseg.query(`
             INSERT INTO eePoliza_Salud_Aseg (
-              icedula_asegurado, xrif_asegurado, xnombre_asegurado, xapellido_asegurado, 
+              icedula_asegurado, xrif_asegurado, xnombre_asegurado, xapellido_asegurado,
               fnac_asegurado, isexo_asegurado, nparentesco_asegurado, iestado_civil_asegurado
             ) VALUES (
-              @icedula_asegurado, @xrif_asegurado, @xnombre_asegurado, @xapellido_asegurado, 
+              @icedula_asegurado, @xrif_asegurado, @xnombre_asegurado, @xapellido_asegurado,
               @fnac_asegurado, @isexo_asegurado, @nparentesco_asegurado, @iestado_civil_asegurado
             )
           `);
@@ -374,7 +376,7 @@ export class PersonasService {
 
         const beneficiarios = Array.isArray(b['beneficiarios']) ? b['beneficiarios'] : (b['funeral'] && typeof b['funeral'] === 'object' && Array.isArray((b['funeral'] as any)['beneficiarios']) ? (b['funeral'] as any)['beneficiarios'] : []);
         for (const a of beneficiarios as Record<string, any>[]) {
-          const reqBen = new T.Request(tx);
+          const reqBen = tx.request();
           reqBen.input('icedula_beneficiario', T.Char(1), a.icedula_beneficiario ?? a.tipoDoc ?? 'V');
           reqBen.input('xrif_beneficiario', T.Numeric(13, 0), a.xrif_beneficiario ?? a.identificacion);
           reqBen.input('xnombre_beneficiario', T.NVarChar(120), a.xnombre_beneficiario ?? a.nombre);
@@ -384,10 +386,10 @@ export class PersonasService {
           reqBen.input('nparentesco_beneficiario', T.Int, a.nparentesco_beneficiario ?? getPar(a.parentesco));
           await reqBen.query(`
             INSERT INTO eePoliza_Salud_Ben (
-              icedula_beneficiario, xrif_beneficiario, xnombre_beneficiario, xapellido_beneficiario, 
+              icedula_beneficiario, xrif_beneficiario, xnombre_beneficiario, xapellido_beneficiario,
               fnac_beneficiario, isexo_beneficiario, nparentesco_beneficiario
             ) VALUES (
-              @icedula_beneficiario, @xrif_beneficiario, @xnombre_beneficiario, @xapellido_beneficiario, 
+              @icedula_beneficiario, @xrif_beneficiario, @xnombre_beneficiario, @xapellido_beneficiario,
               @fnac_beneficiario, @isexo_beneficiario, @nparentesco_beneficiario
             )
           `);
@@ -398,19 +400,17 @@ export class PersonasService {
           return acc;
         }, {} as Record<string, any>);
         this.logger.log(`createEmissionPerson fields: ${JSON.stringify(fieldsLog)}`);
-
         this.logger.log(`createEmissionPerson: INSERT eePoliza_Personas_General plan=${b['plan']} rif=${b['rif_titular']}`);
 
-        const reqInsert = new T.Request(tx);
-        const cols = Object.keys(fields);
-        cols.forEach((c) => reqInsert.input(c, (fields[c] as { type: unknown }).type as any, (fields[c] as { value: unknown }).value));
-        
+        const reqInsert = tx.request();
+        Object.keys(fields).forEach((c) => reqInsert.input(c, (fields[c] as { type: any }).type, (fields[c] as { value: unknown }).value));
+
         const insertResult = await reqInsert.query(`
           SET NOCOUNT ON;
           INSERT INTO eePoliza_Personas_General (${colList})
           VALUES (${valList})
         `);
-        
+
         await tx.commit();
 
         // El trigger puede devolver múltiples recordsets. Buscamos el que tenga cnpoliza.
@@ -456,18 +456,12 @@ export class PersonasService {
         }
 
         this.logger.log(`createEmissionPerson: emitida exitosamente cnpoliza=${cnpoliza}`);
-
-        return { cnpoliza, cnrecibo, urlpoliza, ncuota };
+        return { message: 'Emisión registrada exitosamente.', cnpoliza, cnrecibo, urlpoliza, ncuota, fanopol, fmespol };
       } catch (txErr) {
-        if (tx) {
-          try {
-            await tx.rollback();
-          } catch (e) {
-            // ignore rollback error
-          }
-        }
+        try { await tx.rollback(); } catch (_) { /* ignore */ }
         throw txErr;
       }
+
     } catch (err) {
       if (err instanceof BadRequestException || err instanceof UnauthorizedException) throw err;
       const msg = err instanceof Error ? err.message : String(err);

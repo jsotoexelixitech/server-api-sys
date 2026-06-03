@@ -6,6 +6,8 @@ import {
 } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 // eslint-disable-next-line @typescript-eslint/no-require-imports
+import * as mssql from 'mssql';
+// eslint-disable-next-line @typescript-eslint/no-require-imports
 import sql = require('mssql');
 
 @Injectable()
@@ -77,11 +79,11 @@ export class MssqlService implements OnModuleInit, OnModuleDestroy {
     return this.pool.request();
   }
 
-  transaction(): sql.Transaction {
+  transaction(): mssql.Transaction {
     if (!this.pool || !this.pool.connected) {
       throw new Error('mssql pool is not connected');
     }
-    return new sql.Transaction(this.pool);
+    return new mssql.Transaction(this.pool);
   }
 
   /** Re-exported so services can reference sql.Int, sql.NVarChar, etc. without their own import. */
