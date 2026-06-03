@@ -338,7 +338,7 @@ export class PersonasService {
       `);
 
       // El trigger puede devolver múltiples recordsets. Buscamos el que tenga cnpoliza.
-      let row = {};
+      let row: Record<string, any> = {};
       if (insertResult.recordsets && insertResult.recordsets.length > 0) {
         for (const rs of insertResult.recordsets) {
           if (rs && rs.length > 0 && rs[0]['cnpoliza']) {
@@ -357,7 +357,6 @@ export class PersonasService {
         );
       }
 
-      const row = insertResult.recordset[0] ?? {};
       const cnpoliza = String(row['cnpoliza'] ?? '').trim();
       const cnrecibo = String(row['cnrecibo'] ?? '').trim();
       const fanopol = row['fanopol'] as number | undefined;
