@@ -136,6 +136,29 @@ export class PersonasService {
     return planes;
   }
 
+  async getParenPlanPer(cramo: number, cplan: string) {
+    try {
+      const T = this.db.types;
+      const req = this.db.request();
+      req.input('cramo', T.NVarChar(20), String(cramo));
+      req.input('cplan', T.NVarChar(20), cplan);
+      const result = await req.query<{ cparen: number; xparentesco: string }>(`
+        SELECT
+          A.cparen,
+          TRIM(B.xparentesco) AS xparentesco
+        FROM mapltarifas_per A
+        INNER JOIN maparent B ON B.cparentesco = A.cparen
+        WHERE A.cramo = @cramo AND A.cplan = @cplan
+        GROUP BY A.cparen, B.xparentesco
+      `);
+      return result.recordset ?? [];
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : String(err);
+      this.logger.error(`getParenPlanPer plan=${cplan}: ${msg}`);
+      throw new InternalServerErrorException('Error al obtener los parentescos del plan.');
+    }
+  }
+
   // ── Cotización de personas (spCalculoPer por asegurado, sumando) ───────────
 
   async getCotizacionPer(body: CotizacionPerDto): Promise<CotizacionPerResult> {
@@ -313,12 +336,27 @@ export class PersonasService {
         VALUES (${valList})
       `);
 
-      const row = insertResult.recordset?.[0] ?? {};
+      if (!insertResult.recordset || insertResult.recordset.length === 0) {
+        this.logger.error('createEmissionPerson: INSERT no devolvió un recordset válido.');
+        throw new InternalServerErrorException(
+          'Error al crear la emisión de personas: no se recibió resultado de la vista eePoliza_Personas_General.',
+        );
+      }
+
+      const row = insertResult.recordset[0] ?? {};
       const cnpoliza = String(row['cnpoliza'] ?? '').trim();
       const cnrecibo = String(row['cnrecibo'] ?? '').trim();
       const fanopol = row['fanopol'] as number | undefined;
       const fmespol = row['fmespol'] as number | undefined;
       const ncuota = (row['qcuotas'] ?? row['ncuota']) as number | undefined;
+      if (!cnpoliza || !cnrecibo) {
+        this.logger.error(
+          `createEmissionPerson: resultado incompleto cnpoliza='${cnpoliza}' cnrecibo='${cnrecibo}'.`,
+        );
+        throw new InternalServerErrorException(
+          'Error al crear la emisión de personas: la emisión no devolvió cnpoliza/cnrecibo.',
+        );
+      }
 
       const pdfBase = (this.config.get<string>('POLICY_PDF_URL') ?? this.config.get<string>('URLPoliza') ?? '')
         .trim()

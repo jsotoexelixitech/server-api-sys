@@ -6,10 +6,16 @@ import { GetCotizacionAutoDto } from './dto/get-cotizacion-auto.dto';
 import { ValrepService } from './valrep.service';
 import { Api500, ApiCommonErrors } from '../../common/swagger/api-error-responses';
 
+import { PersonasService } from '../personas/personas.service';
+import { GetPlanesPerDto } from '../personas/dto/get-planes-per.dto';
+
 @ApiTags('valrep')
 @Controller('v1/valrep')
 export class ValrepController {
-  constructor(private readonly valrepService: ValrepService) {}
+  constructor(
+    private readonly valrepService: ValrepService,
+    private readonly personasService: PersonasService,
+  ) {}
 
   // ── GET /api/v1/valrep/matipos ─────────────────────────────────────────
 
@@ -20,6 +26,30 @@ export class ValrepController {
   async getMatipos() {
     const data = await this.valrepService.getMatipos();
     return { status: true, data };
+  }
+
+  // ── POST /api/v1/valrep/planesPer ──────────────────────────────────────
+
+  @Post('planesPer')
+  @HttpCode(HttpStatus.OK)
+  @ApiOperation({
+    summary: 'Planes de personas vigentes (ramo 9 = Funerario)',
+    description: 'Devuelve los planes de personas con formato plan en lugar de planes.',
+  })
+  @ApiBody({ type: GetPlanesPerDto })
+  @ApiResponse({
+    status: 200,
+    schema: {
+      example: {
+        status: true,
+        data: { plan: [{ cplan: 'FUNBAS', xplan: 'Plan Funerario Básico', cramo: 9, cmoneda: 'USD', parentescos: [{ cparen: 1, xparentesco: 'TITULAR', min_edad: 18, max_edad: 75 }] }] },
+      },
+    },
+  })
+  @Api500()
+  async getPlanesPer(@Body() dto: GetPlanesPerDto) {
+    const plan = await this.personasService.getPlanesPer(dto.cramo, dto.ctipo ?? null);
+    return { status: true, data: { plan } };
   }
 
   // ── POST /api/v1/valrep/macategtr ──────────────────────────────────────

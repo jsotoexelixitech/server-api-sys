@@ -9,6 +9,9 @@ import { EmissionsModule } from './modules/emissions/emissions.module';
 import { ChangesModule } from './modules/changes/changes.module';
 import { PersonasModule } from './modules/personas/personas.module';
 
+import { AppApiModule } from './modules/app/app.module';
+import { ExternalModule } from './modules/external/external.module';
+
 @Module({
   imports: [
     ConfigModule.forRoot({
@@ -27,6 +30,8 @@ import { PersonasModule } from './modules/personas/personas.module';
     EmissionsModule,
     ChangesModule,
     PersonasModule,
+    AppApiModule,
+    ExternalModule,
   ],
 })
 export class AppModule {}
