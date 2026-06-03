@@ -111,4 +111,8 @@ export class CreateEmissionPersonDto {
   @ApiPropertyOptional({ type: [Object], description: 'Lista de asegurados (opcional, informativa).' })
   @IsOptional() @IsArray()
   asegurados?: unknown[];
+
+  @ApiPropertyOptional({ type: [Object], description: 'Lista de beneficiarios (opcional, informativa).' })
+  @IsOptional() @IsArray()
+  beneficiarios?: unknown[];
 }

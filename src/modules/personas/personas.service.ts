@@ -329,6 +329,57 @@ export class PersonasService {
       const colList = cols.join(', ');
       const valList = cols.map((c) => `@${c}`).join(', ');
 
+      // 4. Poblar las tablas temporales de salud antes del INSERT principal
+      // ya que el trigger eePoliza_Personas_General lee de estas tablas
+      await this.db.getPool().request().query(`
+        TRUNCATE TABLE eePoliza_Salud_Ben;
+        TRUNCATE TABLE eePoliza_Salud_Aseg;
+        TRUNCATE TABLE eePoliza_Salud;
+      `);
+
+      const asegurados = Array.isArray(b['asegurados']) ? b['asegurados'] : [];
+      for (const aseg of asegurados as Record<string, any>[]) {
+        const req = this.db.getPool().request();
+        req.input('icedula_asegurado', T.Char(1), aseg.icedula_asegurado);
+        req.input('xrif_asegurado', T.Numeric(13, 0), aseg.xrif_asegurado);
+        req.input('xnombre_asegurado', T.NVarChar(120), aseg.xnombre_asegurado);
+        req.input('xapellido_asegurado', T.NVarChar(120), aseg.xapellido_asegurado);
+        req.input('fnac_asegurado', T.DateTime, aseg.fnac_asegurado);
+        req.input('isexo_asegurado', T.Char(1), aseg.isexo_asegurado);
+        req.input('nparentesco_asegurado', T.Int, aseg.nparentesco_asegurado);
+        req.input('iestado_civil_asegurado', T.Char(1), aseg.iestado_civil_asegurado);
+        await req.query(`
+          INSERT INTO eePoliza_Salud_Aseg (
+            icedula_asegurado, xrif_asegurado, xnombre_asegurado, xapellido_asegurado, 
+            fnac_asegurado, isexo_asegurado, nparentesco_asegurado, iestado_civil_asegurado
+          ) VALUES (
+            @icedula_asegurado, @xrif_asegurado, @xnombre_asegurado, @xapellido_asegurado, 
+            @fnac_asegurado, @isexo_asegurado, @nparentesco_asegurado, @iestado_civil_asegurado
+          )
+        `);
+      }
+
+      const beneficiarios = Array.isArray(b['beneficiarios']) ? b['beneficiarios'] : [];
+      for (const ben of beneficiarios as Record<string, any>[]) {
+        const req = this.db.getPool().request();
+        req.input('icedula_beneficiario', T.Char(1), ben.icedula_beneficiario);
+        req.input('xrif_beneficiario', T.Numeric(13, 0), ben.xrif_beneficiario);
+        req.input('xnombre_beneficiario', T.NVarChar(120), ben.xnombre_beneficiario);
+        req.input('xapellido_beneficiario', T.NVarChar(120), ben.xapellido_beneficiario);
+        req.input('fnac_beneficiario', T.DateTime, ben.fnac_beneficiario);
+        req.input('isexo_beneficiario', T.Char(1), ben.isexo_beneficiario);
+        req.input('nparentesco_beneficiario', T.Int, ben.nparentesco_beneficiario);
+        await req.query(`
+          INSERT INTO eePoliza_Salud_Ben (
+            icedula_beneficiario, xrif_beneficiario, xnombre_beneficiario, xapellido_beneficiario, 
+            fnac_beneficiario, isexo_beneficiario, nparentesco_beneficiario
+          ) VALUES (
+            @icedula_beneficiario, @xrif_beneficiario, @xnombre_beneficiario, @xapellido_beneficiario, 
+            @fnac_beneficiario, @isexo_beneficiario, @nparentesco_beneficiario
+          )
+        `);
+      }
+
       const fieldsLog = Object.keys(fields).reduce((acc, k) => {
         acc[k] = fields[k].value;
         return acc;
