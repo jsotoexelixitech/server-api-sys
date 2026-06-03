@@ -332,12 +332,26 @@ export class PersonasService {
       this.logger.log(`createEmissionPerson: INSERT eePoliza_Personas_General plan=${b['plan']} rif=${b['rif_titular']}`);
 
       const insertResult = await ins.query(`
+        SET NOCOUNT ON;
         INSERT INTO eePoliza_Personas_General (${colList})
         VALUES (${valList})
       `);
 
-      if (!insertResult.recordset || insertResult.recordset.length === 0) {
-        this.logger.error('createEmissionPerson: INSERT no devolvió un recordset válido.');
+      // El trigger puede devolver múltiples recordsets. Buscamos el que tenga cnpoliza.
+      let row = {};
+      if (insertResult.recordsets && insertResult.recordsets.length > 0) {
+        for (const rs of insertResult.recordsets) {
+          if (rs && rs.length > 0 && rs[0]['cnpoliza']) {
+            row = rs[0];
+            break;
+          }
+        }
+      } else if (insertResult.recordset && insertResult.recordset.length > 0) {
+        row = insertResult.recordset[0];
+      }
+
+      if (Object.keys(row).length === 0) {
+        this.logger.error('createEmissionPerson: INSERT no devolvió un recordset válido con cnpoliza. Estructura recibida: ' + JSON.stringify(insertResult));
         throw new InternalServerErrorException(
           'Error al crear la emisión de personas: no se recibió resultado de la vista eePoliza_Personas_General.',
         );
