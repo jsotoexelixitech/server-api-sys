@@ -331,7 +331,7 @@ export class PersonasService {
 
       // 4. Poblar las tablas temporales de salud antes del INSERT principal
       // ya que el trigger eePoliza_Personas_General lee de estas tablas
-      await this.db.getPool().request().query(`
+      await this.db.request().query(`
         TRUNCATE TABLE eePoliza_Salud_Ben;
         TRUNCATE TABLE eePoliza_Salud_Aseg;
         TRUNCATE TABLE eePoliza_Salud;
@@ -339,7 +339,7 @@ export class PersonasService {
 
       const asegurados = Array.isArray(b['asegurados']) ? b['asegurados'] : [];
       for (const aseg of asegurados as Record<string, any>[]) {
-        const req = this.db.getPool().request();
+        const req = this.db.request();
         req.input('icedula_asegurado', T.Char(1), aseg.icedula_asegurado);
         req.input('xrif_asegurado', T.Numeric(13, 0), aseg.xrif_asegurado);
         req.input('xnombre_asegurado', T.NVarChar(120), aseg.xnombre_asegurado);
@@ -361,7 +361,7 @@ export class PersonasService {
 
       const beneficiarios = Array.isArray(b['beneficiarios']) ? b['beneficiarios'] : [];
       for (const ben of beneficiarios as Record<string, any>[]) {
-        const req = this.db.getPool().request();
+        const req = this.db.request();
         req.input('icedula_beneficiario', T.Char(1), ben.icedula_beneficiario);
         req.input('xrif_beneficiario', T.Numeric(13, 0), ben.xrif_beneficiario);
         req.input('xnombre_beneficiario', T.NVarChar(120), ben.xnombre_beneficiario);
