@@ -351,6 +351,7 @@ export class PersonasService {
 
       const asegurados = Array.isArray(b['asegurados']) ? b['asegurados'] : (b['funeral'] && typeof b['funeral'] === 'object' && Array.isArray((b['funeral'] as any)['asegurados']) ? (b['funeral'] as any)['asegurados'] : []);
       this.logger.log(`createEmissionPerson: asegurados count = ${asegurados.length}`);
+      this.logger.log(`createEmissionPerson: RAW BODY = ${JSON.stringify(b)}`);
       
       for (const a of asegurados as Record<string, any>[]) {
         const req = this.db.request();
