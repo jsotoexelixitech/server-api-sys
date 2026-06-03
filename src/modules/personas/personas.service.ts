@@ -324,137 +324,150 @@ export class PersonasService {
         cproces:               { type: T.Numeric(13, 0), value: null },
       };
 
-      const cols = Object.keys(fields);
-      cols.forEach((c) => ins.input(c, (fields[c] as { type: unknown }).type, (fields[c] as { value: unknown }).value));
-      const colList = cols.join(', ');
-      const valList = cols.map((c) => `@${c}`).join(', ');
+      // 4. Utilizar transacción para asegurar mismo SPID y visibilidad para el trigger
+      const tx = this.db.transaction();
+      await tx.begin();
+      try {
+        const reqTrunc = new T.Request(tx);
+        await reqTrunc.query(`
+          TRUNCATE TABLE eePoliza_Salud_Ben;
+          TRUNCATE TABLE eePoliza_Salud_Aseg;
+          TRUNCATE TABLE eePoliza_Salud;
+        `);
 
-      // 4. Poblar las tablas temporales de salud antes del INSERT principal
-      await this.db.request().query(`
-        TRUNCATE TABLE eePoliza_Salud_Ben;
-        TRUNCATE TABLE eePoliza_Salud_Aseg;
-        TRUNCATE TABLE eePoliza_Salud;
-      `);
+        const getPar = (p: any) => {
+          if (typeof p === 'number') return p;
+          if (typeof p === 'string') {
+            const s = p.toLowerCase();
+            if (s.includes('titular')) return 1;
+            if (s.includes('conyug') || s.includes('cónyug')) return 2;
+            if (s.includes('hij')) return 3;
+            if (s.includes('padre') || s.includes('madre')) return 4;
+            return 5;
+          }
+          return 1;
+        };
 
-      const getPar = (p: any) => {
-        if (typeof p === 'number') return p;
-        if (typeof p === 'string') {
-          const s = p.toLowerCase();
-          if (s.includes('titular')) return 1;
-          if (s.includes('conyug') || s.includes('cónyug')) return 2;
-          if (s.includes('hij')) return 3;
-          if (s.includes('padre') || s.includes('madre')) return 4;
-          return 5;
+        const asegurados = Array.isArray(b['asegurados']) ? b['asegurados'] : (b['funeral'] && typeof b['funeral'] === 'object' && Array.isArray((b['funeral'] as any)['asegurados']) ? (b['funeral'] as any)['asegurados'] : []);
+        this.logger.log(`createEmissionPerson: asegurados count = ${asegurados.length}`);
+        
+        for (const a of asegurados as Record<string, any>[]) {
+          const reqAseg = new T.Request(tx);
+          reqAseg.input('icedula_asegurado', T.Char(1), a.icedula_asegurado ?? a.tipoDoc ?? 'V');
+          reqAseg.input('xrif_asegurado', T.Numeric(13, 0), a.xrif_asegurado ?? a.identificacion);
+          reqAseg.input('xnombre_asegurado', T.NVarChar(120), a.xnombre_asegurado ?? a.nombre);
+          reqAseg.input('xapellido_asegurado', T.NVarChar(120), a.xapellido_asegurado ?? a.apellido);
+          reqAseg.input('fnac_asegurado', T.DateTime, a.fnac_asegurado ?? a.fechaNac);
+          reqAseg.input('isexo_asegurado', T.Char(1), a.isexo_asegurado ?? a.sexo ?? 'M');
+          reqAseg.input('nparentesco_asegurado', T.Int, a.nparentesco_asegurado ?? getPar(a.parentesco));
+          reqAseg.input('iestado_civil_asegurado', T.Char(1), a.iestado_civil_asegurado ?? a.estadoCivil ?? 'S');
+          await reqAseg.query(`
+            INSERT INTO eePoliza_Salud_Aseg (
+              icedula_asegurado, xrif_asegurado, xnombre_asegurado, xapellido_asegurado, 
+              fnac_asegurado, isexo_asegurado, nparentesco_asegurado, iestado_civil_asegurado
+            ) VALUES (
+              @icedula_asegurado, @xrif_asegurado, @xnombre_asegurado, @xapellido_asegurado, 
+              @fnac_asegurado, @isexo_asegurado, @nparentesco_asegurado, @iestado_civil_asegurado
+            )
+          `);
         }
-        return 1;
-      };
 
-      const asegurados = Array.isArray(b['asegurados']) ? b['asegurados'] : (b['funeral'] && typeof b['funeral'] === 'object' && Array.isArray((b['funeral'] as any)['asegurados']) ? (b['funeral'] as any)['asegurados'] : []);
-      this.logger.log(`createEmissionPerson: asegurados count = ${asegurados.length}`);
-      this.logger.log(`createEmissionPerson: RAW BODY = ${JSON.stringify(b)}`);
-      
-      for (const a of asegurados as Record<string, any>[]) {
-        const req = this.db.request();
-        req.input('icedula_asegurado', T.Char(1), a.icedula_asegurado ?? a.tipoDoc ?? 'V');
-        req.input('xrif_asegurado', T.Numeric(13, 0), a.xrif_asegurado ?? a.identificacion);
-        req.input('xnombre_asegurado', T.NVarChar(120), a.xnombre_asegurado ?? a.nombre);
-        req.input('xapellido_asegurado', T.NVarChar(120), a.xapellido_asegurado ?? a.apellido);
-        req.input('fnac_asegurado', T.DateTime, a.fnac_asegurado ?? a.fechaNac);
-        req.input('isexo_asegurado', T.Char(1), a.isexo_asegurado ?? a.sexo ?? 'M');
-        req.input('nparentesco_asegurado', T.Int, a.nparentesco_asegurado ?? getPar(a.parentesco));
-        req.input('iestado_civil_asegurado', T.Char(1), a.iestado_civil_asegurado ?? a.estadoCivil ?? 'S');
-        await req.query(`
-          INSERT INTO eePoliza_Salud_Aseg (
-            icedula_asegurado, xrif_asegurado, xnombre_asegurado, xapellido_asegurado, 
-            fnac_asegurado, isexo_asegurado, nparentesco_asegurado, iestado_civil_asegurado
-          ) VALUES (
-            @icedula_asegurado, @xrif_asegurado, @xnombre_asegurado, @xapellido_asegurado, 
-            @fnac_asegurado, @isexo_asegurado, @nparentesco_asegurado, @iestado_civil_asegurado
-          )
+        const beneficiarios = Array.isArray(b['beneficiarios']) ? b['beneficiarios'] : (b['funeral'] && typeof b['funeral'] === 'object' && Array.isArray((b['funeral'] as any)['beneficiarios']) ? (b['funeral'] as any)['beneficiarios'] : []);
+        for (const a of beneficiarios as Record<string, any>[]) {
+          const reqBen = new T.Request(tx);
+          reqBen.input('icedula_beneficiario', T.Char(1), a.icedula_beneficiario ?? a.tipoDoc ?? 'V');
+          reqBen.input('xrif_beneficiario', T.Numeric(13, 0), a.xrif_beneficiario ?? a.identificacion);
+          reqBen.input('xnombre_beneficiario', T.NVarChar(120), a.xnombre_beneficiario ?? a.nombre);
+          reqBen.input('xapellido_beneficiario', T.NVarChar(120), a.xapellido_beneficiario ?? a.apellido);
+          reqBen.input('fnac_beneficiario', T.DateTime, a.fnac_beneficiario ?? a.fechaNac);
+          reqBen.input('isexo_beneficiario', T.Char(1), a.isexo_beneficiario ?? a.sexo ?? 'M');
+          reqBen.input('nparentesco_beneficiario', T.Int, a.nparentesco_beneficiario ?? getPar(a.parentesco));
+          await reqBen.query(`
+            INSERT INTO eePoliza_Salud_Ben (
+              icedula_beneficiario, xrif_beneficiario, xnombre_beneficiario, xapellido_beneficiario, 
+              fnac_beneficiario, isexo_beneficiario, nparentesco_beneficiario
+            ) VALUES (
+              @icedula_beneficiario, @xrif_beneficiario, @xnombre_beneficiario, @xapellido_beneficiario, 
+              @fnac_beneficiario, @isexo_beneficiario, @nparentesco_beneficiario
+            )
+          `);
+        }
+
+        const fieldsLog = Object.keys(fields).reduce((acc, k) => {
+          acc[k] = fields[k].value;
+          return acc;
+        }, {} as Record<string, any>);
+        this.logger.log(`createEmissionPerson fields: ${JSON.stringify(fieldsLog)}`);
+
+        this.logger.log(`createEmissionPerson: INSERT eePoliza_Personas_General plan=${b['plan']} rif=${b['rif_titular']}`);
+
+        const reqInsert = new T.Request(tx);
+        const cols = Object.keys(fields);
+        cols.forEach((c) => reqInsert.input(c, (fields[c] as { type: unknown }).type as any, (fields[c] as { value: unknown }).value));
+        
+        const insertResult = await reqInsert.query(`
+          SET NOCOUNT ON;
+          INSERT INTO eePoliza_Personas_General (${colList})
+          VALUES (${valList})
         `);
-      }
+        
+        await tx.commit();
 
-      const beneficiarios = Array.isArray(b['beneficiarios']) ? b['beneficiarios'] : (b['funeral'] && typeof b['funeral'] === 'object' && Array.isArray((b['funeral'] as any)['beneficiarios']) ? (b['funeral'] as any)['beneficiarios'] : []);
-      for (const a of beneficiarios as Record<string, any>[]) {
-        const req = this.db.request();
-        req.input('icedula_beneficiario', T.Char(1), a.icedula_beneficiario ?? a.tipoDoc ?? 'V');
-        req.input('xrif_beneficiario', T.Numeric(13, 0), a.xrif_beneficiario ?? a.identificacion);
-        req.input('xnombre_beneficiario', T.NVarChar(120), a.xnombre_beneficiario ?? a.nombre);
-        req.input('xapellido_beneficiario', T.NVarChar(120), a.xapellido_beneficiario ?? a.apellido);
-        req.input('fnac_beneficiario', T.DateTime, a.fnac_beneficiario ?? a.fechaNac);
-        req.input('isexo_beneficiario', T.Char(1), a.isexo_beneficiario ?? a.sexo ?? 'M');
-        req.input('nparentesco_beneficiario', T.Int, a.nparentesco_beneficiario ?? getPar(a.parentesco));
-        await req.query(`
-          INSERT INTO eePoliza_Salud_Ben (
-            icedula_beneficiario, xrif_beneficiario, xnombre_beneficiario, xapellido_beneficiario, 
-            fnac_beneficiario, isexo_beneficiario, nparentesco_beneficiario
-          ) VALUES (
-            @icedula_beneficiario, @xrif_beneficiario, @xnombre_beneficiario, @xapellido_beneficiario, 
-            @fnac_beneficiario, @isexo_beneficiario, @nparentesco_beneficiario
-          )
-        `);
-      }
+        // El trigger puede devolver múltiples recordsets. Buscamos el que tenga cnpoliza.
+        let row: Record<string, any> = {};
+        if (insertResult.recordsets && insertResult.recordsets.length > 0) {
+          for (const rs of insertResult.recordsets) {
+            if (rs && rs.length > 0 && rs[0]['cnpoliza']) {
+              row = rs[0];
+              break;
+            }
+          }
+        } else if (insertResult.recordset && insertResult.recordset.length > 0) {
+          row = insertResult.recordset[0];
+        }
 
-      const fieldsLog = Object.keys(fields).reduce((acc, k) => {
-        acc[k] = fields[k].value;
-        return acc;
-      }, {} as Record<string, any>);
-      this.logger.log(`createEmissionPerson fields: ${JSON.stringify(fieldsLog)}`);
+        if (Object.keys(row).length === 0) {
+          this.logger.error('createEmissionPerson: INSERT no devolvió un recordset válido con cnpoliza. Estructura recibida: ' + JSON.stringify(insertResult));
+          throw new InternalServerErrorException(
+            'Error al crear la emisión de personas: no se recibió resultado de la vista eePoliza_Personas_General.',
+          );
+        }
 
-      this.logger.log(`createEmissionPerson: INSERT eePoliza_Personas_General plan=${b['plan']} rif=${b['rif_titular']}`);
+        const cnpoliza = String(row['cnpoliza'] ?? '').trim();
+        const cnrecibo = String(row['cnrecibo'] ?? '').trim();
+        const fanopol = row['fanopol'] as number | undefined;
+        const fmespol = row['fmespol'] as number | undefined;
+        const ncuota = (row['qcuotas'] ?? row['ncuota']) as number | undefined;
+        if (!cnpoliza || !cnrecibo) {
+          this.logger.error(
+            `createEmissionPerson: resultado incompleto cnpoliza='${cnpoliza}' cnrecibo='${cnrecibo}'.`,
+          );
+          throw new InternalServerErrorException(
+            'Error al crear la emisión de personas: la emisión no devolvió cnpoliza/cnrecibo.',
+          );
+        }
 
-      const insertResult = await ins.query(`
-        SET NOCOUNT ON;
-        INSERT INTO eePoliza_Personas_General (${colList})
-        VALUES (${valList})
-      `);
+        const pdfBase = (this.config.get<string>('POLICY_PDF_URL') ?? this.config.get<string>('URLPoliza') ?? '')
+          .trim()
+          .replace(/\/$/, '');
+        let urlpoliza = '';
+        if (pdfBase && cnpoliza) {
+          urlpoliza = `${pdfBase}?cnpoliza=${cnpoliza}`;
+        }
 
-      // El trigger puede devolver múltiples recordsets. Buscamos el que tenga cnpoliza.
-      let row: Record<string, any> = {};
-      if (insertResult.recordsets && insertResult.recordsets.length > 0) {
-        for (const rs of insertResult.recordsets) {
-          if (rs && rs.length > 0 && rs[0]['cnpoliza']) {
-            row = rs[0];
-            break;
+        this.logger.log(`createEmissionPerson: emitida exitosamente cnpoliza=${cnpoliza}`);
+
+        return { cnpoliza, cnrecibo, urlpoliza, ncuota };
+      } catch (txErr) {
+        if (tx) {
+          try {
+            await tx.rollback();
+          } catch (e) {
+            // ignore rollback error
           }
         }
-      } else if (insertResult.recordset && insertResult.recordset.length > 0) {
-        row = insertResult.recordset[0];
+        throw txErr;
       }
-
-      if (Object.keys(row).length === 0) {
-        this.logger.error('createEmissionPerson: INSERT no devolvió un recordset válido con cnpoliza. Estructura recibida: ' + JSON.stringify(insertResult));
-        throw new InternalServerErrorException(
-          'Error al crear la emisión de personas: no se recibió resultado de la vista eePoliza_Personas_General.',
-        );
-      }
-
-      const cnpoliza = String(row['cnpoliza'] ?? '').trim();
-      const cnrecibo = String(row['cnrecibo'] ?? '').trim();
-      const fanopol = row['fanopol'] as number | undefined;
-      const fmespol = row['fmespol'] as number | undefined;
-      const ncuota = (row['qcuotas'] ?? row['ncuota']) as number | undefined;
-      if (!cnpoliza || !cnrecibo) {
-        this.logger.error(
-          `createEmissionPerson: resultado incompleto cnpoliza='${cnpoliza}' cnrecibo='${cnrecibo}'.`,
-        );
-        throw new InternalServerErrorException(
-          'Error al crear la emisión de personas: la emisión no devolvió cnpoliza/cnrecibo.',
-        );
-      }
-
-      const pdfBase = (this.config.get<string>('POLICY_PDF_URL') ?? this.config.get<string>('URLPoliza') ?? '')
-        .trim()
-        .replace(/\/$/, '');
-      let urlpoliza = '';
-      if (pdfBase && cnpoliza) {
-        urlpoliza = fanopol != null && fmespol != null
-          ? `${pdfBase}/${cnpoliza}/${fanopol}/${fmespol}/`
-          : `${pdfBase}/${cnpoliza}/`;
-      }
-
-      this.logger.log(`createEmissionPerson: OK cnpoliza=${cnpoliza} cnrecibo=${cnrecibo}`);
-      return { message: 'Emisión registrada exitosamente.', cnpoliza, cnrecibo, urlpoliza, ncuota, fanopol, fmespol };
     } catch (err) {
       if (err instanceof BadRequestException || err instanceof UnauthorizedException) throw err;
       const msg = err instanceof Error ? err.message : String(err);

@@ -77,6 +77,13 @@ export class MssqlService implements OnModuleInit, OnModuleDestroy {
     return this.pool.request();
   }
 
+  transaction(): sql.Transaction {
+    if (!this.pool || !this.pool.connected) {
+      throw new Error('mssql pool is not connected');
+    }
+    return new sql.Transaction(this.pool);
+  }
+
   /** Re-exported so services can reference sql.Int, sql.NVarChar, etc. without their own import. */
   get types(): typeof sql {
     return sql;
