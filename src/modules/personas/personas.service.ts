@@ -329,6 +329,12 @@ export class PersonasService {
       const colList = cols.join(', ');
       const valList = cols.map((c) => `@${c}`).join(', ');
 
+      const fieldsLog = Object.keys(fields).reduce((acc, k) => {
+        acc[k] = fields[k].value;
+        return acc;
+      }, {} as Record<string, any>);
+      this.logger.log(`createEmissionPerson fields: ${JSON.stringify(fieldsLog)}`);
+
       this.logger.log(`createEmissionPerson: INSERT eePoliza_Personas_General plan=${b['plan']} rif=${b['rif_titular']}`);
 
       const insertResult = await ins.query(`
