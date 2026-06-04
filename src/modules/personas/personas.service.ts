@@ -380,7 +380,12 @@ export class PersonasService {
           : []);
 
       // === LLAMADA A LA NUEVA API QAAPISYS2000 (PRIMER INTENTO) ===
+      const ENABLE_QAAPISYS2000 = false; // <-- APAGADO TEMPORALMENTE por bug en rollback de la API externa
       try {
+        if (!ENABLE_QAAPISYS2000) {
+          throw new Error('qaapisys2000 disabled - usando fallback local directamente');
+        }
+
         const payloadAPI = {
           cramo: b['cramo'] ?? 9,
           plan: String(b['plan'] ?? '6'),
