@@ -10,6 +10,31 @@ import { MssqlService } from '../../database/mssql.service';
 import { CotizacionPerDto } from './dto/cotizacion-per.dto';
 import { CreateEmissionPersonDto } from './dto/create-emission-person.dto';
 
+class Mutex {
+  private queue: Array<(release: () => void) => void> = [];
+  private locked = false;
+
+  async acquire(): Promise<() => void> {
+    return new Promise(resolve => {
+      this.queue.push(resolve);
+      this.dispatch();
+    });
+  }
+
+  private dispatch() {
+    if (this.locked) return;
+    const next = this.queue.shift();
+    if (next) {
+      this.locked = true;
+      next(() => {
+        this.locked = false;
+        this.dispatch();
+      });
+    }
+  }
+}
+const emisionMutex = new Mutex();
+
 export interface PlanPerItem {
   cplan: string;
   xplan: string;
@@ -225,6 +250,15 @@ export class PersonasService {
   // ── Emisión de póliza de personas (vista eePoliza_Personas_General) ────────
 
   async createEmissionPerson(apikey: string, body: CreateEmissionPersonDto) {
+    const release = await emisionMutex.acquire();
+    try {
+      return await this._createEmissionPerson(apikey, body);
+    } finally {
+      release();
+    }
+  }
+
+  private async _createEmissionPerson(apikey: string, body: CreateEmissionPersonDto) {
     try {
       const T = this.db.types;
 
@@ -252,6 +286,57 @@ export class PersonasService {
 
       const b = body as unknown as Record<string, unknown>;
 
+      // 2a. Tasa de cambio: si no viene en el body, leerla de mamonedas.
+      let ptasamonResolved = (b['tasa'] != null ? Number(b['tasa']) : null);
+      if (!ptasamonResolved) {
+        const rateReq = this.db.request();
+        const rateResult = await rateReq.query<{ ptasamon: number }>(
+          `SELECT ptasamon FROM mamonedas WHERE TRIM(cmoneda) = '$'`,
+        );
+        ptasamonResolved = rateResult.recordset[0]?.ptasamon ?? null;
+        if (ptasamonResolved) this.logger.log(`createEmissionPerson: ptasamon auto-resuelto = ${ptasamonResolved}`);
+      }
+
+      // 2b. Suma asegurada: si no viene en el body, obtenerla de spCalculoPer
+      //     usando el primer asegurado. El trigger NECESITA este valor para calcular
+      //     la prima por cobertura y no sufrir overflow en la conversión de moneda.
+      let msumaasegResolved = (b['msumaaseg'] != null ? Number(b['msumaaseg']) : null);
+      if (!msumaasegResolved) {
+        const aseguradosList = Array.isArray(b['asegurados'])
+          ? b['asegurados'] as Record<string, any>[]
+          : (b['funeral'] && typeof b['funeral'] === 'object' && Array.isArray((b['funeral'] as any)['asegurados'])
+            ? (b['funeral'] as any)['asegurados'] as Record<string, any>[]
+            : []);
+
+        if (aseguradosList.length > 0) {
+          const ase = aseguradosList[0] as Record<string, any>;
+          const fnacStr = String(ase.fnac_asegurado ?? ase.fechaNac ?? '');
+          const birthDate = fnacStr ? new Date(fnacStr) : null;
+          const nedad = birthDate
+            ? Math.floor((Date.now() - birthDate.getTime()) / (365.25 * 24 * 3600 * 1000))
+            : 30;
+          try {
+            const calReq = this.db.request();
+            calReq.input('ptasamon', T.Numeric(13, 6), ptasamonResolved ?? 0);
+            calReq.input('cramo', T.Int, Number(b['cramo'] ?? 9));
+            calReq.input('cplan', T.VarChar(10), String(b['plan'] ?? ''));
+            calReq.input('cparen', T.Int, 1); // Titular
+            calReq.input('xrif_asegurado', T.VarChar(10), String(ase.xrif_asegurado ?? ase.identificacion ?? '').replace(/\D/g, ''));
+            calReq.input('nedad_asegurado', T.Int, nedad);
+            calReq.input('ifrecuencia', T.Char(1), String(b['frecuencia'] ?? 'M'));
+            calReq.input('msumaaseg', T.Numeric(18, 2), null);
+            const calResult = await calReq.execute('spCalculoPer');
+            const calRow = (calResult.recordsets?.[0] ?? []) as Record<string, any>[];
+            if (calRow.length > 0 && calRow[0]['msumaasegext']) {
+              msumaasegResolved = Number(calRow[0]['msumaasegext']);
+              this.logger.log(`createEmissionPerson: msumaaseg auto-resuelto = ${msumaasegResolved} USD`);
+            }
+          } catch (calErr) {
+            this.logger.warn(`createEmissionPerson: no se pudo auto-resolver msumaaseg: ${calErr instanceof Error ? calErr.message : calErr}`);
+          }
+        }
+      }
+
       // 2. Fechas: si no vienen fdesde/fhasta se derivan de fecha_emision (1 año).
       const femision = String(b['fecha_emision'] ?? '').trim();
       const fdesde = String(b['fdesde'] ?? femision).trim();
@@ -266,6 +351,137 @@ export class PersonasService {
       const ctipocanal = (b['ctipocanal'] ?? (canal['ctipocanal'] === 'A' ? canal['ctipocanal'] : null)) as string | null;
       const ccanalalt = (b['ccanalalt'] ?? (canal['ctipocanal'] === 'A' ? canal['ccanalalt'] : null)) as number | null;
       const cscanalalt = (b['cscanalalt'] ?? (canal['ctipocanal'] === 'A' ? canal['cscanalalt'] : null)) as number | null;
+
+      const getPar = (p: any) => {
+        if (typeof p === 'number') return p;
+        if (typeof p === 'string') {
+          const n = parseInt(p, 10);
+          if (!isNaN(n)) return n;
+          const s = p.toLowerCase();
+          if (s.includes('titular')) return 1;
+          if (s.includes('conyug') || s.includes('cónyug')) return 2;
+          if (s.includes('hij')) return 3;
+          if (s.includes('padre') || s.includes('madre')) return 4;
+          return 5;
+        }
+        return 1;
+      };
+
+      const asegurados = Array.isArray(b['asegurados'])
+        ? b['asegurados']
+        : (b['funeral'] && typeof b['funeral'] === 'object' && Array.isArray((b['funeral'] as any)['asegurados'])
+          ? (b['funeral'] as any)['asegurados']
+          : []);
+
+      const beneficiarios = Array.isArray(b['beneficiarios'])
+        ? b['beneficiarios']
+        : (b['funeral'] && typeof b['funeral'] === 'object' && Array.isArray((b['funeral'] as any)['beneficiarios'])
+          ? (b['funeral'] as any)['beneficiarios']
+          : []);
+
+      // === LLAMADA A LA NUEVA API QAAPISYS2000 (PRIMER INTENTO) ===
+      try {
+        const payloadAPI = {
+          cramo: b['cramo'] ?? 9,
+          plan: String(b['plan'] ?? '6'),
+          tipo_cedula_tomador: String(b['tipo_cedula_tomador'] ?? b['cedula_tomador'] ?? 'V'),
+          rif_tomador: Number(b['rif_tomador']),
+          nombre_tomador: String(b['nombre_tomador'] ?? ''),
+          apellido_tomador: String(b['apellido_tomador'] ?? ''),
+          telefono_tomador: String(b['telefono_tomador'] ?? ''),
+          correo_tomador: String(b['correo_tomador'] ?? ''),
+          fnac_tomador: b['fnac_tomador'] ? String(b['fnac_tomador']) : (b['fechaNac'] ? String(b['fechaNac']) : null),
+          isexo_tomador: String(b['sexo_tomador'] ?? b['isexo_tomador'] ?? 'M'),
+          iestado_civil_tomador: String(b['estado_civil_tomador'] ?? b['iestado_civil_tomador'] ?? 'S'),
+          estado_tomador: Number(b['estado_tomador'] ?? 1),
+          ciudad_tomador: Number(b['ciudad_tomador'] ?? 128),
+          direccion_tomador: String(b['direccion_tomador'] ?? 'No indicada'),
+          
+          tipo_cedula_titular: String(b['tipo_cedula_titular'] ?? b['cedula_titular'] ?? 'V'),
+          rif_titular: Number(b['rif_titular']),
+          nombre_titular: String(b['nombre_titular'] ?? ''),
+          apellido_titular: String(b['apellido_titular'] ?? ''),
+          telefono_titular: String(b['telefono_titular'] ?? ''),
+          correo_titular: String(b['correo_titular'] ?? ''),
+          fnac_titular: b['fnac_titular'] ? String(b['fnac_titular']) : (b['fechaNac'] ? String(b['fechaNac']) : null),
+          isexo_titular: String(b['sexo_titular'] ?? b['isexo_titular'] ?? 'M'),
+          iestado_civil_titular: String(b['estado_civil_titular'] ?? b['iestado_civil_titular'] ?? 'S'),
+          estado_titular: Number(b['estado_titular'] ?? 1),
+          ciudad_titular: Number(b['ciudad_titular'] ?? 128),
+          direccion_titular: String(b['direccion_titular'] ?? 'No indicada'),
+          
+          dec_persona_politica: Number(b['dec_persona_politica'] ?? 0),
+          cpersona_politica: Number(b['cpersona_politica'] ?? 0),
+          dec_term_y_cod: Number(b['dec_term_y_cod'] ?? 1),
+          cterm_y_cod: Number(b['cterm_y_cod'] ?? 1),
+          dec_diagnos_enferm: Number(b['dec_diagnos_enferm'] ?? 0),
+          cdiagnos_enferm: Number(b['cdiagnos_enferm'] ?? 0),
+          
+          cproductor: Number(b['productor'] ?? canal['cproductor'] ?? 80080),
+          frecuencia: String(b['frecuencia'] ?? b['ifrecuencia'] ?? 'M'),
+          
+          fecha_emision: femision,
+          fdesde: fdesde,
+          fhasta: fhasta,
+          
+          asegurados: asegurados.map((a: any) => ({
+            icedula_asegurado: String(a.icedula_asegurado ?? a.tipoDoc ?? 'V'),
+            xrif_asegurado: String(a.xrif_asegurado ?? a.identificacion),
+            xnombre_asegurado: String(a.xnombre_asegurado ?? a.nombre),
+            xapellido_asegurado: String(a.xapellido_asegurado ?? a.apellido),
+            fnac_asegurado: a.fnac_asegurado ? String(a.fnac_asegurado) : (a.fechaNac ? String(a.fechaNac) : null),
+            isexo_asegurado: String(a.isexo_asegurado ?? (a.sexo ? String(a.sexo)[0].toUpperCase() : 'M')),
+            nparentesco_asegurado: Number(getPar(a.nparentesco_asegurado ?? a.parentesco)),
+            iestado_civil_asegurado: String(a.iestado_civil_asegurado ?? 'S')
+          })),
+          beneficiarios: beneficiarios.map((a: any) => ({
+            icedula_beneficiario: String(a.icedula_beneficiario ?? a.tipoDoc ?? 'V'),
+            xrif_beneficiario: String(a.xrif_beneficiario ?? a.identificacion),
+            xnombre_beneficiario: String(a.xnombre_beneficiario ?? a.nombre),
+            xapellido_beneficiario: String(a.xapellido_beneficiario ?? a.apellido),
+            fnac_beneficiario: a.fnac_beneficiario ? String(a.fnac_beneficiario) : (a.fechaNac ? String(a.fechaNac) : null),
+            isexo_beneficiario: String(a.isexo_beneficiario ?? (a.sexo ? String(a.sexo)[0].toUpperCase() : 'M')),
+            nparentesco_beneficiario: Number(getPar(a.nparentesco_beneficiario ?? a.parentesco))
+          }))
+        };
+
+        const EXTERNAL_API_URL = 'https://qaapisys2000.lamundialdeseguros.com/api/v1/external/createEmissionPerson';
+        const EXTERNAL_API_KEY = '2729cc160b985890e0e6df72a161aea27f8e45682511c2dfd045f94eb9868f10';
+        const EXTERNAL_BASIC_AUTH = 'Basic YWRtaW46cGFzc3dvcmQxMjM0';
+
+        this.logger.log(`Llamando API externa La Mundial con payload: ${JSON.stringify(payloadAPI)}`);
+        
+        const response = await fetch(EXTERNAL_API_URL, {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            'apikey': EXTERNAL_API_KEY,
+            'Authorization': EXTERNAL_BASIC_AUTH
+          },
+          body: JSON.stringify(payloadAPI)
+        });
+        
+        const resData = await response.json().catch(() => ({}));
+        this.logger.log(`Respuesta API La Mundial: HTTP ${response.status} - ${JSON.stringify(resData)}`);
+
+        // De acuerdo con la API, status === true significa éxito, pero si hay error HTTP ya no pasa
+        if (response.ok && resData && resData.status === true) {
+           return {
+             message: 'Emisión registrada exitosamente via API La Mundial.',
+             cnpoliza: resData.poliza || resData.cnpoliza || '',
+             cnrecibo: resData.recibo || resData.cnrecibo || '',
+             urlpoliza: '',
+             ncuota: 1,
+             fanopol: new Date().getFullYear(),
+             fmespol: new Date().getMonth() + 1
+           };
+        }
+        
+        this.logger.warn(`API La Mundial falló o fue rechazada. Usando fallback local...`);
+      } catch (apiErr) {
+        this.logger.error(`Error llamando API La Mundial: ${apiErr instanceof Error ? apiErr.message : String(apiErr)}. Usando fallback.`);
+      }
+      // === FIN LLAMADA API LA MUNDIAL ===
 
       const fields: Record<string, { type: unknown; value: unknown }> = {
         cnpoliza_rel:          { type: T.NVarChar(30),   value: b['poliza'] ? String(b['poliza']) : null },
@@ -303,8 +519,8 @@ export class PersonasService {
         ctipocanal:            { type: T.Char(1),        value: ctipocanal },
         ccanalalt:             { type: T.Int,            value: ccanalalt },
         cscanalalt:            { type: T.Int,            value: cscanalalt },
-        ptasamon:              { type: T.Numeric(18, 6), value: b['tasa'] ?? null },
-        msumaaseg:             { type: T.Numeric(18, 2), value: b['msumaaseg'] ?? null },
+        ptasamon:              { type: T.Numeric(18, 6), value: ptasamonResolved },
+        msumaaseg:             { type: T.Numeric(18, 2), value: msumaasegResolved },
         cmoneda:               { type: T.NVarChar(6),    value: b['cmoneda'] ?? null },
         mprimaext:             { type: T.Numeric(18, 2), value: b['prima'] },
         ifrecuencia:           { type: T.Char(1),        value: b['frecuencia'] },
@@ -326,27 +542,11 @@ export class PersonasService {
       const colList = Object.keys(fields).join(', ');
       const valList = Object.keys(fields).map((c) => `@${c}`).join(', ');
 
-      const getPar = (p: any) => {
-        if (typeof p === 'number') return p;
-        if (typeof p === 'string') {
-          const n = parseInt(p, 10);
-          if (!isNaN(n)) return n;
-          const s = p.toLowerCase();
-          if (s.includes('titular')) return 1;
-          if (s.includes('conyug') || s.includes('cónyug')) return 2;
-          if (s.includes('hij')) return 3;
-          if (s.includes('padre') || s.includes('madre')) return 4;
-          return 5;
-        }
-        return 1;
-      };
+      this.logger.log(`_createEmissionPerson: asegurados count = ${asegurados.length}`);
 
-      const asegurados = Array.isArray(b['asegurados'])
-        ? b['asegurados']
-        : (b['funeral'] && typeof b['funeral'] === 'object' && Array.isArray((b['funeral'] as any)['asegurados'])
-          ? (b['funeral'] as any)['asegurados']
-          : []);
-      this.logger.log(`createEmissionPerson: asegurados count = ${asegurados.length}`);
+      // IMPORTANTE: Limpiar tablas de staging por el problema de concurrencia viejo (además del Mutex)
+      await this.db.request().query('DELETE FROM eePoliza_Salud_Aseg');
+      await this.db.request().query('DELETE FROM eePoliza_Salud_Ben');
 
       // 4. Insertar asegurados en tabla temporal (misma conexión del pool)
       for (const a of asegurados as Record<string, any>[]) {
@@ -370,11 +570,6 @@ export class PersonasService {
         `);
       }
 
-      const beneficiarios = Array.isArray(b['beneficiarios'])
-        ? b['beneficiarios']
-        : (b['funeral'] && typeof b['funeral'] === 'object' && Array.isArray((b['funeral'] as any)['beneficiarios'])
-          ? (b['funeral'] as any)['beneficiarios']
-          : []);
       for (const a of beneficiarios as Record<string, any>[]) {
         const reqBen = this.db.request();
         reqBen.input('icedula_beneficiario', T.Char(1), a.icedula_beneficiario ?? a.tipoDoc ?? 'V');
