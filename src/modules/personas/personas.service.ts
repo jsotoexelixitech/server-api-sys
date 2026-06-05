@@ -474,8 +474,8 @@ export class PersonasService {
         this.logger.log(`=== FIN EMISION FUNERARIO ===`);
 
         if (response.ok && resData && (resData.status === true || resData.success === true)) {
-           // Algunas APIs envían datos en resData.data
-           const dataObj = resData.data || resData;
+           // La Mundial API sends the data in resData.result
+           const dataObj = resData.result || resData.data || resData;
            return {
              message: resData.message || 'Emisión registrada exitosamente via API La Mundial.',
              cnpoliza: dataObj.poliza || dataObj.cnpoliza || '',
