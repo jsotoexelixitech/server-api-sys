@@ -323,7 +323,26 @@ export class EmissionsService {
          };
       }
 
-      const errMsg = resData?.message || resData?.error || resData?.detail || `Error desconocido desde la API: HTTP ${response.status}`;
+      let errMsg = `Error desconocido desde la API: HTTP ${response.status}`;
+      if (resData) {
+        if (typeof resData.result?.result?.error === 'string') {
+          errMsg = resData.result.result.error;
+        } else if (typeof resData.result?.error === 'string') {
+          errMsg = resData.result.error;
+        } else if (resData.result?.message) {
+          errMsg = resData.result.message;
+        } else if (resData.message) {
+          errMsg = resData.message;
+        } else if (resData.error && typeof resData.error === 'string') {
+          errMsg = resData.error;
+        }
+        
+        if (Array.isArray(resData.errors)) {
+          const arrErrs = resData.errors.map((e: any) => e.mensaje || e.message || JSON.stringify(e)).join(', ');
+          if (arrErrs) errMsg = `${errMsg} - Detalles: ${arrErrs}`;
+        }
+      }
+
       this.logger.error(`Error llamando API La Mundial Automóvil: ${errMsg}`);
       throw new BadRequestException(errMsg);
     } catch (err) {
