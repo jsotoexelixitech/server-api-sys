@@ -381,12 +381,11 @@ export class PersonasService {
 
       // === LLAMADA A LA NUEVA API QAAPISYS2000 (PRIMER INTENTO) ===
       const ENABLE_QAAPISYS2000 = true;
-      try {
-        if (!ENABLE_QAAPISYS2000) {
-          throw new Error('qaapisys2000 disabled - usando fallback local directamente');
-        }
+      if (!ENABLE_QAAPISYS2000) {
+        throw new Error('qaapisys2000 disabled - usando fallback local directamente');
+      }
 
-        const payloadAPI = {
+      const payloadAPI = {
           cramo: b['cramo'] ?? 9,
           plan: String(b['plan'] ?? '6'),
           tipo_cedula_tomador: String(b['tipo_cedula_tomador'] ?? b['cedula_tomador'] ?? 'V'),
@@ -459,22 +458,54 @@ export class PersonasService {
         this.logger.log(`2. URL DESTINO API LA MUNDIAL: ${EXTERNAL_API_URL}`);
         this.logger.log(`3. PAYLOAD TRANSFORMADO HACIA LA MUNDIAL: ${JSON.stringify(payloadAPI)}`);
         
-        const response = await fetch(EXTERNAL_API_URL, {
-          method: 'POST',
-          headers: {
-            'Content-Type': 'application/json',
-            'apikey': EXTERNAL_API_KEY,
-            'Authorization': EXTERNAL_BASIC_AUTH
-          },
-          body: JSON.stringify(payloadAPI)
-        });
-        
-        const resData = await response.json().catch(() => ({}));
-        this.logger.log(`4. RESPUESTA DE LA MUNDIAL [HTTP ${response.status}]: ${JSON.stringify(resData)}`);
-        this.logger.log(`=== FIN EMISION FUNERARIO ===`);
+        let useFallback = false;
+        let resData: any = {};
+        let response: Response | null = null;
+        let errMsg = 'Error desconocido desde la API';
 
-        if (response.ok && resData && (resData.status === true || resData.success === true)) {
-           // La Mundial API sends the data in resData.result
+        try {
+          response = await fetch(EXTERNAL_API_URL, {
+            method: 'POST',
+            headers: {
+              'Content-Type': 'application/json',
+              'apikey': EXTERNAL_API_KEY,
+              'Authorization': EXTERNAL_BASIC_AUTH
+            },
+            body: JSON.stringify(payloadAPI),
+            signal: AbortSignal.timeout(15000)
+          });
+          
+          resData = await response.json().catch(() => ({}));
+          this.logger.log(`4. RESPUESTA DE LA MUNDIAL [HTTP ${response.status}]: ${JSON.stringify(resData)}`);
+          
+          if (response.status >= 500) {
+             this.logger.warn(`API La Mundial retornó HTTP ${response.status}, activando fallback...`);
+             useFallback = true;
+          } else if (!response.ok) {
+             errMsg = `HTTP ${response.status}`;
+             if (resData) {
+               if (typeof resData.result?.result?.error === 'string') errMsg = resData.result.result.error;
+               else if (typeof resData.result?.error === 'string') errMsg = resData.result.error;
+               else if (resData.result?.message) errMsg = resData.result.message;
+               else if (resData.message) errMsg = resData.message;
+               else if (resData.error && typeof resData.error === 'string') errMsg = resData.error;
+               
+               if (Array.isArray(resData.errors)) {
+                 const arrErrs = resData.errors.map((e: any) => e.mensaje || e.message || JSON.stringify(e)).join(', ');
+                 if (arrErrs) errMsg = `${errMsg} - Detalles: ${arrErrs}`;
+               }
+             }
+             this.logger.error(`Error llamando API La Mundial Funerario: ${errMsg}`);
+             throw new BadRequestException(errMsg);
+          }
+        } catch (err) {
+          if (err instanceof BadRequestException) throw err;
+          this.logger.warn(`Falla de red o timeout comunicando con La Mundial: ${err instanceof Error ? err.message : String(err)}, activando fallback...`);
+          useFallback = true;
+        }
+
+        if (!useFallback && response?.ok && resData && (resData.status === true || resData.success === true)) {
+           this.logger.log(`=== FIN EMISION FUNERARIO ===`);
            const dataObj = resData.result || resData.data || resData;
            return {
              message: resData.message || 'Emisión registrada exitosamente via API La Mundial.',
@@ -487,15 +518,10 @@ export class PersonasService {
              raw: resData
            };
         }
-        
-        // Si falló, lanzamos error directamente sin fallback
-        throw new Error(resData?.message || JSON.stringify(resData) || 'Respuesta inválida de La Mundial');
-      } catch (apiErr) {
-        this.logger.error(`Error llamando API La Mundial: ${apiErr instanceof Error ? apiErr.message : String(apiErr)}`);
-        // Lanza error para que se rompa el proceso de NestJS devolviendo 400
-        throw new BadRequestException(apiErr instanceof Error ? apiErr.message : String(apiErr));
-      }
-      // === FIN LLAMADA API LA MUNDIAL (NO HAY FALLBACK LOCAL AHORA) ===
+
+        // Si useFallback === true, simplemente dejamos que la ejecución continúe hacia abajo 
+        // para insertar en eePoliza_Personas_General (Sis2000 local).
+        this.logger.log(`=== INICIO FALLBACK LOCAL EMISION FUNERARIO ===`);
       // === FIN LLAMADA API LA MUNDIAL ===
 
       const fields: Record<string, { type: unknown; value: unknown }> = {
