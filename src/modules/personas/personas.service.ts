@@ -469,23 +469,29 @@ export class PersonasService {
         const resData = await response.json().catch(() => ({}));
         this.logger.log(`Respuesta API La Mundial: HTTP ${response.status} - ${JSON.stringify(resData)}`);
 
-        // De acuerdo con la API, status === true significa éxito, pero si hay error HTTP ya no pasa
-        if (response.ok && resData && resData.status === true) {
+        if (response.ok && resData && (resData.status === true || resData.success === true)) {
+           // Algunas APIs envían datos en resData.data
+           const dataObj = resData.data || resData;
            return {
-             message: 'Emisión registrada exitosamente via API La Mundial.',
-             cnpoliza: resData.poliza || resData.cnpoliza || '',
-             cnrecibo: resData.recibo || resData.cnrecibo || '',
-             urlpoliza: '',
-             ncuota: 1,
+             message: resData.message || 'Emisión registrada exitosamente via API La Mundial.',
+             cnpoliza: dataObj.poliza || dataObj.cnpoliza || '',
+             cnrecibo: dataObj.recibo || dataObj.cnrecibo || '',
+             urlpoliza: dataObj.urlpoliza || '',
+             ncuota: dataObj.ncuota || 1,
              fanopol: new Date().getFullYear(),
-             fmespol: new Date().getMonth() + 1
+             fmespol: new Date().getMonth() + 1,
+             raw: resData
            };
         }
         
-        this.logger.warn(`API La Mundial falló o fue rechazada. Usando fallback local...`);
+        // Si falló, lanzamos error directamente sin fallback
+        throw new Error(resData?.message || JSON.stringify(resData) || 'Respuesta inválida de La Mundial');
       } catch (apiErr) {
-        this.logger.error(`Error llamando API La Mundial: ${apiErr instanceof Error ? apiErr.message : String(apiErr)}. Usando fallback.`);
+        this.logger.error(`Error llamando API La Mundial: ${apiErr instanceof Error ? apiErr.message : String(apiErr)}`);
+        // Lanza error para que se rompa el proceso de NestJS devolviendo 400
+        throw new BadRequestException(apiErr instanceof Error ? apiErr.message : String(apiErr));
       }
+      // === FIN LLAMADA API LA MUNDIAL (NO HAY FALLBACK LOCAL AHORA) ===
       // === FIN LLAMADA API LA MUNDIAL ===
 
       const fields: Record<string, { type: unknown; value: unknown }> = {
