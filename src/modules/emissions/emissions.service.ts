@@ -277,8 +277,13 @@ export class EmissionsService {
         mprimaext: Number(b['mprimaext'] ?? b['prima'] ?? b['mprima_ext'] ?? 0),
         
         fecha_emision: fechaEmision,
-        fdesde: b['fdesde'],
-        fhasta: b['fhasta']
+        fdesde: b['fdesde'] || fechaEmision,
+        // Forzamos a que fhasta sea exactamente el mismo día del año siguiente
+        fhasta: (() => {
+          const d = new Date(`${b['fdesde'] || fechaEmision}T00:00:00Z`);
+          d.setUTCFullYear(d.getUTCFullYear() + 1);
+          return d.toISOString().slice(0, 10);
+        })()
       };
 
       const EXTERNAL_API_URL = 'https://qaapisys2000.lamundialdeseguros.com/api/v1/external/createEmissionAuto';
