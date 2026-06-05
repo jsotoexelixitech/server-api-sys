@@ -261,6 +261,11 @@ export class EmissionsService {
         xsercar: String(b['xsercar'] ?? b['serial_carroceria']),
         xsermot: b['xsermot'] ?? b['serial_motor'] ? String(b['xsermot'] ?? b['serial_motor']) : null,
 
+        ccategoria_uso: Number(b['ccategoria_uso'] ?? 20),
+        ntoneladas: b['ntoneladas'] != null ? Number(b['ntoneladas']) : null,
+        iplaca: String(b['iplaca'] ?? 'N'),
+        cusuario: String(b['cusuario'] ?? '4'),
+
         dec_persona_politica: Number(b['dec_persona_politica'] ?? 0),
         cpersona_politica: Number(b['cpersona_politica'] ?? 0),
         dec_term_y_cod: Number(b['dec_term_y_cod'] ?? 1),
