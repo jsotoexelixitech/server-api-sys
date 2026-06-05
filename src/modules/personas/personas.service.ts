@@ -380,7 +380,7 @@ export class PersonasService {
           : []);
 
       // === LLAMADA A LA NUEVA API QAAPISYS2000 (PRIMER INTENTO) ===
-      const ENABLE_QAAPISYS2000 = false; // <-- APAGADO TEMPORALMENTE por bug en rollback de la API externa
+      const ENABLE_QAAPISYS2000 = true;
       try {
         if (!ENABLE_QAAPISYS2000) {
           throw new Error('qaapisys2000 disabled - usando fallback local directamente');
