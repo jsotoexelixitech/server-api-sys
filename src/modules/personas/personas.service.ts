@@ -454,7 +454,10 @@ export class PersonasService {
         const EXTERNAL_API_KEY = '2729cc160b985890e0e6df72a161aea27f8e45682511c2dfd045f94eb9868f10';
         const EXTERNAL_BASIC_AUTH = 'Basic YWRtaW46cGFzc3dvcmQxMjM0';
 
-        this.logger.log(`Llamando API externa La Mundial con payload: ${JSON.stringify(payloadAPI)}`);
+        this.logger.log(`=== INICIO EMISION FUNERARIO ===`);
+        this.logger.log(`1. PAYLOAD RECIBIDO DEL FRONTEND: ${JSON.stringify(b)}`);
+        this.logger.log(`2. URL DESTINO API LA MUNDIAL: ${EXTERNAL_API_URL}`);
+        this.logger.log(`3. PAYLOAD TRANSFORMADO HACIA LA MUNDIAL: ${JSON.stringify(payloadAPI)}`);
         
         const response = await fetch(EXTERNAL_API_URL, {
           method: 'POST',
@@ -467,7 +470,8 @@ export class PersonasService {
         });
         
         const resData = await response.json().catch(() => ({}));
-        this.logger.log(`Respuesta API La Mundial: HTTP ${response.status} - ${JSON.stringify(resData)}`);
+        this.logger.log(`4. RESPUESTA DE LA MUNDIAL [HTTP ${response.status}]: ${JSON.stringify(resData)}`);
+        this.logger.log(`=== FIN EMISION FUNERARIO ===`);
 
         if (response.ok && resData && (resData.status === true || resData.success === true)) {
            // Algunas APIs envían datos en resData.data
