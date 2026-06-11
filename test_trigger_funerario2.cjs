@@ -17,18 +17,9 @@ async function testTrigger() {
     try {
         let pool = await sql.connect(config);
         
-        console.log('--- BUSCANDO EN ADPOLIZA POR RIF ---');
-        const search = await pool.request().query(`
-            SELECT TOP 3 cnpoliza, cramo, xrif, fdesde
-            FROM adpoliza
-            WHERE xrif = '45461175'
-            ORDER BY cnpoliza DESC
-        `);
-        console.log(search.recordset);
-
-        console.log('--- BUSCANDO ÚLTIMAS PÓLIZAS GLOBALES ---');
+        console.log('--- ÚLTIMAS 3 PÓLIZAS EN LA BASE DE DATOS ---');
         const latest = await pool.request().query(`
-            SELECT TOP 3 cnpoliza, cramo, xrif, fdesde
+            SELECT TOP 3 *
             FROM adpoliza
             ORDER BY cnpoliza DESC
         `);
