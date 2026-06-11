@@ -1,0 +1,126 @@
+CREATE   TRIGGER [dbo].[Emision_Personas_General_copy1]
+ON [dbo].[eePoliza_Personas_General]
+WITH EXECUTE AS CALLER
+FOR INSERT
+AS
+BEGIN
+
+    SET NOCOUNT ON;
+
+    DECLARE @id int, @cnpoliza_rel varchar(30), @cplan varchar(10), @xcanal_venta  varchar(250),  @icedula_tomador  char(1),
+        @xrif_tomador  numeric(9),  @xnombre_tomador  varchar(250),  @xapellido_tomador  varchar(250),  @isexo_tomador  char(1),
+        @iestado_civil_tomador char(1), @fnac_tomador datetime, @cestado_tomador  varchar(100),  @cciudad_tomador  varchar(100),
+        @xdireccion_tomador varchar(1000),  @xtelefono_tomador  varchar(250),  @xcorreo_tomador  varchar(250),  @icedula_titular
+        char(1),  @xrif_titular  numeric(9),  @xnombre_titular  varchar(250),  @xapellido_titular  varchar(250),  @isexo_titular
+        char(1),  @iestado_civil_titular  char(1),  @fnac_titular  datetime,  @cestado_titular  varchar(100),   @cciudad_titular
+        varchar(100),  @xdireccion_titular  varchar(1000),  @xtelefono_titular  varchar(250),   @xcorreo_titular   varchar(250),
+        @cpersona_politica char(1), @cterm_y_cod char(1), @cdiagnos_enferm char(1), @xdiagnos_enferm varchar(1000),
+        @cproductor  int,  @ptasamon  numeric(18,6), @msumaaseg numeric(18,2), @mprimaext  numeric(18,2),  
+        @ifrecuencia  char(1),  @femision  datetime,  @fdesde date, @fhasta date,
+        @corigen_rel CHAR(2), @api  varchar(100),  @method varchar(100), 
+        @cprog char(20), @ifuente char(10),  @fingreso  datetime, @cpoliza NUMERIC(19), @cnpoliza  varchar(30),  @cproces  NUMERIC(13),
+		@pcomision numeric(9, 2), @cramo int, @qcontador numeric(18, 0), @POL_RAMO VARCHAR(20),
+        @minedad char(3), @maxedad char(3), @error VARCHAR(200), @ccanalalt int, @cscanalalt int, @ctipocanal CHAR(1),
+		@cnrecibo varchar(50), @crecibo numeric(19), @csucur int, @cpoliza_ou numeric(19), @cnpoliza_ou varchar(20), @cproces_ou numeric(19)
+
+
+    SELECT
+        @id = id, @cnpoliza_rel = cnpoliza_rel, @cplan = cplan, @cramo = cramo, @xcanal_venta = xcanal_venta, @icedula_tomador = icedula_tomador,
+        @xrif_tomador = xrif_tomador, @xnombre_tomador = xnombre_tomador, @xapellido_tomador = xapellido_tomador,
+        @isexo_tomador = isexo_tomador, @iestado_civil_tomador = iestado_civil_tomador, @fnac_tomador = fnac_tomador,
+        @cestado_tomador = cestado_tomador, @cciudad_tomador = cciudad_tomador, @xdireccion_tomador = xdireccion_tomador,
+        @xtelefono_tomador = xtelefono_tomador, @xcorreo_tomador = xcorreo_tomador, @icedula_titular = icedula_titular,
+        @xrif_titular = xrif_titular, @xnombre_titular = xnombre_titular, @xapellido_titular = xapellido_titular,
+        @isexo_titular = isexo_titular, @iestado_civil_titular = iestado_civil_titular, @fnac_titular = fnac_titular,
+        @cestado_titular = cestado_titular, @cciudad_titular = cciudad_titular, @xdireccion_titular = xdireccion_titular,
+        @xtelefono_titular = xtelefono_titular, @xcorreo_titular = xcorreo_titular,
+        @cpersona_politica = cpersona_politica, @cterm_y_cod = cterm_y_cod, @cdiagnos_enferm = cdiagnos_enferm, @xdiagnos_enferm = xdiagnos_enferm,
+        @cproductor = cproductor, @ptasamon = ptasamon, @msumaaseg = msumaaseg,
+        @mprimaext = mprimaext, @ifrecuencia = ifrecuencia, @femision = femision, @fdesde = fdesde, @fhasta = fhasta, 
+        @api = api, @method = method, @cprog = cprog, @ifuente = ifuente,
+        @fingreso = fingreso, @cpoliza = cpoliza, @cnpoliza = cnpoliza, @cproces = cproces, @corigen_rel = corigen_rel, @ccanalalt = ccanalalt ,
+        @cscanalalt = cscanalalt, @ctipocanal = ctipocanal
+        
+    FROM Inserted
+
+		-- SI EL PRODUCTOR ES "DIRECTO" Y RECIBE "0"
+    IF @cproductor = 0 BEGIN
+        SELECT @cproductor = 80080
+    END
+		
+	IF @cramo IS NULL BEGIN
+        SELECT @cramo = cramo from maplanes_per WHERE cplan = @cplan and iestado = 'V'
+    END
+
+		
+	-- 	EJECUTA SP DE VALIDACIÓN PARA EMISIONES
+	EXEC speeValidatePersonGeneral @cramo, @cplan, @femision, @fdesde, @fhasta, @xrif_titular, @fnac_titular
+
+	IF @cproductor = 0 BEGIN
+        SELECT @cproductor = 80080
+    END
+
+	IF @ccanalalt is not null BEGIN
+        SELECT @csucur = COALESCE(csucur,1) from macanalalt where ccanalalt = @ccanalalt
+    END ELSE BEGIN
+		SELECT @csucur = COALESCE(csucur,1) from maproduc where cproductor = @cproductor
+	END
+	/*
+	SELECT @POL_RAMO = 'CPOLIZA'
+    SELECT @qcontador=qcontador FROM macontadores WHERE ccontador=@POL_RAMO
+    SELECT @qcontador=@qcontador + 1
+    UPDATE MACONTADORES SET qcontador = @qcontador WHERE ccontador = @POL_RAMO
+    SELECT @cpoliza = CONVERT(VARCHAR, @cramo) + CONVERT(VARCHAR, FORMAT(@qcontador, '00000000000000'))
+	*/
+    IF (@cramo = 1)  SELECT @POL_RAMO = 'POL_VIDA'
+    IF (@cramo = 5)  SELECT @POL_RAMO = 'POL_ACC'
+    IF (@cramo = 7)  SELECT @POL_RAMO = 'POL_SALUD'
+    IF (@cramo = 9)  SELECT @POL_RAMO = 'POL_FUN'
+	IF (@cramo > 9)  SELECT @POL_RAMO = 'POLIZA'
+	
+	EXEC spContador_v1 @cpoliza OUTPUT, @cnpoliza OUTPUT, @crecibo OUTPUT, @cnrecibo OUTPUT, @cproces OUTPUT , @csucur, @fdesde, @cramo, @POL_RAMO
+
+	--SELECT @cpoliza = CAST(@cpoliza_ou as varchar(50)), @cnpoliza = CAST(@cnpoliza_ou as varchar(50)), @cproces = CAST(@cproces_ou as varchar(50))
+
+
+	/*
+    SELECT @qcontador=qcontador FROM macontadores WHERE ccontador=@POL_RAMO
+    SELECT @qcontador=@qcontador + 1
+    UPDATE MACONTADORES SET qcontador = @qcontador WHERE ccontador = @POL_RAMO
+    SELECT @cnpoliza = CONVERT(VARCHAR, @cramo) + '-' + CONVERT(VARCHAR, FORMAT(@qcontador, '0000000000')) + '-0'
+
+    SELECT @POL_RAMO = 'CPROCES'
+    SELECT @qcontador=qcontador FROM macontadores WHERE ccontador=@POL_RAMO
+    SELECT @qcontador=@qcontador + 1
+    UPDATE MACONTADORES SET qcontador = @qcontador WHERE ccontador = @POL_RAMO
+    SELECT @cproces = CONVERT(VARCHAR, YEAR(GETDATE())) + CONVERT(VARCHAR, FORMAT(@qcontador, '00000000'))
+	*/
+
+	
+    INSERT INTO TMEMISION_PERSONAS_GENERAL
+        (
+        cnpoliza_rel, cplan, cramo, xcanal_venta, icedula_tomador,
+        xrif_tomador, xnombre_tomador, xapellido_tomador,  isexo_tomador,  iestado_civil_tomador,  fnac_tomador,  cestado_tomador,
+        cciudad_tomador, xdireccion_tomador, xtelefono_tomador, xcorreo_tomador, icedula_titular,  xrif_titular,  xnombre_titular,
+        xapellido_titular,    isexo_titular,    iestado_civil_titular,     fnac_titular,     cestado_titular,     cciudad_titular,
+        xdireccion_titular, xtelefono_titular, xcorreo_titular, 
+        cpersona_politica, cterm_y_cod, cdiagnos_enferm, xdiagnos_enferm,
+        cproductor, ptasamon, msumaaseg, mprimaext, ifrecuencia, femision, fdesde, fhasta,
+        corigen_rel, api,  method,  cprog,
+        ifuente, fingreso, cpoliza, cnpoliza, cproces, ccanalalt, cscanalalt, ctipocanal
+        )
+
+    SELECT
+        @cnpoliza_rel, @cplan, @cramo, @xcanal_venta, @icedula_tomador,
+        @xrif_tomador,    @xnombre_tomador,    @xapellido_tomador,    @isexo_tomador,    @iestado_civil_tomador,     @fnac_tomador,
+        @cestado_tomador,   @cciudad_tomador,   @xdireccion_tomador,   @xtelefono_tomador,   @xcorreo_tomador,    @icedula_titular,
+        @xrif_titular,    @xnombre_titular,    @xapellido_titular,    @isexo_titular,    @iestado_civil_titular,     @fnac_titular,
+        @cestado_titular, @cciudad_titular,  @xdireccion_titular,  @xtelefono_titular,  @xcorreo_titular,  
+        @cpersona_politica, @cterm_y_cod, @cdiagnos_enferm, @xdiagnos_enferm,
+        @cproductor,  @ptasamon, @msumaaseg,
+        @mprimaext, @ifrecuencia, @femision, @fdesde, @fhasta,
+        @corigen_rel, @api, @method, @cprog, 
+        @ifuente, @fingreso, @cpoliza, @cnpoliza, @cproces, @ccanalalt, @cscanalalt, @ctipocanal
+		
+END
+;

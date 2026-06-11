@@ -1,0 +1,85 @@
+--  ˚☽˚. ‧₊˚✩₊˚.⋆☾⋆⁺₊✧⋆⁺₊⋆ ☀︎ ⋆⁺₊⋆
+-- Author:	Franjhely Araujo <3
+-- Create date: 2/2/2026
+-- Description:	Contadores (Actualmente,solo auto)
+--  ˚☽˚. ‧₊˚✩₊˚.⋆☾⋆⁺₊✧⋆⁺₊⋆ ☀︎ ⋆⁺₊⋆
+CREATE PROCEDURE [dbo].[spContador_v1]
+@cpoliza NUMERIC(19) OUTPUT, @cnpoliza NVARCHAR(17)OUTPUT,
+@crecibo NUMERIC(19) OUTPUT, @cnrecibo NVARCHAR(17) OUTPUT,
+@cproces NUMERIC(13)OUTPUT, @csucur NUMERIC(4),@fdesde DATE,
+@ramo INT, @pol_type VARCHAR(10)
+AS
+BEGIN
+    BEGIN TRANSACTION;
+    BEGIN TRY
+        DECLARE 
+            @lencpoliza  NUMERIC (19) = (SELECT NUMERIC_PRECISION FROM information_schema.COLUMNS WHERE TABLE_NAME = 'adrecibos' and COLUMN_NAME = 'cpoliza'),
+            @lencnpoliza  NVARCHAR (14) = 14,--(SELECT CHARACTER_MAXIMUM_LENGTH FROM information_schema.COLUMNS WHERE TABLE_NAME = 'adrecibos' and COLUMN_NAME = 'cnpoliza'),
+            @lencrecibo NUMERIC (19) = (SELECT NUMERIC_PRECISION FROM information_schema.COLUMNS WHERE TABLE_NAME = 'adrecibos' and COLUMN_NAME = 'crecibo'),
+            @lencnrecibo NVARCHAR (19) = 14,-- ( SELECT CHARACTER_MAXIMUM_LENGTH FROM information_schema.COLUMNS WHERE TABLE_NAME = 'adrecibos' and COLUMN_NAME = 'cnrecibo'),
+            @lencproces NUMERIC (13) = (SELECT NUMERIC_PRECISION FROM information_schema.COLUMNS WHERE TABLE_NAME = 'adrecibos' and COLUMN_NAME = 'cproces'),
+            @q_recibo numeric(16), @q_proces numeric(16), @q_poliza numeric(16), @q_pol_type numeric(16), @q_crecibo numeric(16);
+
+        UPDATE macontadores WITH (UPDLOCK) 
+        SET @q_recibo = qcontador = qcontador + 1 WHERE ccontador = 'RECIBO';
+
+        UPDATE macontadores WITH (UPDLOCK) 
+        SET @q_proces = qcontador = qcontador + 1 WHERE ccontador = 'cproces';
+
+        UPDATE macontadores WITH (UPDLOCK) 
+        SET @q_poliza = qcontador = qcontador + 1 WHERE ccontador = 'cpoliza';
+
+        UPDATE macontadores WITH (UPDLOCK) 
+        SET @q_pol_type = qcontador = qcontador + 1 WHERE ccontador = @pol_type;
+
+        UPDATE macontadores WITH (UPDLOCK) 
+        SET @q_crecibo = qcontador = qcontador + 1 WHERE ccontador = 'CRECIBO';
+
+        SELECT @cnrecibo = CAST(@ramo AS NVARCHAR) +  '-' + CAST(@csucur AS NVARCHAR) + CAST(qcontador AS NVARCHAR)  FROM macontadores WHERE ccontador = 'RECIBO'
+
+        SELECT @cproces = CONCAT(YEAR(@fdesde), REPLICATE('0', 
+            CASE 
+                WHEN (@lencproces - LEN(YEAR(@fdesde)) - LEN(CONVERT(VARCHAR, qcontador))) > 0 
+                THEN @lencproces - LEN(YEAR(@fdesde)) - LEN(CONVERT(VARCHAR, qcontador))
+                ELSE 0 
+            END
+        ) ,qcontador + 1) FROM macontadores WHERE ccontador = 'cproces'
+    
+        SELECT @cpoliza = CONCAT(CAST(@ramo AS NVARCHAR), REPLICATE('0', 
+            CASE 
+                WHEN (@lencpoliza - LEN(@ramo) - LEN(CONVERT(VARCHAR, qcontador))) > 0 
+                THEN @lencpoliza - LEN(@ramo) - LEN(CONVERT(VARCHAR, qcontador))
+                ELSE 0 
+            END
+        ) ,qcontador + 1) FROM macontadores WHERE ccontador = 'cpoliza'
+
+        SELECT @cnpoliza = CONCAT(CAST(@ramo AS NVARCHAR) + '-' + 
+            CAST(@csucur AS NVARCHAR) + '-' + 
+            CAST(@csucur AS NVARCHAR) + 
+            REPLICATE('0', 
+            CASE 
+                WHEN (@lencnpoliza - LEN(@ramo)- len('-') - LEN(@csucur) - len('-') - LEN(@csucur) -LEN(CONVERT(VARCHAR, qcontador))) > 0 
+                THEN @lencnpoliza -LEN(@ramo)- len('-') - LEN(@csucur)  -len('-') - LEN(@csucur) -LEN(CONVERT(VARCHAR, qcontador))
+                ELSE 0 
+            END
+            ) ,qcontador + 1)
+        FROM macontadores 
+        WHERE ccontador = @pol_type
+
+        SELECT @crecibo = CONCAT(CAST(@ramo AS NVARCHAR), REPLICATE('0', 
+            CASE 
+                WHEN (@lencrecibo - LEN(@ramo) - LEN(CONVERT(VARCHAR, qcontador + 1))) > 0 
+                THEN @lencrecibo - LEN(@ramo) - LEN(CONVERT(VARCHAR, qcontador + 1))
+                ELSE 0 
+            END
+        ) ,qcontador + 1) FROM macontadores WHERE ccontador = 'CRECIBO'
+
+        COMMIT TRANSACTION;
+    END TRY
+    BEGIN CATCH
+        IF @@TRANCOUNT > 0 ROLLBACK TRANSACTION;
+        THROW; -- Lanza el error para saber qué pasó
+    END CATCH
+END
+
+

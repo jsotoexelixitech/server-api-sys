@@ -400,9 +400,9 @@ export class PersonasService {
           : []);
 
       // === LLAMADA A LA NUEVA API QAAPISYS2000 (PRIMER INTENTO) ===
-      const ENABLE_QAAPISYS2000 = true;
+      const ENABLE_QAAPISYS2000 = false; // Deshabilitado para forzar la emisión local directa
       if (!ENABLE_QAAPISYS2000) {
-        throw new Error('qaapisys2000 disabled - usando fallback local directamente');
+        this.logger.log('qaapisys2000 disabled - usando emisión local en Sis2000 directamente');
       }
 
       const payloadAPI = {
@@ -478,50 +478,52 @@ export class PersonasService {
         this.logger.log(`2. URL DESTINO API LA MUNDIAL: ${EXTERNAL_API_URL}`);
         this.logger.log(`3. PAYLOAD TRANSFORMADO HACIA LA MUNDIAL: ${JSON.stringify(payloadAPI)}`);
         
-        let useFallback = false;
+        let useFallback = !ENABLE_QAAPISYS2000;
         let resData: any = {};
         let response: Response | null = null;
         let errMsg = 'Error desconocido desde la API';
 
-        try {
-          response = await fetch(EXTERNAL_API_URL, {
-            method: 'POST',
-            headers: {
-              'Content-Type': 'application/json',
-              'apikey': EXTERNAL_API_KEY,
-              'Authorization': EXTERNAL_BASIC_AUTH
-            },
-            body: JSON.stringify(payloadAPI),
-            signal: AbortSignal.timeout(15000)
-          });
-          
-          resData = await response.json().catch(() => ({}));
-          this.logger.log(`4. RESPUESTA DE LA MUNDIAL [HTTP ${response.status}]: ${JSON.stringify(resData)}`);
-          
-          if (response.status >= 500) {
-             this.logger.warn(`API La Mundial retornó HTTP ${response.status}, activando fallback...`);
-             useFallback = true;
-          } else if (!response.ok) {
-             errMsg = `HTTP ${response.status}`;
-             if (resData) {
-               if (typeof resData.result?.result?.error === 'string') errMsg = resData.result.result.error;
-               else if (typeof resData.result?.error === 'string') errMsg = resData.result.error;
-               else if (resData.result?.message) errMsg = resData.result.message;
-               else if (resData.message) errMsg = resData.message;
-               else if (resData.error && typeof resData.error === 'string') errMsg = resData.error;
-               
-               if (Array.isArray(resData.errors)) {
-                 const arrErrs = resData.errors.map((e: any) => e.mensaje || e.message || JSON.stringify(e)).join(', ');
-                 if (arrErrs) errMsg = `${errMsg} - Detalles: ${arrErrs}`;
+        if (ENABLE_QAAPISYS2000) {
+          try {
+            response = await fetch(EXTERNAL_API_URL, {
+              method: 'POST',
+              headers: {
+                'Content-Type': 'application/json',
+                'apikey': EXTERNAL_API_KEY,
+                'Authorization': EXTERNAL_BASIC_AUTH
+              },
+              body: JSON.stringify(payloadAPI),
+              signal: AbortSignal.timeout(15000)
+            });
+            
+            resData = await response.json().catch(() => ({}));
+            this.logger.log(`4. RESPUESTA DE LA MUNDIAL [HTTP ${response.status}]: ${JSON.stringify(resData)}`);
+            
+            if (response.status >= 500) {
+               this.logger.warn(`API La Mundial retornó HTTP ${response.status}, activando fallback...`);
+               useFallback = true;
+            } else if (!response.ok) {
+               errMsg = `HTTP ${response.status}`;
+               if (resData) {
+                 if (typeof resData.result?.result?.error === 'string') errMsg = resData.result.result.error;
+                 else if (typeof resData.result?.error === 'string') errMsg = resData.result.error;
+                 else if (resData.result?.message) errMsg = resData.result.message;
+                 else if (resData.message) errMsg = resData.message;
+                 else if (resData.error && typeof resData.error === 'string') errMsg = resData.error;
+                 
+                 if (Array.isArray(resData.errors)) {
+                   const arrErrs = resData.errors.map((e: any) => e.mensaje || e.message || JSON.stringify(e)).join(', ');
+                   if (arrErrs) errMsg = `${errMsg} - Detalles: ${arrErrs}`;
+                 }
                }
-             }
-             this.logger.error(`Error llamando API La Mundial Funerario: ${errMsg}`);
-             throw new BadRequestException(errMsg);
+               this.logger.error(`Error llamando API La Mundial Funerario: ${errMsg}`);
+               throw new BadRequestException(errMsg);
+            }
+          } catch (err) {
+            if (err instanceof BadRequestException) throw err;
+            this.logger.warn(`Falla de red o timeout comunicando con La Mundial: ${err instanceof Error ? err.message : String(err)}, activando fallback...`);
+            useFallback = true;
           }
-        } catch (err) {
-          if (err instanceof BadRequestException) throw err;
-          this.logger.warn(`Falla de red o timeout comunicando con La Mundial: ${err instanceof Error ? err.message : String(err)}, activando fallback...`);
-          useFallback = true;
         }
 
         if (!useFallback && response?.ok && resData && (resData.status === true || resData.success === true)) {
