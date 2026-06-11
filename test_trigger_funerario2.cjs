@@ -17,13 +17,14 @@ async function testTrigger() {
     try {
         let pool = await sql.connect(config);
         
-        console.log('--- ÚLTIMAS 3 PÓLIZAS EN LA BASE DE DATOS ---');
-        const latest = await pool.request().query(`
-            SELECT TOP 3 *
-            FROM adpoliza
-            ORDER BY cnpoliza DESC
+        console.log('--- BUSCANDO EN TMEMISION_PERSONAS_GENERAL POR RIF ---');
+        const search = await pool.request().query(`
+            SELECT TOP 3 id, cnpoliza, cplan, xrif_titular, fingreso
+            FROM TMEMISION_PERSONAS_GENERAL
+            WHERE xrif_titular = 45461175
+            ORDER BY id DESC
         `);
-        console.log(latest.recordset);
+        console.log(search.recordset);
         
     } catch (err) {
         console.error('Error:', err.message);
