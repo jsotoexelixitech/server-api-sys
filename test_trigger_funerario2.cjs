@@ -19,16 +19,16 @@ async function testTrigger() {
         
         console.log('--- BUSCANDO EN ADPOLIZA POR RIF ---');
         const search = await pool.request().query(`
-            SELECT TOP 3 cnpoliza, xnombre, xapellido, fdesde, fcreacion
+            SELECT TOP 3 cnpoliza, xnombre, xapellido, fdesde
             FROM adpoliza
             WHERE xrif = '45461175'
-            ORDER BY fcreacion DESC
+            ORDER BY cnpoliza DESC
         `);
         console.log(search.recordset);
 
         console.log('--- BUSCANDO ÚLTIMAS PÓLIZAS GLOBALES ---');
         const latest = await pool.request().query(`
-            SELECT TOP 3 cnpoliza, xnombre, xapellido, fdesde, fcreacion
+            SELECT TOP 3 cnpoliza, xnombre, xapellido, fdesde
             FROM adpoliza
             ORDER BY cnpoliza DESC
         `);
