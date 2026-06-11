@@ -287,6 +287,7 @@ export class EmissionsService {
       let errMsg = 'Error desconocido desde la API';
 
       if (ENABLE_QAAPISYS2000) {
+        this.logger.log(`[EMISIÓN AUTO] -> Intentando emitir a través de la API EXTERNA (La Mundial) plan=${b['plan']} rif=${b['rif_titular']}`);
         try {
           response = await fetch(EXTERNAL_API_URL, {
             method: 'POST',
@@ -346,6 +347,7 @@ export class EmissionsService {
 
       if (useFallback) {
         // === FALLBACK A BASE DE DATOS LOCAL SIS2000 ===
+        this.logger.log(`[EMISIÓN AUTO] -> Usando API LOCAL (Sys2000 - eePoliza_Automovil_General) para plan=${b['plan']} rif=${b['rif_titular']}`);
         this.logger.log(`=== INICIO FALLBACK LOCAL EMISION AUTOMOVIL ===`);
         const ins = this.db.request();
         const ctipocanal = null;

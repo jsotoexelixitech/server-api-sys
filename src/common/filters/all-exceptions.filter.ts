@@ -24,7 +24,7 @@ export class AllExceptionsFilter implements ExceptionFilter {
 
     const isHttp = exception instanceof HttpException;
 
-    const statusCode = isHttp
+    let statusCode = isHttp
       ? exception.getStatus()
       : HttpStatus.INTERNAL_SERVER_ERROR;
 
@@ -40,6 +40,17 @@ export class AllExceptionsFilter implements ExceptionFilter {
         // ValidationPipe genera { message: string[] }; HttpException propios { message: string }
         message = (p.message as string | string[]) ?? 'Error en la solicitud.';
       }
+    } else if (
+      exception &&
+      typeof exception === 'object' &&
+      ('code' in exception || 'name' in exception) &&
+      (exception['code'] === 'EREQUEST' || exception['name'] === 'RequestError')
+    ) {
+      // Error de negocio arrojado por un Trigger/SP (THROW 99001, '...', 1)
+      const sqlError = exception as Error;
+      // Usamos el status 400 (Bad Request) ya que es un error de regla de negocio
+      statusCode = HttpStatus.BAD_REQUEST;
+      message = sqlError.message || 'Error de validación de base de datos.';
     } else {
       // Error NO-HTTP: bug, timeout de red, etc. — nunca filtrar info interna
       message = 'Ha ocurrido un error inesperado en el servidor.';

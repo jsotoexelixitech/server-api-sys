@@ -34,8 +34,8 @@ export class CreateEmissionAutoDto {
   @IsString()
   tipo_cedula_tomador: string;
 
-  @ApiProperty({ example: 25221952, description: 'RIF del tomador (solo números)' })
-  @IsNumber()
+  @ApiProperty({ example: 25221952, description: 'RIF del tomador' })
+  @IsNotEmpty()
   rif_tomador: number | string;
 
   @ApiProperty({ example: 'Gabriel', description: 'Nombre del tomador' })
@@ -93,7 +93,7 @@ export class CreateEmissionAutoDto {
   tipo_cedula_titular: string;
 
   @ApiProperty({ example: 25221952, description: 'RIF del titular (puede ser igual al tomador)' })
-  @IsNumber()
+  @IsNotEmpty()
   rif_titular: number | string;
 
   @ApiProperty({ example: 'Gabriel', description: 'Nombre del titular' })

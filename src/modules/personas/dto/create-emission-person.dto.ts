@@ -62,9 +62,9 @@ export class CreateEmissionPersonDto {
   poliza?: string | null;
 
   // ── Tomador ──────────────────────────────────────────────────────────────
-  @ApiPropertyOptional({ example: 'V' }) @IsOptional() @IsString() tipo_cedula_tomador?: string;
-  @ApiPropertyOptional({ example: 'V' }) @IsOptional() @IsString() cedula_tomador?: string;
-  @ApiProperty({ example: 25221952 }) @IsNumber() rif_tomador: number | string;
+  @ApiPropertyOptional({ example: 'V' }) @IsOptional() @IsString() @IsNotEmpty() tipo_cedula_tomador?: string;
+  @ApiPropertyOptional({ example: 'V' }) @IsOptional() @IsString() @IsNotEmpty() cedula_tomador?: string;
+  @ApiProperty({ example: 25221952 }) @IsNotEmpty() rif_tomador: number | string;
   @ApiPropertyOptional({ example: 'JUAN' }) @IsOptional() @IsString() nombre_tomador?: string;
   @ApiPropertyOptional({ example: 'PEREZ' }) @IsOptional() @IsString() apellido_tomador?: string;
   @ApiPropertyOptional({ example: 'M' }) @IsOptional() @IsString() sexo_tomador?: string;
@@ -77,9 +77,9 @@ export class CreateEmissionPersonDto {
   @ApiPropertyOptional({ example: 'juan@mail.com' }) @IsOptional() @IsString() correo_tomador?: string;
 
   // ── Titular ──────────────────────────────────────────────────────────────
-  @ApiPropertyOptional({ example: 'V' }) @IsOptional() @IsString() tipo_cedula_titular?: string;
-  @ApiPropertyOptional({ example: 'V' }) @IsOptional() @IsString() cedula_titular?: string;
-  @ApiProperty({ example: 25221952 }) @IsNumber() rif_titular: number | string;
+  @ApiPropertyOptional({ example: 'V' }) @IsOptional() @IsString() @IsNotEmpty() tipo_cedula_titular?: string;
+  @ApiPropertyOptional({ example: 'V' }) @IsOptional() @IsString() @IsNotEmpty() cedula_titular?: string;
+  @ApiProperty({ example: 25221952 }) @IsNotEmpty() rif_titular: number | string;
   @ApiPropertyOptional({ example: 'JUAN' }) @IsOptional() @IsString() nombre_titular?: string;
   @ApiPropertyOptional({ example: 'PEREZ' }) @IsOptional() @IsString() apellido_titular?: string;
   @ApiPropertyOptional({ example: 'M' }) @IsOptional() @IsString() sexo_titular?: string;
