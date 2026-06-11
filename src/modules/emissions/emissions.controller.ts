@@ -2,12 +2,11 @@ import { Body, Controller, Headers, HttpCode, HttpStatus, Post } from '@nestjs/c
 import { ApiBody, ApiHeader, ApiOperation, ApiResponse, ApiTags } from '@nestjs/swagger';
 import { EmissionsService } from './emissions.service';
 import { CreateEmissionAutoDto } from './dto/create-emission-auto.dto';
-import { ValidateEmissionPersonDto } from './dto/validate-emission-person.dto';
 import { ValidateEmissionAutoDto } from './dto/validate-emission-auto.dto';
 import { SearchVehicleByPlateDto, SearchVehicleBySerialDto } from './dto/search-vehicle.dto';
 import { Api401, Api500, ApiCommonErrors } from '../../common/swagger/api-error-responses';
 
-@ApiTags('emissions')
+@ApiTags('Emisión Automóvil (RCV)')
 @Controller('v1')
 export class EmissionsController {
   constructor(private readonly emissionsService: EmissionsService) {}
@@ -59,29 +58,6 @@ export class EmissionsController {
     return await this.emissionsService.searchBySerial(serial);
   }
 
-  // ── POST /api/v1/external/validateEmissionPerson ─────────────────────────
-
-  @Post('external/validateEmissionPerson')
-  @HttpCode(HttpStatus.OK)
-  @ApiOperation({
-    summary: 'Validar persona para emisión',
-    description:
-      'Ejecuta `speeValidatePersonGeneral`. ' +
-      'Si la persona **puede** emitir devuelve `status: true`. ' +
-      'Si el SP detecta una restricción (póliza vigente, edad, etc.) devuelve `status: false` con el motivo.',
-  })
-  @ApiBody({ type: ValidateEmissionPersonDto })
-  @ApiResponse({ status: 200, schema: { example: { status: true, result: { status: true, message: 'Persona válida para emisión.' } } } })
-  @ApiResponse({
-    status: 200,
-    description: 'Validación rechazada por regla de negocio (status: false)',
-    schema: { example: { status: false, result: { status: false, error: 'Se ha detectado la existencia de una póliza vigente con el mismo asegurado y ramo.' } } },
-  })
-  @ApiCommonErrors()
-  async validateEmissionPerson(@Body() dto: ValidateEmissionPersonDto) {
-    const result = await this.emissionsService.validateEmissionPerson(dto as unknown as Record<string, unknown>);
-    return { status: result.status, result };
-  }
 
   // ── POST /api/v1/external/validateEmissionAuto ────────────────────────────
 

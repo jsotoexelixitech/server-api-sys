@@ -2,9 +2,10 @@ import { Body, Controller, Headers, HttpCode, HttpStatus, Post } from '@nestjs/c
 import { ApiBody, ApiHeader, ApiOperation, ApiResponse, ApiTags } from '@nestjs/swagger';
 import { PersonasService } from '../personas/personas.service';
 import { CreateEmissionPersonDto } from '../personas/dto/create-emission-person.dto';
+import { ValidateEmissionPersonDto } from '../emissions/dto/validate-emission-person.dto';
 import { Api401, Api500, ApiCommonErrors } from '../../common/swagger/api-error-responses';
 
-@ApiTags('external')
+@ApiTags('Emisión Personas (Funerario)')
 @Controller('v1/external')
 export class ExternalController {
   constructor(private readonly personasService: PersonasService) {}
@@ -15,17 +16,20 @@ export class ExternalController {
     summary: 'Validar emisión de personas',
     description: 'Valida los datos antes de emitir. Actualmente es un paso de paso que devuelve status: true si los datos están correctos según el DTO.',
   })
-  @ApiHeader({ name: 'apikey', description: 'Token de autenticación del canal emisor', required: true })
-  @ApiBody({ type: CreateEmissionPersonDto })
+  @ApiBody({ type: ValidateEmissionPersonDto })
   @ApiResponse({
     status: 200,
-    schema: { example: { status: true, result: { message: 'Validación exitosa.' } } },
+    schema: { example: { status: true, result: { status: true, message: 'Persona válida para emisión.' } } },
+  })
+  @ApiResponse({
+    status: 200,
+    description: 'Validación rechazada por regla de negocio (status: false)',
+    schema: { example: { status: false, result: { status: false, error: 'Se ha detectado la existencia de una póliza vigente con el mismo asegurado y ramo.' } } },
   })
   @ApiCommonErrors()
-  async validateEmissionPerson(@Headers('apikey') apikey: string, @Body() dto: CreateEmissionPersonDto) {
-    // Si llega aquí, el DTO es válido por las validaciones de clase.
-    // Futuro: Validar límites de edad, suma asegurada vs plan, etc.
-    return { status: true, result: { message: 'Validación exitosa.' } };
+  async validateEmissionPerson(@Body() dto: ValidateEmissionPersonDto) {
+    const result = await this.personasService.validateEmissionPerson(dto as unknown as Record<string, unknown>);
+    return { status: result.status, result };
   }
 
   @Post('createEmissionPerson')

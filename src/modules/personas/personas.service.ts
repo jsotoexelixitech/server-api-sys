@@ -9,6 +9,7 @@ import { ConfigService } from '@nestjs/config';
 import { MssqlService } from '../../database/mssql.service';
 import { CotizacionPerDto } from './dto/cotizacion-per.dto';
 import { CreateEmissionPersonDto } from './dto/create-emission-person.dto';
+import { parseSPError } from '../../common/helpers/sp-error.helper';
 
 class Mutex {
   private queue: Array<(release: () => void) => void> = [];
@@ -243,7 +244,26 @@ export class PersonasService {
       if (err instanceof BadRequestException) throw err;
       const msg = err instanceof Error ? err.message : String(err);
       this.logger.error(`getCotizacionPer: ${msg}`);
-      throw new InternalServerErrorException('Error al calcular la cotización de personas.');
+      throw new BadRequestException(msg);
+    }
+  }
+
+  // ── Validación de persona (speeValidatePersonGeneral) ──────────────────────
+  async validateEmissionPerson(body: Record<string, unknown>) {
+    const req = this.db.request();
+    const T = this.db.types;
+    req.input('cramo',        T.Int,          body.cramo);
+    req.input('cplan',        T.VarChar(10),  body.plan);
+    req.input('femision',     T.Date,         body.femision);
+    req.input('xrif_titular', T.Numeric(9),   body.rif_titular);
+    req.input('fnac_titular', T.DateTime,     body.fnac_titular);
+    try {
+      await req.execute('speeValidatePersonGeneral');
+      return { status: true, message: 'Persona válida para emisión.' };
+    } catch (err) {
+      const msg = parseSPError(err);
+      this.logger.warn(`validateEmissionPerson (SP validation error): ${msg}`);
+      return { status: false, error: msg };
     }
   }
 
@@ -449,9 +469,9 @@ export class PersonasService {
           }))
         };
 
-        const EXTERNAL_API_URL = 'https://qaapisys2000.lamundialdeseguros.com/api/v1/external/createEmissionPerson';
-        const EXTERNAL_API_KEY = '2729cc160b985890e0e6df72a161aea27f8e45682511c2dfd045f94eb9868f10';
-        const EXTERNAL_BASIC_AUTH = 'Basic YWRtaW46cGFzc3dvcmQxMjM0';
+        const EXTERNAL_API_URL = this.config.get<string>('EXTERNAL_API_URL_PERSON', 'https://qaapisys2000.lamundialdeseguros.com/api/v1/external/createEmissionPerson');
+        const EXTERNAL_API_KEY = this.config.get<string>('EXTERNAL_API_KEY', '');
+        const EXTERNAL_BASIC_AUTH = this.config.get<string>('EXTERNAL_BASIC_AUTH', '');
 
         this.logger.log(`=== INICIO EMISION FUNERARIO ===`);
         this.logger.log(`1. PAYLOAD RECIBIDO DEL FRONTEND: ${JSON.stringify(b)}`);
@@ -684,12 +704,8 @@ export class PersonasService {
     } catch (err) {
       if (err instanceof BadRequestException || err instanceof UnauthorizedException) throw err;
       const msg = err instanceof Error ? err.message : String(err);
-      const lower = msg.toLowerCase();
-      if (lower.includes('poliza vigente') || lower.includes('póliza vigente') || lower.includes('mismo asegurado')) {
-        throw new BadRequestException(msg);
-      }
       this.logger.error(`createEmissionPerson: ${msg}`);
-      throw new InternalServerErrorException(`Error al crear la emisión de personas: ${msg}`);
+      throw new BadRequestException(msg);
     }
   }
 }

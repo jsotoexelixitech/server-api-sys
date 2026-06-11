@@ -38,17 +38,22 @@ async function bootstrap(): Promise<void> {
 
   if (swaggerPath) {
     const swaggerConfig = new DocumentBuilder()
-      .setTitle('SysIP NestJS API')
+      .setTitle('Exelixi Tech - API La Mundial')
       .setDescription(
-        'Nuevo backend NestJS. Corre en paralelo al Express viejo (puerto 3000) usando la misma base de datos.',
+        'Backend moderno NestJS para la emisión directa de pólizas (RCV y Funerario) en la base de datos Sis2000.',
       )
-      .setVersion('0.1.0')
+      .setVersion('1.0.0')
+      .addApiKey({ type: 'apiKey', name: 'apikey', in: 'header', description: 'Token de autenticación del canal emisor' }, 'apikey')
       .addBearerAuth()
+      .addServer('http://192.168.8.120:3002', 'Servidor de Producción (srv001)')
+      .addServer('http://localhost:3002', 'Entorno de Desarrollo Local')
+      .addTag('Emisión Automóvil (RCV)', 'Endpoints para cotizar, validar y emitir pólizas de vehículos')
+      .addTag('Emisión Personas (Funerario)', 'Endpoints para cotizar, validar y emitir pólizas funerarias')
       .build();
 
     const document = SwaggerModule.createDocument(app, swaggerConfig);
     SwaggerModule.setup(swaggerPath, app, document, {
-      swaggerOptions: { persistAuthorization: true, docExpansion: 'none' },
+      swaggerOptions: { persistAuthorization: true, docExpansion: 'list', filter: true },
     });
   }
 

@@ -4,13 +4,18 @@ import {
   InternalServerErrorException,
   Logger,
 } from '@nestjs/common';
+import { ConfigService } from '@nestjs/config';
 import { MssqlService } from '../../database/mssql.service';
+import { parseSPError } from '../../common/helpers/sp-error.helper';
 
 @Injectable()
 export class EmissionsService {
   private readonly logger = new Logger(EmissionsService.name);
 
-  constructor(private readonly db: MssqlService) {}
+  constructor(
+    private readonly db: MssqlService,
+    private readonly config: ConfigService,
+  ) {}
 
   // ── Búsqueda de vehículo en vhcerti ──────────────────────────────────────
 
@@ -70,25 +75,6 @@ export class EmissionsService {
     }
   }
 
-  // ── POST /api/v1/external/validateEmissionPerson ─────────────────────────
-
-  async validateEmissionPerson(body: Record<string, unknown>) {
-    const req = this.db.request();
-    const T = this.db.types;
-    req.input('cramo',        T.Int,          body.cramo);
-    req.input('cplan',        T.VarChar(10),  body.plan);
-    req.input('femision',     T.Date,         body.femision);
-    req.input('xrif_titular', T.Numeric(9),   body.rif_titular);
-    req.input('fnac_titular', T.DateTime,     body.fnac_titular);
-    try {
-      await req.execute('speeValidatePersonGeneral');
-      return { status: true, message: 'Persona válida para emisión.' };
-    } catch (err) {
-      const msg = err instanceof Error ? err.message : String(err);
-      this.logger.warn(`validateEmissionPerson (SP validation error): ${msg}`);
-      return { status: false, error: msg };
-    }
-  }
 
   // ── POST /api/v1/external/validateEmissionAuto ────────────────────────────
 
@@ -103,7 +89,7 @@ export class EmissionsService {
       await req.execute('speeValidateAutomovilGeneral');
       return { status: true, message: 'Vehículo válido para emisión.' };
     } catch (err) {
-      const msg = err instanceof Error ? err.message : String(err);
+      const msg = parseSPError(err);
       this.logger.warn(`validateEmissionAuto (SP validation error): ${msg}`);
       return { status: false, error: msg };
     }
@@ -286,9 +272,9 @@ export class EmissionsService {
         })()
       };
 
-      const EXTERNAL_API_URL = 'https://qaapisys2000.lamundialdeseguros.com/api/v1/external/createEmissionAuto';
-      const EXTERNAL_API_KEY = '2729cc160b985890e0e6df72a161aea27f8e45682511c2dfd045f94eb9868f10';
-      const EXTERNAL_BASIC_AUTH = 'Basic YWRtaW46cGFzc3dvcmQxMjM0';
+      const EXTERNAL_API_URL = this.config.get<string>('EXTERNAL_API_URL_AUTO', 'https://qaapisys2000.lamundialdeseguros.com/api/v1/external/createEmissionAuto');
+      const EXTERNAL_API_KEY = this.config.get<string>('EXTERNAL_API_KEY', '');
+      const EXTERNAL_BASIC_AUTH = this.config.get<string>('EXTERNAL_BASIC_AUTH', '');
 
       this.logger.log(`=== INICIO EMISION AUTOMOVIL RCV ===`);
       this.logger.log(`1. PAYLOAD RECIBIDO DEL FRONTEND: ${JSON.stringify(b)}`);
@@ -462,7 +448,7 @@ export class EmissionsService {
       }
     } catch (err) {
       if (err instanceof BadRequestException) throw err;
-      const msg = err instanceof Error ? err.message : String(err);
+      const msg = parseSPError(err);
       const lower = msg.toLowerCase();
       if (
         lower.includes('poliza vigente') ||

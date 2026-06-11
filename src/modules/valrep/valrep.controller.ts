@@ -1,4 +1,4 @@
-import { Body, Controller, Get, HttpCode, HttpStatus, Post, Query } from '@nestjs/common';
+import { Body, Controller, Get, HttpCode, HttpStatus, Post, Query, BadRequestException } from '@nestjs/common';
 import { ApiBody, ApiOperation, ApiQuery, ApiResponse, ApiTags } from '@nestjs/swagger';
 import { GetPlanesV2Dto } from './dto/get-planes-v2.dto';
 import { GetCitiesDto } from './dto/get-cities.dto';
@@ -164,6 +164,20 @@ export class ValrepController {
   async getPlanesV2(@Body() dto: GetPlanesV2Dto) {
     const plan = await this.valrepService.getPlanesV2(dto);
     return { status: true, data: { plan } };
+  }
+
+  // ── POST /api/v1/valrep/frecuencia ─────────────────────────────────────
+
+  @Post('frecuencia')
+  @HttpCode(HttpStatus.OK)
+  @ApiOperation({ summary: 'Obtener frecuencias de un plan', description: 'Devuelve las frecuencias válidas para un cplan desde maplanes_frec.' })
+  @ApiBody({ schema: { example: { cplan: 'FUNBAS' } } })
+  @ApiResponse({ status: 200, schema: { example: { status: true, data: { frecuencias: [{ cvalor: 'M', xdescripcion: 'MENSUAL' }] } } } })
+  @Api500()
+  async getFrecuencia(@Body() body: { cplan?: string }) {
+    if (!body.cplan) throw new BadRequestException('El parámetro cplan es requerido');
+    const frecuencias = await this.valrepService.getFrecuencia(body.cplan);
+    return { status: true, data: { frecuencias } };
   }
 
   // ── POST /api/v1/valrep/cotizacion ─────────────────────────────────────

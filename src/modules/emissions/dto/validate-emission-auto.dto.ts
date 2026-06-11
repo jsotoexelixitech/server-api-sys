@@ -1,24 +1,28 @@
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
-import { IsNotEmpty, IsOptional, IsString } from 'class-validator';
+import { IsNotEmpty, IsOptional, IsString, MaxLength } from 'class-validator';
 
 export class ValidateEmissionAutoDto {
   @ApiProperty({ example: 'RCVBAS', description: 'Código del plan a emitir' })
-  @IsString()
-  @IsNotEmpty()
+  @IsString({ message: 'El plan debe ser texto.' })
+  @IsNotEmpty({ message: 'El plan es requerido.' })
+  @MaxLength(6, { message: 'El plan no debe exceder 6 caracteres.' })
   plan: string;
 
-  @ApiProperty({ example: 'AE886C23', description: 'Placa del vehículo' })
-  @IsString()
-  @IsNotEmpty()
+  @ApiProperty({ example: 'AE886C', description: 'Placa del vehículo' })
+  @IsString({ message: 'La placa debe ser texto.' })
+  @IsNotEmpty({ message: 'La placa es requerida.' })
+  @MaxLength(7, { message: 'La placa no debe exceder 7 caracteres.' })
   placa: string;
 
-  @ApiPropertyOptional({ example: 'SC1S6ZMV3024323', description: 'Serial de carrocería del vehículo' })
-  @IsOptional()
-  @IsString()
-  serial_carroceria?: string;
+  @ApiProperty({ example: 'SC1S6ZMV3024323', description: 'Serial de carrocería del vehículo' })
+  @IsString({ message: 'El serial de carrocería debe ser texto.' })
+  @IsNotEmpty({ message: 'El serial de carrocería es requerido.' })
+  @MaxLength(30, { message: 'El serial de carrocería no debe exceder 30 caracteres.' })
+  serial_carroceria: string;
 
   @ApiPropertyOptional({ example: null, description: 'Serial de motor (null si no aplica)' })
   @IsOptional()
-  @IsString()
+  @IsString({ message: 'El serial de motor debe ser texto.' })
+  @MaxLength(30, { message: 'El serial de motor no debe exceder 30 caracteres.' })
   serial_motor?: string | null;
 }

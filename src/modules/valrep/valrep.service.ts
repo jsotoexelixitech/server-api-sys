@@ -423,6 +423,26 @@ export class ValrepService {
     }
   }
 
+  async getFrecuencia(cplan: string) {
+    try {
+      const T = this.db.types;
+      const req = this.db.request();
+      req.input('cplan', T.VarChar(10), cplan);
+      const result = await req.query<{ cvalor: string; xdescripcion: string }>(`
+        SELECT TRIM(ifrecuencia) AS cvalor, TRIM(xfrecuencia) AS xdescripcion
+        FROM maplanes_frec
+        WHERE cplan = @cplan
+      `);
+      const rows = result.recordset ?? [];
+      if (rows.length > 0) return rows;
+      return ValrepService.FALLBACK_LISTS['FRECUENCIAS'];
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : String(err);
+      this.logger.error(`getFrecuencia cplan=${cplan}: ${msg}`);
+      throw new InternalServerErrorException('Error al obtener las frecuencias.');
+    }
+  }
+
   private async enrichWithCoberturas(planes: PlanItem[]): Promise<PlanItem[]> {
     for (const plan of planes) {
       try {
