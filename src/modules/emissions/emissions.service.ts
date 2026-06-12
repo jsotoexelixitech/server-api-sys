@@ -283,6 +283,9 @@ export class EmissionsService {
           d.setUTCFullYear(d.getUTCFullYear() + 1);
           return d.toISOString().slice(0, 10);
         })(),
+
+        ...(b['conductor'] ? { conductor: b['conductor'] } : {}),
+        ...(b['beneficiario'] ? { beneficiario: b['beneficiario'] } : {}),
       };
 
       const EXTERNAL_API_URL = this.config.get<string>('EXTERNAL_API_URL_AUTO', 'https://qaapisys2000.lamundialdeseguros.com/api/v1/external/createEmissionAuto');
