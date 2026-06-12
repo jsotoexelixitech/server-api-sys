@@ -44,7 +44,7 @@ export class AllExceptionsFilter implements ExceptionFilter {
       exception &&
       typeof exception === 'object' &&
       ('code' in exception || 'name' in exception) &&
-      (exception['code'] === 'EREQUEST' || exception['name'] === 'RequestError')
+      ((exception as Record<string, unknown>)['code'] === 'EREQUEST' || (exception as Record<string, unknown>)['name'] === 'RequestError')
     ) {
       // Error de negocio arrojado por un Trigger/SP (THROW 99001, '...', 1)
       const sqlError = exception as Error;
