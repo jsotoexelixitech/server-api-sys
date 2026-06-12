@@ -204,7 +204,7 @@ export class EmissionsService {
       }
 
       // === LLAMADA A LA NUEVA API QAAPISYS2000 (PRIMER INTENTO) ===
-      const ENABLE_QAAPISYS2000 = false; // Deshabilitado para forzar la emisión local directa
+      const ENABLE_QAAPISYS2000 = true; // Habilitado para emitir via API externa (192.168.10.213:3000)
       if (!ENABLE_QAAPISYS2000) {
         this.logger.log('qaapisys2000 disabled - usando emisión local en Sis2000 directamente');
       }
