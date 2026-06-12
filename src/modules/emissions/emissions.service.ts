@@ -210,66 +210,79 @@ export class EmissionsService {
       }
 
       const payloadAPI = {
-        cramo: b['cramo'] ?? 18,
-        plan: String(b['cplan'] ?? b['plan'] ?? '10'),
-        tipo_cedula_tomador: String(b['tipo_cedula_tomador'] ?? b['cedula_tomador'] ?? 'V'),
-        rif_tomador: Number(b['rif_tomador']),
-        nombre_tomador: String(b['nombre_tomador'] ?? ''),
-        apellido_tomador: String(b['apellido_tomador'] ?? ''),
-        telefono_tomador: String(b['telefono_tomador'] ?? ''),
-        correo_tomador: String(b['correo_tomador'] ?? ''),
-        fnac_tomador: b['fnac_tomador'] ? String(b['fnac_tomador']) : null,
-        isexo_tomador: String(b['sexo_tomador'] ?? b['isexo_tomador'] ?? 'M'),
+        cnpoliza_rel: '',
+        cnpoliza:     String(b['poliza'] ?? ''),
+        cramo:        b['cramo'] ?? 18,
+        cplan:        String(b['cplan'] ?? b['plan'] ?? 'RCVBAS'),
+
+        // Tomador
+        icedula_tomador:      String(b['tipo_cedula_tomador'] ?? b['icedula_tomador'] ?? 'V'),
+        xrif_tomador:         Number(b['rif_tomador']),
+        xnombre_tomador:      String(b['nombre_tomador'] ?? ''),
+        xapellido_tomador:    String(b['apellido_tomador'] ?? ''),
+        isexo_tomador:        String(b['sexo_tomador'] ?? b['isexo_tomador'] ?? 'M'),
         iestado_civil_tomador: String(b['estado_civil_tomador'] ?? b['iestado_civil_tomador'] ?? 'S'),
-        estado_tomador: Number(b['estado_tomador'] ?? b['cestado_tomador'] ?? 1),
-        ciudad_tomador: Number(b['ciudad_tomador'] ?? b['cciudad_tomador'] ?? 128),
-        direccion_tomador: String(b['direccion_tomador'] ?? 'No indicada'),
-        
-        tipo_cedula_titular: String(b['tipo_cedula_titular'] ?? b['cedula_titular'] ?? 'V'),
-        rif_titular: Number(b['rif_titular']),
-        nombre_titular: String(b['nombre_titular'] ?? ''),
-        apellido_titular: String(b['apellido_titular'] ?? ''),
-        telefono_titular: String(b['telefono_titular'] ?? ''),
-        correo_titular: String(b['correo_titular'] ?? ''),
-        fnac_titular: b['fnac_titular'] ? String(b['fnac_titular']) : null,
-        isexo_titular: String(b['sexo_titular'] ?? b['isexo_titular'] ?? 'M'),
+        fnac_tomador:         b['fnac_tomador'] ? String(b['fnac_tomador']) : null,
+        cestado_tomador:      Number(b['estado_tomador'] ?? b['cestado_tomador'] ?? 1),
+        cciudad_tomador:      Number(b['ciudad_tomador'] ?? b['cciudad_tomador'] ?? 128),
+        xdireccion_tomador:   String(b['direccion_tomador'] ?? 'No indicada'),
+        xtelefono_tomador:    String(b['telefono_tomador'] ?? ''),
+        xcorreo_tomador:      String(b['correo_tomador'] ?? ''),
+
+        // Titular
+        icedula_titular:      String(b['tipo_cedula_titular'] ?? b['icedula_titular'] ?? 'V'),
+        xrif_titular:         Number(b['rif_titular']),
+        xnombre_titular:      String(b['nombre_titular'] ?? ''),
+        xapellido_titular:    String(b['apellido_titular'] ?? ''),
+        isexo_titular:        String(b['sexo_titular'] ?? b['isexo_titular'] ?? 'M'),
         iestado_civil_titular: String(b['estado_civil_titular'] ?? b['iestado_civil_titular'] ?? 'S'),
-        estado_titular: Number(b['estado_titular'] ?? b['cestado_titular'] ?? 1),
-        ciudad_titular: Number(b['ciudad_titular'] ?? b['cciudad_titular'] ?? 128),
-        direccion_titular: String(b['direccion_titular'] ?? 'No indicada'),
+        fnac_titular:         b['fnac_titular'] ? String(b['fnac_titular']) : null,
+        cestado_titular:      Number(b['estado_titular'] ?? b['cestado_titular'] ?? 1),
+        cciudad_titular:      Number(b['ciudad_titular'] ?? b['cciudad_titular'] ?? 128),
+        xdireccion_titular:   String(b['direccion_titular'] ?? 'No indicada'),
+        xtelefono_titular:    String(b['telefono_titular'] ?? ''),
+        xcorreo_titular:      String(b['correo_titular'] ?? ''),
 
-        cmarca: String(b['cmarca'] ?? b['marca']),
-        cmodelo: String(b['cmodelo'] ?? b['modelo']),
-        cversion: String(b['cversion'] ?? b['version']),
-        cano: Number(b['cano'] ?? b['fano']),
-        xcolor: String(b['xcolor'] ?? b['color'] ?? 'No indicado'),
-        xplaca: String(b['xplaca'] ?? b['placa']),
-        xsercar: String(b['xsercar'] ?? b['serial_carroceria']),
-        xsermot: b['xsermot'] ?? b['serial_motor'] ? String(b['xsermot'] ?? b['serial_motor']) : null,
-
+        // Vehículo
+        cmarca:        String(b['cmarca'] ?? b['marca']),
+        cmodelo:       String(b['cmodelo'] ?? b['modelo']),
+        cversion:      String(b['cversion'] ?? b['version']),
+        cano:          Number(b['cano'] ?? b['fano']),
+        xcolor:        String(b['xcolor'] ?? b['color'] ?? 'No indicado'),
+        xplaca:        String(b['xplaca'] ?? b['placa']),
+        xsercar:       String(b['xsercar'] ?? b['serial_carroceria']),
+        xsermot:       (b['xsermot'] ?? b['serial_motor']) ? String(b['xsermot'] ?? b['serial_motor']) : null,
         ccategoria_uso: Number(b['ccategoria_uso'] ?? 20),
-        ntoneladas: b['ntoneladas'] != null ? Number(b['ntoneladas']) : null,
-        iplaca: String(b['iplaca'] ?? 'N'),
-        cusuario: String(b['cusuario'] ?? '4'),
+        npuestos:      Number(b['npuestos'] ?? 5),
+        ntoneladas:    b['ntoneladas'] != null ? Number(b['ntoneladas']) : 0,
+        iplaca:        String(b['iplaca'] ?? 'N'),
+        precargorcv:   Number(b['precargorcv'] ?? 0),
 
-        dec_persona_politica: Number(b['dec_persona_politica'] ?? 0),
-        cpersona_politica: Number(b['cpersona_politica'] ?? 0),
-        dec_term_y_cod: Number(b['dec_term_y_cod'] ?? 1),
-        cterm_y_cod: Number(b['cterm_y_cod'] ?? 1),
-        dec_transporte_o_entrega: Number(b['dec_transporte_o_entrega'] ?? 0),
+        // Canal / comercial
+        cpersona_politica: Number(b['cpersona_politica'] ?? b['dec_persona_politica'] ?? 0),
+        cterm_y_cod:       Number(b['cterm_y_cod'] ?? b['dec_term_y_cod'] ?? 1),
+        cproductor:        Number(b['productor'] ?? canal['cproductor'] ?? 80080),
+        ctipocanal:        String(canal['ctipocanal'] ?? b['ctipocanal'] ?? 'E'),
+        ccanalalt:         Number(canal['ccanalalt'] ?? b['ccanalalt'] ?? 27),
+        cscanalalt:        Number(canal['cscanalalt'] ?? b['cscanalalt'] ?? 1),
+        cusuario:          Number(b['cusuario'] ?? 4),
 
-        cproductor: Number(b['productor'] ?? canal['cproductor'] ?? 80080),
-        frecuencia: String(b['frecuencia'] ?? b['ifrecuencia'] ?? 'A'),
-        mprimaext: Number(b['mprimaext'] ?? b['prima'] ?? b['mprima_ext'] ?? 0),
-        
-        fecha_emision: fechaEmision,
-        fdesde: b['fdesde'] || fechaEmision,
-        // Forzamos a que fhasta sea exactamente el mismo día del año siguiente
-        fhasta: (() => {
+        // Financiero
+        ptasamon:     Number(b['ptasa'] ?? b['ptasamon'] ?? 1),
+        ptasamon_pago: Number(b['ptasa'] ?? b['ptasamon_pago'] ?? 1),
+        cmoneda:      String(b['cmoneda'] ?? 'USD'),
+        msumaaseg:    Number(b['msumaaseg'] ?? 0),
+        mprima:       Number(b['mprimaext'] ?? b['mprima_ext'] ?? b['prima'] ?? 0),
+        ifrecuencia:  String(b['frecuencia'] ?? b['ifrecuencia'] ?? 'A'),
+
+        // Vigencia
+        femision: fechaEmision,
+        fdesde:   b['fdesde'] || fechaEmision,
+        fhasta:   (() => {
           const d = new Date(`${b['fdesde'] || fechaEmision}T00:00:00Z`);
           d.setUTCFullYear(d.getUTCFullYear() + 1);
           return d.toISOString().slice(0, 10);
-        })()
+        })(),
       };
 
       const EXTERNAL_API_URL = this.config.get<string>('EXTERNAL_API_URL_AUTO', 'https://qaapisys2000.lamundialdeseguros.com/api/v1/external/createEmissionAuto');
