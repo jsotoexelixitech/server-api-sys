@@ -211,7 +211,7 @@ export class EmissionsService {
 
       const payloadAPI = {
         cnpoliza_rel: '',
-        cnpoliza:     String(b['poliza'] ?? ''),
+        cnpoliza:     '',
         cramo:        b['cramo'] ?? 18,
         cplan:        String(b['cplan'] ?? b['plan'] ?? 'RCVBAS'),
 
@@ -245,8 +245,11 @@ export class EmissionsService {
 
         // Vehículo
         cmarca:        String(b['cmarca'] ?? b['marca']),
+        xmarca:        String(b['xmarca'] ?? ''),
         cmodelo:       String(b['cmodelo'] ?? b['modelo']),
+        xmodelo:       String(b['xmodelo'] ?? ''),
         cversion:      String(b['cversion'] ?? b['version']),
+        xversion:      String(b['xversion'] ?? ''),
         cano:          Number(b['cano'] ?? b['fano']),
         xcolor:        String(b['xcolor'] ?? b['color'] ?? 'No indicado'),
         xplaca:        String(b['xplaca'] ?? b['placa']),
