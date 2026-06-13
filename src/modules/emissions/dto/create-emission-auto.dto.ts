@@ -269,4 +269,24 @@ export class CreateEmissionAutoDto {
   @IsOptional()
   @IsString()
   cusuario?: string;
+
+  @ApiPropertyOptional()
+  @IsOptional()
+  @IsNumber()
+  msumaaseg?: number;
+
+  @ApiPropertyOptional()
+  @IsOptional()
+  @IsNumber()
+  mprima?: number;
+
+  @ApiPropertyOptional()
+  @IsOptional()
+  @IsNumber()
+  mprimaext?: number;
+
+  @ApiPropertyOptional()
+  @IsOptional()
+  @IsNumber()
+  ptasa?: number;
 }
