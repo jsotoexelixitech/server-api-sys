@@ -143,6 +143,14 @@ export class CreateEmissionAutoDto {
   @IsString()
   direccion_titular: string;
 
+  @ApiPropertyOptional()
+  @IsOptional()
+  conductor?: any;
+
+  @ApiPropertyOptional()
+  @IsOptional()
+  beneficiario?: any;
+
   // ── Vehículo ──────────────────────────────────────────────────────────────
 
   @ApiProperty({ example: '083', description: 'Código de marca (de /inma/marcas)' })
@@ -156,6 +164,21 @@ export class CreateEmissionAutoDto {
   @ApiProperty({ example: '03', description: 'Código de versión (de /inma/version)' })
   @IsString()
   version: string;
+
+  @ApiPropertyOptional()
+  @IsOptional()
+  @IsString()
+  xmarca?: string;
+
+  @ApiPropertyOptional()
+  @IsOptional()
+  @IsString()
+  xmodelo?: string;
+
+  @ApiPropertyOptional()
+  @IsOptional()
+  @IsString()
+  xversion?: string;
 
   @ApiProperty({ example: 2004, description: 'Año del vehículo' })
   @IsInt()
