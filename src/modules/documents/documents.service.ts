@@ -10,6 +10,30 @@ export class DocumentsService {
 
   async generateConductorHabitualPdf(dto: GenerateConductorPdfDto): Promise<{ pdfBytes: Uint8Array, filename: string }> {
     try {
+      // 1. Fetch conductor details from La Mundial API
+      const cedulaNumerica = String(dto.conductorRif).replace(/\D/g, '');
+      if (cedulaNumerica) {
+        try {
+          const apiUrl = `https://qaapisys2000.lamundialdeseguros.com/PasarelaPago/api/v1/client/search/${cedulaNumerica}`;
+          const response = await fetch(apiUrl, { method: 'GET', headers: { 'Accept': 'application/json' }, timeout: 15000 } as RequestInit);
+          if (response.ok) {
+            const result = await response.json();
+            if (result.status === true && result.data && result.data.client && result.data.client.length > 0) {
+              const clientData = result.data.client[0];
+              // Overwrite DTO fields with real data from DB
+              dto.conductorNombre = clientData.xcliente || `${clientData.xnombre} ${clientData.xapellido}`;
+              if (clientData.cid) {
+                dto.conductorRif = clientData.cid;
+              }
+              this.logger.log(`Datos de conductor actualizados desde el API: ${dto.conductorNombre} (${dto.conductorRif})`);
+            }
+          }
+        } catch (apiErr: any) {
+          this.logger.warn(`Fallo al consultar la API del conductor habitual: ${apiErr.message}`);
+          // Continuamos con los datos del DTO si la API falla
+        }
+      }
+
       const fonts = {
         Helvetica: {
           normal: 'Helvetica',
