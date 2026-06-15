@@ -24,9 +24,18 @@ export class DocumentsService {
       const color = rgb(0, 0, 0); // Negro
       const size = 10;
 
-      // Función helper para estampar texto
-      const drawText = (text: string, x: number, y: number, isBold = false) => {
+      // Función helper para estampar texto con fondo blanco para tapar las 'xxxxxx'
+      const drawCleanText = (text: string, x: number, y: number, eraseWidth: number = 100, isBold = false) => {
         if (!text) return;
+        // Dibujar parche blanco para borrar las XXXXXX de la plantilla
+        firstPage.drawRectangle({
+          x: x - 2,
+          y: y - 2,
+          width: eraseWidth,
+          height: 12,
+          color: rgb(1, 1, 1),
+        });
+        // Dibujar el texto encima
         firstPage.drawText(text, {
           x,
           y,
@@ -40,32 +49,32 @@ export class DocumentsService {
       // Alto total = 792, Ancho total = 612
 
       // --- Caja Superior Derecha ---
-      drawText(dto.poliza, 460, 760);
-      drawText(dto.certificado, 460, 745);
-      drawText(dto.fechaEmision, 460, 730);
+      drawCleanText(dto.poliza, 450, 785, 80);
+      drawCleanText(dto.certificado, 450, 771, 80);
+      drawCleanText(dto.fechaEmision, 450, 757, 100);
 
       // --- Caja de Sucursal e Intermediario ---
-      drawText(dto.sucursal, 60, 655);
-      drawText(dto.intermediario || '80080 - LA MUNDIAL DE SEGUROS', 315, 655);
+      drawCleanText(dto.sucursal, 60, 665, 200);
+      drawCleanText(dto.intermediario || '80080 - LA MUNDIAL DE SEGUROS', 315, 665, 200);
 
       // --- Datos del Tomador ---
-      drawText(dto.tomadorNombre, 215, 595);
-      drawText(dto.tomadorRif, 60, 570);
+      drawCleanText(dto.tomadorNombre, 215, 600, 300);
+      drawCleanText(dto.tomadorRif, 60, 574, 100);
       
       // Vigencia
-      drawText(dto.vigenciaDesde, 380, 570);
-      drawText(dto.vigenciaHasta, 500, 570);
+      drawCleanText(dto.vigenciaDesde, 380, 574, 100);
+      drawCleanText(dto.vigenciaHasta, 500, 574, 100);
 
       // --- Párrafo Central ---
-      drawText(dto.fechaEmision, 260, 545); // Fecha de comienzo
+      drawCleanText(dto.fechaEmision, 260, 549, 100); // Fecha de comienzo
       
-      drawText(dto.fechaEmision, 380, 485); // a partir del...
-      drawText(dto.conductorNombre, 180, 470, true); 
-      drawText(dto.conductorRif, 430, 470, true);   
+      drawCleanText(dto.fechaEmision, 360, 485, 100); // a partir del...
+      drawCleanText(dto.conductorNombre, 150, 471, 150, true); 
+      drawCleanText(dto.conductorRif, 430, 471, 150, true);   
 
       // --- Firmas Footer ---
-      drawText(dto.tomadorNombre, 60, 215);
-      drawText(dto.tomadorRif, 60, 195);
+      drawCleanText(dto.tomadorNombre, 60, 215, 200);
+      drawCleanText(dto.tomadorRif, 60, 195, 150);
 
       const pdfBytes = await pdfDoc.save();
 
