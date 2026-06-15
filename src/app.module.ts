@@ -11,6 +11,7 @@ import { PersonasModule } from './modules/personas/personas.module';
 
 import { AppApiModule } from './modules/app/app.module';
 import { ExternalModule } from './modules/external/external.module';
+import { DocumentsModule } from './modules/documents/documents.module';
 
 @Module({
   imports: [
@@ -32,6 +33,7 @@ import { ExternalModule } from './modules/external/external.module';
     PersonasModule,
     AppApiModule,
     ExternalModule,
+    DocumentsModule,
   ],
 })
 export class AppModule {}
