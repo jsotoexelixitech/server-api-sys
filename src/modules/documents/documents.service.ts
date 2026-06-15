@@ -44,6 +44,14 @@ export class DocumentsService {
       };
 
       pdfMake.setFonts(fonts);
+      
+      // Silenciar warnings de políticas de acceso en NodeJS
+      if (typeof pdfMake.setUrlAccessPolicy === 'function') {
+        pdfMake.setUrlAccessPolicy(() => true);
+      }
+      if (typeof pdfMake.setLocalAccessPolicy === 'function') {
+        pdfMake.setLocalAccessPolicy(() => true);
+      }
 
       const logoPath = path.join(process.cwd(), 'src', 'assets', 'logo.png');
 
@@ -94,14 +102,14 @@ export class DocumentsService {
             margin: [0, 0, 0, 10]
           },
 
-          // Datos Tomador
+          // Datos Conductor
           {
             table: {
               widths: ['*', '*'],
               body: [
-                [{ text: 'DATOS DEL TOMADOR', bold: true, alignment: 'center', colSpan: 2, fillColor: '#dddddd' }, {}],
-                [{ text: 'Apellido(s) y Nombre(s) o Razón Social:\n', bold: true }, { text: dto.tomadorNombre || '' }],
-                [{ text: 'Cédula de Identidad / R.I.F:\n' + (dto.tomadorRif || ''), margin: [0, 2, 0, 2] }, { text: 'Vigencia del Anexo:   Desde: ' + (dto.vigenciaDesde || '') + '   Hasta: ' + (dto.vigenciaHasta || ''), margin: [0, 2, 0, 2] }]
+                [{ text: 'DATOS DEL CONDUCTOR HABITUAL', bold: true, alignment: 'center', colSpan: 2, fillColor: '#dddddd' }, {}],
+                [{ text: 'Apellido(s) y Nombre(s) o Razón Social:\n', bold: true }, { text: dto.conductorNombre || '' }],
+                [{ text: 'Cédula de Identidad / R.I.F:\n' + (dto.conductorRif || ''), margin: [0, 2, 0, 2] }, { text: 'Vigencia del Anexo:   Desde: ' + (dto.vigenciaDesde || '') + '   Hasta: ' + (dto.vigenciaHasta || ''), margin: [0, 2, 0, 2] }]
               ]
             },
             margin: [0, 0, 0, 15]
@@ -135,14 +143,14 @@ export class DocumentsService {
             table: {
               widths: ['*', '*'],
               body: [
-                [{ text: 'Por el Tomador', bold: true, alignment: 'center', fillColor: '#dddddd' }, { text: 'Por La Mundial de Seguros', bold: true, alignment: 'center', fillColor: '#dddddd' }],
+                [{ text: 'Por el Conductor Habitual', bold: true, alignment: 'center', fillColor: '#dddddd' }, { text: 'Por La Mundial de Seguros', bold: true, alignment: 'center', fillColor: '#dddddd' }],
                 [
                   {
                     stack: [
                       { text: 'Nombre y Apellido / Razón Social:', bold: true },
-                      { text: dto.tomadorNombre || '', margin: [0, 5, 0, 10] },
+                      { text: dto.conductorNombre || '', margin: [0, 5, 0, 10] },
                       { text: 'C.I./R.I.F:', bold: true },
-                      { text: dto.tomadorRif || '', margin: [0, 5, 0, 20] },
+                      { text: dto.conductorRif || '', margin: [0, 5, 0, 20] },
                       { text: 'Firma:', bold: true },
                       { text: '________________________', margin: [0, 15, 0, 0] }
                     ],
