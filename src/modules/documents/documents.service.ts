@@ -40,32 +40,32 @@ export class DocumentsService {
       // Alto total = 792, Ancho total = 612
 
       // --- Caja Superior Derecha ---
-      drawText(dto.poliza, 460, 752);
-      drawText(dto.certificado, 460, 732);
-      drawText(dto.fechaEmision, 460, 712);
+      drawText(dto.poliza, 460, 760);
+      drawText(dto.certificado, 460, 745);
+      drawText(dto.fechaEmision, 460, 730);
 
       // --- Caja de Sucursal e Intermediario ---
-      drawText(dto.sucursal, 60, 620);
-      drawText(dto.intermediario || '80080 - LA MUNDIAL DE SEGUROS', 315, 620);
+      drawText(dto.sucursal, 60, 655);
+      drawText(dto.intermediario || '80080 - LA MUNDIAL DE SEGUROS', 315, 655);
 
       // --- Datos del Tomador ---
-      drawText(dto.tomadorNombre, 215, 570);
-      drawText(dto.tomadorRif, 60, 545);
+      drawText(dto.tomadorNombre, 215, 595);
+      drawText(dto.tomadorRif, 60, 570);
       
       // Vigencia
-      drawText(dto.vigenciaDesde, 380, 545);
-      drawText(dto.vigenciaHasta, 500, 545);
+      drawText(dto.vigenciaDesde, 380, 570);
+      drawText(dto.vigenciaHasta, 500, 570);
 
       // --- Párrafo Central ---
-      drawText(dto.fechaEmision, 260, 500); // Fecha de comienzo
+      drawText(dto.fechaEmision, 260, 545); // Fecha de comienzo
       
-      drawText(dto.fechaEmision, 400, 470); // a partir del...
-      drawText(dto.conductorNombre, 60, 455, true); 
-      drawText(dto.conductorRif, 280, 455, true);   
+      drawText(dto.fechaEmision, 380, 485); // a partir del...
+      drawText(dto.conductorNombre, 180, 470, true); 
+      drawText(dto.conductorRif, 430, 470, true);   
 
       // --- Firmas Footer ---
       drawText(dto.tomadorNombre, 60, 215);
-      drawText(dto.tomadorRif, 60, 175);
+      drawText(dto.tomadorRif, 60, 195);
 
       const pdfBytes = await pdfDoc.save();
 
