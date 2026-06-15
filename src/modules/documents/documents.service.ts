@@ -11,11 +11,11 @@ export class DocumentsService {
   async generateConductorHabitualPdf(dto: GenerateConductorPdfDto): Promise<{ pdfBytes: Uint8Array, filename: string }> {
     try {
       const fonts = {
-        Roboto: {
-          normal: path.join(process.cwd(), 'src', 'assets', 'fonts', 'Roboto-Regular.ttf'),
-          bold: path.join(process.cwd(), 'src', 'assets', 'fonts', 'Roboto-Medium.ttf'),
-          italics: path.join(process.cwd(), 'src', 'assets', 'fonts', 'Roboto-Regular.ttf'),
-          bolditalics: path.join(process.cwd(), 'src', 'assets', 'fonts', 'Roboto-Medium.ttf')
+        Helvetica: {
+          normal: 'Helvetica',
+          bold: 'Helvetica-Bold',
+          italics: 'Helvetica-Oblique',
+          bolditalics: 'Helvetica-BoldOblique'
         }
       };
 
@@ -27,7 +27,7 @@ export class DocumentsService {
         pageSize: 'LETTER',
         pageMargins: [40, 40, 40, 40],
         defaultStyle: {
-          font: 'Roboto',
+          font: 'Helvetica',
           fontSize: 9,
         },
         content: [
