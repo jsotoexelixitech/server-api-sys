@@ -1,8 +1,10 @@
-import { Controller, Post, Body, Res, HttpStatus } from '@nestjs/common';
+import { Controller, Post, Get, Param, Body, Res, Req, HttpStatus } from '@nestjs/common';
 import { ApiTags, ApiOperation, ApiResponse } from '@nestjs/swagger';
-import { Response } from 'express';
+import { Response, Request } from 'express';
 import { DocumentsService } from './documents.service';
 import { GenerateConductorPdfDto } from './dto/generate-conductor.dto';
+import * as path from 'path';
+import * as fs from 'fs';
 
 @ApiTags('Documentos')
 @Controller('v1/documents')
@@ -16,20 +18,20 @@ export class DocumentsController {
   @ApiResponse({ status: 500, description: 'Error interno al generar el documento.' })
   async generateConductorHabitual(
     @Body() dto: GenerateConductorPdfDto,
+    @Req() req: Request,
     @Res() res: Response,
   ) {
     try {
-      const pdfBytes = await this.documentsService.generateConductorHabitualPdf(dto);
+      const { filename } = await this.documentsService.generateConductorHabitualPdf(dto);
       
-      const buffer = Buffer.from(pdfBytes);
-      
-      res.set({
-        'Content-Type': 'application/pdf',
-        'Content-Disposition': 'attachment; filename="anexo_conductor.pdf"',
-        'Content-Length': buffer.length,
-      });
+      const baseUrl = `${req.protocol}://${req.get('host')}`;
+      const fileUrl = `${baseUrl}/api/v1/documents/pdf/${filename}`;
 
-      res.status(HttpStatus.CREATED).send(buffer);
+      res.status(HttpStatus.CREATED).json({
+        success: true,
+        message: 'PDF generado exitosamente',
+        url: fileUrl
+      });
     } catch (error: any) {
       res.status(HttpStatus.INTERNAL_SERVER_ERROR).json({
         success: false,
@@ -37,5 +39,27 @@ export class DocumentsController {
         error: error.message,
       });
     }
+  }
+
+  @Get('pdf/:filename')
+  @ApiOperation({ summary: 'Descarga o visualiza un PDF generado' })
+  async getPdf(@Param('filename') filename: string, @Res() res: Response) {
+    const tempDir = path.join(process.cwd(), 'temp-pdfs');
+    const filePath = path.join(tempDir, filename);
+
+    if (!fs.existsSync(filePath)) {
+      return res.status(HttpStatus.NOT_FOUND).json({
+        success: false,
+        message: 'El documento no existe o ha expirado.',
+      });
+    }
+
+    res.set({
+      'Content-Type': 'application/pdf',
+      'Content-Disposition': `inline; filename="${filename}"`,
+    });
+
+    const fileStream = fs.createReadStream(filePath);
+    fileStream.pipe(res);
   }
 }

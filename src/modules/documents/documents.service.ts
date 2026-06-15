@@ -8,7 +8,7 @@ import { GenerateConductorPdfDto } from './dto/generate-conductor.dto';
 export class DocumentsService {
   private readonly logger = new Logger(DocumentsService.name);
 
-  async generateConductorHabitualPdf(dto: GenerateConductorPdfDto): Promise<Uint8Array> {
+  async generateConductorHabitualPdf(dto: GenerateConductorPdfDto): Promise<{ pdfBytes: Uint8Array, filename: string }> {
     try {
       // 1. Cargar el PDF base (plantilla)
       const templatePath = path.join(__dirname, '..', '..', 'assets', 'templates', 'conductor_habitual.pdf');
@@ -40,40 +40,45 @@ export class DocumentsService {
       // Alto total = 792, Ancho total = 612
 
       // --- Caja Superior Derecha ---
-      drawText(dto.poliza, 460, 725);
-      drawText(dto.certificado, 460, 705);
-      drawText(dto.fechaEmision, 460, 685);
+      drawText(dto.poliza, 460, 752);
+      drawText(dto.certificado, 460, 732);
+      drawText(dto.fechaEmision, 460, 712);
 
       // --- Caja de Sucursal e Intermediario ---
-      drawText(dto.sucursal, 60, 608);
-      drawText(dto.intermediario || '80080 - LA MUNDIAL DE SEGUROS', 315, 608);
+      drawText(dto.sucursal, 60, 620);
+      drawText(dto.intermediario || '80080 - LA MUNDIAL DE SEGUROS', 315, 620);
 
       // --- Datos del Tomador ---
-      drawText(dto.tomadorNombre, 215, 555);
-      drawText(dto.tomadorRif, 60, 528);
+      drawText(dto.tomadorNombre, 215, 570);
+      drawText(dto.tomadorRif, 60, 545);
       
-      // Vigencia (Asumiendo que el texto "Desde:" y "Hasta:" ya está en el PDF y solo llenamos la fecha)
-      drawText(dto.vigenciaDesde, 380, 528);
-      drawText(dto.vigenciaHasta, 500, 528);
+      // Vigencia
+      drawText(dto.vigenciaDesde, 380, 545);
+      drawText(dto.vigenciaHasta, 500, 545);
 
       // --- Párrafo Central ---
-      // Fecha de comienzo
-      drawText(dto.fechaEmision, 260, 482);
+      drawText(dto.fechaEmision, 260, 500); // Fecha de comienzo
       
-      // En la línea del párrafo donde se designa al conductor:
-      // Estas coordenadas deben afinarse visualmente luego.
-      drawText(dto.fechaEmision, 400, 452); // "a partir del [fecha]"
-      drawText(dto.conductorNombre, 60, 437, true); // Nombre en la siguiente línea
-      drawText(dto.conductorRif, 280, 437, true);   // Cédula en la misma línea
+      drawText(dto.fechaEmision, 400, 470); // a partir del...
+      drawText(dto.conductorNombre, 60, 455, true); 
+      drawText(dto.conductorRif, 280, 455, true);   
 
       // --- Firmas Footer ---
-      // Tomador
-      drawText(dto.tomadorNombre, 60, 195);
-      drawText(dto.tomadorRif, 60, 155);
+      drawText(dto.tomadorNombre, 60, 215);
+      drawText(dto.tomadorRif, 60, 175);
 
-      // Guardar documento
       const pdfBytes = await pdfDoc.save();
-      return pdfBytes;
+
+      // Guardar el PDF generado temporalmente para poder accederlo por URL
+      const tempDir = path.join(process.cwd(), 'temp-pdfs');
+      if (!fs.existsSync(tempDir)) {
+        fs.mkdirSync(tempDir, { recursive: true });
+      }
+      const filename = `conductor_${Date.now()}.pdf`;
+      const filePath = path.join(tempDir, filename);
+      fs.writeFileSync(filePath, pdfBytes);
+
+      return { pdfBytes, filename };
     } catch (error: any) {
       this.logger.error(`Error generando PDF: ${error.message}`, error.stack);
       throw new Error('No se pudo generar el documento PDF.');
