@@ -12,16 +12,16 @@ export class DocumentsService {
     try {
       const fonts = {
         Roboto: {
-          normal: path.join(__dirname, '..', '..', 'assets', 'fonts', 'Roboto-Regular.ttf'),
-          bold: path.join(__dirname, '..', '..', 'assets', 'fonts', 'Roboto-Medium.ttf'),
-          italics: path.join(__dirname, '..', '..', 'assets', 'fonts', 'Roboto-Regular.ttf'),
-          bolditalics: path.join(__dirname, '..', '..', 'assets', 'fonts', 'Roboto-Medium.ttf')
+          normal: path.join(process.cwd(), 'src', 'assets', 'fonts', 'Roboto-Regular.ttf'),
+          bold: path.join(process.cwd(), 'src', 'assets', 'fonts', 'Roboto-Medium.ttf'),
+          italics: path.join(process.cwd(), 'src', 'assets', 'fonts', 'Roboto-Regular.ttf'),
+          bolditalics: path.join(process.cwd(), 'src', 'assets', 'fonts', 'Roboto-Medium.ttf')
         }
       };
 
       pdfMake.setFonts(fonts);
 
-      const logoPath = path.join(__dirname, '..', '..', 'assets', 'logo.png');
+      const logoPath = path.join(process.cwd(), 'src', 'assets', 'logo.png');
 
       const docDefinition: any = {
         pageSize: 'LETTER',
