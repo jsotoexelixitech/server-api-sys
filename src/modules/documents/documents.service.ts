@@ -21,11 +21,7 @@ export class DocumentsService {
 
       pdfMake.setFonts(fonts);
 
-      const logoPath = path.join(process.cwd(), 'logo_base64.txt');
-      let logoBase64 = '';
-      if (fs.existsSync(logoPath)) {
-        logoBase64 = fs.readFileSync(logoPath, 'utf8').trim();
-      }
+      const logoPath = path.join(__dirname, '..', '..', 'assets', 'logo.png');
 
       const docDefinition: any = {
         pageSize: 'LETTER',
@@ -38,7 +34,7 @@ export class DocumentsService {
           // Header
           {
             columns: [
-              logoBase64 ? { image: logoBase64, width: 120 } : { text: 'LA MUNDIAL', width: 120, fontSize: 16, bold: true },
+              fs.existsSync(logoPath) ? { image: logoPath, width: 120 } : { text: 'LA MUNDIAL', width: 120, fontSize: 16, bold: true },
               {
                 text: 'ANEXO DE CONDUCTOR HABITUAL\n001',
                 alignment: 'center',
