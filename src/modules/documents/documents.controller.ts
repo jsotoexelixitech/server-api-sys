@@ -22,17 +22,20 @@ export class DocumentsController {
     @Res() res: Response,
   ) {
     try {
+      this.logger.log(`[DocumentsController] Iniciando generación de anexo conductor para póliza ${dto.poliza}`);
       const { filename } = await this.documentsService.generateConductorHabitualPdf(dto);
       
       const baseUrl = `${req.protocol}://${req.get('host')}`;
       const fileUrl = `${baseUrl}/api/v1/documents/pdf/${filename}`;
 
+      this.logger.log(`[DocumentsController] PDF generado con éxito. URL: ${fileUrl}`);
       res.status(HttpStatus.CREATED).json({
         success: true,
         message: 'PDF generado exitosamente',
         url: fileUrl
       });
     } catch (error: any) {
+      this.logger.error(`[DocumentsController] Error generando anexo: ${error.message}`, error.stack);
       res.status(HttpStatus.INTERNAL_SERVER_ERROR).json({
         success: false,
         message: 'No se pudo generar el PDF del conductor habitual',
@@ -43,7 +46,7 @@ export class DocumentsController {
 
   @Get('pdf/:filename')
   @ApiOperation({ summary: 'Descarga o visualiza un PDF generado' })
-  async getPdf(@Param('filename') filename: string, @Res() res: Response) {
+  async getPdf(@Param('filename') filename: string, @Req() req: Request, @Res() res: Response) {
     const tempDir = path.join(process.cwd(), 'temp-pdfs');
     const filePath = path.join(tempDir, filename);
 
@@ -54,9 +57,11 @@ export class DocumentsController {
       });
     }
 
+    const disposition = req.query.download === 'true' ? 'attachment' : 'inline';
+
     res.set({
       'Content-Type': 'application/pdf',
-      'Content-Disposition': `inline; filename="${filename}"`,
+      'Content-Disposition': `${disposition}; filename="${filename}"`,
     });
 
     const fileStream = fs.createReadStream(filePath);
