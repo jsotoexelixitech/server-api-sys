@@ -5,7 +5,7 @@ import { DocumentsService } from './documents.service';
 import { GenerateConductorPdfDto } from './dto/generate-conductor.dto';
 
 @ApiTags('Documentos')
-@Controller('api/v1/documents')
+@Controller('v1/documents')
 export class DocumentsController {
   constructor(private readonly documentsService: DocumentsService) {}
 
