@@ -1,4 +1,4 @@
-import { Controller, Post, Get, Param, Body, Res, Req, HttpStatus } from '@nestjs/common';
+import { Controller, Post, Get, Param, Body, Res, Req, HttpStatus, Logger } from '@nestjs/common';
 import { ApiTags, ApiOperation, ApiResponse } from '@nestjs/swagger';
 import { Response, Request } from 'express';
 import { DocumentsService } from './documents.service';
@@ -9,6 +9,8 @@ import * as fs from 'fs';
 @ApiTags('Documentos')
 @Controller('v1/documents')
 export class DocumentsController {
+  private readonly logger = new Logger(DocumentsController.name);
+
   constructor(private readonly documentsService: DocumentsService) {}
 
   @Post('conductor-habitual')
