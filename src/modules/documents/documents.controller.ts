@@ -27,7 +27,7 @@ export class DocumentsController {
       this.logger.log(`[DocumentsController] Iniciando generación de anexo conductor para póliza ${dto.poliza}`);
       const { filename } = await this.documentsService.generateConductorHabitualPdf(dto);
       
-      const baseUrl = `${req.protocol}://${req.get('host')}`;
+      const baseUrl = process.env.PUBLIC_URL || `http://192.168.8.120:${process.env.PORT || 3002}`;
       const fileUrl = `${baseUrl}/api/v1/documents/pdf/${filename}`;
 
       this.logger.log(`[DocumentsController] PDF generado con éxito. URL: ${fileUrl}`);
