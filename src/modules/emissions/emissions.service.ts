@@ -300,7 +300,7 @@ export class EmissionsService {
       this.logger.log(`2. URL DESTINO API LA MUNDIAL: ${EXTERNAL_API_URL}`);
       this.logger.log(`3. PAYLOAD TRANSFORMADO HACIA LA MUNDIAL: ${JSON.stringify(payloadAPI)}`);
       
-      let useFallback = !ENABLE_QAAPISYS2000;
+      let useFallback = false; // Fallback deshabilitado (!ENABLE_QAAPISYS2000)
       let resData: any = {};
       let response: Response | null = null;
       let errMsg = 'Error desconocido desde la API';
@@ -323,8 +323,9 @@ export class EmissionsService {
           this.logger.log(`4. RESPUESTA DE LA MUNDIAL [HTTP ${response.status}]: ${JSON.stringify(resData)}`);
           
           if (response.status >= 500) {
-             this.logger.warn(`API La Mundial retornó HTTP ${response.status}, activando fallback...`);
-             useFallback = true;
+             errMsg = `HTTP ${response.status} (Servicio no disponible)`;
+             this.logger.error(`API La Mundial retornó ${errMsg}, fallback deshabilitado.`);
+             throw new InternalServerErrorException(errMsg);
           } else if (!response.ok) {
              errMsg = `HTTP ${response.status}`;
              if (resData) {
@@ -344,8 +345,10 @@ export class EmissionsService {
           }
         } catch (err) {
           if (err instanceof BadRequestException) throw err;
-          this.logger.warn(`Falla de red o timeout comunicando con La Mundial: ${err instanceof Error ? err.message : String(err)}, activando fallback...`);
-          useFallback = true;
+          if (err instanceof InternalServerErrorException) throw err;
+          errMsg = `Falla de red o timeout comunicando con La Mundial: ${err instanceof Error ? err.message : String(err)}`;
+          this.logger.error(`${errMsg}. Fallback deshabilitado.`);
+          throw new InternalServerErrorException(errMsg);
         }
       }
 
