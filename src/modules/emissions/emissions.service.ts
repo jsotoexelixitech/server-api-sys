@@ -291,7 +291,7 @@ export class EmissionsService {
         ...(b['beneficiario'] ? { beneficiario: b['beneficiario'] } : {}),
       };
 
-      const EXTERNAL_API_URL = this.config.get<string>('EXTERNAL_API_URL_AUTO', 'https://qaapisys2000.lamundialdeseguros.com/api/v1/external/createEmissionAuto');
+      const EXTERNAL_API_URL = this.config.get<string>('EXTERNAL_API_URL_AUTO', 'https://qaapisys2000.lamundialdeseguros.com/SinTicket-ConductorHabitual/api/v1/external/createEmissionAuto');
       const EXTERNAL_API_KEY = this.config.get<string>('EXTERNAL_API_KEY', '');
       const EXTERNAL_BASIC_AUTH = this.config.get<string>('EXTERNAL_BASIC_AUTH', '');
 
