@@ -59,6 +59,43 @@ export class EmissionsService {
     return v != null ? Number(v) : null;
   }
 
+  /** Fila devuelta por trigger INSTEAD OF INSERT (puede venir en recordsets[N]). */
+  private extractTriggerInsertRow(insertResult: {
+    recordset?: Record<string, unknown>[];
+    recordsets?: Record<string, unknown>[][];
+  }): Record<string, unknown> {
+    if (insertResult.recordsets?.length) {
+      for (const rs of insertResult.recordsets) {
+        if (rs?.length && rs[0]?.['cnpoliza']) return rs[0];
+      }
+    }
+    if (insertResult.recordset?.length && insertResult.recordset[0]?.['cnpoliza']) {
+      return insertResult.recordset[0];
+    }
+    return {};
+  }
+
+  /** Fallback: última póliza/recibo por placa tras INSERT en vista RCV2. */
+  private async lookupEmissionByPlaca(xplaca: string): Promise<Record<string, unknown>> {
+    const T = this.db.types;
+    const req = this.db.request();
+    req.input('xplaca', T.VarChar(15), xplaca.trim().toUpperCase());
+    const result = await req.query(`
+      SELECT TOP 1
+        cert.cnpoliza,
+        pol.fanopol,
+        pol.fmespol,
+        rec.cnrecibo,
+        rec.qcuotas
+      FROM vhcerti cert
+      INNER JOIN adpoliza pol ON pol.cnpoliza = cert.cnpoliza
+      INNER JOIN adrecibos rec ON rec.cnpoliza = cert.cnpoliza AND rec.qcuotas = cert.qcuotas
+      WHERE cert.xplaca = @xplaca
+      ORDER BY pol.femision DESC, rec.cnrecibo DESC
+    `);
+    return (result.recordset?.[0] ?? {}) as Record<string, unknown>;
+  }
+
   private async searchVehicle(field: 'xplaca' | 'xsercar', value: string) {
     const T = this.db.types;
     const req = this.db.request();
@@ -447,7 +484,23 @@ export class EmissionsService {
       VALUES (${cols.map((c) => `@${c}`).join(', ')})
     `);
 
-    const row = insertResult.recordset?.[0] ?? {};
+    let row = this.extractTriggerInsertRow(
+      insertResult as { recordset?: Record<string, unknown>[]; recordsets?: Record<string, unknown>[][] },
+    );
+    const xplaca = String(this.pick(b, 'xplaca', 'placa') ?? '').trim();
+    if (!row['cnpoliza'] && xplaca) {
+      this.logger.warn(`emitLocal: trigger sin cnpoliza; lookup por placa=${xplaca}`);
+      row = await this.lookupEmissionByPlaca(xplaca);
+    }
+    if (!row['cnpoliza']) {
+      this.logger.error(
+        `emitLocal: INSERT RCV2 sin cnpoliza. recordsets=${insertResult.recordsets?.length ?? 0}`,
+      );
+      throw new InternalServerErrorException(
+        'Emisión insertada pero Sis2000 no devolvió cnpoliza/cnrecibo. Revisar logs PM2.',
+      );
+    }
+
     const cnpoliza = String(row['cnpoliza'] ?? '').trim();
     const cnrecibo = String(row['cnrecibo'] ?? '').trim();
     const fanopol = row['fanopol'] as number | undefined;
