@@ -111,7 +111,7 @@ export class CollectionService {
     const req = this.db.request();
     req.input('xtoken', T.VarChar(100), apikey);
     const result = await req.query(`
-      SELECT TOP 1 cproductor, cci_rif, cbanco_destino, ctipopago, cprog
+      SELECT TOP 1 cproductor, cci_rif, cbanco_destino, cprog
       FROM maclient_api WHERE xtoken = @xtoken
     `);
     if (!result.recordset.length) {
@@ -217,7 +217,6 @@ export class CollectionService {
       req.input('casegurado', T.Numeric(18, 0), null);
       req.input('cmoneda', T.Char(4), s.cmoneda);
       req.input('cbanco', T.Numeric(18, 2), s.cbanco ?? null);
-      req.input('ctipopago', T.Numeric(), s.ctipopago ?? null);
       req.input('cbanco_destino', T.Numeric(18, 2), s.cbanco_destino ?? null);
       req.input('mpago', T.Numeric(18, 2), s.mpago);
       req.input('mpagoext', T.Numeric(18, 2), s.mpagoext);
@@ -225,28 +224,23 @@ export class CollectionService {
       req.input('mpagoigtfext', T.Numeric(18, 2), s.mpagoigtfext ?? 0);
       req.input('mtotal', T.Numeric(18, 2), s.mtotal);
       req.input('mtotalext', T.Numeric(18, 2), s.mtotalext);
-      req.input('mnotificado', T.Numeric(18, 2), null);
-      req.input('mnotificadoext', T.Numeric(18, 2), null);
       req.input('ptasamon', T.Numeric(13, 6), s.ptasamon);
       req.input('ptasaref', T.Numeric(18, 2), s.ptasaref ?? 0);
       req.input('xreferencia', T.VarChar(100), s.xreferencia);
       req.input('xruta', T.VarChar(100), s.xruta ?? 'Sin soporte');
-      req.input('cprog', T.Char(20), cprog);
       req.input('cusuario', T.Numeric(18, 0), cusuario);
       req.input('fingreso', T.DateTime, now);
-      req.input('freporte', T.DateTime, now);
 
+      // Sis2000 QA: cbreporte_pago sin columna ctipopago (legacy Express insert)
       await req.query(`
         INSERT INTO cbreporte_pago (
-          ctransaccion, npago, casegurado, cmoneda, cbanco, ctipopago,
-          cbanco_destino, mpago, mpagoext, mpagoigtf, mpagoigtfext,
-          mtotal, mtotalext, mnotificado, mnotificadoext, ptasamon,
-          ptasaref, xreferencia, xruta, cprog, cusuario, fingreso, freporte
+          ctransaccion, npago, casegurado, cmoneda, cbanco, cbanco_destino,
+          mpago, mpagoext, mpagoigtf, mpagoigtfext, mtotal, mtotalext,
+          ptasamon, ptasaref, xreferencia, xruta, cusuario, fingreso
         ) VALUES (
-          @ctransaccion, @npago, @casegurado, @cmoneda, @cbanco, @ctipopago,
-          @cbanco_destino, @mpago, @mpagoext, @mpagoigtf, @mpagoigtfext,
-          @mtotal, @mtotalext, @mnotificado, @mnotificadoext, @ptasamon,
-          @ptasaref, @xreferencia, @xruta, @cprog, @cusuario, @fingreso, @freporte
+          @ctransaccion, @npago, @casegurado, @cmoneda, @cbanco, @cbanco_destino,
+          @mpago, @mpagoext, @mpagoigtf, @mpagoigtfext, @mtotal, @mtotalext,
+          @ptasamon, @ptasaref, @xreferencia, @xruta, @cusuario, @fingreso
         )
       `);
     }
