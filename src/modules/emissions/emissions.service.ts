@@ -59,23 +59,30 @@ export class EmissionsService {
     return v != null ? Number(v) : null;
   }
 
-  /** Fila devuelta por trigger INSTEAD OF INSERT (puede venir en recordsets[N]). */
-  private extractTriggerInsertRow(insertResult: {
+  /** Flag char(1) para SP (cpersona_politica, cterm_y_cod). */
+  private spCharFlag(value: unknown, defaultVal = '0'): string {
+    if (value == null || String(value).trim() === '') return defaultVal;
+    return String(value).trim().charAt(0);
+  }
+
+  /** Fila devuelta por sp_pre_emision / sp_emision (recordsets anidados). */
+  private extractEmissionRow(result: {
     recordset?: Record<string, unknown>[];
     recordsets?: Record<string, unknown>[][];
   }): Record<string, unknown> {
-    if (insertResult.recordsets?.length) {
-      for (const rs of insertResult.recordsets) {
+    if (result.recordsets?.length) {
+      for (let i = result.recordsets.length - 1; i >= 0; i--) {
+        const rs = result.recordsets[i];
         if (rs?.length && rs[0]?.['cnpoliza']) return rs[0];
       }
     }
-    if (insertResult.recordset?.length && insertResult.recordset[0]?.['cnpoliza']) {
-      return insertResult.recordset[0];
+    if (result.recordset?.length && result.recordset[0]?.['cnpoliza']) {
+      return result.recordset[0];
     }
     return {};
   }
 
-  /** Fallback: última póliza/recibo por placa tras INSERT en vista RCV2. */
+  /** Fallback: última póliza/recibo por placa tras emisión RCV2. */
   private async lookupEmissionByPlaca(xplaca: string): Promise<Record<string, unknown>> {
     const T = this.db.types;
     const req = this.db.request();
@@ -189,10 +196,20 @@ export class EmissionsService {
 
       const b: Record<string, unknown> = { ...body };
 
-      if (canal['ctipocanal'] === 'A' && !b['ctipocanal']) {
+      if (
+        (canal['ctipocanal'] === 'T' ||
+          canal['ctipocanal'] === 'A' ||
+          canal['ctipocanal'] === 'D') &&
+        !b['ctipocanal']
+      ) {
         b['ctipocanal'] = canal['ctipocanal'];
         b['ccanalalt'] = canal['ccanalalt'];
         b['cscanalalt'] = canal['cscanalalt'];
+        b['cproductor'] = canal['cproductor'];
+      }
+
+      if (!b['fecha_emision'] && b['femision']) {
+        b['fecha_emision'] = b['femision'];
       }
       const fechaEmision = String(b['fecha_emision'] ?? b['femision'] ?? '').trim();
       if (fechaEmision) {
@@ -297,9 +314,12 @@ export class EmissionsService {
     const ptasamon = this.resolvePtasamon(b);
     const mprima = this.resolveMprima(b);
     const defaultRamo = parseInt(this.config.get<string>('LAMUNDIAL_RAMO', '18') ?? '18', 10);
+    const femision =
+      this.pick<string>(b, 'fecha_emision', 'femision') ??
+      new Date().toISOString().slice(0, 10);
 
-    const ins = this.db.request();
-    const fields: Record<string, { type: unknown; value: unknown }> = {
+    const req = this.db.request();
+    const params: Record<string, { type: unknown; value: unknown }> = {
       cnpoliza_rel: {
         type: T.NVarChar(30),
         value: this.pick(b, 'cnpoliza_rel', 'poliza') ?? null,
@@ -309,6 +329,7 @@ export class EmissionsService {
         value: this.intField(this.pick(b, 'cramo', 'ramo')) ?? defaultRamo,
       },
       cplan: { type: T.NVarChar(10), value: this.pick(b, 'cplan', 'plan') },
+      xcanal_venta: { type: T.NVarChar(250), value: canal['xcanal_venta'] ?? null },
       icedula_tomador: {
         type: T.Char(1),
         value: this.pick(b, 'icedula_tomador', 'tipo_cedula_tomador', 'cedula_tomador'),
@@ -323,12 +344,12 @@ export class EmissionsService {
       },
       fnac_tomador: { type: T.Date, value: b['fnac_tomador'] },
       cestado_tomador: {
-        type: T.Int,
-        value: this.intField(this.pick(b, 'cestado_tomador', 'estado_tomador')),
+        type: T.VarChar(100),
+        value: String(this.pick(b, 'cestado_tomador', 'estado_tomador') ?? ''),
       },
       cciudad_tomador: {
-        type: T.Int,
-        value: this.intField(this.pick(b, 'cciudad_tomador', 'ciudad_tomador')),
+        type: T.VarChar(100),
+        value: String(this.pick(b, 'cciudad_tomador', 'ciudad_tomador') ?? ''),
       },
       xdireccion_tomador: {
         type: T.NVarChar(1000),
@@ -354,14 +375,14 @@ export class EmissionsService {
         type: T.Char(1),
         value: this.pick(b, 'iestado_civil_titular', 'estado_civil_titular'),
       },
-      fnac_titular: { type: T.DateTime, value: b['fnac_titular'] ?? null },
+      fnac_titular: { type: T.Date, value: b['fnac_titular'] ?? null },
       cestado_titular: {
-        type: T.Int,
-        value: this.intField(this.pick(b, 'cestado_titular', 'estado_titular')),
+        type: T.VarChar(100),
+        value: String(this.pick(b, 'cestado_titular', 'estado_titular') ?? ''),
       },
       cciudad_titular: {
-        type: T.Int,
-        value: this.intField(this.pick(b, 'cciudad_titular', 'ciudad_titular')),
+        type: T.VarChar(100),
+        value: String(this.pick(b, 'cciudad_titular', 'ciudad_titular') ?? ''),
       },
       xdireccion_titular: {
         type: T.NVarChar(1000),
@@ -376,12 +397,9 @@ export class EmissionsService {
         value: this.pick(b, 'xcorreo_titular', 'correo_titular'),
       },
       cmarca: { type: T.VarChar(3), value: this.pick(b, 'cmarca', 'marca') },
-      xmarca: { type: T.VarChar(60), value: this.pick(b, 'xmarca') ?? null },
       cmodelo: { type: T.VarChar(3), value: this.pick(b, 'cmodelo', 'modelo') },
-      xmodelo: { type: T.VarChar(60), value: this.pick(b, 'xmodelo') ?? null },
       cversion: { type: T.VarChar(3), value: this.pick(b, 'cversion', 'version') },
-      xversion: { type: T.VarChar(60), value: this.pick(b, 'xversion') ?? null },
-      cano: { type: T.Int, value: this.pick(b, 'cano', 'fano', 'año') },
+      cano: { type: T.SmallInt, value: this.pick(b, 'cano', 'fano', 'año') },
       xcolor: { type: T.VarChar(60), value: this.pick(b, 'xcolor', 'color') },
       xplaca: { type: T.VarChar(15), value: this.pick(b, 'xplaca', 'placa') },
       xsercar: { type: T.VarChar(60), value: this.pick(b, 'xsercar', 'serial_carroceria') },
@@ -389,38 +407,34 @@ export class EmissionsService {
         type: T.VarChar(60),
         value: this.pick(b, 'xsermot', 'serial_motor') ?? null,
       },
-      ccategoria_uso: {
-        type: T.Int,
-        value: this.intField(this.pick(b, 'ccategoria_uso')),
-      },
-      npuestos: {
-        type: T.Int,
-        value: this.intField(this.pick(b, 'npuestos')) ?? 5,
-      },
-      ntoneladas: {
-        type: T.Int,
-        value: this.intField(this.pick(b, 'ntoneladas')) ?? 60,
-      },
-      iplaca: {
-        type: T.Char(1),
-        value: String(this.pick(b, 'iplaca', 'tipo_placa') ?? 'N').trim().charAt(0).toUpperCase(),
-      },
-      precargorcv: {
-        type: T.Numeric(18, 2),
-        value: this.pick(b, 'precargorcv') ?? 0,
-      },
       cpersona_politica: {
-        type: T.Int,
-        value: this.pick(b, 'cpersona_politica', 'dec_persona_politica') ?? 0,
+        type: T.Char(1),
+        value: this.spCharFlag(this.pick(b, 'cpersona_politica', 'dec_persona_politica'), '0'),
       },
       cterm_y_cod: {
-        type: T.Int,
-        value: this.pick(b, 'cterm_y_cod', 'dec_term_y_cod') ?? 1,
+        type: T.Char(1),
+        value: this.spCharFlag(this.pick(b, 'cterm_y_cod', 'dec_term_y_cod'), '1'),
       },
       cproductor: {
         type: T.Int,
         value: this.pick(b, 'cproductor', 'productor') ?? canal['cproductor'] ?? 80080,
       },
+      ptasamon: { type: T.Numeric(18, 6), value: ptasamon },
+      mprima: { type: T.Numeric(18, 2), value: mprima },
+      ifrecuencia: {
+        type: T.Char(1),
+        value: this.pick(b, 'ifrecuencia', 'frecuencia') ?? 'A',
+      },
+      femision: { type: T.Date, value: femision },
+      corigen_rel: { type: T.Char(2), value: canal['corigen_rel'] ?? null },
+      api: { type: T.NVarChar(100), value: 'tmCreateEmission' },
+      method: { type: T.NVarChar(100), value: 'createEmmisionAutomobileRcv2' },
+      cprog: { type: T.Char(20), value: 'eePoliza_AutoRcv2' },
+      ifuente: { type: T.Char(10), value: canal['ifuente_api'] ?? canal['ifuente'] ?? 'API' },
+      fingreso: { type: T.DateTime, value: new Date() },
+      cpoliza: { type: T.Numeric(19, 0), value: null },
+      cnpoliza: { type: T.NVarChar(30), value: b['cnpoliza'] ?? null },
+      cproces: { type: T.Numeric(13, 0), value: null },
       ctipocanal: {
         type: T.Char(1),
         value: (b['ctipocanal'] ? String(b['ctipocanal']) : null) as string | null,
@@ -434,70 +448,69 @@ export class EmissionsService {
         value: b['cscanalalt'] != null ? this.intField(b['cscanalalt']) : null,
       },
       cusuario: {
-        type: T.Int,
+        type: T.Numeric(13, 0),
         value: this.intField(this.pick(b, 'cusuario')) ?? null,
       },
-      ptasamon: { type: T.Numeric(13, 6), value: ptasamon },
-      ptasamon_pago: { type: T.Numeric(13, 6), value: ptasamon },
+      ptasamon_pago: { type: T.Numeric(18, 6), value: ptasamon },
       cmoneda: {
         type: T.Char(4),
-        value: String(this.pick(b, 'cmoneda') ?? '$').slice(0, 4),
+        value: this.pick(b, 'cmoneda') ? String(this.pick(b, 'cmoneda')).slice(0, 4) : null,
       },
       msumaaseg: {
         type: T.Numeric(18, 2),
-        value: this.pick(b, 'msumaaseg', 'sumaaseg') ?? 0,
+        value: this.pick(b, 'msumaaseg', 'sumaaseg') ?? null,
       },
-      mprima: { type: T.Numeric(18, 2), value: mprima },
-      ifrecuencia: {
+      xmarca: { type: T.VarChar(60), value: this.pick(b, 'xmarca') ?? null },
+      xmodelo: { type: T.VarChar(60), value: this.pick(b, 'xmodelo') ?? null },
+      xversion: { type: T.VarChar(60), value: this.pick(b, 'xversion') ?? null },
+      ccategoria_uso: {
+        type: T.Int,
+        value: this.intField(this.pick(b, 'ccategoria_uso')),
+      },
+      npuestos: {
+        type: T.Int,
+        value: this.intField(this.pick(b, 'npuestos')) ?? null,
+      },
+      ntoneladas: {
+        type: T.Int,
+        value: this.intField(this.pick(b, 'ntoneladas')) ?? null,
+      },
+      iplaca: {
         type: T.Char(1),
-        value: this.pick(b, 'ifrecuencia', 'frecuencia') ?? 'A',
+        value: String(this.pick(b, 'iplaca', 'tipo_placa') ?? 'N').trim().charAt(0).toUpperCase(),
       },
-      femision: {
-        type: T.DateTime,
-        value: this.pick(b, 'femision', 'fecha_emision') ?? new Date(),
+      precargorcv: {
+        type: T.Numeric(18, 2),
+        value: this.pick(b, 'precargorcv') ?? null,
       },
       fdesde: { type: T.Date, value: b['fdesde'] },
       fhasta: { type: T.Date, value: b['fhasta'] },
-      xcanal_venta: { type: T.NVarChar(250), value: canal['xcanal_venta'] ?? null },
-      corigen_rel: { type: T.Char(2), value: canal['corigen_rel'] ?? null },
-      api: { type: T.NVarChar(100), value: 'tmCreateEmission' },
-      method: { type: T.NVarChar(100), value: 'createEmmisionAutomobileRcv2' },
-      cprog: { type: T.Char(20), value: canal['cprog'] ?? 'eePoliza_AutoRcv2' },
-      ifuente: { type: T.Char(10), value: canal['ifuente_api'] ?? canal['ifuente'] ?? 'API' },
-      fingreso: { type: T.DateTime, value: new Date() },
-      cpoliza: { type: T.NVarChar(19), value: null },
-      cnpoliza: { type: T.NVarChar(30), value: b['cnpoliza'] ?? null },
-      cproces: { type: T.NVarChar(13), value: null },
     };
 
-    const cols = Object.keys(fields);
-    cols.forEach((col) =>
-      ins.input(col, (fields[col] as { type: unknown; value: unknown }).type, (fields[col] as { type: unknown; value: unknown }).value),
+    Object.entries(params).forEach(([key, field]) =>
+      req.input(key, (field as { type: unknown }).type, (field as { value: unknown }).value),
     );
 
-    this.logger.log(
-      `emitLocal: INSERT eePoliza_Automovil_RCV2 placa=${b['xplaca'] ?? b['placa']} plan=${b['cplan'] ?? b['plan']} mprima=${mprima} ptasamon=${ptasamon}`,
-    );
-
-    const insertResult = await ins.query(`
-      INSERT INTO eePoliza_Automovil_RCV2 (${cols.join(', ')})
-      VALUES (${cols.map((c) => `@${c}`).join(', ')})
-    `);
-
-    let row = this.extractTriggerInsertRow(
-      insertResult as { recordset?: Record<string, unknown>[]; recordsets?: Record<string, unknown>[][] },
-    );
     const xplaca = String(this.pick(b, 'xplaca', 'placa') ?? '').trim();
+    this.logger.log(
+      `emitLocal: EXEC sp_pre_emision_Automovil_RCV2 placa=${xplaca} plan=${b['cplan'] ?? b['plan']} mprima=${mprima} ptasamon=${ptasamon}`,
+    );
+
+    const spResult = await req.execute('sp_pre_emision_Automovil_RCV2');
+
+    let row = this.extractEmissionRow(
+      spResult as { recordset?: Record<string, unknown>[]; recordsets?: Record<string, unknown>[][] },
+    );
     if (!row['cnpoliza'] && xplaca) {
-      this.logger.warn(`emitLocal: trigger sin cnpoliza; lookup por placa=${xplaca}`);
+      this.logger.warn(`emitLocal: SP sin cnpoliza en recordset; lookup placa=${xplaca}`);
       row = await this.lookupEmissionByPlaca(xplaca);
     }
     if (!row['cnpoliza']) {
       this.logger.error(
-        `emitLocal: INSERT RCV2 sin cnpoliza. recordsets=${insertResult.recordsets?.length ?? 0}`,
+        `emitLocal: sp_pre_emision_Automovil_RCV2 sin cnpoliza. recordsets=${spResult.recordsets?.length ?? 0}`,
       );
       throw new InternalServerErrorException(
-        'Emisión insertada pero Sis2000 no devolvió cnpoliza/cnrecibo. Revisar logs PM2.',
+        'Emisión RCV2 sin cnpoliza/cnrecibo en respuesta de Sis2000.',
       );
     }
 
@@ -521,7 +534,7 @@ export class EmissionsService {
     this.logger.log(`emitLocal OK cnpoliza=${cnpoliza} cnrecibo=${cnrecibo}`);
 
     return {
-      message: 'Emisión registrada exitosamente.',
+      message: 'Póliza generada exitosamente',
       cnpoliza,
       cnrecibo,
       urlpoliza,

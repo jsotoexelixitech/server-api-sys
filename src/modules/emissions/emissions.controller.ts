@@ -90,7 +90,7 @@ export class EmissionsController {
   @ApiOperation({
     summary: 'Emitir póliza de automóvil RCV',
     description:
-      'Inserta en `eePoliza_Automovil_RCV2`. ' +
+      'Ejecuta `sp_pre_emision_Automovil_RCV2` (flujo fb_organizacion_swagger). ' +
       'Requiere header `apikey` (se valida contra `maclient_api`). ' +
       'Devuelve `cnpoliza`, `fanopol` y `fmespol` para construir la URL del PDF.',
   })
