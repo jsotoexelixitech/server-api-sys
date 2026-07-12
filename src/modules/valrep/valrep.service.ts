@@ -137,13 +137,23 @@ export class ValrepService {
   async getStates(): Promise<{ cestado: number; xdescripcion_l: string }[]> {
     try {
       const req = this.db.request();
-      const result = await req.query<{ cestado: number; xdescripcion_l: string }>(`
+      let result = await req.query<{ cestado: number; xdescripcion_l: string }>(`
         SELECT cestado, TRIM(xdescripcion_l) AS xdescripcion_l
         FROM maestados
         WHERE cpais = 58
         ORDER BY xdescripcion_l
       `);
-      return result.recordset ?? [];
+      let rows = result.recordset ?? [];
+      if (!rows.length) {
+        this.logger.warn('getStates: sin filas con cpais=58, consultando todos los estados');
+        result = await this.db.request().query(`
+          SELECT cestado, TRIM(xdescripcion_l) AS xdescripcion_l
+          FROM maestados
+          ORDER BY xdescripcion_l
+        `);
+        rows = result.recordset ?? [];
+      }
+      return rows;
     } catch (err) {
       const msg = err instanceof Error ? err.message : String(err);
       this.logger.error(`getStates: ${msg}`);
@@ -345,6 +355,12 @@ export class ValrepService {
       { cvalor: '2', xdescripcion: 'Broker' },
       { cvalor: '3', xdescripcion: 'Banca-Seguros' },
     ],
+    PARENTESCOS: [
+      { cvalor: 'T', xdescripcion: 'TITULAR' },
+      { cvalor: 'C', xdescripcion: 'CONYUGE' },
+      { cvalor: 'H', xdescripcion: 'HIJO(A)' },
+      { cvalor: 'P', xdescripcion: 'PADRE/MADRE' },
+    ],
   };
 
   async getLists(cdominio: string): Promise<{ cvalor: string; xdescripcion: string }[]> {
@@ -356,71 +372,55 @@ export class ValrepService {
       );
     }
 
-    // 1. Intentar La Mundial QA primero
-    const baseUrl = (process.env.LAMUNDIAL_BASE_URL ?? 'https://qaapisys2000.lamundialdeseguros.com').replace(/\/$/, '');
-    const apikey  = process.env.LAMUNDIAL_APIKEY ?? '';
+    const T = this.db.types;
 
-    try {
-      const res = await fetch(`${baseUrl}/api/v1/valrep/getLists`, {
-        method:  'POST',
-        headers: { 'Content-Type': 'application/json', ...(apikey ? { apikey } : {}) },
-        body:    JSON.stringify({ cdominio: domain, xtipo_orden: 'ASC' }),
-        signal:  AbortSignal.timeout(10_000),
-      });
-
-      if (!res.ok) throw new Error(`La Mundial respondió HTTP ${res.status}`);
-
-      const json: any = await res.json();
-
-      // La Mundial puede responder con data.listas, data.list, data.items o data directo
-      const raw: any[] = json?.data?.listas ?? json?.data?.list ?? json?.data?.items ?? json?.data ?? [];
-
-      const items = (Array.isArray(raw) ? raw : [])
-        .map((i: any) => ({
-          cvalor:       String(i?.cvalor ?? i?.citem ?? i?.codigo ?? i?.cdominio_item ?? ''),
-          xdescripcion: String(i?.xdescripcion ?? i?.xitem ?? i?.descripcion ?? i?.xdescripcion_l ?? ''),
-        }))
-        .filter((i) => i.cvalor !== '' && i.xdescripcion !== '');
-
-      if (items.length > 0) {
-        this.logger.log(`getLists ${domain}: ${items.length} items de La Mundial`);
-        return items;
-      }
-
-      throw new Error('La Mundial devolvió lista vacía');
-
-    } catch (err) {
-      const msg = err instanceof Error ? err.message : String(err);
-      this.logger.warn(`getLists ${domain}: La Mundial no disponible (${msg}), usando fallback`);
-
-      // 2. Fallback PARENTESCOS → Sis2000 (maparent)
-      if (domain === 'PARENTESCOS') {
-        try {
-          const req = this.db.request();
-          const result = await req.query<{ cvalor: string; xdescripcion: string }>(`
-            SELECT TRIM(cparentesco) AS cvalor, TRIM(xparentesco) AS xdescripcion
-            FROM maparent ORDER BY cparentesco
-          `);
-          const rows = result.recordset ?? [];
-          if (rows.length > 0) {
-            this.logger.log(`getLists PARENTESCOS: ${rows.length} items de Sis2000 (fallback)`);
-            return rows;
-          }
-        } catch (dbErr) {
-          const dbMsg = dbErr instanceof Error ? dbErr.message : String(dbErr);
-          this.logger.error(`getLists PARENTESCOS fallback DB: ${dbMsg}`);
+    // PARENTESCOS → maparent (Sis2000 directo)
+    if (domain === 'PARENTESCOS') {
+      try {
+        const result = await this.db.request().query<{ cvalor: string; xdescripcion: string }>(`
+          SELECT TRIM(CAST(cparentesco AS VARCHAR(10))) AS cvalor,
+                 TRIM(xparentesco) AS xdescripcion
+          FROM maparent
+          ORDER BY cparentesco
+        `);
+        const rows = result.recordset ?? [];
+        if (rows.length > 0) {
+          this.logger.log(`getLists PARENTESCOS: ${rows.length} items de Sis2000`);
+          return rows;
         }
+      } catch (err) {
+        const msg = err instanceof Error ? err.message : String(err);
+        this.logger.warn(`getLists PARENTESCOS DB: ${msg}`);
       }
-
-      // 3. Fallback estático
-      const fallback = ValrepService.FALLBACK_LISTS[domain];
-      if (fallback) {
-        this.logger.warn(`getLists ${domain}: usando valores fijos como último recurso`);
-        return fallback;
+    } else {
+      // SEXO, EDOCIVIL, FRECUENCIAS, MATIPCANAL → macatvalores
+      try {
+        const req = this.db.request();
+        req.input('cdom', T.NVarChar(30), domain);
+        const result = await req.query<{ cvalor: string; xdescripcion: string }>(`
+          SELECT TRIM(cvalor) AS cvalor, TRIM(xdescripcion) AS xdescripcion
+          FROM macatvalores
+          WHERE cdominio = @cdom AND bactivo = 1
+          ORDER BY iorden, cvalor
+        `);
+        const rows = result.recordset ?? [];
+        if (rows.length > 0) {
+          this.logger.log(`getLists ${domain}: ${rows.length} items de macatvalores`);
+          return rows;
+        }
+      } catch (err) {
+        const msg = err instanceof Error ? err.message : String(err);
+        this.logger.warn(`getLists ${domain} DB: ${msg}`);
       }
-
-      throw new InternalServerErrorException(`No se pudo obtener la lista ${domain}.`);
     }
+
+    const fallback = ValrepService.FALLBACK_LISTS[domain];
+    if (fallback?.length) {
+      this.logger.warn(`getLists ${domain}: usando valores fijos (${fallback.length} items)`);
+      return fallback;
+    }
+
+    throw new InternalServerErrorException(`No se pudo obtener la lista ${domain}.`);
   }
 
   async getFrecuencia(cplan: string) {
