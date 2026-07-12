@@ -8,6 +8,8 @@ import {
 import { MssqlService } from '../../database/mssql.service';
 import { CollectionPaymentDto } from './dto/collection-payment.dto';
 import { parseSPError } from '../../common/helpers/sp-error.helper';
+// eslint-disable-next-line @typescript-eslint/no-require-imports
+import sql = require('mssql');
 
 interface ApiClientRow {
   cproductor?: number;
@@ -274,12 +276,11 @@ export class CollectionService {
     }
   }
 
-  /** Notifica el pago (spNotificaPago + soporte + spCnSaldo_Ad). */
+  /** Notifica el pago (spNotificaPago QA: incluye @soporte, sin @cmoneda_pago). */
   async notifyPayment(payload: CollectionPayload) {
     const T = this.db.types;
     const req = this.db.request();
     req.input('freporte', T.Date, payload.fcobro);
-    req.input('cmoneda_pago', T.NVarChar, payload.cmoneda_pago);
     req.input('ctenedor', T.Numeric(19, 4), payload.ctenedor);
     req.input('numRecibos', T.Numeric(19, 4), payload.numRecibos);
     req.input('mpago', T.Decimal(19, 4), payload.mpago);
@@ -302,12 +303,6 @@ export class CollectionService {
       }
 
       const transaccion = Number(result.output['transaccion']);
-      await this.insertSoporteRows(
-        transaccion,
-        payload.soporte,
-        payload.cusuario,
-        payload.cprog,
-      );
 
       const saldoReq = this.db.request();
       saldoReq.input('cusuario', T.Numeric(10), payload.cusuario);
@@ -328,11 +323,54 @@ export class CollectionService {
     }
   }
 
-  /** Registra el cobro (spCobroSis_Ad + soporte). */
-  async collectPayment(payload: CollectionPayload) {
+  /** Cobro directo (spCobroSis_Ad) — fallback si notific no aplica en QA. */
+  async notifyPaymentLegacy(payload: CollectionPayload) {
     const T = this.db.types;
     const req = this.db.request();
     req.input('freporte', T.Date, payload.fcobro);
+    req.input('cmoneda_pago', T.NVarChar, payload.cmoneda_pago);
+    req.input('ctenedor', T.Numeric(19, 4), payload.ctenedor);
+    req.input('numRecibos', T.Numeric(19, 4), payload.numRecibos);
+    req.input('mpago', T.Decimal(19, 4), payload.mpago);
+    req.input('mpagoext', T.Decimal(19, 4), payload.mpagoext);
+    req.input('cprog', T.NVarChar(19), payload.cprog);
+    req.input('recibos', T.NVarChar, this.formatRecibosList(payload.recibos));
+    req.input('cusuario', T.Numeric(11), payload.cusuario);
+    req.output('status', T.Bit);
+    req.output('mensaje', T.NVarChar(100));
+    req.output('ptasamon', T.Numeric(13, 6));
+    req.output('transaccion', T.Numeric(19, 4));
+
+    const result = await req.execute('spNotificaPago');
+    if (!result.output['status']) {
+      throw new BadRequestException(String(result.output['mensaje'] ?? 'spNotificaPago falló'));
+    }
+    const transaccion = Number(result.output['transaccion']);
+    await this.insertSoporteRows(transaccion, payload.soporte, payload.cusuario, payload.cprog);
+    const saldoReq = this.db.request();
+    saldoReq.input('cusuario', T.Numeric(10), payload.cusuario);
+    saldoReq.input('transaccion', T.Numeric(7), transaccion);
+    saldoReq.input('ctenedor', T.Numeric(13), payload.ctenedor);
+    await saldoReq.execute('spCnSaldo_Ad');
+    return {
+      transaccion,
+      mensaje: result.output['mensaje'],
+      ptasamon: result.output['ptasamon'],
+    };
+  }
+
+  /** Ejecuta spCobroSis_Ad (QA puede incluir cmoneda_pago/referencia). */
+  private async executeCobroSis(
+    payload: CollectionPayload,
+    extended: boolean,
+  ): Promise<sql.IProcedureResult<unknown>> {
+    const T = this.db.types;
+    const req = this.db.request();
+    req.input('freporte', T.Date, payload.fcobro);
+    if (extended) {
+      req.input('cmoneda_pago', T.NVarChar, payload.cmoneda_pago);
+      req.input('referencia', T.NVarChar(100), payload.referencia);
+    }
     req.input('ctenedor', T.Numeric(19, 4), payload.ctenedor);
     req.input('numRecibos', T.Numeric(19, 4), payload.numRecibos);
     req.input('mpago', T.Decimal(19, 4), payload.mpago);
@@ -347,9 +385,25 @@ export class CollectionService {
     req.output('cnpoliza', T.NVarChar(30));
     req.output('fanopol', T.Int);
     req.output('fmespol', T.Int);
+    return req.execute('spCobroSis_Ad');
+  }
 
+  /** Registra el cobro (spCobroSis_Ad + soporte). */
+  async collectPayment(payload: CollectionPayload) {
     try {
-      const result = await req.execute('spCobroSis_Ad');
+      let result: sql.IProcedureResult<unknown>;
+      try {
+        result = await this.executeCobroSis(payload, true);
+      } catch (err) {
+        const msg = parseSPError(err).toLowerCase();
+        if (msg.includes('too many arguments') || msg.includes('demasiados argumentos')) {
+          this.logger.warn('collectPayment: reintento spCobroSis_Ad sin cmoneda_pago/referencia');
+          result = await this.executeCobroSis(payload, false);
+        } else {
+          throw err;
+        }
+      }
+
       const status = result.output['status'];
       if (!status) {
         const mensaje = String(result.output['mensaje'] ?? 'spCobroSis_Ad falló');
@@ -357,12 +411,16 @@ export class CollectionService {
       }
 
       const transaccion = Number(result.output['transaccion']);
-      await this.insertSoporteRows(
-        transaccion,
-        payload.soporte,
-        payload.cusuario,
-        payload.cprog,
-      );
+      try {
+        await this.insertSoporteRows(
+          transaccion,
+          payload.soporte,
+          payload.cusuario,
+          payload.cprog,
+        );
+      } catch (soporteErr) {
+        this.logger.warn(`insertSoporteRows: ${parseSPError(soporteErr)}`);
+      }
 
       return {
         transaccion,
@@ -388,7 +446,28 @@ export class CollectionService {
     this.logger.log(
       `activateReceipt cnrecibo=${body.cnrecibo} mpago=${body.mpago} ref=${body.xreferencia}`,
     );
-    const notif = await this.notifyPayment(payload);
+
+    let notif: Awaited<ReturnType<CollectionService['notifyPayment']>> | null = null;
+    try {
+      notif = await this.notifyPayment(payload);
+    } catch (err) {
+      const msg = parseSPError(err).toLowerCase();
+      try {
+        if (
+          msg.includes('too many arguments') ||
+          msg.includes('demasiados argumentos') ||
+          msg.includes('@soporte')
+        ) {
+          this.logger.warn(`notifyPayment QA: ${parseSPError(err)}; reintento legacy`);
+          notif = await this.notifyPaymentLegacy(payload);
+        } else {
+          this.logger.warn(`notifyPayment omitido (${parseSPError(err)}); cobro directo`);
+        }
+      } catch (legacyErr) {
+        this.logger.warn(`notifyPayment legacy omitido: ${parseSPError(legacyErr)}`);
+      }
+    }
+
     const collect = await this.collectPayment(payload);
     return {
       message: 'Recibo notificado y cobrado exitosamente.',
