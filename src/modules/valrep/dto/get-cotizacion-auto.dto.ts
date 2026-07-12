@@ -2,8 +2,6 @@ import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
 import { Type } from 'class-transformer';
 import { IsIn, IsInt, IsNotEmpty, IsOptional, IsString, Max, MaxLength, Min, MinLength } from 'class-validator';
 
-const PLANES_VALIDOS = ['RCVBAS', 'RUSPAT', 'Auto', 'AutoI', 'AutoII', 'AutoIII', 'AutoIV', 'BOLIP1', 'BOLIP2', 'BOLIP3'];
-
 export class GetCotizacionAutoDto {
   @ApiProperty({ example: '083', description: 'Código INMA de marca (1–5 chars)' })
   @IsString()
@@ -35,12 +33,11 @@ export class GetCotizacionAutoDto {
 
   @ApiProperty({
     example: 'RCVBAS',
-    description: `Código de plan SysIP (planes válidos: ${PLANES_VALIDOS.join(', ')})`,
-    enum: PLANES_VALIDOS,
+    description: 'Código de plan Sis2000 (cplan de spBuscaPlan / valrep/planes/v2)',
   })
   @IsString()
   @IsNotEmpty()
-  @IsIn(PLANES_VALIDOS, { message: `cplan debe ser uno de: ${PLANES_VALIDOS.join(', ')}` })
+  @MaxLength(50)
   cplan: string;
 
   @ApiProperty({ example: 2, description: 'Categoría de uso numérica (≥0, de /inma/categorias-uso)' })

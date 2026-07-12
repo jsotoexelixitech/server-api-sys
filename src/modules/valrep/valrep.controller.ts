@@ -187,10 +187,8 @@ export class ValrepController {
   @ApiOperation({
     summary: 'Cotizar prima RCV (spCalculoAuto)',
     description:
-      'Llama a `spCalculoAuto` en Sis2000 con el código de plan real ' +
-      '(RCVBAS, RUSPAT, Auto, AutoI…). ' +
-      'Devuelve `mprimaext` (USD), `mprima` (Bs) y `ptasa` (tasa BCV). ' +
-      'A diferencia de La Mundial externa, soporta todos los planes.',
+      'Llama a `spCalculoAuto` en Sis2000 con el código de plan real devuelto por `valrep/planes/v2`. ' +
+      'Acepta cualquier cplan válido en Sis2000 (no solo una lista fija).',
   })
   @ApiBody({ type: GetCotizacionAutoDto })
   @ApiResponse({
