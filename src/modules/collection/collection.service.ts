@@ -8,8 +8,6 @@ import {
 import { MssqlService } from '../../database/mssql.service';
 import { CollectionPaymentDto } from './dto/collection-payment.dto';
 import { parseSPError } from '../../common/helpers/sp-error.helper';
-// eslint-disable-next-line @typescript-eslint/no-require-imports
-import sql = require('mssql');
 
 interface ApiClientRow {
   cproductor?: number;
@@ -289,7 +287,7 @@ export class CollectionService {
     req.input('cprog', T.NVarChar(19), payload.cprog);
     req.input('recibos', T.NVarChar, this.formatRecibosList(payload.recibos));
     req.input('cusuario', T.Numeric(11), payload.cusuario);
-    req.input('soporte', sql.NVarChar(sql.MAX), this.buildSoporteJson(payload));
+    req.input('soporte', T.NVarChar(-1), this.buildSoporteJson(payload));
     req.output('status', T.Bit);
     req.output('mensaje', T.NVarChar(100));
     req.output('ptasamon', T.Numeric(13, 6));
