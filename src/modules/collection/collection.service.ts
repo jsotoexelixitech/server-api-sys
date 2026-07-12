@@ -8,8 +8,6 @@ import {
 import { MssqlService } from '../../database/mssql.service';
 import { CollectionPaymentDto } from './dto/collection-payment.dto';
 import { parseSPError } from '../../common/helpers/sp-error.helper';
-// eslint-disable-next-line @typescript-eslint/no-require-imports
-import sql = require('mssql');
 
 interface ApiClientRow {
   cproductor?: number;
@@ -363,7 +361,7 @@ export class CollectionService {
   private async executeCobroSis(
     payload: CollectionPayload,
     extended: boolean,
-  ): Promise<sql.IProcedureResult<unknown>> {
+  ): Promise<{ output: Record<string, unknown>; recordset?: unknown[] }> {
     const T = this.db.types;
     const req = this.db.request();
     req.input('freporte', T.Date, payload.fcobro);
@@ -391,7 +389,7 @@ export class CollectionService {
   /** Registra el cobro (spCobroSis_Ad + soporte). */
   async collectPayment(payload: CollectionPayload) {
     try {
-      let result: sql.IProcedureResult<unknown>;
+      let result: { output: Record<string, unknown>; recordset?: unknown[] };
       try {
         result = await this.executeCobroSis(payload, true);
       } catch (err) {
