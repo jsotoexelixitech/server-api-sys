@@ -288,9 +288,6 @@ export class PersonasService {
       const authResult = await authReq.query(
         `SELECT TOP 1 * FROM maclient_api WHERE xtoken = @xtoken`,
       );
-      if (authResult.recordset.length === 0 && !apikey) {
-        throw new UnauthorizedException('Fallo de autenticación: token no encontrado.');
-      }
       const canal: Record<string, unknown> = authResult.recordset.length
         ? authResult.recordset[0]
         : {

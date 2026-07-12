@@ -94,7 +94,7 @@ export class EmissionsController {
       'Requiere header `apikey` (se valida contra `maclient_api`). ' +
       'Devuelve `cnpoliza`, `fanopol` y `fmespol` para construir la URL del PDF.',
   })
-  @ApiHeader({ name: 'apikey', description: 'Token de autenticación del canal emisor', required: true, example: 'tu-api-key' })
+  @ApiHeader({ name: 'apikey', description: 'Token de autenticación del canal emisor (opcional en QA interno)', required: false, example: 'tu-api-key' })
   @ApiBody({ type: CreateEmissionAutoDto })
   @ApiResponse({
     status: 200,

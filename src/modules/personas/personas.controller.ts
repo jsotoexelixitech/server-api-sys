@@ -72,7 +72,7 @@ export class PersonasController {
       'Requiere header `apikey` (se valida contra `maclient_api`). ' +
       'Devuelve `cnpoliza`, `cnrecibo` y `urlpoliza`.',
   })
-  @ApiHeader({ name: 'apikey', description: 'Token de autenticación del canal emisor', required: true })
+  @ApiHeader({ name: 'apikey', description: 'Token de autenticación del canal emisor (opcional en QA interno)', required: false })
   @ApiBody({ type: CreateEmissionPersonDto })
   @ApiResponse({
     status: 200,

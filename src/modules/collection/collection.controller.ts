@@ -31,7 +31,7 @@ export class CollectionController {
   @Post('notific')
   @HttpCode(HttpStatus.OK)
   @ApiOperation({ summary: 'Notificar pago de recibo (spNotificaPago)' })
-  @ApiHeader({ name: 'apikey', required: true })
+  @ApiHeader({ name: 'apikey', description: 'Token del canal (opcional en QA interno; default Exelixi)', required: false })
   @ApiBody({ type: CollectionPaymentDto })
   @Api401()
   @ApiCommonErrors()
@@ -47,7 +47,7 @@ export class CollectionController {
   @Post('collect')
   @HttpCode(HttpStatus.OK)
   @ApiOperation({ summary: 'Cobrar recibo notificado (spCobroSis_Ad)' })
-  @ApiHeader({ name: 'apikey', required: true })
+  @ApiHeader({ name: 'apikey', description: 'Token del canal (opcional en QA interno; default Exelixi)', required: false })
   @ApiBody({ type: CollectionPaymentDto })
   @Api401()
   @ApiCommonErrors()
@@ -65,7 +65,7 @@ export class CollectionController {
   @ApiOperation({
     summary: 'Notificar + cobrar en un paso (activar recibo tras pago bancario)',
   })
-  @ApiHeader({ name: 'apikey', required: true })
+  @ApiHeader({ name: 'apikey', description: 'Token del canal (opcional en QA interno; default Exelixi)', required: false })
   @ApiBody({ type: CollectionPaymentDto })
   @Api401()
   @ApiCommonErrors()

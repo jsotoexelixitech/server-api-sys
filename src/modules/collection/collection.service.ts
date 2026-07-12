@@ -3,7 +3,6 @@ import {
   Injectable,
   InternalServerErrorException,
   Logger,
-  UnauthorizedException,
 } from '@nestjs/common';
 import { MssqlService } from '../../database/mssql.service';
 import { CollectionPaymentDto } from './dto/collection-payment.dto';
@@ -437,10 +436,7 @@ export class CollectionService {
 
   /** Flujo completo: notificar + cobrar (activa recibo pendiente tras pago). */
   async activateReceipt(apikey: string, body: CollectionPaymentDto) {
-    if (!apikey?.trim()) {
-      throw new UnauthorizedException('Header apikey requerido.');
-    }
-    const payload = await this.buildCollectionPayload(apikey, body);
+    const payload = await this.buildCollectionPayload(apikey ?? '', body);
     this.logger.log(
       `activateReceipt cnrecibo=${body.cnrecibo} mpago=${body.mpago} ref=${body.xreferencia}`,
     );
