@@ -12,6 +12,7 @@ import { PersonasModule } from './modules/personas/personas.module';
 import { AppApiModule } from './modules/app/app.module';
 import { ExternalModule } from './modules/external/external.module';
 import { DocumentsModule } from './modules/documents/documents.module';
+import { CollectionModule } from './modules/collection/collection.module';
 
 @Module({
   imports: [
@@ -34,6 +35,7 @@ import { DocumentsModule } from './modules/documents/documents.module';
     AppApiModule,
     ExternalModule,
     DocumentsModule,
+    CollectionModule,
   ],
 })
 export class AppModule {}

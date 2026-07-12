@@ -1,0 +1,376 @@
+import {
+  BadRequestException,
+  Injectable,
+  InternalServerErrorException,
+  Logger,
+  UnauthorizedException,
+} from '@nestjs/common';
+import { MssqlService } from '../../database/mssql.service';
+import { CollectionPaymentDto } from './dto/collection-payment.dto';
+import { parseSPError } from '../../common/helpers/sp-error.helper';
+
+interface ApiClientRow {
+  cproductor?: number;
+  cci_rif?: number;
+  cbanco_destino?: number | null;
+  ctipopago?: number | null;
+  cprog?: string;
+}
+
+interface SoporteRow {
+  cbanco?: number | null;
+  cbanco_destino?: number | null;
+  cmoneda: string;
+  ctipopago?: number | null;
+  mpago: number;
+  mpagoext: number;
+  mpagoigtf?: number;
+  mpagoigtfext?: number;
+  mtotal: number;
+  mtotalext: number;
+  ptasamon: number;
+  ptasaref?: number;
+  xreferencia: string;
+  xruta?: string;
+}
+
+interface CollectionPayload {
+  asegurados: unknown[];
+  cmoneda_pago: string;
+  cprog: string;
+  ctenedor: number;
+  cusuario: number;
+  fcobro: string;
+  freporte: string;
+  imov: string;
+  mpago: number;
+  mpagoext: number;
+  numRecibos: number;
+  recibos: string[];
+  referencia: string;
+  soporte: SoporteRow[];
+}
+
+@Injectable()
+export class CollectionService {
+  private readonly logger = new Logger(CollectionService.name);
+
+  constructor(private readonly db: MssqlService) {}
+
+  /** Busca recibos pendientes del cliente vía spSearchForCustomerByReceipt. */
+  async searchByClient(cci_rif: string) {
+    const T = this.db.types;
+    const req = this.db.request();
+    req.input('xcaso', T.NVarChar(10), 'recibos');
+    req.input('iestadorec', T.NVarChar(2), 'P');
+    req.input('itiporec', T.NVarChar(2), '0');
+    req.input('cci_rif', T.NVarChar(20), cci_rif);
+
+    try {
+      const result = await req.execute('spSearchForCustomerByReceipt');
+      const rows = result.recordset ?? [];
+
+      const rateReq = this.db.request();
+      const rateResult = await rateReq.query<{ ptasamon: number }>(
+        `SELECT ptasamon FROM mamonedas WHERE TRIM(cmoneda) = '$'`,
+      );
+      const ptasamon = rateResult.recordset[0]?.ptasamon ?? 0;
+
+      const data = rows.map((rec: Record<string, unknown>) => ({
+        cliente: {
+          cid: rec['cid'],
+          xcliente: rec['xcliente'],
+          xcorreo: rec['xcorreo'],
+        },
+        recibo: {
+          cdoccob: rec['cdoccob'],
+          cnpoliza: rec['cnpoliza'],
+          fanopol: rec['fanopol'],
+          cnrecibo: rec['cnrecibo'],
+          qcuotas: rec['qcuotas'],
+          cmoneda: rec['cmoneda'],
+          ptasamon,
+          mmontorec: parseFloat(
+            (Number(rec['mmontorecext'] ?? 0) * ptasamon).toFixed(2),
+          ),
+          mmontorecext: rec['mmontorecext'],
+        },
+      }));
+
+      return { data };
+    } catch (err) {
+      const msg = parseSPError(err);
+      this.logger.error(`searchByClient: ${msg}`);
+      throw new InternalServerErrorException(msg);
+    }
+  }
+
+  /** Resuelve datos del canal desde maclient_api (o defaults Exelixi). */
+  private async resolveApiClient(apikey: string): Promise<ApiClientRow> {
+    const T = this.db.types;
+    const req = this.db.request();
+    req.input('xtoken', T.VarChar(100), apikey);
+    const result = await req.query(`
+      SELECT TOP 1 cproductor, cci_rif, cbanco_destino, ctipopago, cprog
+      FROM maclient_api WHERE xtoken = @xtoken
+    `);
+    if (!result.recordset.length) {
+      return {
+        cproductor: parseInt(process.env.LAMUNDIAL_PRODUCTOR ?? '80080', 10),
+        cci_rif: parseInt(process.env.LAMUNDIAL_CUSUARIO ?? '4', 10),
+        cbanco_destino: null,
+        ctipopago: null,
+        cprog: 'buildExtPayload',
+      };
+    }
+    return result.recordset[0] as ApiClientRow;
+  }
+
+  /** Construye payload de cobro a partir del recibo y datos de pago. */
+  async buildCollectionPayload(
+    apikey: string,
+    body: CollectionPaymentDto,
+  ): Promise<CollectionPayload> {
+    const client = await this.resolveApiClient(apikey);
+    const T = this.db.types;
+
+    const recReq = this.db.request();
+    recReq.input('cnrecibo', T.VarChar(30), body.cnrecibo);
+    const recResult = await recReq.query(`
+      SELECT ctenedor, cmoneda FROM adrecibos WHERE cnrecibo = @cnrecibo
+    `);
+    if (!recResult.recordset.length) {
+      throw new BadRequestException(`Recibo no encontrado: ${body.cnrecibo}`);
+    }
+    const { ctenedor, cmoneda } = recResult.recordset[0] as {
+      ctenedor: number;
+      cmoneda: string;
+    };
+
+    const curReq = this.db.request();
+    curReq.input('cmoneda', T.Char(4), cmoneda);
+    const curResult = await curReq.query(`
+      SELECT ptasamon FROM mamonedas WHERE cmoneda = @cmoneda
+    `);
+    if (!curResult.recordset.length) {
+      throw new BadRequestException(`Moneda no encontrada: ${cmoneda}`);
+    }
+    const ptasamon = Number(curResult.recordset[0]['ptasamon'] ?? 0);
+    const mpagoext = body.mpago / ptasamon;
+
+    const cusuario = body.cusuario ?? client.cci_rif ?? 4;
+
+    return {
+      asegurados: [],
+      cmoneda_pago: 'Bs',
+      cprog: client.cprog ?? 'buildExtPayload',
+      ctenedor,
+      cusuario,
+      fcobro: body.fpago,
+      freporte: body.fpago,
+      imov: 'CO',
+      mpago: body.mpago,
+      mpagoext,
+      numRecibos: 1,
+      recibos: [body.cnrecibo],
+      referencia: body.xreferencia,
+      soporte: [
+        {
+          cbanco: null,
+          cbanco_destino: client.cbanco_destino ?? null,
+          cmoneda: 'Bs',
+          ctipopago: client.ctipopago ?? null,
+          mpago: body.mpago,
+          mpagoext,
+          mpagoigtf: 0,
+          mpagoigtfext: 0,
+          mtotal: body.mpago,
+          mtotalext: mpagoext,
+          ptasamon,
+          ptasaref: 0,
+          xreferencia: body.xreferencia,
+          xruta: 'Sin soporte',
+        },
+      ],
+    };
+  }
+
+  private formatRecibosList(recibos: string[]): string {
+    return `'${recibos.join("','")}'`;
+  }
+
+  /** Inserta filas de soporte en cbreporte_pago. */
+  private async insertSoporteRows(
+    ctransaccion: number,
+    soporte: SoporteRow[],
+    cusuario: number,
+    cprog: string,
+  ): Promise<void> {
+    const T = this.db.types;
+    const now = new Date();
+
+    for (let i = 0; i < soporte.length; i++) {
+      const s = soporte[i];
+      const req = this.db.request();
+      req.input('ctransaccion', T.Numeric(18, 0), ctransaccion);
+      req.input('npago', T.Numeric(18, 0), i + 1);
+      req.input('casegurado', T.Numeric(18, 0), null);
+      req.input('cmoneda', T.Char(4), s.cmoneda);
+      req.input('cbanco', T.Numeric(18, 2), s.cbanco ?? null);
+      req.input('ctipopago', T.Numeric(), s.ctipopago ?? null);
+      req.input('cbanco_destino', T.Numeric(18, 2), s.cbanco_destino ?? null);
+      req.input('mpago', T.Numeric(18, 2), s.mpago);
+      req.input('mpagoext', T.Numeric(18, 2), s.mpagoext);
+      req.input('mpagoigtf', T.Numeric(18, 2), s.mpagoigtf ?? 0);
+      req.input('mpagoigtfext', T.Numeric(18, 2), s.mpagoigtfext ?? 0);
+      req.input('mtotal', T.Numeric(18, 2), s.mtotal);
+      req.input('mtotalext', T.Numeric(18, 2), s.mtotalext);
+      req.input('mnotificado', T.Numeric(18, 2), null);
+      req.input('mnotificadoext', T.Numeric(18, 2), null);
+      req.input('ptasamon', T.Numeric(13, 6), s.ptasamon);
+      req.input('ptasaref', T.Numeric(18, 2), s.ptasaref ?? 0);
+      req.input('xreferencia', T.VarChar(100), s.xreferencia);
+      req.input('xruta', T.VarChar(100), s.xruta ?? 'Sin soporte');
+      req.input('cprog', T.Char(20), cprog);
+      req.input('cusuario', T.Numeric(18, 0), cusuario);
+      req.input('fingreso', T.DateTime, now);
+      req.input('freporte', T.DateTime, now);
+
+      await req.query(`
+        INSERT INTO cbreporte_pago (
+          ctransaccion, npago, casegurado, cmoneda, cbanco, ctipopago,
+          cbanco_destino, mpago, mpagoext, mpagoigtf, mpagoigtfext,
+          mtotal, mtotalext, mnotificado, mnotificadoext, ptasamon,
+          ptasaref, xreferencia, xruta, cprog, cusuario, fingreso, freporte
+        ) VALUES (
+          @ctransaccion, @npago, @casegurado, @cmoneda, @cbanco, @ctipopago,
+          @cbanco_destino, @mpago, @mpagoext, @mpagoigtf, @mpagoigtfext,
+          @mtotal, @mtotalext, @mnotificado, @mnotificadoext, @ptasamon,
+          @ptasaref, @xreferencia, @xruta, @cprog, @cusuario, @fingreso, @freporte
+        )
+      `);
+    }
+  }
+
+  /** Notifica el pago (spNotificaPago + soporte + spCnSaldo_Ad). */
+  async notifyPayment(payload: CollectionPayload) {
+    const T = this.db.types;
+    const req = this.db.request();
+    req.input('freporte', T.Date, payload.fcobro);
+    req.input('cmoneda_pago', T.NVarChar, payload.cmoneda_pago);
+    req.input('ctenedor', T.Numeric(19, 4), payload.ctenedor);
+    req.input('numRecibos', T.Numeric(19, 4), payload.numRecibos);
+    req.input('mpago', T.Decimal(19, 4), payload.mpago);
+    req.input('mpagoext', T.Decimal(19, 4), payload.mpagoext);
+    req.input('cprog', T.NVarChar(19), payload.cprog);
+    req.input('recibos', T.NVarChar, this.formatRecibosList(payload.recibos));
+    req.input('cusuario', T.Numeric(11), payload.cusuario);
+    req.output('status', T.Bit);
+    req.output('mensaje', T.NVarChar(100));
+    req.output('ptasamon', T.Numeric(13, 6));
+    req.output('transaccion', T.Numeric(19, 4));
+
+    try {
+      const result = await req.execute('spNotificaPago');
+      const status = result.output['status'];
+      if (!status) {
+        const mensaje = String(result.output['mensaje'] ?? 'spNotificaPago falló');
+        throw new BadRequestException(mensaje);
+      }
+
+      const transaccion = Number(result.output['transaccion']);
+      await this.insertSoporteRows(
+        transaccion,
+        payload.soporte,
+        payload.cusuario,
+        payload.cprog,
+      );
+
+      const saldoReq = this.db.request();
+      saldoReq.input('cusuario', T.Numeric(10), payload.cusuario);
+      saldoReq.input('transaccion', T.Numeric(7), transaccion);
+      saldoReq.input('ctenedor', T.Numeric(13), payload.ctenedor);
+      await saldoReq.execute('spCnSaldo_Ad');
+
+      return {
+        transaccion,
+        mensaje: result.output['mensaje'],
+        ptasamon: result.output['ptasamon'],
+      };
+    } catch (err) {
+      if (err instanceof BadRequestException) throw err;
+      const msg = parseSPError(err);
+      this.logger.error(`notifyPayment: ${msg}`);
+      throw new InternalServerErrorException(msg);
+    }
+  }
+
+  /** Registra el cobro (spCobroSis_Ad + soporte). */
+  async collectPayment(payload: CollectionPayload) {
+    const T = this.db.types;
+    const req = this.db.request();
+    req.input('freporte', T.Date, payload.fcobro);
+    req.input('ctenedor', T.Numeric(19, 4), payload.ctenedor);
+    req.input('numRecibos', T.Numeric(19, 4), payload.numRecibos);
+    req.input('mpago', T.Decimal(19, 4), payload.mpago);
+    req.input('mpagoext', T.Decimal(19, 4), payload.mpagoext);
+    req.input('cprog', T.NVarChar(20), payload.cprog);
+    req.input('recibos', T.NVarChar, this.formatRecibosList(payload.recibos));
+    req.input('cusuario', T.Numeric(11), payload.cusuario);
+    req.output('status', T.Bit);
+    req.output('ptasamon', T.Numeric(13, 6));
+    req.output('mensaje', T.NVarChar(100));
+    req.output('transaccion', T.Numeric(19, 4));
+    req.output('cnpoliza', T.NVarChar(30));
+    req.output('fanopol', T.Int);
+    req.output('fmespol', T.Int);
+
+    try {
+      const result = await req.execute('spCobroSis_Ad');
+      const status = result.output['status'];
+      if (!status) {
+        const mensaje = String(result.output['mensaje'] ?? 'spCobroSis_Ad falló');
+        throw new BadRequestException(mensaje);
+      }
+
+      const transaccion = Number(result.output['transaccion']);
+      await this.insertSoporteRows(
+        transaccion,
+        payload.soporte,
+        payload.cusuario,
+        payload.cprog,
+      );
+
+      return {
+        transaccion,
+        cnpoliza: result.output['cnpoliza'],
+        fanopol: result.output['fanopol'],
+        fmespol: result.output['fmespol'],
+        mensaje: result.output['mensaje'],
+      };
+    } catch (err) {
+      if (err instanceof BadRequestException) throw err;
+      const msg = parseSPError(err);
+      this.logger.error(`collectPayment: ${msg}`);
+      throw new InternalServerErrorException(msg);
+    }
+  }
+
+  /** Flujo completo: notificar + cobrar (activa recibo pendiente tras pago). */
+  async activateReceipt(apikey: string, body: CollectionPaymentDto) {
+    if (!apikey?.trim()) {
+      throw new UnauthorizedException('Header apikey requerido.');
+    }
+    const payload = await this.buildCollectionPayload(apikey, body);
+    this.logger.log(
+      `activateReceipt cnrecibo=${body.cnrecibo} mpago=${body.mpago} ref=${body.xreferencia}`,
+    );
+    const notif = await this.notifyPayment(payload);
+    const collect = await this.collectPayment(payload);
+    return {
+      message: 'Recibo notificado y cobrado exitosamente.',
+      notificacion: notif,
+      cobro: collect,
+    };
+  }
+}

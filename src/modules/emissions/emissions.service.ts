@@ -17,8 +17,6 @@ export class EmissionsService {
     private readonly config: ConfigService,
   ) {}
 
-  // ── Búsqueda de vehículo en vhcerti ──────────────────────────────────────
-
   private async searchVehicle(field: 'xplaca' | 'xsercar', value: string) {
     const T = this.db.types;
     const req = this.db.request();
@@ -51,8 +49,6 @@ export class EmissionsService {
     return { status: false, vehicle: vehicle[0] };
   }
 
-  // ── POST /api/v1/emissions/automobile/vehicle ─────────────────────────────
-
   async searchByPlate(xplaca: string) {
     try {
       return await this.searchVehicle('xplaca', xplaca);
@@ -62,8 +58,6 @@ export class EmissionsService {
       throw new InternalServerErrorException('Error al buscar vehículo por placa.');
     }
   }
-
-  // ── POST /api/v1/emissions/automobile/serial ──────────────────────────────
 
   async searchBySerial(xsercar: string) {
     try {
@@ -75,14 +69,11 @@ export class EmissionsService {
     }
   }
 
-
-  // ── POST /api/v1/external/validateEmissionAuto ────────────────────────────
-
   async validateEmissionAuto(body: Record<string, unknown>) {
     const req = this.db.request();
     const T = this.db.types;
-    req.input('cplan',   T.VarChar(10), body.plan);
-    req.input('xplaca',  T.VarChar(15), body.placa);
+    req.input('cplan', T.VarChar(10), body.plan);
+    req.input('xplaca', T.VarChar(15), body.placa);
     req.input('xsercar', T.VarChar(60), body.serial_carroceria);
     req.input('xsermot', T.VarChar(60), body.serial_motor);
     try {
@@ -95,20 +86,9 @@ export class EmissionsService {
     }
   }
 
-  // ── POST /api/v1/external/createEmissionAuto ──────────────────────────────
-  //
-  // Usa la VIEW `eePoliza_Automovil_General` de Sis2000, que tiene un trigger
-  // INSTEAD OF INSERT que ejecuta el SP de emisión, autogenera cnpoliza/cnrecibo
-  // y devuelve el resultado como recordset (sin necesitar OUTPUT clause).
-  // Este es el mismo mecanismo que usa el backend original de La Mundial (backend-api-sys).
-
   async createEmissionAuto(apikey: string, body: Record<string, unknown>) {
     try {
       const T = this.db.types;
-
-      // 1. Buscar token en maclient_api para obtener metadatos del canal.
-      //    Si no existe, se usan valores por defecto (el token puede ser el
-      //    LAMUNDIAL_APIKEY externo que no está registrado localmente).
       const authReq = this.db.request();
       authReq.input('xtoken', T.VarChar(100), apikey);
       const authResult = await authReq.query(`
@@ -117,21 +97,18 @@ export class EmissionsService {
       const canal: Record<string, unknown> = authResult.recordset.length
         ? authResult.recordset[0]
         : {
-            cproductor:   parseInt(process.env.LAMUNDIAL_PRODUCTOR ?? '80080', 10),
+            cproductor: parseInt(this.config.get<string>('LAMUNDIAL_PRODUCTOR', '80080') ?? '80080', 10),
             xcanal_venta: 'ExelixiTech-RCV',
-            corigen_rel:  'WE',
-            ifuente_api:  'API',
-            ifuente:      'API',
-            cprog:        'eePoliza_AutoGe',
-            ctipocanal:   null,
-            ccanalalt:    null,
-            cscanalalt:   null,
+            corigen_rel: 'WE',
+            ifuente_api: 'API',
+            ifuente: 'API',
+            cprog: 'eePoliza_AutoGe',
+            ctipocanal: null,
+            ccanalalt: null,
+            cscanalalt: null,
           };
 
       const b: Record<string, unknown> = { ...body };
-
-      // 1.1 Normalizar fechas y defaults (emision-api puede enviar femision/fdesde/fhasta;
-      // si faltan, se calculan desde fecha_emision como en policyService).
       const fechaEmision = String(b['fecha_emision'] ?? b['femision'] ?? '').trim();
       if (fechaEmision) {
         if (!b['femision']) b['femision'] = fechaEmision;
@@ -144,27 +121,22 @@ export class EmissionsService {
         }
       }
 
-      const estadoCivilTom =
-        b['iestado_civil_tomador'] ?? b['estado_civil_tomador'];
-      if (estadoCivilTom != null && String(estadoCivilTom).trim() !== '') {
-        b['iestado_civil_tomador'] = String(estadoCivilTom).trim().charAt(0).toUpperCase();
-      } else {
-        b['iestado_civil_tomador'] = 'S';
-      }
+      const estadoCivilTom = b['iestado_civil_tomador'] ?? b['estado_civil_tomador'];
+      b['iestado_civil_tomador'] =
+        estadoCivilTom != null && String(estadoCivilTom).trim() !== ''
+          ? String(estadoCivilTom).trim().charAt(0).toUpperCase()
+          : 'S';
 
-      const estadoCivilTit =
-        b['iestado_civil_titular'] ?? b['estado_civil_titular'];
-      if (estadoCivilTit != null && String(estadoCivilTit).trim() !== '') {
-        b['iestado_civil_titular'] = String(estadoCivilTit).trim().charAt(0).toUpperCase();
-      } else {
-        b['iestado_civil_titular'] = b['iestado_civil_tomador'];
-      }
+      const estadoCivilTit = b['iestado_civil_titular'] ?? b['estado_civil_titular'];
+      b['iestado_civil_titular'] =
+        estadoCivilTit != null && String(estadoCivilTit).trim() !== ''
+          ? String(estadoCivilTit).trim().charAt(0).toUpperCase()
+          : b['iestado_civil_tomador'];
 
       if (!b['iplaca'] || String(b['iplaca']).trim() === '') {
         b['iplaca'] = 'N';
       }
 
-      // 1.2 Validaciones de negocio alineadas con QA La Mundial.
       const requiredFields: Array<[string, unknown]> = [
         ['plan', b['cplan'] ?? b['plan']],
         ['fecha_emision', b['fecha_emision'] ?? b['femision']],
@@ -176,11 +148,9 @@ export class EmissionsService {
         ['iplaca', b['iplaca']],
         ['iestado_civil_tomador', b['iestado_civil_tomador']],
       ];
-
       const missing = requiredFields
         .filter(([, value]) => value == null || String(value).trim() === '')
         .map(([name]) => name);
-
       if (missing.length > 0) {
         throw new BadRequestException(
           `Parámetros de entrada inválidos. Faltan: ${missing.join(', ')}`,
@@ -188,13 +158,12 @@ export class EmissionsService {
       }
 
       const isoDate = /^\d{4}-\d{2}-\d{2}$/;
-      const dateChecks: Array<[string, unknown]> = [
+      const badDates = [
         ['fecha_emision', b['fecha_emision'] ?? b['femision']],
         ['fdesde', b['fdesde']],
         ['fhasta', b['fhasta']],
         ['fnac_tomador', b['fnac_tomador']],
-      ];
-      const badDates = dateChecks
+      ]
         .filter(([, value]) => typeof value !== 'string' || !isoDate.test(value))
         .map(([name]) => name);
       if (badDates.length > 0) {
@@ -203,275 +172,14 @@ export class EmissionsService {
         );
       }
 
-      // === LLAMADA A LA NUEVA API QAAPISYS2000 (PRIMER INTENTO) ===
-      const ENABLE_QAAPISYS2000 = true; // Habilitado para emitir via API externa (192.168.10.213:3000)
-      if (!ENABLE_QAAPISYS2000) {
-        this.logger.log('qaapisys2000 disabled - usando emisión local en Sis2000 directamente');
+      const emissionSource = (
+        this.config.get<string>('EMISSION_SOURCE', 'local') ?? 'local'
+      ).toLowerCase();
+
+      if (emissionSource === 'external') {
+        return await this.createEmissionAutoExternal(b, canal, apikey);
       }
-
-      const payloadAPI = {
-        cnpoliza_rel: '',
-        cnpoliza:     '',
-        cramo:        b['cramo'] ?? 18,
-        cplan:        String(b['cplan'] ?? b['plan'] ?? 'RCVBAS'),
-
-        // Tomador
-        icedula_tomador:      String(b['tipo_cedula_tomador'] ?? b['icedula_tomador'] ?? 'V'),
-        xrif_tomador:         Number(b['rif_tomador']),
-        xnombre_tomador:      String(b['nombre_tomador'] ?? ''),
-        xapellido_tomador:    String(b['apellido_tomador'] ?? ''),
-        isexo_tomador:        String(b['sexo_tomador'] ?? b['isexo_tomador'] ?? 'M'),
-        iestado_civil_tomador: String(b['estado_civil_tomador'] ?? b['iestado_civil_tomador'] ?? 'S'),
-        fnac_tomador:         b['fnac_tomador'] ? String(b['fnac_tomador']) : null,
-        cestado_tomador:      Number(b['estado_tomador'] ?? b['cestado_tomador'] ?? 1),
-        cciudad_tomador:      Number(b['ciudad_tomador'] ?? b['cciudad_tomador'] ?? 128),
-        xdireccion_tomador:   String(b['direccion_tomador'] ?? 'No indicada'),
-        xtelefono_tomador:    String(b['telefono_tomador'] ?? ''),
-        xcorreo_tomador:      String(b['correo_tomador'] ?? ''),
-
-        // Titular
-        icedula_titular:      String(b['tipo_cedula_titular'] ?? b['icedula_titular'] ?? 'V'),
-        xrif_titular:         Number(b['rif_titular']),
-        xnombre_titular:      String(b['nombre_titular'] ?? ''),
-        xapellido_titular:    String(b['apellido_titular'] ?? ''),
-        isexo_titular:        String(b['sexo_titular'] ?? b['isexo_titular'] ?? 'M'),
-        iestado_civil_titular: String(b['estado_civil_titular'] ?? b['iestado_civil_titular'] ?? 'S'),
-        fnac_titular:         b['fnac_titular'] ? String(b['fnac_titular']) : null,
-        cestado_titular:      Number(b['estado_titular'] ?? b['cestado_titular'] ?? 1),
-        cciudad_titular:      Number(b['ciudad_titular'] ?? b['cciudad_titular'] ?? 128),
-        xdireccion_titular:   String(b['direccion_titular'] ?? 'No indicada'),
-        xtelefono_titular:    String(b['telefono_titular'] ?? ''),
-        xcorreo_titular:      String(b['correo_titular'] ?? ''),
-
-        // Vehículo
-        cmarca:        String(b['cmarca'] ?? b['marca']),
-        xmarca:        String(b['xmarca'] ?? ''),
-        cmodelo:       String(b['cmodelo'] ?? b['modelo']),
-        xmodelo:       String(b['xmodelo'] ?? ''),
-        cversion:      String(b['cversion'] ?? b['version']),
-        xversion:      String(b['xversion'] ?? ''),
-        cano:          Number(b['cano'] ?? b['fano']),
-        xcolor:        String(b['xcolor'] ?? b['color'] ?? 'No indicado'),
-        xplaca:        String(b['xplaca'] ?? b['placa']),
-        xsercar:       String(b['xsercar'] ?? b['serial_carroceria']),
-        xsermot:       (b['xsermot'] ?? b['serial_motor']) ? String(b['xsermot'] ?? b['serial_motor']) : null,
-        ccategoria_uso: Number(b['ccategoria_uso'] ?? 20),
-        npuestos:      Number(b['npuestos'] ?? 5),
-        ntoneladas:    b['ntoneladas'] != null ? Number(b['ntoneladas']) : 0,
-        iplaca:        String(b['iplaca'] ?? 'N'),
-        precargorcv:   Number(b['precargorcv'] ?? 0),
-
-        // Canal / comercial
-        cpersona_politica: Number(b['cpersona_politica'] ?? b['dec_persona_politica'] ?? 0),
-        cterm_y_cod:       Number(b['cterm_y_cod'] ?? b['dec_term_y_cod'] ?? 1),
-        cproductor:        Number(b['productor'] ?? canal['cproductor'] ?? 80080),
-        ctipocanal:        String(canal['ctipocanal'] ?? b['ctipocanal'] ?? 'E'),
-        ccanalalt:         Number(canal['ccanalalt'] ?? b['ccanalalt'] ?? 27),
-        cscanalalt:        Number(canal['cscanalalt'] ?? b['cscanalalt'] ?? 1),
-        cusuario:          Number(b['cusuario'] ?? 4),
-
-        // Financiero
-        ptasamon:     Number(b['ptasa'] ?? b['ptasamon'] ?? 1),
-        ptasamon_pago: Number(b['ptasa'] ?? b['ptasamon_pago'] ?? 1),
-        cmoneda:      String(b['cmoneda'] ?? 'USD'),
-        msumaaseg:    Number(b['msumaaseg'] ?? 0),
-        mprima:       Number(b['mprimaext'] ?? b['mprima_ext'] ?? b['prima'] ?? 0),
-        ifrecuencia:  String(b['frecuencia'] ?? b['ifrecuencia'] ?? 'A'),
-
-        // Vigencia
-        femision: fechaEmision,
-        fdesde:   b['fdesde'] || fechaEmision,
-        fhasta:   (() => {
-          const d = new Date(`${b['fdesde'] || fechaEmision}T00:00:00Z`);
-          d.setUTCFullYear(d.getUTCFullYear() + 1);
-          return d.toISOString().slice(0, 10);
-        })(),
-
-        ...(b['conductor'] ? { conductor: b['conductor'] } : {}),
-        ...(b['beneficiario'] ? { beneficiario: b['beneficiario'] } : {}),
-      };
-
-      const EXTERNAL_API_URL = this.config.get<string>('EXTERNAL_API_URL_AUTO', 'https://qaapisys2000.lamundialdeseguros.com/SinTicket-ConductorHabitual/api/v1/external/createEmissionAuto');
-      const EXTERNAL_API_KEY = this.config.get<string>('EXTERNAL_API_KEY', '');
-      const EXTERNAL_BASIC_AUTH = this.config.get<string>('EXTERNAL_BASIC_AUTH', '');
-
-      this.logger.log(`=== INICIO EMISION AUTOMOVIL RCV ===`);
-      this.logger.log(`1. PAYLOAD RECIBIDO DEL FRONTEND: ${JSON.stringify(b)}`);
-      this.logger.log(`2. URL DESTINO API LA MUNDIAL: ${EXTERNAL_API_URL}`);
-      this.logger.log(`3. PAYLOAD TRANSFORMADO HACIA LA MUNDIAL: ${JSON.stringify(payloadAPI)}`);
-      
-      let useFallback = false; // Fallback deshabilitado (!ENABLE_QAAPISYS2000)
-      let resData: any = {};
-      let response: Response | null = null;
-      let errMsg = 'Error desconocido desde la API';
-
-      if (ENABLE_QAAPISYS2000) {
-        this.logger.log(`[EMISIÓN AUTO] -> Intentando emitir a través de la API EXTERNA (La Mundial) plan=${b['plan']} rif=${b['rif_titular']}`);
-        try {
-          response = await fetch(EXTERNAL_API_URL, {
-            method: 'POST',
-            headers: {
-              'Content-Type': 'application/json',
-              'apikey': EXTERNAL_API_KEY,
-              'Authorization': EXTERNAL_BASIC_AUTH
-            },
-            body: JSON.stringify(payloadAPI),
-            signal: AbortSignal.timeout(15000)
-          });
-          
-          resData = await response.json().catch(() => ({}));
-          this.logger.log(`4. RESPUESTA DE LA MUNDIAL [HTTP ${response.status}]: ${JSON.stringify(resData)}`);
-          
-          if (response.status >= 500) {
-             errMsg = `HTTP ${response.status} (Servicio no disponible)`;
-             this.logger.error(`API La Mundial retornó ${errMsg}, fallback deshabilitado.`);
-             throw new InternalServerErrorException(errMsg);
-          } else if (!response.ok) {
-             errMsg = `HTTP ${response.status}`;
-             if (resData) {
-               if (typeof resData.result?.result?.error === 'string') errMsg = resData.result.result.error;
-               else if (typeof resData.result?.error === 'string') errMsg = resData.result.error;
-               else if (resData.result?.message) errMsg = resData.result.message;
-               else if (resData.message) errMsg = resData.message;
-               else if (resData.error && typeof resData.error === 'string') errMsg = resData.error;
-               
-               if (Array.isArray(resData.errors)) {
-                 const arrErrs = resData.errors.map((e: any) => e.mensaje || e.message || JSON.stringify(e)).join(', ');
-                 if (arrErrs) errMsg = `${errMsg} - Detalles: ${arrErrs}`;
-               }
-             }
-             this.logger.error(`Error llamando API La Mundial Automóvil: ${errMsg}`);
-             throw new BadRequestException(errMsg);
-          }
-        } catch (err) {
-          if (err instanceof BadRequestException) throw err;
-          if (err instanceof InternalServerErrorException) throw err;
-          errMsg = `Falla de red o timeout comunicando con La Mundial: ${err instanceof Error ? err.message : String(err)}`;
-          this.logger.error(`${errMsg}. Fallback deshabilitado.`);
-          throw new InternalServerErrorException(errMsg);
-        }
-      }
-
-      if (!useFallback && response?.ok && resData && (resData.status === true || resData.success === true)) {
-         this.logger.log(`=== FIN EMISION AUTOMOVIL RCV ===`);
-         const dataObj = resData.result || resData.data || resData;
-         return {
-           message: resData.message || 'Emisión registrada exitosamente via API La Mundial.',
-           cnpoliza: dataObj.poliza || dataObj.cnpoliza || '',
-           cnrecibo: dataObj.recibo || dataObj.cnrecibo || '',
-           urlpoliza: dataObj.urlpoliza || '',
-           ncuota: dataObj.ncuota || 1,
-           fanopol: new Date().getFullYear(),
-           fmespol: new Date().getMonth() + 1,
-           raw: resData
-         };
-      }
-
-      if (useFallback) {
-        // === FALLBACK A BASE DE DATOS LOCAL SIS2000 ===
-        this.logger.log(`[EMISIÓN AUTO] -> Usando API LOCAL (Sys2000 - eePoliza_Automovil_General) para plan=${b['plan']} rif=${b['rif_titular']}`);
-        this.logger.log(`=== INICIO FALLBACK LOCAL EMISION AUTOMOVIL ===`);
-        const ins = this.db.request();
-        const ctipocanal = null;
-        const ccanalalt = null;
-        const cscanalalt = null;
-
-        const fields: Record<string, { type: unknown; value: unknown }> = {
-          cnpoliza_rel:          { type: T.NVarChar(30),    value: b['cnpoliza_rel'] ?? (b['poliza'] ? `${b['poliza']}` : null) },
-          cplan:                 { type: T.NVarChar(10),    value: b['cplan'] ?? b['plan'] },
-          icedula_tomador:       { type: T.Char(1),         value: b['tipo_cedula_tomador'] ?? b['cedula_tomador'] },
-          xrif_tomador:          { type: T.Numeric(9),      value: b['rif_tomador'] },
-          xnombre_tomador:       { type: T.NVarChar(250),   value: b['nombre_tomador'] },
-          xapellido_tomador:     { type: T.NVarChar(250),   value: b['apellido_tomador'] },
-          isexo_tomador:         { type: T.Char(1),         value: b['sexo_tomador'] ?? b['isexo_tomador'] },
-          iestado_civil_tomador: { type: T.Char(1),         value: b['estado_civil_tomador'] ?? null },
-          fnac_tomador:          { type: T.Date,            value: b['fnac_tomador'] },
-          cestado_tomador:       { type: T.NVarChar(100),   value: b['estado_tomador'] },
-          cciudad_tomador:       { type: T.NVarChar(100),   value: b['ciudad_tomador'] },
-          xdireccion_tomador:    { type: T.NVarChar(1000),  value: b['direccion_tomador'] },
-          xtelefono_tomador:     { type: T.NVarChar(250),   value: b['telefono_tomador'] },
-          xcorreo_tomador:       { type: T.NVarChar(250),   value: b['correo_tomador'] },
-          icedula_titular:       { type: T.Char(1),         value: b['tipo_cedula_titular'] ?? b['cedula_titular'] },
-          xrif_titular:          { type: T.Numeric(9),      value: b['rif_titular'] },
-          xnombre_titular:       { type: T.NVarChar(250),   value: b['nombre_titular'] },
-          xapellido_titular:     { type: T.NVarChar(250),   value: b['apellido_titular'] },
-          isexo_titular:         { type: T.Char(1),         value: b['sexo_titular'] ?? b['isexo_titular'] },
-          iestado_civil_titular: { type: T.Char(1),         value: b['estado_civil_titular'] ?? null },
-          fnac_titular:          { type: T.DateTime,        value: b['fnac_titular'] ?? null },
-          cestado_titular:       { type: T.NVarChar(100),   value: b['estado_titular'] },
-          cciudad_titular:       { type: T.NVarChar(100),   value: b['ciudad_titular'] },
-          xdireccion_titular:    { type: T.NVarChar(1000),  value: b['direccion_titular'] },
-          xtelefono_titular:     { type: T.NVarChar(250),   value: b['telefono_titular'] },
-          xcorreo_titular:       { type: T.NVarChar(250),   value: b['correo_titular'] },
-          cmarca:                { type: T.Char(3),         value: b['cmarca'] ?? b['marca'] },
-          cmodelo:               { type: T.Char(3),         value: b['cmodelo'] ?? b['modelo'] },
-          cversion:              { type: T.Char(3),         value: b['cversion'] ?? b['version'] },
-          cano:                  { type: T.Int,             value: b['cano'] ?? b['fano'] },
-          xcolor:                { type: T.VarChar(60),     value: b['xcolor'] ?? b['color'] },
-          xplaca:                { type: T.VarChar(15),     value: b['xplaca'] ?? b['placa'] },
-          xsercar:               { type: T.VarChar(60),     value: b['xsercar'] ?? b['serial_carroceria'] },
-          xsermot:               { type: T.VarChar(60),     value: b['xsermot'] ?? b['serial_motor'] ?? null },
-          cpersona_politica:     { type: T.Int,             value: b['dec_persona_politica'] },
-          cterm_y_cod:           { type: T.Int,             value: b['dec_term_y_cod'] },
-          ctransporte_o_entrega: { type: T.Int,             value: b['dec_transporte_o_entrega'] ?? null },
-          cproductor:            { type: T.Int,             value: b['productor'] ?? 80080 },
-          ctipocanal:            { type: T.Char(1),         value: ctipocanal },
-          ccanalalt:             { type: T.Int,             value: ccanalalt },
-          cscanalalt:            { type: T.Int,             value: cscanalalt },
-          ptasamon:              { type: T.Numeric(13, 6),  value: null },
-          mprimaext:             { type: T.Numeric(18, 2),  value: b['mprimaext'] ?? b['prima'] ?? b['mprima_ext'] },
-          ifrecuencia:           { type: T.Char(1),         value: b['frecuencia'] },
-          femision:              { type: T.DateTime,        value: b['fecha_emision'] },
-          xcanal_venta:          { type: T.NVarChar(250),   value: null },
-          corigen_rel:           { type: T.Char(2),         value: null },
-          api:                   { type: T.NVarChar(100),   value: 'createEmissionAutoRCV' },
-          method:                { type: T.NVarChar(100),   value: 'POST' },
-          cprog:                 { type: T.Char(20),        value: 'eePoliza_AutoGe' },
-          ifuente:               { type: T.Char(10),        value: 'API' },
-          fingreso:              { type: T.DateTime,        value: new Date() },
-          cpoliza:               { type: T.VarChar(19),     value: null },
-          cnpoliza:              { type: T.VarChar(30),     value: null },
-          cproces:               { type: T.VarChar(13),     value: null },
-        };
-
-        const cols = Object.keys(fields);
-        cols.forEach((col) => ins.input(col, (fields[col] as any).type, (fields[col] as any).value));
-
-        const colList = cols.join(', ');
-        const valList = cols.map((c) => `@${c}`).join(', ');
-
-        this.logger.log(`fallback: INSERT INTO eePoliza_Automovil_General placa=${b['placa']} plan=${b['cplan'] ?? b['plan']}`);
-
-        const insertResult = await ins.query(`
-          INSERT INTO eePoliza_Automovil_General (${colList})
-          VALUES (${valList})
-        `);
-
-        const row = insertResult.recordset?.[0] ?? {};
-        const cnpoliza  = String(row['cnpoliza']  ?? '').trim();
-        const cnrecibo  = String(row['cnrecibo']  ?? '').trim();
-        const fanopol   = row['fanopol']  as number | undefined;
-        const fmespol   = row['fmespol']  as number | undefined;
-        const ncuota    = (row['qcuotas'] ?? row['ncuota']) as number | undefined;
-
-        const pdfBase   = (process.env.POLICY_PDF_URL ?? 'https://qaapi.lamundialdeseguros.com/sis2000/poliza/').replace(/\/$/, '');
-        const urlpoliza = cnpoliza && fanopol != null && fmespol != null
-          ? `${pdfBase}/${cnpoliza}/${fanopol}/${fmespol}/`
-          : '';
-
-        this.logger.log(`fallback OK cnpoliza=${cnpoliza} cnrecibo=${cnrecibo}`);
-        this.logger.log(`=== FIN FALLBACK LOCAL EMISION AUTOMOVIL ===`);
-
-        return {
-          message: 'Emisión registrada exitosamente via Fallback Local.',
-          cnpoliza,
-          cnrecibo,
-          urlpoliza,
-          ncuota,
-          fanopol,
-          fmespol,
-        };
-      }
+      return await this.emitLocalAutomobile(b, canal);
     } catch (err) {
       if (err instanceof BadRequestException) throw err;
       const msg = parseSPError(err);
@@ -485,6 +193,189 @@ export class EmissionsService {
       }
       this.logger.error(`createEmissionAuto: ${msg}`);
       throw new InternalServerErrorException(`Error al crear emisión: ${msg}`);
+    }
+  }
+
+  private async emitLocalAutomobile(
+    b: Record<string, unknown>,
+    canal: Record<string, unknown>,
+  ) {
+    const T = this.db.types;
+    const ctipocanal = (b['ctipocanal'] ??
+      (canal['ctipocanal'] === 'A' ? canal['ctipocanal'] : null)) as string | null;
+    const ccanalalt = (b['ccanalalt'] ??
+      (canal['ctipocanal'] === 'A' ? canal['ccanalalt'] : null)) as number | null;
+    const cscanalalt = (b['cscanalalt'] ??
+      (canal['ctipocanal'] === 'A' ? canal['cscanalalt'] : null)) as number | null;
+
+    const ins = this.db.request();
+    const fields: Record<string, { type: unknown; value: unknown }> = {
+      cnpoliza_rel: { type: T.NVarChar(30), value: b['cnpoliza_rel'] ?? (b['poliza'] ? `${b['poliza']}` : null) },
+      cplan: { type: T.NVarChar(10), value: b['cplan'] ?? b['plan'] },
+      icedula_tomador: { type: T.Char(1), value: b['tipo_cedula_tomador'] ?? b['cedula_tomador'] },
+      xrif_tomador: { type: T.Numeric(9), value: b['rif_tomador'] },
+      xnombre_tomador: { type: T.NVarChar(250), value: b['nombre_tomador'] },
+      xapellido_tomador: { type: T.NVarChar(250), value: b['apellido_tomador'] },
+      isexo_tomador: { type: T.Char(1), value: b['sexo_tomador'] ?? b['isexo_tomador'] },
+      iestado_civil_tomador: { type: T.Char(1), value: b['estado_civil_tomador'] ?? null },
+      fnac_tomador: { type: T.Date, value: b['fnac_tomador'] },
+      cestado_tomador: { type: T.NVarChar(100), value: b['estado_tomador'] },
+      cciudad_tomador: { type: T.NVarChar(100), value: b['ciudad_tomador'] },
+      xdireccion_tomador: { type: T.NVarChar(1000), value: b['direccion_tomador'] },
+      xtelefono_tomador: { type: T.NVarChar(250), value: b['telefono_tomador'] },
+      xcorreo_tomador: { type: T.NVarChar(250), value: b['correo_tomador'] },
+      icedula_titular: { type: T.Char(1), value: b['tipo_cedula_titular'] ?? b['cedula_titular'] },
+      xrif_titular: { type: T.Numeric(9), value: b['rif_titular'] },
+      xnombre_titular: { type: T.NVarChar(250), value: b['nombre_titular'] },
+      xapellido_titular: { type: T.NVarChar(250), value: b['apellido_titular'] },
+      isexo_titular: { type: T.Char(1), value: b['sexo_titular'] ?? b['isexo_titular'] },
+      iestado_civil_titular: { type: T.Char(1), value: b['estado_civil_titular'] ?? null },
+      fnac_titular: { type: T.DateTime, value: b['fnac_titular'] ?? null },
+      cestado_titular: { type: T.NVarChar(100), value: b['estado_titular'] },
+      cciudad_titular: { type: T.NVarChar(100), value: b['ciudad_titular'] },
+      xdireccion_titular: { type: T.NVarChar(1000), value: b['direccion_titular'] },
+      xtelefono_titular: { type: T.NVarChar(250), value: b['telefono_titular'] },
+      xcorreo_titular: { type: T.NVarChar(250), value: b['correo_titular'] },
+      cmarca: { type: T.Char(3), value: b['cmarca'] ?? b['marca'] },
+      cmodelo: { type: T.Char(3), value: b['cmodelo'] ?? b['modelo'] },
+      cversion: { type: T.Char(3), value: b['cversion'] ?? b['version'] },
+      cano: { type: T.Int, value: b['cano'] ?? b['fano'] },
+      xcolor: { type: T.VarChar(60), value: b['xcolor'] ?? b['color'] },
+      xplaca: { type: T.VarChar(15), value: b['xplaca'] ?? b['placa'] },
+      xsercar: { type: T.VarChar(60), value: b['xsercar'] ?? b['serial_carroceria'] },
+      xsermot: { type: T.VarChar(60), value: b['xsermot'] ?? b['serial_motor'] ?? null },
+      cpersona_politica: { type: T.Int, value: b['dec_persona_politica'] },
+      cterm_y_cod: { type: T.Int, value: b['dec_term_y_cod'] },
+      ctransporte_o_entrega: { type: T.Int, value: b['dec_transporte_o_entrega'] ?? null },
+      cproductor: { type: T.Int, value: b['productor'] ?? canal['cproductor'] ?? 80080 },
+      ctipocanal: { type: T.Char(1), value: ctipocanal },
+      ccanalalt: { type: T.Int, value: ccanalalt },
+      cscanalalt: { type: T.Int, value: cscanalalt },
+      ptasamon: { type: T.Numeric(13, 6), value: null },
+      mprimaext: { type: T.Numeric(18, 2), value: b['mprimaext'] ?? b['prima'] ?? b['mprima_ext'] },
+      ifrecuencia: { type: T.Char(1), value: b['frecuencia'] },
+      femision: { type: T.DateTime, value: b['fecha_emision'] ?? b['femision'] },
+      xcanal_venta: { type: T.NVarChar(250), value: canal['xcanal_venta'] ?? null },
+      corigen_rel: { type: T.Char(2), value: canal['corigen_rel'] ?? null },
+      api: { type: T.NVarChar(100), value: 'createEmissionAutoRCV' },
+      method: { type: T.NVarChar(100), value: 'POST' },
+      cprog: { type: T.Char(20), value: canal['cprog'] ?? 'eePoliza_AutoGe' },
+      ifuente: { type: T.Char(10), value: canal['ifuente_api'] ?? canal['ifuente'] ?? 'API' },
+      fingreso: { type: T.DateTime, value: new Date() },
+      cpoliza: { type: T.VarChar(19), value: null },
+      cnpoliza: { type: T.VarChar(30), value: null },
+      cproces: { type: T.VarChar(13), value: null },
+    };
+
+    const cols = Object.keys(fields);
+    cols.forEach((col) =>
+      ins.input(col, (fields[col] as { type: unknown; value: unknown }).type, (fields[col] as { type: unknown; value: unknown }).value),
+    );
+
+    this.logger.log(
+      `emitLocal: INSERT eePoliza_Automovil_General placa=${b['placa']} plan=${b['cplan'] ?? b['plan']}`,
+    );
+
+    const insertResult = await ins.query(`
+      INSERT INTO eePoliza_Automovil_General (${cols.join(', ')})
+      VALUES (${cols.map((c) => `@${c}`).join(', ')})
+    `);
+
+    const row = insertResult.recordset?.[0] ?? {};
+    const cnpoliza = String(row['cnpoliza'] ?? '').trim();
+    const cnrecibo = String(row['cnrecibo'] ?? '').trim();
+    const fanopol = row['fanopol'] as number | undefined;
+    const fmespol = row['fmespol'] as number | undefined;
+    const ncuota = (row['qcuotas'] ?? row['ncuota']) as number | undefined;
+    const pdfBase = (this.config.get<string>('POLICY_PDF_URL') ?? '').replace(/\/$/, '');
+    const urlpoliza =
+      cnpoliza && fanopol != null && fmespol != null && pdfBase
+        ? `${pdfBase}/${cnpoliza}/${fanopol}/${fmespol}/`
+        : '';
+
+    this.logger.log(`emitLocal OK cnpoliza=${cnpoliza} cnrecibo=${cnrecibo}`);
+
+    return {
+      message: 'Emisión registrada exitosamente.',
+      cnpoliza,
+      cnrecibo,
+      urlpoliza,
+      ncuota,
+      fanopol,
+      fmespol,
+    };
+  }
+
+  private async createEmissionAutoExternal(
+    b: Record<string, unknown>,
+    canal: Record<string, unknown>,
+    apikey: string,
+  ) {
+    const fechaEmision = String(b['fecha_emision'] ?? b['femision'] ?? '').trim();
+    const payloadAPI = {
+      cplan: String(b['cplan'] ?? b['plan'] ?? 'RCVBAS'),
+      xrif_tomador: Number(b['rif_tomador']),
+      xrif_titular: Number(b['rif_titular']),
+      xplaca: String(b['xplaca'] ?? b['placa']),
+      cmarca: String(b['cmarca'] ?? b['marca']),
+      cmodelo: String(b['cmodelo'] ?? b['modelo']),
+      cversion: String(b['cversion'] ?? b['version']),
+      cano: Number(b['cano'] ?? b['fano']),
+      femision: fechaEmision,
+      fdesde: b['fdesde'] || fechaEmision,
+      fhasta: b['fhasta'],
+      mprima: Number(b['mprimaext'] ?? b['prima'] ?? 0),
+      cproductor: Number(b['productor'] ?? canal['cproductor'] ?? 80080),
+    };
+
+    const externalUrl = this.config.get<string>('EXTERNAL_API_URL_AUTO', '');
+    const externalKey = this.config.get<string>('EXTERNAL_API_KEY', apikey);
+    const basicAuth = this.config.get<string>('EXTERNAL_BASIC_AUTH', '');
+
+    if (!externalUrl) {
+      this.logger.warn('EXTERNAL_API_URL_AUTO vacío; usando emisión local.');
+      return this.emitLocalAutomobile(b, canal);
+    }
+
+    try {
+      const response = await fetch(externalUrl, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          apikey: externalKey,
+          ...(basicAuth ? { Authorization: basicAuth } : {}),
+        },
+        body: JSON.stringify(payloadAPI),
+        signal: AbortSignal.timeout(15000),
+      });
+      const resData = (await response.json().catch(() => ({}))) as Record<string, unknown>;
+
+      if (response.status >= 500) {
+        this.logger.warn(`API externa HTTP ${response.status}; fallback local.`);
+        return this.emitLocalAutomobile(b, canal);
+      }
+      if (!response.ok) {
+        throw new BadRequestException(
+          (resData['message'] as string) || (resData['error'] as string) || `HTTP ${response.status}`,
+        );
+      }
+
+      const dataObj = (resData['result'] ?? resData['data'] ?? resData) as Record<string, unknown>;
+      return {
+        message: (resData['message'] as string) || 'Emisión registrada via API externa.',
+        cnpoliza: String(dataObj['poliza'] ?? dataObj['cnpoliza'] ?? ''),
+        cnrecibo: String(dataObj['recibo'] ?? dataObj['cnrecibo'] ?? ''),
+        urlpoliza: String(dataObj['urlpoliza'] ?? ''),
+        ncuota: dataObj['ncuota'] as number | undefined,
+        fanopol: dataObj['fanopol'] as number | undefined,
+        fmespol: dataObj['fmespol'] as number | undefined,
+      };
+    } catch (err) {
+      if (err instanceof BadRequestException) throw err;
+      this.logger.warn(
+        `Error API externa: ${err instanceof Error ? err.message : String(err)}; fallback local.`,
+      );
+      return this.emitLocalAutomobile(b, canal);
     }
   }
 }
