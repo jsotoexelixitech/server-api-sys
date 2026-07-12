@@ -8,6 +8,8 @@ import {
 import { MssqlService } from '../../database/mssql.service';
 import { CollectionPaymentDto } from './dto/collection-payment.dto';
 import { parseSPError } from '../../common/helpers/sp-error.helper';
+// eslint-disable-next-line @typescript-eslint/no-require-imports
+import sql = require('mssql');
 
 interface ApiClientRow {
   cproductor?: number;
@@ -56,6 +58,34 @@ export class CollectionService {
   private readonly logger = new Logger(CollectionService.name);
 
   constructor(private readonly db: MssqlService) {}
+
+  /** Moneda para JSON @soporte de spNotificaPago (sis2000_qa). */
+  private normalizeSoporteMoneda(cmoneda: string): string {
+    const m = String(cmoneda ?? 'Bs').trim().toUpperCase();
+    if (m === 'BS' || m === 'BSS' || m === 'BOLIVARES' || m === 'BOLÍVARES') return 'BS';
+    if (m === '$' || m === 'USD' || m === 'DOLARES' || m === 'DÓLARES') return '$';
+    return m;
+  }
+
+  /** JSON requerido por spNotificaPago en QA: [{ cmoneda, mmonto, ftasa }]. */
+  private buildSoporteJson(payload: CollectionPayload): string {
+    const ftasa = payload.fcobro;
+    const items =
+      payload.soporte.length > 0
+        ? payload.soporte.map((s) => ({
+            cmoneda: this.normalizeSoporteMoneda(String(s.cmoneda ?? payload.cmoneda_pago)),
+            mmonto: Number(s.mpago),
+            ftasa,
+          }))
+        : [
+            {
+              cmoneda: this.normalizeSoporteMoneda(payload.cmoneda_pago),
+              mmonto: Number(payload.mpago),
+              ftasa,
+            },
+          ];
+    return JSON.stringify(items);
+  }
 
   /** Busca recibos pendientes del cliente vía spSearchForCustomerByReceipt. */
   async searchByClient(cci_rif: string) {
@@ -259,6 +289,7 @@ export class CollectionService {
     req.input('cprog', T.NVarChar(19), payload.cprog);
     req.input('recibos', T.NVarChar, this.formatRecibosList(payload.recibos));
     req.input('cusuario', T.Numeric(11), payload.cusuario);
+    req.input('soporte', sql.NVarChar(sql.MAX), this.buildSoporteJson(payload));
     req.output('status', T.Bit);
     req.output('mensaje', T.NVarChar(100));
     req.output('ptasamon', T.Numeric(13, 6));
