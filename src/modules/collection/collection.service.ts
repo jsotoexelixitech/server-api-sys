@@ -287,7 +287,7 @@ export class CollectionService {
     req.input('cprog', T.NVarChar(19), payload.cprog);
     req.input('recibos', T.NVarChar, this.formatRecibosList(payload.recibos));
     req.input('cusuario', T.Numeric(11), payload.cusuario);
-    req.input('soporte', T.NVarChar(-1), this.buildSoporteJson(payload));
+    req.input('soporte', T.NVarChar(4000), this.buildSoporteJson(payload));
     req.output('status', T.Bit);
     req.output('mensaje', T.NVarChar(100));
     req.output('ptasamon', T.Numeric(13, 6));
