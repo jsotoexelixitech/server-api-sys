@@ -17,6 +17,20 @@ export class EmissionsService {
     private readonly config: ConfigService,
   ) {}
 
+  private nvarchar(value: unknown): string | null {
+    if (value == null || String(value).trim() === '') return null;
+    return String(value);
+  }
+
+  /** Resuelve clave interna o La Mundial (ej. estado_tomador / cestado_tomador). */
+  private pick<T>(b: Record<string, unknown>, ...keys: string[]): T | undefined {
+    for (const key of keys) {
+      const v = b[key];
+      if (v != null && String(v).trim() !== '') return v as T;
+    }
+    return undefined;
+  }
+
   private async searchVehicle(field: 'xplaca' | 'xsercar', value: string) {
     const T = this.db.types;
     const req = this.db.request();
@@ -133,9 +147,17 @@ export class EmissionsService {
           ? String(estadoCivilTit).trim().charAt(0).toUpperCase()
           : b['iestado_civil_tomador'];
 
-      if (!b['iplaca'] || String(b['iplaca']).trim() === '') {
+      const tipoPlaca =
+        b['iplaca'] ?? b['tipo_placa'] ?? (b['xplaca'] || b['placa'] ? 'N' : null);
+      if (tipoPlaca != null && String(tipoPlaca).trim() !== '') {
+        b['iplaca'] = String(tipoPlaca).trim().charAt(0).toUpperCase();
+      } else {
         b['iplaca'] = 'N';
       }
+
+      if (!b['xplaca'] && b['placa']) b['xplaca'] = b['placa'];
+      if (!b['xsercar'] && b['serial_carroceria']) b['xsercar'] = b['serial_carroceria'];
+      if (!b['xsermot'] && b['serial_motor']) b['xsermot'] = b['serial_motor'];
 
       const requiredFields: Array<[string, unknown]> = [
         ['plan', b['cplan'] ?? b['plan']],
@@ -145,7 +167,7 @@ export class EmissionsService {
         ['fnac_tomador', b['fnac_tomador']],
         ['cestado_tomador', b['estado_tomador'] ?? b['cestado_tomador']],
         ['cciudad_tomador', b['ciudad_tomador'] ?? b['cciudad_tomador']],
-        ['iplaca', b['iplaca']],
+        ['xplaca', b['xplaca'] ?? b['placa']],
         ['iestado_civil_tomador', b['iestado_civil_tomador']],
       ];
       const missing = requiredFields
@@ -211,50 +233,104 @@ export class EmissionsService {
     const ins = this.db.request();
     const fields: Record<string, { type: unknown; value: unknown }> = {
       cnpoliza_rel: { type: T.NVarChar(30), value: b['cnpoliza_rel'] ?? (b['poliza'] ? `${b['poliza']}` : null) },
-      cplan: { type: T.NVarChar(10), value: b['cplan'] ?? b['plan'] },
-      icedula_tomador: { type: T.Char(1), value: b['tipo_cedula_tomador'] ?? b['cedula_tomador'] },
-      xrif_tomador: { type: T.Numeric(9), value: b['rif_tomador'] },
-      xnombre_tomador: { type: T.NVarChar(250), value: b['nombre_tomador'] },
-      xapellido_tomador: { type: T.NVarChar(250), value: b['apellido_tomador'] },
-      isexo_tomador: { type: T.Char(1), value: b['sexo_tomador'] ?? b['isexo_tomador'] },
-      iestado_civil_tomador: { type: T.Char(1), value: b['estado_civil_tomador'] ?? null },
+      cplan: { type: T.NVarChar(10), value: this.pick(b, 'cplan', 'plan') },
+      icedula_tomador: {
+        type: T.Char(1),
+        value: this.pick(b, 'tipo_cedula_tomador', 'icedula_tomador', 'cedula_tomador'),
+      },
+      xrif_tomador: { type: T.Numeric(9), value: this.pick(b, 'xrif_tomador', 'rif_tomador') },
+      xnombre_tomador: { type: T.NVarChar(250), value: this.pick(b, 'xnombre_tomador', 'nombre_tomador') },
+      xapellido_tomador: { type: T.NVarChar(250), value: this.pick(b, 'xapellido_tomador', 'apellido_tomador') },
+      isexo_tomador: { type: T.Char(1), value: this.pick(b, 'isexo_tomador', 'sexo_tomador') },
+      iestado_civil_tomador: {
+        type: T.Char(1),
+        value: this.pick(b, 'iestado_civil_tomador', 'estado_civil_tomador'),
+      },
       fnac_tomador: { type: T.Date, value: b['fnac_tomador'] },
-      cestado_tomador: { type: T.NVarChar(100), value: b['estado_tomador'] },
-      cciudad_tomador: { type: T.NVarChar(100), value: b['ciudad_tomador'] },
-      xdireccion_tomador: { type: T.NVarChar(1000), value: b['direccion_tomador'] },
-      xtelefono_tomador: { type: T.NVarChar(250), value: b['telefono_tomador'] },
-      xcorreo_tomador: { type: T.NVarChar(250), value: b['correo_tomador'] },
-      icedula_titular: { type: T.Char(1), value: b['tipo_cedula_titular'] ?? b['cedula_titular'] },
-      xrif_titular: { type: T.Numeric(9), value: b['rif_titular'] },
-      xnombre_titular: { type: T.NVarChar(250), value: b['nombre_titular'] },
-      xapellido_titular: { type: T.NVarChar(250), value: b['apellido_titular'] },
-      isexo_titular: { type: T.Char(1), value: b['sexo_titular'] ?? b['isexo_titular'] },
-      iestado_civil_titular: { type: T.Char(1), value: b['estado_civil_titular'] ?? null },
+      cestado_tomador: {
+        type: T.NVarChar(100),
+        value: this.nvarchar(this.pick(b, 'cestado_tomador', 'estado_tomador')),
+      },
+      cciudad_tomador: {
+        type: T.NVarChar(100),
+        value: this.nvarchar(this.pick(b, 'cciudad_tomador', 'ciudad_tomador')),
+      },
+      xdireccion_tomador: {
+        type: T.NVarChar(1000),
+        value: this.pick(b, 'xdireccion_tomador', 'direccion_tomador'),
+      },
+      xtelefono_tomador: {
+        type: T.NVarChar(250),
+        value: this.pick(b, 'xtelefono_tomador', 'telefono_tomador'),
+      },
+      xcorreo_tomador: {
+        type: T.NVarChar(250),
+        value: this.pick(b, 'xcorreo_tomador', 'correo_tomador'),
+      },
+      icedula_titular: {
+        type: T.Char(1),
+        value: this.pick(b, 'tipo_cedula_titular', 'icedula_titular', 'cedula_titular'),
+      },
+      xrif_titular: { type: T.Numeric(9), value: this.pick(b, 'xrif_titular', 'rif_titular') },
+      xnombre_titular: { type: T.NVarChar(250), value: this.pick(b, 'xnombre_titular', 'nombre_titular') },
+      xapellido_titular: { type: T.NVarChar(250), value: this.pick(b, 'xapellido_titular', 'apellido_titular') },
+      isexo_titular: { type: T.Char(1), value: this.pick(b, 'isexo_titular', 'sexo_titular') },
+      iestado_civil_titular: {
+        type: T.Char(1),
+        value: this.pick(b, 'iestado_civil_titular', 'estado_civil_titular'),
+      },
       fnac_titular: { type: T.DateTime, value: b['fnac_titular'] ?? null },
-      cestado_titular: { type: T.NVarChar(100), value: b['estado_titular'] },
-      cciudad_titular: { type: T.NVarChar(100), value: b['ciudad_titular'] },
-      xdireccion_titular: { type: T.NVarChar(1000), value: b['direccion_titular'] },
-      xtelefono_titular: { type: T.NVarChar(250), value: b['telefono_titular'] },
-      xcorreo_titular: { type: T.NVarChar(250), value: b['correo_titular'] },
-      cmarca: { type: T.Char(3), value: b['cmarca'] ?? b['marca'] },
-      cmodelo: { type: T.Char(3), value: b['cmodelo'] ?? b['modelo'] },
-      cversion: { type: T.Char(3), value: b['cversion'] ?? b['version'] },
-      cano: { type: T.Int, value: b['cano'] ?? b['fano'] },
-      xcolor: { type: T.VarChar(60), value: b['xcolor'] ?? b['color'] },
-      xplaca: { type: T.VarChar(15), value: b['xplaca'] ?? b['placa'] },
-      xsercar: { type: T.VarChar(60), value: b['xsercar'] ?? b['serial_carroceria'] },
-      xsermot: { type: T.VarChar(60), value: b['xsermot'] ?? b['serial_motor'] ?? null },
-      cpersona_politica: { type: T.Int, value: b['dec_persona_politica'] },
-      cterm_y_cod: { type: T.Int, value: b['dec_term_y_cod'] },
-      ctransporte_o_entrega: { type: T.Int, value: b['dec_transporte_o_entrega'] ?? null },
-      cproductor: { type: T.Int, value: b['productor'] ?? canal['cproductor'] ?? 80080 },
+      cestado_titular: {
+        type: T.NVarChar(100),
+        value: this.nvarchar(this.pick(b, 'cestado_titular', 'estado_titular')),
+      },
+      cciudad_titular: {
+        type: T.NVarChar(100),
+        value: this.nvarchar(this.pick(b, 'cciudad_titular', 'ciudad_titular')),
+      },
+      xdireccion_titular: {
+        type: T.NVarChar(1000),
+        value: this.pick(b, 'xdireccion_titular', 'direccion_titular'),
+      },
+      xtelefono_titular: {
+        type: T.NVarChar(250),
+        value: this.pick(b, 'xtelefono_titular', 'telefono_titular'),
+      },
+      xcorreo_titular: {
+        type: T.NVarChar(250),
+        value: this.pick(b, 'xcorreo_titular', 'correo_titular'),
+      },
+      cmarca: { type: T.Char(3), value: this.pick(b, 'cmarca', 'marca') },
+      cmodelo: { type: T.Char(3), value: this.pick(b, 'cmodelo', 'modelo') },
+      cversion: { type: T.Char(3), value: this.pick(b, 'cversion', 'version') },
+      cano: { type: T.Int, value: this.pick(b, 'cano', 'fano') },
+      xcolor: { type: T.VarChar(60), value: this.pick(b, 'xcolor', 'color') },
+      xplaca: { type: T.VarChar(15), value: this.pick(b, 'xplaca', 'placa') },
+      xsercar: { type: T.VarChar(60), value: this.pick(b, 'xsercar', 'serial_carroceria') },
+      xsermot: { type: T.VarChar(60), value: this.pick(b, 'xsermot', 'serial_motor') ?? null },
+      cpersona_politica: {
+        type: T.Int,
+        value: this.pick(b, 'cpersona_politica', 'dec_persona_politica'),
+      },
+      cterm_y_cod: { type: T.Int, value: this.pick(b, 'cterm_y_cod', 'dec_term_y_cod') },
+      ctransporte_o_entrega: {
+        type: T.Int,
+        value: this.pick(b, 'ctransporte_o_entrega', 'dec_transporte_o_entrega') ?? null,
+      },
+      cproductor: {
+        type: T.Int,
+        value: this.pick(b, 'cproductor', 'productor') ?? canal['cproductor'] ?? 80080,
+      },
       ctipocanal: { type: T.Char(1), value: ctipocanal },
       ccanalalt: { type: T.Int, value: ccanalalt },
       cscanalalt: { type: T.Int, value: cscanalalt },
       ptasamon: { type: T.Numeric(13, 6), value: null },
-      mprimaext: { type: T.Numeric(18, 2), value: b['mprimaext'] ?? b['prima'] ?? b['mprima_ext'] },
-      ifrecuencia: { type: T.Char(1), value: b['frecuencia'] },
-      femision: { type: T.DateTime, value: b['fecha_emision'] ?? b['femision'] },
+      mprimaext: {
+        type: T.Numeric(18, 2),
+        value: this.pick(b, 'mprimaext', 'prima', 'mprima_ext'),
+      },
+      ifrecuencia: { type: T.Char(1), value: this.pick(b, 'ifrecuencia', 'frecuencia') },
+      femision: { type: T.DateTime, value: this.pick(b, 'femision', 'fecha_emision') },
       xcanal_venta: { type: T.NVarChar(250), value: canal['xcanal_venta'] ?? null },
       corigen_rel: { type: T.Char(2), value: canal['corigen_rel'] ?? null },
       api: { type: T.NVarChar(100), value: 'createEmissionAutoRCV' },

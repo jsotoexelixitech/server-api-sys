@@ -109,9 +109,11 @@ export class EmissionsController {
   @ApiCommonErrors()
   async createEmissionAuto(
     @Headers('apikey') apikey: string,
-    @Body() dto: CreateEmissionAutoDto,
+    @Body() body: Record<string, unknown>,
   ) {
-    const result = await this.emissionsService.createEmissionAuto(apikey ?? '', dto as unknown as Record<string, unknown>);
+    // Sin DTO class-validator: acepta formato La Mundial (cplan, xplaca, femision)
+    // y formato interno (plan, placa, fecha_emision) — validación en EmissionsService.
+    const result = await this.emissionsService.createEmissionAuto(apikey ?? '', body);
     return { status: true, result };
   }
 }
