@@ -363,7 +363,13 @@ export class EmissionsService {
     const fanopol = row['fanopol'] as number | undefined;
     const fmespol = row['fmespol'] as number | undefined;
     const ncuota = (row['qcuotas'] ?? row['ncuota']) as number | undefined;
-    const pdfBase = (this.config.get<string>('POLICY_PDF_URL') ?? '').replace(/\/$/, '');
+    const pdfBase = (
+      this.config.get<string>('POLICY_PDF_URL') ??
+      this.config.get<string>('URLPoliza') ??
+      ''
+    )
+      .trim()
+      .replace(/\/$/, '');
     const urlpoliza =
       cnpoliza && fanopol != null && fmespol != null && pdfBase
         ? `${pdfBase}/${cnpoliza}/${fanopol}/${fmespol}/`

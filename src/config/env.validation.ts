@@ -23,6 +23,8 @@ export const envValidationSchema = Joi.object({
   LAMUNDIAL_PRODUCTOR: Joi.string().optional(),
   LAMUNDIAL_CUSUARIO: Joi.string().optional(),
   POLICY_PDF_URL: Joi.string().optional(),
+  /** Alias legacy Express (misma URL base PDF). */
+  URLPoliza: Joi.string().optional(),
   EXTERNAL_API_URL_AUTO: Joi.string().optional(),
   EXTERNAL_API_KEY: Joi.string().optional(),
   EXTERNAL_BASIC_AUTH: Joi.string().optional(),
