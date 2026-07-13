@@ -28,4 +28,21 @@ export class CollectionPaymentDto {
   @Type(() => Number)
   @IsNumber()
   cusuario?: number;
+
+  @ApiPropertyOptional({ example: 30, description: 'Código cbanco origen en mabanco (si ya se conoce)' })
+  @IsOptional()
+  @Type(() => Number)
+  @IsNumber()
+  cbanco?: number;
+
+  @ApiPropertyOptional({ example: '0134', description: 'Código ref. banco origen (cbanco_ref) del pago móvil verificado' })
+  @IsOptional()
+  @IsString()
+  cbanco_ref?: string;
+
+  @ApiPropertyOptional({ example: 35, description: 'Código cbanco_destino (MABANCO_DESTINO); fallback maclient_api' })
+  @IsOptional()
+  @Type(() => Number)
+  @IsNumber()
+  cbanco_destino?: number;
 }

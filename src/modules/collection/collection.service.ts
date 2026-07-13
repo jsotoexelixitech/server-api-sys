@@ -56,6 +56,114 @@ export class CollectionService {
 
   constructor(private readonly db: MssqlService) {}
 
+  /** Rechaza referencias internas Exélixi; exige ref. bancaria del pago verificado. */
+  private assertValidBankReference(xreferencia: string): void {
+    const ref = String(xreferencia ?? '').trim();
+    if (!ref) {
+      throw new BadRequestException('xreferencia requerida: use la referencia bancaria del pago verificado.');
+    }
+    if (/^EX-/i.test(ref)) {
+      throw new BadRequestException(
+        'xreferencia inválida: no se aceptan referencias internas (EX-INT). Use la referencia del banco.',
+      );
+    }
+    if (ref.length > 30) {
+      throw new BadRequestException('xreferencia excede 30 caracteres.');
+    }
+  }
+
+  /** La referencia debe existir en pago_movil o trsypago (mismo criterio que SysIP). */
+  private async assertPaymentRegistered(xreferencia: string): Promise<void> {
+    const T = this.db.types;
+    const req = this.db.request();
+    req.input('xreferencia', T.VarChar(30), xreferencia);
+    const result = await req.query(`
+      SELECT CASE
+        WHEN EXISTS (SELECT 1 FROM pago_movil WHERE referencia_banco LIKE '%' + @xreferencia + '%') THEN 1
+        WHEN EXISTS (SELECT 1 FROM trsypago WHERE ref_ibp LIKE '%' + @xreferencia + '%') THEN 1
+        ELSE 0
+      END AS found
+    `);
+    const found = Number(result.recordset?.[0]?.['found'] ?? 0);
+    if (!found) {
+      throw new BadRequestException(
+        'Referencia de pago no registrada en Sis2000. Verifique el pago móvil antes de cobrar el recibo.',
+      );
+    }
+  }
+
+  /** Resuelve cbanco numérico desde cbanco_ref (ej. 0134 → mabanco.cbanco). */
+  private async resolveCbancoFromRef(bankRef: string): Promise<number | null> {
+    const ref = String(bankRef).trim();
+    if (!ref) return null;
+    const T = this.db.types;
+    const req = this.db.request();
+    req.input('ref', T.VarChar(10), ref);
+    const result = await req.query(`
+      SELECT TOP 1 cbanco FROM mabanco
+      WHERE LTRIM(RTRIM(cbanco_ref)) = @ref OR CAST(cbanco AS VARCHAR(20)) = @ref
+    `);
+    const cbanco = result.recordset?.[0]?.['cbanco'];
+    return cbanco != null ? Number(cbanco) : null;
+  }
+
+  /**
+   * Igual que SysIP getPaymentData + datos de pago_movil para banco origen.
+   * cbanco_destino: 35 pago móvil, 31 sypago.
+   */
+  private async resolvePaymentBanks(
+    xreferencia: string,
+    body: CollectionPaymentDto,
+    client: ApiClientRow,
+  ): Promise<{ cbanco: number | null; cbanco_destino: number | null; ctipopago: number | null }> {
+    const T = this.db.types;
+
+    const destReq = this.db.request();
+    destReq.input('xreferencia', T.VarChar(30), xreferencia);
+    const destResult = await destReq.query(`
+      SELECT CASE
+        WHEN EXISTS (SELECT 1 FROM trsypago WHERE ref_ibp LIKE '%' + @xreferencia + '%') THEN 31
+        WHEN EXISTS (SELECT 1 FROM pago_movil WHERE referencia_banco LIKE '%' + @xreferencia + '%') THEN 35
+        ELSE NULL
+      END AS cbanco_destino
+    `);
+    let cbanco_destino =
+      destResult.recordset?.[0]?.['cbanco_destino'] != null
+        ? Number(destResult.recordset[0]['cbanco_destino'])
+        : null;
+
+    const pmReq = this.db.request();
+    pmReq.input('xreferencia', T.VarChar(30), xreferencia);
+    const pmResult = await pmReq.query(`
+      SELECT TOP 1 banco_origen FROM pago_movil
+      WHERE referencia_banco LIKE '%' + @xreferencia + '%'
+    `);
+    const bancoOrigenRef =
+      body.cbanco_ref?.trim() ||
+      (pmResult.recordset?.[0]?.['banco_origen'] as string | undefined)?.trim() ||
+      null;
+
+    let cbanco = body.cbanco != null ? Number(body.cbanco) : null;
+    if (!cbanco && bancoOrigenRef) {
+      cbanco = await this.resolveCbancoFromRef(bancoOrigenRef);
+    }
+
+    if (cbanco_destino == null) {
+      cbanco_destino =
+        body.cbanco_destino != null
+          ? Number(body.cbanco_destino)
+          : client.cbanco_destino != null
+            ? Number(client.cbanco_destino)
+            : null;
+    }
+
+    return {
+      cbanco,
+      cbanco_destino,
+      ctipopago: client.ctipopago ?? null,
+    };
+  }
+
   /** Moneda para JSON @soporte de spNotificaPago (sis2000_qa). */
   private normalizeSoporteMoneda(cmoneda: string): string {
     const m = String(cmoneda ?? 'Bs').trim().toUpperCase();
@@ -153,13 +261,29 @@ export class CollectionService {
     return result.recordset[0] as ApiClientRow;
   }
 
-  /** Construye payload de cobro a partir del recibo y datos de pago. */
+  /** Construye payload de cobro a partir del recibo y datos de pago verificado. */
   async buildCollectionPayload(
+    apikey: string,
+    body: CollectionPaymentDto,
+  ): Promise<CollectionPayload> {
+    this.assertValidBankReference(body.xreferencia);
+    if (!body.mpago || Number(body.mpago) <= 0) {
+      throw new BadRequestException(
+        'mpago debe ser el monto pagado en bolívares (Bs) según la verificación bancaria.',
+      );
+    }
+    await this.assertPaymentRegistered(body.xreferencia.trim());
+    return this.buildCollectionPayloadInternal(apikey, body);
+  }
+
+  private async buildCollectionPayloadInternal(
     apikey: string,
     body: CollectionPaymentDto,
   ): Promise<CollectionPayload> {
     const client = await this.resolveApiClient(apikey);
     const T = this.db.types;
+    const xreferencia = body.xreferencia.trim();
+    const banks = await this.resolvePaymentBanks(xreferencia, body, client);
 
     const recReq = this.db.request();
     recReq.input('cnrecibo', T.VarChar(30), body.cnrecibo);
@@ -200,13 +324,13 @@ export class CollectionService {
       mpagoext,
       numRecibos: 1,
       recibos: [body.cnrecibo],
-      referencia: body.xreferencia,
+      referencia: xreferencia,
       soporte: [
         {
-          cbanco: null,
-          cbanco_destino: client.cbanco_destino ?? null,
+          cbanco: banks.cbanco,
+          cbanco_destino: banks.cbanco_destino,
           cmoneda: 'Bs',
-          ctipopago: client.ctipopago ?? null,
+          ctipopago: banks.ctipopago,
           mpago: body.mpago,
           mpagoext,
           mpagoigtf: 0,
@@ -215,7 +339,7 @@ export class CollectionService {
           mtotalext: mpagoext,
           ptasamon,
           ptasaref: 0,
-          xreferencia: body.xreferencia,
+          xreferencia,
           xruta: 'Sin soporte',
         },
       ],
