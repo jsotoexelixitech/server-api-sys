@@ -45,4 +45,24 @@ export class CollectionPaymentDto {
   @Type(() => Number)
   @IsNumber()
   cbanco_destino?: number;
+
+  @ApiPropertyOptional({ example: '584243678907', description: 'Teléfono origen del pago móvil verificado' })
+  @IsOptional()
+  @IsString()
+  xtelefono?: string;
+
+  @ApiPropertyOptional({ example: '04143966962', description: 'Teléfono destino La Mundial del pago móvil' })
+  @IsOptional()
+  @IsString()
+  telefono_dest?: string;
+
+  @ApiPropertyOptional({ example: 'V-24174934', description: 'Cédula/RIF del pagador (pago móvil)' })
+  @IsOptional()
+  @IsString()
+  cci_rif?: string;
+
+  @ApiPropertyOptional({ example: '0171', description: 'Código ref. banco destino (banco_destino en pago_movil)' })
+  @IsOptional()
+  @IsString()
+  cbanco_dest_ref?: string;
 }

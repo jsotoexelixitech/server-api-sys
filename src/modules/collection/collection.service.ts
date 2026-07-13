@@ -72,8 +72,8 @@ export class CollectionService {
     }
   }
 
-  /** La referencia debe existir en pago_movil o trsypago (mismo criterio que SysIP). */
-  private async assertPaymentRegistered(xreferencia: string): Promise<void> {
+  /** ¿Existe la referencia en pago_movil o trsypago? */
+  private async isPaymentRegistered(xreferencia: string): Promise<boolean> {
     const T = this.db.types;
     const req = this.db.request();
     req.input('xreferencia', T.VarChar(30), xreferencia);
@@ -84,8 +84,60 @@ export class CollectionService {
         ELSE 0
       END AS found
     `);
-    const found = Number(result.recordset?.[0]?.['found'] ?? 0);
-    if (!found) {
+    return Number(result.recordset?.[0]?.['found'] ?? 0) === 1;
+  }
+
+  /**
+   * Tras verificar pago móvil vía SysIP, la fila puede no existir en la BD que usa nest-api
+   * (instancia distinta o registro solo en el gateway). Inserta en pago_movil si falta.
+   */
+  private async ensureMobilePaymentRegistered(body: CollectionPaymentDto): Promise<void> {
+    const ref = body.xreferencia.trim();
+    if (await this.isPaymentRegistered(ref)) return;
+
+    const bankRef = body.cbanco_ref?.trim();
+    if (!bankRef) {
+      this.logger.warn(
+        `ensureMobilePayment: ref=${ref} sin cbanco_ref — no se puede registrar en pago_movil`,
+      );
+      return;
+    }
+
+    const T = this.db.types;
+    const destBank =
+      body.cbanco_dest_ref?.trim() ||
+      process.env.LAMUNDIAL_PAYMENTS_DEST_BANCO ||
+      '0171';
+    const fechaMov = new Date(`${body.fpago}T12:00:00`);
+
+    const ins = this.db.request();
+    ins.input('dni', T.VarChar(20), body.cci_rif?.trim() ?? null);
+    ins.input('tel_orig', T.VarChar(20), body.xtelefono?.trim() ?? null);
+    ins.input('tel_dest', T.VarChar(20), body.telefono_dest?.trim() ?? '04143966962');
+    ins.input('banco_orig', T.VarChar(10), bankRef);
+    ins.input('banco_dest', T.VarChar(10), destBank);
+    ins.input('referencia', T.VarChar(50), ref);
+    ins.input('monto', T.Numeric(18, 2), body.mpago);
+    ins.input('fecha', T.DateTime, fechaMov);
+
+    await ins.query(`
+      INSERT INTO pago_movil
+        (dni, telefono_origen, telefono_destino, banco_origen, banco_destino,
+         referencia_banco, monto, fecha_movimiento, descripcion, refpk, ifuente, fcreacion)
+      SELECT
+        @dni, @tel_orig, @tel_dest, @banco_orig, @banco_dest,
+        @referencia, @monto, @fecha, 'Pago verificado Exelixi', @referencia, 'EXELIXI', GETDATE()
+      WHERE NOT EXISTS (
+        SELECT 1 FROM pago_movil WHERE referencia_banco = @referencia
+      )
+    `);
+
+    this.logger.log(`ensureMobilePayment: ref=${ref} registrado en pago_movil (Exelixi)`);
+  }
+
+  /** La referencia debe existir en pago_movil o trsypago (mismo criterio que SysIP). */
+  private async assertPaymentRegistered(xreferencia: string): Promise<void> {
+    if (!(await this.isPaymentRegistered(xreferencia))) {
       throw new BadRequestException(
         'Referencia de pago no registrada en Sis2000. Verifique el pago móvil antes de cobrar el recibo.',
       );
@@ -272,6 +324,7 @@ export class CollectionService {
         'mpago debe ser el monto pagado en bolívares (Bs) según la verificación bancaria.',
       );
     }
+    await this.ensureMobilePaymentRegistered(body);
     await this.assertPaymentRegistered(body.xreferencia.trim());
     return this.buildCollectionPayloadInternal(apikey, body);
   }
