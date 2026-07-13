@@ -33,6 +33,20 @@ interface SoporteRow {
   xruta?: string;
 }
 
+interface ReceiptAmounts {
+  ctenedor: number;
+  cmoneda: string;
+  mprimabrutaext: number;
+  mmontorecext: number;
+  mmontorec: number;
+  ptasamon: number;
+}
+
+interface PagoMovilOperacion {
+  banco_origen: string | null;
+  fecha_movimiento: Date | null;
+}
+
 interface CollectionPayload {
   asegurados: unknown[];
   cmoneda_pago: string;
@@ -41,6 +55,7 @@ interface CollectionPayload {
   cusuario: number;
   fcobro: string;
   freporte: string;
+  fingresoOperacion?: Date;
   imov: string;
   mpago: number;
   mpagoext: number;
@@ -144,19 +159,82 @@ export class CollectionService {
     }
   }
 
-  /** Resuelve cbanco numérico desde cbanco_ref (ej. 0134 → mabanco.cbanco). */
-  private async resolveCbancoFromRef(bankRef: string): Promise<number | null> {
+  /** Variantes de cbanco_ref (0105, 105) para lookup en mabanco. */
+  private bankRefVariants(bankRef: string): string[] {
     const ref = String(bankRef).trim();
-    if (!ref) return null;
+    if (!ref) return [];
+    const variants = new Set<string>([ref]);
+    if (/^\d+$/.test(ref)) {
+      variants.add(ref.padStart(4, '0'));
+      const stripped = ref.replace(/^0+/, '');
+      if (stripped) variants.add(stripped);
+    }
+    return [...variants];
+  }
+
+  /** Resuelve cbanco numérico desde cbanco_ref (ej. 0105 → mabanco.cbanco). */
+  private async resolveCbancoFromRef(bankRef: string): Promise<number | null> {
+    const variants = this.bankRefVariants(bankRef);
+    if (!variants.length) return null;
+
+    const T = this.db.types;
+    for (const ref of variants) {
+      const req = this.db.request();
+      req.input('ref', T.VarChar(10), ref);
+      const result = await req.query(`
+        SELECT TOP 1 cbanco FROM mabanco
+        WHERE LTRIM(RTRIM(cbanco_ref)) = @ref OR CAST(cbanco AS VARCHAR(20)) = @ref
+      `);
+      const cbanco = result.recordset?.[0]?.['cbanco'];
+      if (cbanco != null) return Number(cbanco);
+    }
+    return null;
+  }
+
+  /** Montos del recibo: prima bruta ext para TOTAL EXT (igual que createPaymentPasarela). */
+  private async getReceiptAmounts(cnrecibo: string): Promise<ReceiptAmounts> {
     const T = this.db.types;
     const req = this.db.request();
-    req.input('ref', T.VarChar(10), ref);
+    req.input('cnrecibo', T.VarChar(30), cnrecibo);
     const result = await req.query(`
-      SELECT TOP 1 cbanco FROM mabanco
-      WHERE LTRIM(RTRIM(cbanco_ref)) = @ref OR CAST(cbanco AS VARCHAR(20)) = @ref
+      SELECT ctenedor, TRIM(cmoneda) AS cmoneda,
+             mprimabrutaext, mmontorecext, mmontorec, ptasamon
+      FROM adrecibos WHERE cnrecibo = @cnrecibo
     `);
-    const cbanco = result.recordset?.[0]?.['cbanco'];
-    return cbanco != null ? Number(cbanco) : null;
+    if (!result.recordset.length) {
+      throw new BadRequestException(`Recibo no encontrado: ${cnrecibo}`);
+    }
+    const row = result.recordset[0] as Record<string, unknown>;
+    return {
+      ctenedor: Number(row['ctenedor']),
+      cmoneda: String(row['cmoneda'] ?? 'Bs'),
+      mprimabrutaext: Number(row['mprimabrutaext'] ?? 0),
+      mmontorecext: Number(row['mmontorecext'] ?? 0),
+      mmontorec: Number(row['mmontorec'] ?? 0),
+      ptasamon: Number(row['ptasamon'] ?? 0),
+    };
+  }
+
+  /** Datos de operación desde pago_movil (banco origen + fecha operación). */
+  private async getPagoMovilOperacion(
+    xreferencia: string,
+  ): Promise<PagoMovilOperacion | null> {
+    const T = this.db.types;
+    const req = this.db.request();
+    req.input('xreferencia', T.VarChar(30), xreferencia);
+    const result = await req.query(`
+      SELECT TOP 1 banco_origen, fecha_movimiento
+      FROM pago_movil
+      WHERE referencia_banco LIKE '%' + @xreferencia + '%'
+      ORDER BY fcreacion DESC
+    `);
+    if (!result.recordset.length) return null;
+    const row = result.recordset[0] as Record<string, unknown>;
+    const fecha = row['fecha_movimiento'];
+    return {
+      banco_origen: row['banco_origen'] != null ? String(row['banco_origen']).trim() : null,
+      fecha_movimiento: fecha instanceof Date ? fecha : fecha ? new Date(String(fecha)) : null,
+    };
   }
 
   /**
@@ -184,16 +262,9 @@ export class CollectionService {
         ? Number(destResult.recordset[0]['cbanco_destino'])
         : null;
 
-    const pmReq = this.db.request();
-    pmReq.input('xreferencia', T.VarChar(30), xreferencia);
-    const pmResult = await pmReq.query(`
-      SELECT TOP 1 banco_origen FROM pago_movil
-      WHERE referencia_banco LIKE '%' + @xreferencia + '%'
-    `);
+    const pmOperacion = await this.getPagoMovilOperacion(xreferencia);
     const bancoOrigenRef =
-      body.cbanco_ref?.trim() ||
-      (pmResult.recordset?.[0]?.['banco_origen'] as string | undefined)?.trim() ||
-      null;
+      body.cbanco_ref?.trim() || pmOperacion?.banco_origen || null;
 
     let cbanco = body.cbanco != null ? Number(body.cbanco) : null;
     if (!cbanco && bancoOrigenRef) {
@@ -337,30 +408,35 @@ export class CollectionService {
     const T = this.db.types;
     const xreferencia = body.xreferencia.trim();
     const banks = await this.resolvePaymentBanks(xreferencia, body, client);
+    const receipt = await this.getReceiptAmounts(body.cnrecibo);
+    const pmOperacion = await this.getPagoMovilOperacion(xreferencia);
 
-    const recReq = this.db.request();
-    recReq.input('cnrecibo', T.VarChar(30), body.cnrecibo);
-    const recResult = await recReq.query(`
-      SELECT ctenedor, cmoneda FROM adrecibos WHERE cnrecibo = @cnrecibo
-    `);
-    if (!recResult.recordset.length) {
-      throw new BadRequestException(`Recibo no encontrado: ${body.cnrecibo}`);
+    let ptasamon = receipt.ptasamon;
+    if (!ptasamon) {
+      const curReq = this.db.request();
+      curReq.input('cmoneda', T.Char(4), receipt.cmoneda);
+      const curResult = await curReq.query(`
+        SELECT ptasamon FROM mamonedas WHERE cmoneda = @cmoneda
+      `);
+      if (!curResult.recordset.length) {
+        throw new BadRequestException(`Moneda no encontrada: ${receipt.cmoneda}`);
+      }
+      ptasamon = Number(curResult.recordset[0]['ptasamon'] ?? 0);
     }
-    const { ctenedor, cmoneda } = recResult.recordset[0] as {
-      ctenedor: number;
-      cmoneda: string;
-    };
 
-    const curReq = this.db.request();
-    curReq.input('cmoneda', T.Char(4), cmoneda);
-    const curResult = await curReq.query(`
-      SELECT ptasamon FROM mamonedas WHERE cmoneda = @cmoneda
-    `);
-    if (!curResult.recordset.length) {
-      throw new BadRequestException(`Moneda no encontrada: ${cmoneda}`);
+    // TOTAL EXT = suma prima bruta ext del recibo (createPaymentPasarela usa mmontorecext)
+    const mpagoext = parseFloat(
+      Number(receipt.mprimabrutaext || receipt.mmontorecext || 0).toFixed(2),
+    );
+
+    let cbanco = banks.cbanco;
+    if (!cbanco) {
+      const bancoRef = body.cbanco_ref?.trim() || pmOperacion?.banco_origen;
+      if (bancoRef) cbanco = await this.resolveCbancoFromRef(bancoRef);
     }
-    const ptasamon = Number(curResult.recordset[0]['ptasamon'] ?? 0);
-    const mpagoext = body.mpago / ptasamon;
+
+    const fingresoOperacion =
+      pmOperacion?.fecha_movimiento ?? new Date(`${body.fpago}T12:00:00`);
 
     const cusuario = body.cusuario ?? client.cci_rif ?? 4;
 
@@ -368,10 +444,11 @@ export class CollectionService {
       asegurados: [],
       cmoneda_pago: 'Bs',
       cprog: client.cprog ?? 'buildExtPayload',
-      ctenedor,
+      ctenedor: receipt.ctenedor,
       cusuario,
       fcobro: body.fpago,
       freporte: body.fpago,
+      fingresoOperacion,
       imov: 'CO',
       mpago: body.mpago,
       mpagoext,
@@ -380,10 +457,10 @@ export class CollectionService {
       referencia: xreferencia,
       soporte: [
         {
-          cbanco: banks.cbanco,
+          cbanco,
           cbanco_destino: banks.cbanco_destino,
           cmoneda: 'Bs',
-          ctipopago: banks.ctipopago,
+          ctipopago: banks.ctipopago ?? banks.cbanco_destino,
           mpago: body.mpago,
           mpagoext,
           mpagoigtf: 0,
@@ -408,10 +485,11 @@ export class CollectionService {
     ctransaccion: number,
     soporte: SoporteRow[],
     cusuario: number,
-    cprog: string,
+    _cprog: string,
+    fingresoOperacion?: Date,
   ): Promise<void> {
     const T = this.db.types;
-    const now = new Date();
+    const fingreso = fingresoOperacion ?? new Date();
 
     for (let i = 0; i < soporte.length; i++) {
       const s = soporte[i];
@@ -433,7 +511,7 @@ export class CollectionService {
       req.input('xreferencia', T.VarChar(100), s.xreferencia);
       req.input('xruta', T.VarChar(100), s.xruta ?? 'Sin soporte');
       req.input('cusuario', T.Numeric(18, 0), cusuario);
-      req.input('fingreso', T.DateTime, now);
+      req.input('fingreso', T.DateTime, fingreso);
 
       // Sis2000 QA: cbreporte_pago sin columna ctipopago (legacy Express insert)
       await req.query(`
@@ -591,7 +669,20 @@ export class CollectionService {
           payload.soporte,
           payload.cusuario,
           payload.cprog,
+          payload.fingresoOperacion,
         );
+        if (payload.fingresoOperacion) {
+          const T = this.db.types;
+          const upd = this.db.request();
+          upd.input('ctransaccion', T.Numeric(19, 4), transaccion);
+          upd.input('fingreso', T.DateTime, payload.fingresoOperacion);
+          upd.input('mpagoext', T.Decimal(19, 4), payload.mpagoext);
+          await upd.query(`
+            UPDATE cbreporte_tran
+            SET fingreso = @fingreso, mpagoext = @mpagoext
+            WHERE ctransaccion = @ctransaccion
+          `);
+        }
       } catch (soporteErr) {
         this.logger.warn(`insertSoporteRows: ${parseSPError(soporteErr)}`);
       }
