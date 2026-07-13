@@ -357,6 +357,113 @@ export class EmissionsService {
     return lower.includes('póliza rel ya existente') || lower.includes('poliza rel ya existente');
   }
 
+  /** Beneficiario preferencial anidado (createEmissionAuto / policyMapper). */
+  private extractBeneficiario(b: Record<string, unknown>): Record<string, unknown> | null {
+    const raw = b['beneficiario'];
+    if (!raw || typeof raw !== 'object' || Array.isArray(raw)) return null;
+    const ben = raw as Record<string, unknown>;
+    const rif = ben['xrif_beneficiario'] ?? ben['rif_beneficiario'] ?? ben['identificacion'];
+    if (rif == null || String(rif).replace(/\D/g, '') === '') return null;
+    return ben;
+  }
+
+  /**
+   * RCV2 fija cbeneficiario = titular en sp_Emision_Automovil_RCV2.
+   * Tras emitir: crea maclient y actualiza cbeneficiario en póliza/recibos/certificados.
+   */
+  private async applyBeneficiarioPreferencial(
+    b: Record<string, unknown>,
+    canal: Record<string, unknown>,
+    cnpoliza: string,
+    fanopol?: number,
+    fmespol?: number,
+  ): Promise<void> {
+    const ben = this.extractBeneficiario(b);
+    if (!ben) return;
+
+    const T = this.db.types;
+    const rif = Number(String(ben['xrif_beneficiario'] ?? ben['rif_beneficiario']).replace(/\D/g, ''));
+    if (!Number.isFinite(rif) || rif <= 0) return;
+
+    const icedula = String(ben['icedula_beneficiario'] ?? 'V').trim().charAt(0) || 'V';
+    const xnombre = String(ben['xnombre_beneficiario'] ?? ben['nombre'] ?? '').trim();
+    const xapellido = String(ben['xapellido_beneficiario'] ?? ben['apellido'] ?? '').trim();
+    const xcliente = `${xnombre} ${xapellido}`.trim();
+    const isexo = String(ben['isexo_beneficiario'] ?? ben['sexo'] ?? 'M').trim().charAt(0) || 'M';
+    const iestadoCivil =
+      String(ben['iestado_civil_beneficiario'] ?? ben['estadoCivil'] ?? 'S').trim().charAt(0) || 'S';
+    const fnac = ben['fnac_beneficiario'] ?? ben['fechaNac'] ?? null;
+    const xcorreo = ben['xcorreo_beneficiario'] ?? ben['email'] ?? null;
+    const cestado = this.intField(ben['cestado_beneficiario'] ?? ben['cestado']);
+    const cciudad = this.intField(ben['cciudad_beneficiario'] ?? ben['cciudad']);
+    const xdireccion = ben['xdireccion_beneficiario'] ?? ben['direccion'] ?? null;
+    const xtelefono = ben['xtelefono_beneficiario'] ?? ben['telefono'] ?? null;
+    const ifuente = String(canal['ifuente_api'] ?? canal['ifuente'] ?? 'API').slice(0, 10);
+
+    const macReq = this.db.request();
+    macReq.input('icedula', T.Char(1), icedula);
+    macReq.input('cci_rif', T.Numeric(13, 0), rif);
+    macReq.input('xnombre', T.VarChar(120), xnombre || null);
+    macReq.input('xapellido', T.VarChar(120), xapellido || null);
+    macReq.input('xcliente', T.VarChar(250), xcliente || null);
+    macReq.input('isexo', T.Char(1), isexo);
+    macReq.input('iestado_civil', T.Char(1), iestadoCivil);
+    macReq.input('fnac', T.DateTime, fnac);
+    macReq.input('xcorreo', T.Char(60), xcorreo != null ? String(xcorreo).slice(0, 60) : null);
+    macReq.input('cpais', T.SmallInt, 58);
+    macReq.input('cestado', T.SmallInt, cestado);
+    macReq.input('cciudad', T.SmallInt, cciudad);
+    macReq.input(
+      'xdireccion',
+      T.Char(60),
+      xdireccion != null ? String(xdireccion).slice(0, 60) : null,
+    );
+    macReq.input('czonapos', T.Char(10), null);
+    macReq.input(
+      'xtelefono',
+      T.Char(20),
+      xtelefono != null ? String(xtelefono).replace(/\D/g, '').slice(0, 20) : null,
+    );
+    macReq.input('ifuente', T.Char(10), ifuente);
+    macReq.output('salida', T.VarChar(50), '');
+    await macReq.execute('spCreateMaclient');
+
+    const polReq = this.db.request();
+    polReq.input('cnpoliza', T.NVarChar(30), cnpoliza);
+    const polResult = await polReq.query(`
+      SELECT TOP 1 fanopol, fmespol, cpoliza
+      FROM adpoliza
+      WHERE cnpoliza = @cnpoliza
+      ORDER BY fingreso DESC
+    `);
+    const polRow = polResult.recordset?.[0] as Record<string, unknown> | undefined;
+    if (!polRow) {
+      this.logger.warn(`applyBeneficiario: póliza ${cnpoliza} no encontrada en adpoliza`);
+      return;
+    }
+
+    const fano = fanopol ?? Number(polRow['fanopol']);
+    const fmes = fmespol ?? Number(polRow['fmespol']);
+    const cpoliza = polRow['cpoliza'];
+
+    const upd = this.db.request();
+    upd.input('rif', T.Numeric(13, 0), rif);
+    upd.input('cnpoliza', T.NVarChar(30), cnpoliza);
+    upd.input('fanopol', T.SmallInt, fano);
+    upd.input('fmespol', T.TinyInt, fmes);
+    upd.input('cpoliza', T.Numeric(19, 0), cpoliza);
+    await upd.query(`
+      UPDATE adpoliza SET cbeneficiario = @rif
+      WHERE cnpoliza = @cnpoliza AND fanopol = @fanopol AND fmespol = @fmespol;
+      UPDATE adrecibos SET cbeneficiario = @rif
+      WHERE cnpoliza = @cnpoliza AND fanopol = @fanopol AND fmespol = @fmespol;
+      UPDATE vhofcert SET cbeneficiario = @rif WHERE cpoliza = @cpoliza;
+      UPDATE vhcerti SET cbeneficiario = @rif WHERE cnpoliza = @cnpoliza;
+    `);
+
+    this.logger.log(`applyBeneficiario OK cnpoliza=${cnpoliza} rif=${rif}`);
+  }
+
   private async emitLocalAutomobile(
     b: Record<string, unknown>,
     canal: Record<string, unknown>,
@@ -605,6 +712,15 @@ export class EmissionsService {
         : '';
 
     this.logger.log(`emitLocal OK cnpoliza=${cnpoliza} cnrecibo=${cnrecibo}`);
+
+    if (this.extractBeneficiario(b)) {
+      try {
+        await this.applyBeneficiarioPreferencial(b, canal, cnpoliza, fanopol, fmespol);
+      } catch (err) {
+        const msg = err instanceof Error ? err.message : String(err);
+        this.logger.warn(`applyBeneficiario falló cnpoliza=${cnpoliza}: ${msg}`);
+      }
+    }
 
     return {
       message: 'Póliza generada exitosamente',
