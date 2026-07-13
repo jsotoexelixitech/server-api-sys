@@ -306,6 +306,27 @@ export class EmissionsService {
     }
   }
 
+  /** Sincroniza macontadores POL_VEH si quedó por debajo del máximo cnpoliza en adpoliza. */
+  private async syncPolVehCounter(cramo: number): Promise<void> {
+    const req = this.db.request();
+    req.input('cramo', this.db.types.Int, cramo);
+    await req.query(`
+      DECLARE @max BIGINT;
+      SELECT @max = MAX(TRY_CAST(RIGHT(cnpoliza, 10) AS BIGINT))
+      FROM adpoliza
+      WHERE cramo = @cramo AND cnpoliza LIKE CAST(@cramo AS VARCHAR) + '-%';
+      IF @max IS NOT NULL
+        UPDATE macontadores
+        SET qcontador = @max
+        WHERE ccontador = 'POL_VEH' AND ISNULL(qcontador, 0) < @max;
+    `);
+  }
+
+  private isCounterCollisionMessage(msg: string): boolean {
+    const lower = msg.toLowerCase();
+    return lower.includes('póliza rel ya existente') || lower.includes('poliza rel ya existente');
+  }
+
   private async emitLocalAutomobile(
     b: Record<string, unknown>,
     canal: Record<string, unknown>,
@@ -496,7 +517,29 @@ export class EmissionsService {
       `emitLocal: EXEC sp_pre_emision_Automovil_RCV2 placa=${xplaca} plan=${b['cplan'] ?? b['plan']} mprima=${mprima} ptasamon=${ptasamon}`,
     );
 
-    const spResult = await req.execute('sp_pre_emision_Automovil_RCV2');
+    await this.syncPolVehCounter(
+      this.intField(this.pick(b, 'cramo', 'ramo')) ?? defaultRamo,
+    );
+
+    let spResult: {
+      recordset?: Record<string, unknown>[];
+      recordsets?: Record<string, unknown>[][];
+    };
+    try {
+      spResult = await req.execute('sp_pre_emision_Automovil_RCV2');
+    } catch (err) {
+      const msg = parseSPError(err);
+      if (!this.isCounterCollisionMessage(msg)) throw err;
+      this.logger.warn(`emitLocal: contador POL_VEH desfasado (${msg}); reintento tras sync`);
+      await this.syncPolVehCounter(
+        this.intField(this.pick(b, 'cramo', 'ramo')) ?? defaultRamo,
+      );
+      const retryReq = this.db.request();
+      Object.entries(params).forEach(([key, field]) =>
+        retryReq.input(key, (field as { type: unknown }).type, (field as { value: unknown }).value),
+      );
+      spResult = await retryReq.execute('sp_pre_emision_Automovil_RCV2');
+    }
 
     let row = this.extractEmissionRow(
       spResult as { recordset?: Record<string, unknown>[]; recordsets?: Record<string, unknown>[][] },
