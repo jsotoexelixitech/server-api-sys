@@ -196,6 +196,14 @@ export class EmissionsService {
 
       const b: Record<string, unknown> = { ...body };
 
+      // cnpoliza lo genera Sis2000; string vacío bloquea el SP (no entra a IF @cnpoliza IS NULL)
+      if (b['cnpoliza'] == null || String(b['cnpoliza']).trim() === '') {
+        delete b['cnpoliza'];
+      }
+      if (b['cpoliza'] == null || String(b['cpoliza']).trim() === '') {
+        delete b['cpoliza'];
+      }
+
       if (
         (canal['ctipocanal'] === 'T' ||
           canal['ctipocanal'] === 'A' ||
@@ -306,19 +314,41 @@ export class EmissionsService {
     }
   }
 
-  /** Sincroniza macontadores POL_VEH si quedó por debajo del máximo cnpoliza en adpoliza. */
+  /** Sincroniza macontadores POL_VEH con el máximo cnpoliza conocido (adpóliza + cola). */
   private async syncPolVehCounter(cramo: number): Promise<void> {
     const req = this.db.request();
     req.input('cramo', this.db.types.Int, cramo);
-    await req.query(`
+    const result = await req.query(`
       DECLARE @max BIGINT;
+
       SELECT @max = MAX(TRY_CAST(RIGHT(cnpoliza, 10) AS BIGINT))
       FROM adpoliza
       WHERE cramo = @cramo AND cnpoliza LIKE CAST(@cramo AS VARCHAR) + '-%';
+
+      DECLARE @maxPending BIGINT;
+      SELECT @maxPending = MAX(TRY_CAST(RIGHT(cnpoliza, 10) AS BIGINT))
+      FROM TMEMISION_AUTOMOVIL_RCV2
+      WHERE cramo = @cramo
+        AND cnpoliza IS NOT NULL
+        AND LTRIM(RTRIM(cnpoliza)) <> ''
+        AND cnpoliza LIKE CAST(@cramo AS VARCHAR) + '-%';
+
+      IF @maxPending > ISNULL(@max, 0) SET @max = @maxPending;
+
       IF @max IS NOT NULL
-        UPDATE macontadores
-        SET qcontador = @max
-        WHERE ccontador = 'POL_VEH' AND ISNULL(qcontador, 0) < @max;
+        UPDATE macontadores SET qcontador = @max WHERE ccontador = 'POL_VEH';
+
+      SELECT ISNULL(qcontador, 0) AS qcontador FROM macontadores WHERE ccontador = 'POL_VEH';
+    `);
+    const q = result.recordset?.[0]?.['qcontador'];
+    this.logger.log(`syncPolVehCounter: cramo=${cramo} qcontador=${q ?? '?'}`);
+  }
+
+  private async bumpPolVehCounter(): Promise<void> {
+    await this.db.request().query(`
+      UPDATE macontadores
+      SET qcontador = ISNULL(qcontador, 0) + 1
+      WHERE ccontador = 'POL_VEH';
     `);
   }
 
@@ -343,7 +373,7 @@ export class EmissionsService {
     const params: Record<string, { type: unknown; value: unknown }> = {
       cnpoliza_rel: {
         type: T.NVarChar(30),
-        value: this.pick(b, 'cnpoliza_rel', 'poliza') ?? null,
+        value: this.nvarchar(this.pick(b, 'cnpoliza_rel', 'poliza')),
       },
       cramo: {
         type: T.Int,
@@ -454,7 +484,7 @@ export class EmissionsService {
       ifuente: { type: T.Char(10), value: canal['ifuente_api'] ?? canal['ifuente'] ?? 'API' },
       fingreso: { type: T.DateTime, value: new Date() },
       cpoliza: { type: T.Numeric(19, 0), value: null },
-      cnpoliza: { type: T.NVarChar(30), value: b['cnpoliza'] ?? null },
+      cnpoliza: { type: T.NVarChar(30), value: this.nvarchar(this.pick(b, 'cnpoliza')) },
       cproces: { type: T.Numeric(13, 0), value: null },
       ctipocanal: {
         type: T.Char(1),
