@@ -44,7 +44,13 @@ interface ReceiptAmounts {
 
 interface PagoMovilOperacion {
   banco_origen: string | null;
+  banco_destino: string | null;
   fecha_movimiento: Date | null;
+}
+
+interface MabancoDestinoPair {
+  cbanco_destino: number;
+  ctipopago: number;
 }
 
 interface CollectionPayload {
@@ -223,7 +229,7 @@ export class CollectionService {
     const req = this.db.request();
     req.input('xreferencia', T.VarChar(30), xreferencia);
     const result = await req.query(`
-      SELECT TOP 1 banco_origen, fecha_movimiento
+      SELECT TOP 1 banco_origen, banco_destino, fecha_movimiento
       FROM pago_movil
       WHERE referencia_banco LIKE '%' + @xreferencia + '%'
       ORDER BY fcreacion DESC
@@ -233,8 +239,72 @@ export class CollectionService {
     const fecha = row['fecha_movimiento'];
     return {
       banco_origen: row['banco_origen'] != null ? String(row['banco_origen']).trim() : null,
+      banco_destino: row['banco_destino'] != null ? String(row['banco_destino']).trim() : null,
       fecha_movimiento: fecha instanceof Date ? fecha : fecha ? new Date(String(fecha)) : null,
     };
+  }
+
+  /**
+   * Par válido en MABANCO_DESTINO (cbanco_destino + ctipopago).
+   * El ingreso de caja hace JOIN con ambas columnas — sin ctipopago no aparece banco destino.
+   */
+  private async resolveMabancoDestinoPair(
+    channelHint: number | null,
+    client: ApiClientRow,
+    body: CollectionPaymentDto,
+  ): Promise<MabancoDestinoPair> {
+    const T = this.db.types;
+
+    const tryLookup = async (
+      cbancoDestino: number | null,
+      ctipopago: number | null,
+    ): Promise<MabancoDestinoPair | null> => {
+      if (cbancoDestino == null && ctipopago == null) return null;
+      const req = this.db.request();
+      req.input('cbanco_destino', T.Numeric(18, 2), cbancoDestino);
+      req.input('ctipopago', T.Numeric(), ctipopago);
+      const result = await req.query(`
+        SELECT TOP 1 CBANCO_DESTINO, CTIPOPAGO
+        FROM MABANCO_DESTINO
+        WHERE BACTIVO = 1
+          AND (@cbanco_destino IS NULL OR CBANCO_DESTINO = @cbanco_destino)
+          AND (@ctipopago IS NULL OR CTIPOPAGO = @ctipopago)
+        ORDER BY CUSUARIOCREACION DESC
+      `);
+      if (!result.recordset.length) return null;
+      const row = result.recordset[0] as Record<string, unknown>;
+      return {
+        cbanco_destino: Number(row['CBANCO_DESTINO']),
+        ctipopago: Number(row['CTIPOPAGO']),
+      };
+    };
+
+    const clientDest =
+      body.cbanco_destino != null
+        ? Number(body.cbanco_destino)
+        : client.cbanco_destino != null
+          ? Number(client.cbanco_destino)
+          : null;
+    const clientTipo = client.ctipopago != null ? Number(client.ctipopago) : null;
+
+    const fromClient = await tryLookup(clientDest, clientTipo);
+    if (fromClient) return fromClient;
+
+    if (channelHint != null) {
+      const fromHintTipo = await tryLookup(null, channelHint);
+      if (fromHintTipo) return fromHintTipo;
+      const fromHintDest = await tryLookup(channelHint, clientTipo);
+      if (fromHintDest) return fromHintDest;
+    }
+
+    if (clientDest != null || clientTipo != null) {
+      return {
+        cbanco_destino: clientDest ?? clientTipo ?? channelHint ?? 30,
+        ctipopago: clientTipo ?? channelHint ?? 35,
+      };
+    }
+
+    return { cbanco_destino: channelHint ?? 30, ctipopago: channelHint ?? 35 };
   }
 
   /**
@@ -257,7 +327,7 @@ export class CollectionService {
         ELSE NULL
       END AS cbanco_destino
     `);
-    let cbanco_destino =
+    const channelHint =
       destResult.recordset?.[0]?.['cbanco_destino'] != null
         ? Number(destResult.recordset[0]['cbanco_destino'])
         : null;
@@ -271,19 +341,12 @@ export class CollectionService {
       cbanco = await this.resolveCbancoFromRef(bancoOrigenRef);
     }
 
-    if (cbanco_destino == null) {
-      cbanco_destino =
-        body.cbanco_destino != null
-          ? Number(body.cbanco_destino)
-          : client.cbanco_destino != null
-            ? Number(client.cbanco_destino)
-            : null;
-    }
+    const destinoPair = await this.resolveMabancoDestinoPair(channelHint, client, body);
 
     return {
       cbanco,
-      cbanco_destino,
-      ctipopago: client.ctipopago ?? null,
+      cbanco_destino: destinoPair.cbanco_destino,
+      ctipopago: destinoPair.ctipopago,
     };
   }
 
@@ -369,7 +432,7 @@ export class CollectionService {
     const req = this.db.request();
     req.input('xtoken', T.VarChar(100), apikey);
     const result = await req.query(`
-      SELECT TOP 1 cproductor, cci_rif, cbanco_destino, cprog
+      SELECT TOP 1 cproductor, cci_rif, cbanco_destino, ctipopago, cprog
       FROM maclient_api WHERE xtoken = @xtoken
     `);
     if (!result.recordset.length) {
@@ -460,7 +523,7 @@ export class CollectionService {
           cbanco,
           cbanco_destino: banks.cbanco_destino,
           cmoneda: 'Bs',
-          ctipopago: banks.ctipopago ?? banks.cbanco_destino,
+          ctipopago: banks.ctipopago,
           mpago: body.mpago,
           mpagoext,
           mpagoigtf: 0,
@@ -480,26 +543,28 @@ export class CollectionService {
     return `'${recibos.join("','")}'`;
   }
 
-  /** Inserta filas de soporte en cbreporte_pago. */
+  /** Inserta filas de soporte en cbreporte_pago (igual que collection2.0 Soport.insert). */
   private async insertSoporteRows(
     ctransaccion: number,
     soporte: SoporteRow[],
     cusuario: number,
-    _cprog: string,
+    cprog: string,
+    casegurado: number,
     fingresoOperacion?: Date,
   ): Promise<void> {
     const T = this.db.types;
-    const fingreso = fingresoOperacion ?? new Date();
+    const operacion = fingresoOperacion ?? new Date();
 
     for (let i = 0; i < soporte.length; i++) {
       const s = soporte[i];
       const req = this.db.request();
       req.input('ctransaccion', T.Numeric(18, 0), ctransaccion);
       req.input('npago', T.Numeric(18, 0), i + 1);
-      req.input('casegurado', T.Numeric(18, 0), null);
+      req.input('casegurado', T.Numeric(18, 0), casegurado);
       req.input('cmoneda', T.Char(4), s.cmoneda);
       req.input('cbanco', T.Numeric(18, 2), s.cbanco ?? null);
       req.input('cbanco_destino', T.Numeric(18, 2), s.cbanco_destino ?? null);
+      req.input('ctipopago', T.Numeric(), s.ctipopago ?? null);
       req.input('mpago', T.Numeric(18, 2), s.mpago);
       req.input('mpagoext', T.Numeric(18, 2), s.mpagoext);
       req.input('mpagoigtf', T.Numeric(18, 2), s.mpagoigtf ?? 0);
@@ -510,21 +575,62 @@ export class CollectionService {
       req.input('ptasaref', T.Numeric(18, 2), s.ptasaref ?? 0);
       req.input('xreferencia', T.VarChar(100), s.xreferencia);
       req.input('xruta', T.VarChar(100), s.xruta ?? 'Sin soporte');
+      req.input('cprog', T.Char(20), cprog);
       req.input('cusuario', T.Numeric(18, 0), cusuario);
-      req.input('fingreso', T.DateTime, fingreso);
+      req.input('fingreso', T.DateTime, operacion);
+      req.input('freporte', T.DateTime, operacion);
 
-      // Sis2000 QA: cbreporte_pago sin columna ctipopago (legacy Express insert)
-      await req.query(`
-        INSERT INTO cbreporte_pago (
-          ctransaccion, npago, casegurado, cmoneda, cbanco, cbanco_destino,
-          mpago, mpagoext, mpagoigtf, mpagoigtfext, mtotal, mtotalext,
-          ptasamon, ptasaref, xreferencia, xruta, cusuario, fingreso
-        ) VALUES (
-          @ctransaccion, @npago, @casegurado, @cmoneda, @cbanco, @cbanco_destino,
-          @mpago, @mpagoext, @mpagoigtf, @mpagoigtfext, @mtotal, @mtotalext,
-          @ptasamon, @ptasaref, @xreferencia, @xruta, @cusuario, @fingreso
-        )
-      `);
+      try {
+        await req.query(`
+          INSERT INTO cbreporte_pago (
+            ctransaccion, npago, casegurado, cmoneda, cbanco, cbanco_destino,
+            mpago, mpagoext, mpagoigtf, mpagoigtfext, mtotal, mtotalext,
+            ptasamon, ptasaref, xreferencia, xruta, cusuario, ctipopago,
+            fingreso, freporte, cprog
+          ) VALUES (
+            @ctransaccion, @npago, @casegurado, @cmoneda, @cbanco, @cbanco_destino,
+            @mpago, @mpagoext, @mpagoigtf, @mpagoigtfext, @mtotal, @mtotalext,
+            @ptasamon, @ptasaref, @xreferencia, @xruta, @cusuario, @ctipopago,
+            @fingreso, @freporte, @cprog
+          )
+        `);
+      } catch (err) {
+        const msg = parseSPError(err).toLowerCase();
+        if (!msg.includes('ctipopago') && !msg.includes('freporte') && !msg.includes('invalid column')) {
+          throw err;
+        }
+        this.logger.warn('insertSoporteRows: insert legacy sin ctipopago/freporte');
+        const legacy = this.db.request();
+        legacy.input('ctransaccion', T.Numeric(18, 0), ctransaccion);
+        legacy.input('npago', T.Numeric(18, 0), i + 1);
+        legacy.input('casegurado', T.Numeric(18, 0), casegurado);
+        legacy.input('cmoneda', T.Char(4), s.cmoneda);
+        legacy.input('cbanco', T.Numeric(18, 2), s.cbanco ?? null);
+        legacy.input('cbanco_destino', T.Numeric(18, 2), s.cbanco_destino ?? null);
+        legacy.input('mpago', T.Numeric(18, 2), s.mpago);
+        legacy.input('mpagoext', T.Numeric(18, 2), s.mpagoext);
+        legacy.input('mpagoigtf', T.Numeric(18, 2), s.mpagoigtf ?? 0);
+        legacy.input('mpagoigtfext', T.Numeric(18, 2), s.mpagoigtfext ?? 0);
+        legacy.input('mtotal', T.Numeric(18, 2), s.mtotal);
+        legacy.input('mtotalext', T.Numeric(18, 2), s.mtotalext);
+        legacy.input('ptasamon', T.Numeric(13, 6), s.ptasamon);
+        legacy.input('ptasaref', T.Numeric(18, 2), s.ptasaref ?? 0);
+        legacy.input('xreferencia', T.VarChar(100), s.xreferencia);
+        legacy.input('xruta', T.VarChar(100), s.xruta ?? 'Sin soporte');
+        legacy.input('cusuario', T.Numeric(18, 0), cusuario);
+        legacy.input('fingreso', T.DateTime, operacion);
+        await legacy.query(`
+          INSERT INTO cbreporte_pago (
+            ctransaccion, npago, casegurado, cmoneda, cbanco, cbanco_destino,
+            mpago, mpagoext, mpagoigtf, mpagoigtfext, mtotal, mtotalext,
+            ptasamon, ptasaref, xreferencia, xruta, cusuario, fingreso
+          ) VALUES (
+            @ctransaccion, @npago, @casegurado, @cmoneda, @cbanco, @cbanco_destino,
+            @mpago, @mpagoext, @mpagoigtf, @mpagoigtfext, @mtotal, @mtotalext,
+            @ptasamon, @ptasaref, @xreferencia, @xruta, @cusuario, @fingreso
+          )
+        `);
+      }
     }
   }
 
@@ -598,7 +704,14 @@ export class CollectionService {
       throw new BadRequestException(String(result.output['mensaje'] ?? 'spNotificaPago falló'));
     }
     const transaccion = Number(result.output['transaccion']);
-    await this.insertSoporteRows(transaccion, payload.soporte, payload.cusuario, payload.cprog);
+    await this.insertSoporteRows(
+      transaccion,
+      payload.soporte,
+      payload.cusuario,
+      payload.cprog,
+      payload.ctenedor,
+      payload.fingresoOperacion,
+    );
     const saldoReq = this.db.request();
     saldoReq.input('cusuario', T.Numeric(10), payload.cusuario);
     saldoReq.input('transaccion', T.Numeric(7), transaccion);
@@ -669,6 +782,7 @@ export class CollectionService {
           payload.soporte,
           payload.cusuario,
           payload.cprog,
+          payload.ctenedor,
           payload.fingresoOperacion,
         );
         if (payload.fingresoOperacion) {
