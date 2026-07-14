@@ -38,17 +38,34 @@ async function bootstrap(): Promise<void> {
 
   if (swaggerPath) {
     const swaggerConfig = new DocumentBuilder()
-      .setTitle('Exelixi Tech - API La Mundial')
+      .setTitle('Exelixi Tech - API La Mundial (nest-api)')
       .setDescription(
-        'Backend moderno NestJS para la emisión directa de pólizas (RCV y Funerario) en la base de datos Sis2000.',
+        'API NestJS sobre Sis2000 para el flujo RCV Exélixi: catálogos, cotización, emisión, cobro e ingreso de caja.\n\n' +
+        '**Flujo recomendado RCV:** validateEmissionAuto → createEmissionAuto → **POST /collection/activate**.\n\n' +
+        'El cobro replica SysIP `collectReceip`: `spCobroSis_Ad` + soporte en `cbreporte_pago`.',
       )
       .setVersion('1.0.0')
-      .addApiKey({ type: 'apiKey', name: 'apikey', in: 'header', description: 'Token de autenticación del canal emisor' }, 'apikey')
+      .addApiKey(
+        {
+          type: 'apiKey',
+          name: 'apikey',
+          in: 'header',
+          description: 'Token del canal (`maclient_api.xtoken`). Requerido en emisión y cobro.',
+        },
+        'apikey',
+      )
       .addBearerAuth()
-      .addServer('http://192.168.8.120:3002', 'Servidor de Producción (srv001)')
-      .addServer('http://localhost:3002', 'Entorno de Desarrollo Local')
-      .addTag('Emisión Automóvil (RCV)', 'Endpoints para cotizar, validar y emitir pólizas de vehículos')
-      .addTag('Emisión Personas (Funerario)', 'Endpoints para cotizar, validar y emitir pólizas funerarias')
+      .addServer('http://192.168.8.120:3002', 'srv001 — QA/Producción Exélixi')
+      .addServer('http://localhost:3002', 'Desarrollo local')
+      .addTag('Emisión Automóvil (RCV)', 'Validar vehículo, emitir póliza RCV (`sp_pre_emision_Automovil_RCV2`)')
+      .addTag('Cobranza (Collection)', 'Cobro de recibos e ingreso de caja (`spCobroSis_Ad` + `cbreporte_pago`)')
+      .addTag('valrep', 'Planes, estados, ciudades, cotización auto (`spBuscaPlan`, `spCalculoAuto`)')
+      .addTag('inma', 'Catálogo vehículos: marcas, modelos, versiones, años')
+      .addTag('personas', 'Emisión y planes funerarios (ramo 9)')
+      .addTag('Emisión Personas (Funerario)', 'Endpoints legacy funerario vía external')
+      .addTag('Documentos', 'PDF anexos (conductor habitual, etc.)')
+      .addTag('app', 'Utilidades de aplicación')
+      .addTag('client', 'Consultas de cliente')
       .build();
 
     const document = SwaggerModule.createDocument(app, swaggerConfig);
