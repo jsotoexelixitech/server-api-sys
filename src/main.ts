@@ -67,172 +67,404 @@ async function bootstrap(): Promise<void> {
     SwaggerModule.setup(swaggerPath, app, document, {
       customSiteTitle: 'Exelixi · RCV Sis2000 API',
       customfavIcon: 'https://exelixitech.com/favicon.ico',
-      customCssUrl: 'https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap',
+      customCssUrl: 'https://fonts.googleapis.com/css2?family=Inter:ital,wght@0,400;0,500;0,600;0,700;0,800;1,400&display=swap',
       customJsStr: `
-        // Inyectar meta viewport y font preconnect
-        if (!document.querySelector('link[rel=preconnect][href*=fonts]')) {
-          ['https://fonts.googleapis.com','https://fonts.gstatic.com'].forEach(function(h){
-            var l=document.createElement('link');l.rel='preconnect';l.href=h;if(h.includes('gstatic'))l.crossOrigin='';
-            document.head.appendChild(l);
+(function() {
+  var STEPS = [
+    { n: 1, short: 'Catálogo Vehículo',    tag: '1. Catálogo vehículo (inma)' },
+    { n: 2, short: 'Catálogos & Cotización', tag: '2. Catálogos y cotización (valrep)' },
+    { n: 3, short: 'Emisión RCV',           tag: '3. Emisión RCV' },
+    { n: 4, short: 'Cobranza RCV',          tag: '4. Cobranza RCV' },
+    { n: 5, short: 'Documentos',            tag: '5. Documentos (post-emisión)' },
+  ];
+
+  /* ── Sidebar ────────────────────────────────────────────── */
+  function buildSidebar() {
+    if (document.getElementById('exelixi-sidebar')) return;
+    var nav = document.createElement('nav');
+    nav.id = 'exelixi-sidebar';
+    nav.innerHTML =
+      '<div class="sb-brand">'
+      + '<span class="sb-bolt">&#9889;</span>'
+      + '<div><div class="sb-name">Exélixi</div><div class="sb-env">QA &middot; RCV Sis2000</div></div>'
+      + '</div>'
+      + '<div class="sb-section-label">FLUJO DE EMISIÓN</div>'
+      + STEPS.map(function(s, i) {
+          return '<a class="sb-item" data-tag="' + s.tag + '" href="#" onclick="return false;">'
+            + '<div class="sb-num-wrap"><div class="sb-num">' + s.n + '</div>'
+            + (i < STEPS.length - 1 ? '<div class="sb-line"></div>' : '') + '</div>'
+            + '<div class="sb-label-wrap"><div class="sb-step-label">' + s.short + '</div></div>'
+            + '</a>';
+        }).join('')
+      + '<div class="sb-spacer"></div>'
+      + '<div class="sb-bottom">'
+      + '<div class="sb-ver">API v3.0</div>'
+      + '<div class="sb-env-tags">'
+      + '<a class="sb-env-tag active" href="#">QA</a>'
+      + '<a class="sb-env-tag" href="#">PROD</a>'
+      + '</div></div>';
+    document.body.insertBefore(nav, document.body.firstChild);
+
+    /* scroll spy */
+    var io = new IntersectionObserver(function(entries) {
+      entries.forEach(function(e) {
+        if (e.isIntersecting) {
+          var t = e.target.getAttribute('data-tag');
+          nav.querySelectorAll('.sb-item').forEach(function(el) {
+            el.classList.toggle('active', el.getAttribute('data-tag') === t);
           });
         }
-        // Badge de paso en cada sección (corre cuando swagger termina de renderizar)
-        function addStepBadges() {
-          document.querySelectorAll('.opblock-tag[data-tag]').forEach(function(el) {
-            var tag = el.getAttribute('data-tag') || '';
-            var m = tag.match(/^(\\d+)\\./);
-            if (m && !el.querySelector('.exelixi-step')) {
-              var badge = document.createElement('span');
-              badge.className = 'exelixi-step';
-              badge.textContent = 'PASO ' + m[1];
-              badge.style.cssText = 'background:#0e6ba8;color:#fff;font-size:0.65rem;font-weight:700;letter-spacing:0.08em;padding:2px 8px;border-radius:20px;margin-right:10px;vertical-align:middle;';
-              el.querySelector('a') && el.querySelector('a').prepend(badge);
-            }
-          });
-        }
-        var obs = new MutationObserver(addStepBadges);
-        obs.observe(document.body, { childList: true, subtree: true });
-        setTimeout(addStepBadges, 1200);
+      });
+    }, { rootMargin: '-80px 0px -50% 0px', threshold: 0 });
+
+    setTimeout(function() {
+      document.querySelectorAll('.opblock-tag[data-tag]').forEach(function(el) { io.observe(el); });
+      var first = nav.querySelector('.sb-item');
+      if (first) first.classList.add('active');
+    }, 2000);
+
+    /* click → scroll */
+    nav.querySelectorAll('.sb-item').forEach(function(el) {
+      el.addEventListener('click', function(e) {
+        e.preventDefault();
+        var tag = el.getAttribute('data-tag');
+        var target = document.querySelector('.opblock-tag[data-tag="' + tag + '"]');
+        if (target) window.scrollTo({ top: target.getBoundingClientRect().top + window.scrollY - 72, behavior: 'smooth' });
+        nav.querySelectorAll('.sb-item').forEach(function(x) { x.classList.remove('active'); });
+        el.classList.add('active');
+      });
+    });
+  }
+
+  /* ── Flow stepper banner ────────────────────────────────── */
+  function buildFlowBanner() {
+    if (document.getElementById('exelixi-flow')) return;
+    var wrapper = document.querySelector('#swagger-ui .wrapper') || document.querySelector('.swagger-ui .wrapper');
+    if (!wrapper) return;
+    var banner = document.createElement('div');
+    banner.id = 'exelixi-flow';
+    banner.innerHTML = '<div class="ef-title">Flujo de Emisión RCV &mdash; 5 pasos</div><div class="ef-steps">'
+      + STEPS.map(function(s, i) {
+          return '<div class="ef-step"><div class="ef-circle">' + s.n + '</div><div class="ef-slabel">' + s.short + '</div></div>'
+            + (i < STEPS.length - 1 ? '<div class="ef-arrow">&#8594;</div>' : '');
+        }).join('')
+      + '</div>';
+    wrapper.insertBefore(banner, wrapper.firstChild);
+  }
+
+  /* ── PASO badges en secciones ───────────────────────────── */
+  function addBadges() {
+    document.querySelectorAll('.opblock-tag[data-tag]').forEach(function(el) {
+      if (el.querySelector('.exelixi-pb')) return;
+      var tag = el.getAttribute('data-tag') || '';
+      var m = tag.match(/^(\\d+)\\./);
+      if (!m) return;
+      var b = document.createElement('span');
+      b.className = 'exelixi-pb';
+      b.textContent = 'PASO ' + m[1];
+      var anchor = el.querySelector('span') || el.querySelector('a');
+      if (anchor) anchor.prepend(b);
+    });
+  }
+
+  var obs = new MutationObserver(function() { buildSidebar(); buildFlowBanner(); addBadges(); });
+  obs.observe(document.body, { childList: true, subtree: true });
+  setTimeout(function() { buildSidebar(); buildFlowBanner(); addBadges(); }, 800);
+  setTimeout(function() { buildFlowBanner(); addBadges(); }, 2500);
+})();
       `,
       customCss: `
         /* ═══════════════════════════════════════════════════════
-           EXÉLIXI · SWAGGER THEME — RCV Sis2000
-           Paleta: navy #0f2544 · blue #0e6ba8 · light #dbeafe
+           EXÉLIXI · SWAGGER THEME v3 — Two-Column Layout
+           navy #0f2544 · blue #0e6ba8 · sidebar 210px
         ═══════════════════════════════════════════════════════ */
-        @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap');
+        @import url('https://fonts.googleapis.com/css2?family=Inter:ital,wght@0,400;0,500;0,600;0,700;0,800;1,400&display=swap');
 
-        /* ── Reset base ────────────────────────────────────────── */
+        /* ── Reset & base ──────────────────────────────────────── */
         *, *::before, *::after { box-sizing: border-box; }
         body {
           background: #f0f4f8;
           font-family: 'Inter', 'Segoe UI', Arial, sans-serif !important;
+          margin: 0;
         }
         .swagger-ui {
           font-family: 'Inter', 'Segoe UI', Arial, sans-serif !important;
-          max-width: 1100px;
-          margin: 0 auto;
+          max-width: none !important;
+          margin: 0 !important;
         }
 
-        /* ── Topbar ────────────────────────────────────────────── */
+        /* ════════════════════════════════════════════════════════
+           SIDEBAR
+        ════════════════════════════════════════════════════════ */
+        #exelixi-sidebar {
+          position: fixed;
+          left: 0; top: 0;
+          width: 210px; height: 100vh;
+          background: linear-gradient(180deg, #081526 0%, #0f2544 55%, #0c3460 100%);
+          z-index: 600;
+          display: flex;
+          flex-direction: column;
+          box-shadow: 4px 0 24px rgba(0,0,0,0.45);
+          overflow-y: auto;
+          overflow-x: hidden;
+          scrollbar-width: thin;
+          scrollbar-color: rgba(255,255,255,0.12) transparent;
+        }
+        #exelixi-sidebar::-webkit-scrollbar { width: 4px; }
+        #exelixi-sidebar::-webkit-scrollbar-thumb { background: rgba(255,255,255,0.15); border-radius: 2px; }
+
+        /* Brand */
+        .sb-brand {
+          display: flex; align-items: center; gap: 10px;
+          padding: 22px 16px 18px;
+          border-bottom: 1px solid rgba(255,255,255,0.07);
+          flex-shrink: 0;
+        }
+        .sb-bolt {
+          font-size: 1.8rem; line-height: 1;
+          filter: drop-shadow(0 0 10px rgba(96,165,250,0.9));
+        }
+        .sb-name {
+          color: #fff; font-weight: 800; font-size: 1.1rem;
+          letter-spacing: 0.01em; line-height: 1;
+          font-family: 'Inter', sans-serif;
+        }
+        .sb-env {
+          color: #60a5fa; font-size: 0.64rem; font-weight: 600;
+          letter-spacing: 0.1em; text-transform: uppercase;
+          margin-top: 3px; font-family: 'Inter', sans-serif;
+        }
+
+        /* Section label */
+        .sb-section-label {
+          color: rgba(255,255,255,0.3); font-size: 0.6rem; font-weight: 700;
+          letter-spacing: 0.15em; text-transform: uppercase;
+          padding: 16px 16px 6px; font-family: 'Inter', sans-serif;
+          flex-shrink: 0;
+        }
+
+        /* Step items */
+        .sb-item {
+          display: flex; align-items: flex-start; gap: 0;
+          padding: 0 16px 0 14px;
+          text-decoration: none !important;
+          cursor: pointer; position: relative;
+          border-left: 3px solid transparent;
+          transition: border-color 0.2s, background 0.2s;
+          flex-shrink: 0;
+        }
+        .sb-item:hover { background: rgba(255,255,255,0.05); border-left-color: rgba(14,107,168,0.6); }
+        .sb-item.active { background: rgba(14,107,168,0.18); border-left-color: #0e6ba8; }
+
+        .sb-num-wrap {
+          display: flex; flex-direction: column; align-items: center;
+          padding-top: 12px; margin-right: 10px;
+          flex-shrink: 0;
+        }
+        .sb-num {
+          width: 26px; height: 26px; border-radius: 50%;
+          background: rgba(255,255,255,0.1);
+          color: rgba(255,255,255,0.75); font-size: 0.72rem; font-weight: 800;
+          display: flex; align-items: center; justify-content: center;
+          transition: all 0.25s; font-family: 'Inter', sans-serif;
+          border: 1px solid rgba(255,255,255,0.12);
+          flex-shrink: 0;
+        }
+        .sb-item.active .sb-num {
+          background: #0e6ba8; color: #fff; border-color: #0e6ba8;
+          box-shadow: 0 0 14px rgba(14,107,168,0.7);
+        }
+        .sb-line {
+          width: 2px; flex: 1; min-height: 20px;
+          background: rgba(255,255,255,0.08);
+          margin-top: 4px;
+        }
+
+        .sb-label-wrap { padding: 13px 0 13px; }
+        .sb-step-label {
+          color: rgba(255,255,255,0.6); font-size: 0.78rem; font-weight: 500;
+          line-height: 1.3; transition: color 0.2s; font-family: 'Inter', sans-serif;
+        }
+        .sb-item:hover .sb-step-label { color: rgba(255,255,255,0.9); }
+        .sb-item.active .sb-step-label { color: #fff; font-weight: 600; }
+
+        /* Bottom */
+        .sb-spacer { flex: 1; }
+        .sb-bottom {
+          padding: 14px 16px;
+          border-top: 1px solid rgba(255,255,255,0.07);
+          flex-shrink: 0;
+        }
+        .sb-ver {
+          color: rgba(255,255,255,0.25); font-size: 0.62rem; font-weight: 600;
+          letter-spacing: 0.1em; text-transform: uppercase; margin-bottom: 8px;
+          font-family: 'Inter', sans-serif;
+        }
+        .sb-env-tags { display: flex; gap: 6px; }
+        .sb-env-tag {
+          color: rgba(255,255,255,0.4) !important; font-size: 0.68rem; font-weight: 600;
+          padding: 3px 10px; border-radius: 4px;
+          border: 1px solid rgba(255,255,255,0.12);
+          text-decoration: none !important; transition: all 0.2s;
+          font-family: 'Inter', sans-serif;
+        }
+        .sb-env-tag.active, .sb-env-tag:hover {
+          color: #fff !important; border-color: #0e6ba8;
+          background: rgba(14,107,168,0.35);
+        }
+
+        /* ════════════════════════════════════════════════════════
+           LAYOUT — push content right
+        ════════════════════════════════════════════════════════ */
+        #swagger-ui {
+          margin-left: 210px !important;
+          width: calc(100% - 210px) !important;
+          min-height: 100vh;
+        }
+
+        /* ════════════════════════════════════════════════════════
+           FLOW BANNER
+        ════════════════════════════════════════════════════════ */
+        #exelixi-flow {
+          background: #fff;
+          border-radius: 14px;
+          padding: 18px 24px 20px;
+          margin: 16px 0 20px;
+          box-shadow: 0 2px 12px rgba(15,37,68,0.08);
+          border: 1px solid #e2e8f0;
+        }
+        .ef-title {
+          font-size: 0.67rem; font-weight: 700; letter-spacing: 0.12em;
+          text-transform: uppercase; color: #9ca3af;
+          margin-bottom: 14px; font-family: 'Inter', sans-serif;
+        }
+        .ef-steps { display: flex; align-items: flex-start; gap: 6px; flex-wrap: wrap; }
+        .ef-step { display: flex; flex-direction: column; align-items: center; gap: 7px; }
+        .ef-circle {
+          width: 38px; height: 38px; border-radius: 50%;
+          background: linear-gradient(135deg, #0f2544 0%, #0e6ba8 100%);
+          color: #fff; font-size: 0.9rem; font-weight: 800;
+          display: flex; align-items: center; justify-content: center;
+          box-shadow: 0 3px 12px rgba(14,107,168,0.35);
+          font-family: 'Inter', sans-serif;
+        }
+        .ef-slabel {
+          font-size: 0.66rem; font-weight: 600; color: #4b5563;
+          text-align: center; max-width: 75px; line-height: 1.25;
+          font-family: 'Inter', sans-serif;
+        }
+        .ef-arrow {
+          color: #0e6ba8; font-size: 1.3rem; opacity: 0.55;
+          margin-top: 10px; flex-shrink: 0;
+        }
+
+        /* ════════════════════════════════════════════════════════
+           PASO badge
+        ════════════════════════════════════════════════════════ */
+        .exelixi-pb {
+          display: inline-flex; align-items: center;
+          background: linear-gradient(90deg, #0f2544, #0e6ba8);
+          color: #fff; font-size: 0.58rem; font-weight: 800;
+          letter-spacing: 0.12em; padding: 2px 9px;
+          border-radius: 20px; margin-right: 10px;
+          vertical-align: middle; text-transform: uppercase;
+          font-family: 'Inter', sans-serif;
+          box-shadow: 0 1px 5px rgba(14,107,168,0.4);
+        }
+
+        /* ════════════════════════════════════════════════════════
+           TOPBAR — delgada, solo info, sin duplicar sidebar
+        ════════════════════════════════════════════════════════ */
         .swagger-ui .topbar {
-          background: linear-gradient(135deg, #0a1a35 0%, #0f2544 50%, #0e4f8a 100%);
+          background: #081526;
           padding: 0;
-          box-shadow: 0 3px 12px rgba(0,0,0,0.4);
-          position: sticky;
-          top: 0;
-          z-index: 100;
+          box-shadow: 0 2px 8px rgba(0,0,0,0.5);
+          position: sticky; top: 0; z-index: 500;
         }
         .swagger-ui .topbar .topbar-wrapper {
-          padding: 14px 28px;
-          align-items: center;
-          gap: 0;
+          padding: 10px 24px; align-items: center; gap: 0; justify-content: flex-end;
         }
         .swagger-ui .topbar .topbar-wrapper img { display: none; }
         .swagger-ui .topbar .topbar-wrapper::before {
-          content: '⚡ Exélixi  ·  RCV → Sis2000';
-          color: #ffffff;
-          font-size: 1.15rem;
-          font-weight: 800;
-          letter-spacing: 0.04em;
-          font-family: 'Inter', sans-serif;
-        }
-        .swagger-ui .topbar .topbar-wrapper::after {
-          content: 'API Documentación Interna';
-          color: rgba(255,255,255,0.5);
-          font-size: 0.72rem;
-          font-weight: 500;
-          letter-spacing: 0.1em;
-          text-transform: uppercase;
-          margin-left: auto;
-          font-family: 'Inter', sans-serif;
+          content: 'Documentación interna · No compartir externamente';
+          color: rgba(255,255,255,0.28);
+          font-size: 0.68rem; font-weight: 500; letter-spacing: 0.06em;
+          font-family: 'Inter', sans-serif; margin-right: auto;
         }
         .swagger-ui .topbar a { display: none !important; }
 
-        /* ── Hero / Info ───────────────────────────────────────── */
+        /* ════════════════════════════════════════════════════════
+           HERO / INFO
+        ════════════════════════════════════════════════════════ */
         .swagger-ui .information-container {
-          background: linear-gradient(135deg, #0f2544 0%, #1a3a6b 100%);
-          border-radius: 0 0 16px 16px;
-          padding: 32px 36px 28px !important;
-          margin-bottom: 28px;
-          box-shadow: 0 6px 24px rgba(15,37,68,0.18);
+          background: #fff;
+          border-bottom: 1px solid #e2e8f0;
+          padding: 28px 28px 22px !important;
+          margin-bottom: 0;
         }
+        .swagger-ui .info { margin: 0; }
         .swagger-ui .info .title {
-          color: #ffffff !important;
-          font-size: 2rem !important;
+          color: #0f2544 !important;
+          font-size: 1.8rem !important;
           font-weight: 800 !important;
-          letter-spacing: -0.01em;
-          text-shadow: 0 2px 8px rgba(0,0,0,0.3);
+          letter-spacing: -0.02em;
+          line-height: 1.2;
         }
-        .swagger-ui .info .title small.version-stamp {
-          vertical-align: middle;
-          margin-left: 12px;
-        }
+        .swagger-ui .info .title small.version-stamp { vertical-align: middle; margin-left: 12px; }
         .swagger-ui .info .version-stamp .version {
-          background: rgba(255,255,255,0.15);
-          color: #93c5fd;
-          border: 1px solid rgba(147,197,253,0.4);
-          border-radius: 20px;
-          padding: 2px 12px;
-          font-size: 0.72rem;
-          font-weight: 700;
-          letter-spacing: 0.06em;
-          text-transform: uppercase;
+          background: #0e6ba8; color: #fff;
+          border-radius: 20px; padding: 2px 12px;
+          font-size: 0.65rem; font-weight: 700; letter-spacing: 0.08em; text-transform: uppercase;
         }
-        .swagger-ui .info a.link { color: #93c5fd !important; }
-        .swagger-ui .info p,
-        .swagger-ui .info li { color: rgba(255,255,255,0.85) !important; font-size: 0.9rem; line-height: 1.65; }
+        .swagger-ui .info a.link { color: #0e6ba8 !important; }
+        .swagger-ui .info p, .swagger-ui .info li {
+          color: #4b5563 !important; font-size: 0.88rem; line-height: 1.65;
+        }
         .swagger-ui .info .description table {
-          border-collapse: collapse; width: 100%; margin: 14px 0; font-size: 0.85rem;
-          background: rgba(255,255,255,0.06); border-radius: 8px; overflow: hidden;
+          border-collapse: collapse; width: 100%; margin: 12px 0; font-size: 0.84rem;
+          border: 1px solid #e2e8f0; border-radius: 8px; overflow: hidden;
         }
         .swagger-ui .info .description th {
-          background: rgba(255,255,255,0.12); color: #bfdbfe;
-          padding: 8px 14px; text-align: left; font-weight: 700; letter-spacing: 0.04em;
-          text-transform: uppercase; font-size: 0.75rem;
+          background: #0f2544; color: #fff;
+          padding: 8px 14px; text-align: left; font-weight: 700;
+          letter-spacing: 0.05em; text-transform: uppercase; font-size: 0.72rem;
         }
         .swagger-ui .info .description td {
-          padding: 7px 14px; border-bottom: 1px solid rgba(255,255,255,0.07);
-          color: rgba(255,255,255,0.82) !important;
+          padding: 7px 14px; border-bottom: 1px solid #f0f4f8;
+          color: #374151 !important;
         }
+        .swagger-ui .info .description tr:last-child td { border-bottom: none; }
         .swagger-ui .info .description code {
-          background: rgba(14,107,168,0.4); color: #bfdbfe;
-          border-radius: 4px; padding: 1px 6px; font-size: 0.82em;
+          background: #eff6ff; color: #1d4ed8;
+          border-radius: 4px; padding: 1px 7px; font-size: 0.82em;
+          border: 1px solid #bfdbfe;
         }
 
-        /* ── Authorize button (hero) ───────────────────────────── */
-        .swagger-ui .info .authorization__btn,
+        /* Auth button */
         .swagger-ui .auth-wrapper .btn.authorize {
-          background: rgba(14,107,168,0.9) !important;
-          border: 1px solid #60a5fa !important;
-          color: #fff !important;
-          border-radius: 8px !important;
-          font-weight: 700 !important;
-          padding: 8px 20px !important;
+          background: #0e6ba8 !important;
+          border: 1px solid #0e6ba8 !important;
+          color: #fff !important; border-radius: 8px !important;
+          font-weight: 700 !important; padding: 8px 20px !important;
           transition: all 0.2s ease !important;
-          letter-spacing: 0.03em;
         }
         .swagger-ui .auth-wrapper .btn.authorize:hover {
-          background: #0e6ba8 !important;
-          transform: translateY(-1px);
-          box-shadow: 0 4px 12px rgba(14,107,168,0.4) !important;
+          background: #0f2544 !important;
+          box-shadow: 0 4px 12px rgba(14,107,168,0.3) !important;
         }
         .swagger-ui .auth-wrapper .btn.authorize svg { fill: #fff; }
 
-        /* ── Servers dropdown ──────────────────────────────────── */
-        .swagger-ui .servers > label {
-          color: rgba(255,255,255,0.8) !important;
-          font-size: 0.82rem;
-        }
+        /* Servers */
+        .swagger-ui .servers > label { color: #4b5563 !important; font-size: 0.82rem; }
         .swagger-ui .servers select {
-          background: rgba(255,255,255,0.1) !important;
-          color: #fff !important;
-          border: 1px solid rgba(255,255,255,0.2) !important;
-          border-radius: 6px !important;
-          padding: 4px 10px;
+          border: 1px solid #d1d5db !important; border-radius: 6px !important;
+          padding: 5px 10px; background: #fff !important; color: #0f2544 !important;
         }
 
-        /* ── Wrapper principal ─────────────────────────────────── */
-        .swagger-ui .wrapper { padding: 0 16px 40px; }
+        /* ════════════════════════════════════════════════════════
+           WRAPPER & CONTENT AREA
+        ════════════════════════════════════════════════════════ */
+        .swagger-ui .wrapper { padding: 0 20px 48px; max-width: none !important; }
 
         /* ── Secciones (tags) ──────────────────────────────────── */
         .swagger-ui .opblock-tag-section { margin-bottom: 20px; }
