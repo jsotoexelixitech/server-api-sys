@@ -67,7 +67,7 @@ async function bootstrap(): Promise<void> {
     SwaggerModule.setup(swaggerPath, app, document, {
       customSiteTitle: 'Exelixi · RCV Sis2000 API',
       customfavIcon: 'https://exelixitech.com/favicon.ico',
-      customCssUrl: 'https://fonts.googleapis.com/css2?family=Inter:ital,wght@0,400;0,500;0,600;0,700;0,800;1,400&display=swap',
+      customCssUrl: 'https://fonts.googleapis.com/css2?family=Manrope:wght@600;700;800&family=Inter:ital,wght@0,400;0,500;0,600;0,700;0,800;1,400&display=swap',
       customJsStr: `
 (function() {
   /* ─────────────────────────────────────────────────────────
@@ -149,7 +149,7 @@ async function bootstrap(): Promise<void> {
       '<div class="sb-brand">'
       + '<span class="sb-bolt">&#9889;</span>'
       + '<div><div class="sb-name">Exélixi API</div>'
-      + '<div class="sb-tagline">Sis2000 · Documentación</div></div>'
+      + '<div class="sb-tagline">Documentación</div></div>'
       + '</div>'
       + '<div class="sb-search-wrap">'
       + '<input class="sb-search" placeholder="&#128269; Buscar..." type="text" />'
@@ -263,15 +263,15 @@ async function bootstrap(): Promise<void> {
       `,
       customCss: `
         /* ═══════════════════════════════════════════════════════
-           EXÉLIXI · SWAGGER THEME v3 — Two-Column Layout
-           navy #0f2544 · blue #0e6ba8 · sidebar 210px
+           EXÉLIXI · SWAGGER THEME v4 — Paleta Corporativa Oficial
+           Oxford #0C133A · Pumpkin #ED7423 · SkyX #05C6DF
         ═══════════════════════════════════════════════════════ */
-        @import url('https://fonts.googleapis.com/css2?family=Inter:ital,wght@0,400;0,500;0,600;0,700;0,800;1,400&display=swap');
+        @import url('https://fonts.googleapis.com/css2?family=Manrope:wght@600;700;800&family=Inter:ital,wght@0,400;0,500;0,600;0,700;0,800;1,400&display=swap');
 
         /* ── Reset & base ──────────────────────────────────────── */
         *, *::before, *::after { box-sizing: border-box; }
         body {
-          background: #f0f4f8;
+          background: #f0f2f5;
           font-family: 'Inter', 'Segoe UI', Arial, sans-serif !important;
           margin: 0;
         }
@@ -288,7 +288,7 @@ async function bootstrap(): Promise<void> {
           position: fixed;
           left: 0; top: 0;
           width: 210px; height: 100vh;
-          background: linear-gradient(180deg, #081526 0%, #0f2544 55%, #0c3460 100%);
+          background: linear-gradient(180deg, #07092a 0%, #0C133A 55%, #1a2255 100%);
           z-index: 600;
           display: flex;
           flex-direction: column;
@@ -310,15 +310,15 @@ async function bootstrap(): Promise<void> {
         }
         .sb-bolt {
           font-size: 1.8rem; line-height: 1;
-          filter: drop-shadow(0 0 10px rgba(96,165,250,0.9));
+          filter: drop-shadow(0 0 10px rgba(237,116,35,0.9));
         }
         .sb-name {
           color: #fff; font-weight: 800; font-size: 1.1rem;
           letter-spacing: 0.01em; line-height: 1;
-          font-family: 'Inter', sans-serif;
+          font-family: 'Manrope', 'Inter', sans-serif;
         }
-        .sb-env {
-          color: #60a5fa; font-size: 0.64rem; font-weight: 600;
+        .sb-env, .sb-tagline {
+          color: #05C6DF; font-size: 0.64rem; font-weight: 600;
           letter-spacing: 0.1em; text-transform: uppercase;
           margin-top: 3px; font-family: 'Inter', sans-serif;
         }
@@ -334,7 +334,7 @@ async function bootstrap(): Promise<void> {
           transition: border 0.2s, background 0.2s;
         }
         .sb-search::placeholder { color: rgba(255,255,255,0.3); }
-        .sb-search:focus { border-color: #0e6ba8; background: rgba(14,107,168,0.15); }
+        .sb-search:focus { border-color: #ED7423; background: rgba(237,116,35,0.12); }
 
         /* Nav label */
         .sb-nav-label {
@@ -355,15 +355,15 @@ async function bootstrap(): Promise<void> {
           border-left: 3px solid transparent;
           transition: background 0.15s, border-color 0.15s;
         }
-        .sb-item:hover { background: rgba(255,255,255,0.06); border-left-color: rgba(14,107,168,0.5); }
-        .sb-item.active { background: rgba(14,107,168,0.2); border-left-color: #0e6ba8; }
+        .sb-item:hover { background: rgba(237,116,35,0.08); border-left-color: rgba(237,116,35,0.5); }
+        .sb-item.active { background: rgba(237,116,35,0.18); border-left-color: #ED7423; }
 
         .sb-dot {
           width: 7px; height: 7px; border-radius: 50%;
           background: rgba(255,255,255,0.2); flex-shrink: 0;
           transition: background 0.2s, box-shadow 0.2s;
         }
-        .sb-item.active .sb-dot { background: #60a5fa; box-shadow: 0 0 8px rgba(96,165,250,0.7); }
+        .sb-item.active .sb-dot { background: #ED7423; box-shadow: 0 0 8px rgba(237,116,35,0.7); }
         .sb-item:hover .sb-dot { background: rgba(255,255,255,0.5); }
 
         .sb-label {
@@ -381,7 +381,7 @@ async function bootstrap(): Promise<void> {
           color: rgba(255,255,255,0.25); font-size: 0.62rem; font-weight: 600;
           letter-spacing: 0.1em; text-transform: uppercase; font-family: 'Inter', sans-serif;
         }
-        .sb-ver-val { color: #60a5fa; font-size: 0.68rem; font-weight: 700; font-family: 'Inter', sans-serif; }
+        .sb-ver-val { color: #05C6DF; font-size: 0.68rem; font-weight: 700; font-family: 'Inter', sans-serif; }
         .sb-env-row { display: flex; gap: 6px; }
         .sb-env-badge {
           color: rgba(255,255,255,0.4) !important; font-size: 0.68rem; font-weight: 600;
@@ -389,13 +389,13 @@ async function bootstrap(): Promise<void> {
           text-decoration: none !important; transition: all 0.2s; font-family: 'Inter', sans-serif;
         }
         .sb-env-badge.active, .sb-env-badge:hover {
-          color: #fff !important; border-color: #0e6ba8; background: rgba(14,107,168,0.4);
+          color: #fff !important; border-color: #ED7423; background: rgba(237,116,35,0.35);
         }
 
         /* ── Hamburger toggle ──────────────────────────────────── */
         #exelixi-toggle {
           display: none; position: fixed; top: 10px; left: 12px; z-index: 800;
-          background: #0f2544; border: 1px solid rgba(255,255,255,0.15);
+          background: #0C133A; border: 1px solid rgba(255,255,255,0.15);
           border-radius: 8px; padding: 8px 10px; cursor: pointer;
           flex-direction: column; gap: 5px; align-items: center;
           box-shadow: 0 3px 12px rgba(0,0,0,0.4);
@@ -423,7 +423,7 @@ async function bootstrap(): Promise<void> {
            TOPBAR — delgada, solo info, sin duplicar sidebar
         ════════════════════════════════════════════════════════ */
         .swagger-ui .topbar {
-          background: #081526;
+          background: #07092a;
           padding: 0;
           box-shadow: 0 2px 8px rgba(0,0,0,0.5);
           position: sticky; top: 0; z-index: 500;
@@ -451,19 +451,20 @@ async function bootstrap(): Promise<void> {
         }
         .swagger-ui .info { margin: 0; }
         .swagger-ui .info .title {
-          color: #0f2544 !important;
+          color: #0C133A !important;
           font-size: 1.8rem !important;
           font-weight: 800 !important;
           letter-spacing: -0.02em;
           line-height: 1.2;
+          font-family: 'Manrope', 'Inter', sans-serif !important;
         }
         .swagger-ui .info .title small.version-stamp { vertical-align: middle; margin-left: 12px; }
         .swagger-ui .info .version-stamp .version {
-          background: #0e6ba8; color: #fff;
+          background: #ED7423; color: #fff;
           border-radius: 20px; padding: 2px 12px;
           font-size: 0.65rem; font-weight: 700; letter-spacing: 0.08em; text-transform: uppercase;
         }
-        .swagger-ui .info a.link { color: #0e6ba8 !important; }
+        .swagger-ui .info a.link { color: #ED7423 !important; }
         .swagger-ui .info p, .swagger-ui .info li {
           color: #4b5563 !important; font-size: 0.88rem; line-height: 1.65;
         }
@@ -472,7 +473,7 @@ async function bootstrap(): Promise<void> {
           border: 1px solid #e2e8f0; border-radius: 8px; overflow: hidden;
         }
         .swagger-ui .info .description th {
-          background: #0f2544; color: #fff;
+          background: #0C133A; color: #fff;
           padding: 8px 14px; text-align: left; font-weight: 700;
           letter-spacing: 0.05em; text-transform: uppercase; font-size: 0.72rem;
         }
@@ -482,22 +483,22 @@ async function bootstrap(): Promise<void> {
         }
         .swagger-ui .info .description tr:last-child td { border-bottom: none; }
         .swagger-ui .info .description code {
-          background: #eff6ff; color: #1d4ed8;
+          background: rgba(5,198,223,0.08); color: #04A8BD;
           border-radius: 4px; padding: 1px 7px; font-size: 0.82em;
-          border: 1px solid #bfdbfe;
+          border: 1px solid rgba(5,198,223,0.3);
         }
 
         /* Auth button */
         .swagger-ui .auth-wrapper .btn.authorize {
-          background: #0e6ba8 !important;
-          border: 1px solid #0e6ba8 !important;
+          background: #ED7423 !important;
+          border: 1px solid #ED7423 !important;
           color: #fff !important; border-radius: 8px !important;
           font-weight: 700 !important; padding: 8px 20px !important;
           transition: all 0.2s ease !important;
         }
         .swagger-ui .auth-wrapper .btn.authorize:hover {
-          background: #0f2544 !important;
-          box-shadow: 0 4px 12px rgba(14,107,168,0.3) !important;
+          background: #0C133A !important;
+          box-shadow: 0 4px 12px rgba(237,116,35,0.35) !important;
         }
         .swagger-ui .auth-wrapper .btn.authorize svg { fill: #fff; }
 
@@ -505,7 +506,7 @@ async function bootstrap(): Promise<void> {
         .swagger-ui .servers > label { color: #4b5563 !important; font-size: 0.82rem; }
         .swagger-ui .servers select {
           border: 1px solid #d1d5db !important; border-radius: 6px !important;
-          padding: 5px 10px; background: #fff !important; color: #0f2544 !important;
+          padding: 5px 10px; background: #fff !important; color: #0C133A !important;
         }
 
         /* ════════════════════════════════════════════════════════
@@ -524,16 +525,16 @@ async function bootstrap(): Promise<void> {
           box-shadow: 0 2px 8px rgba(15,37,68,0.08) !important;
           cursor: pointer;
           transition: all 0.2s ease !important;
-          border-left: 5px solid #0e6ba8 !important;
+          border-left: 5px solid #ED7423 !important;
         }
         .swagger-ui .opblock-tag:hover {
-          background: #f0f7ff !important;
-          box-shadow: 0 4px 16px rgba(14,107,168,0.15) !important;
+          background: #fff9f5 !important;
+          box-shadow: 0 4px 16px rgba(237,116,35,0.12) !important;
           transform: translateX(2px);
         }
         .swagger-ui .opblock-tag span,
         .swagger-ui .opblock-tag a {
-          color: #0f2544 !important;
+          color: #0C133A !important;
           font-size: 1rem !important;
           font-weight: 700 !important;
           text-decoration: none !important;
@@ -544,7 +545,7 @@ async function bootstrap(): Promise<void> {
           font-size: 0.8rem !important;
           margin-left: 8px;
         }
-        .swagger-ui .opblock-tag svg { fill: #0e6ba8 !important; }
+        .swagger-ui .opblock-tag svg { fill: #ED7423 !important; }
 
         /* ── Endpoints: contenedor ─────────────────────────────── */
         .swagger-ui .opblock-tag-section .opblock {
@@ -558,42 +559,42 @@ async function bootstrap(): Promise<void> {
           transform: translateX(2px);
         }
         .swagger-ui .opblock.is-open {
-          box-shadow: 0 4px 20px rgba(14,107,168,0.18) !important;
+          box-shadow: 0 4px 20px rgba(237,116,35,0.15) !important;
           transform: none;
         }
 
         /* ── POST ──────────────────────────────────────────────── */
         .swagger-ui .opblock.opblock-post {
-          border-color: #0e6ba8 !important;
-          background: #f8fbff !important;
+          border-color: #ED7423 !important;
+          background: #fff9f5 !important;
         }
-        .swagger-ui .opblock.opblock-post .opblock-summary { border-color: #bfdbfe !important; }
+        .swagger-ui .opblock.opblock-post .opblock-summary { border-color: rgba(237,116,35,0.25) !important; }
         .swagger-ui .opblock.opblock-post .opblock-summary-method {
-          background: linear-gradient(135deg, #0e6ba8, #1d4ed8) !important;
+          background: linear-gradient(135deg, #ED7423, #C75D14) !important;
           border-radius: 6px !important;
           font-weight: 800 !important;
           font-size: 0.72rem !important;
           letter-spacing: 0.06em;
           min-width: 68px;
           text-align: center;
-          box-shadow: 0 2px 6px rgba(14,107,168,0.3);
+          box-shadow: 0 2px 6px rgba(237,116,35,0.35);
         }
 
         /* ── GET ───────────────────────────────────────────────── */
         .swagger-ui .opblock.opblock-get {
-          border-color: #059669 !important;
-          background: #f8fffe !important;
+          border-color: #05C6DF !important;
+          background: #f0fcfe !important;
         }
-        .swagger-ui .opblock.opblock-get .opblock-summary { border-color: #a7f3d0 !important; }
+        .swagger-ui .opblock.opblock-get .opblock-summary { border-color: rgba(5,198,223,0.3) !important; }
         .swagger-ui .opblock.opblock-get .opblock-summary-method {
-          background: linear-gradient(135deg, #059669, #047857) !important;
+          background: linear-gradient(135deg, #05C6DF, #04A8BD) !important;
           border-radius: 6px !important;
           font-weight: 800 !important;
           font-size: 0.72rem !important;
           letter-spacing: 0.06em;
           min-width: 68px;
           text-align: center;
-          box-shadow: 0 2px 6px rgba(5,150,105,0.3);
+          box-shadow: 0 2px 6px rgba(5,198,223,0.3);
         }
 
         /* ── Summary path & description ────────────────────────── */
@@ -601,7 +602,7 @@ async function bootstrap(): Promise<void> {
           font-family: 'Inter', monospace !important;
           font-size: 0.88rem !important;
           font-weight: 600 !important;
-          color: #0f2544 !important;
+          color: #0C133A !important;
         }
         .swagger-ui .opblock-summary-description {
           color: #6b7280 !important;
@@ -616,7 +617,7 @@ async function bootstrap(): Promise<void> {
           padding: 10px 16px !important;
         }
         .swagger-ui .opblock-section-header h4 {
-          color: #0f2544 !important;
+          color: #0C133A !important;
           font-weight: 700 !important;
           font-size: 0.85rem !important;
           letter-spacing: 0.04em;
@@ -626,9 +627,9 @@ async function bootstrap(): Promise<void> {
         /* ── Parámetros / Body ─────────────────────────────────── */
         .swagger-ui .parameters-col_description p { color: #374151; font-size: 0.86rem; }
         .swagger-ui .parameter__name { color: #0f2544 !important; font-weight: 700 !important; }
-        .swagger-ui .parameter__type { color: #0e6ba8 !important; font-size: 0.78rem; }
+        .swagger-ui .parameter__type { color: #ED7423 !important; font-size: 0.78rem; }
         .swagger-ui textarea.body-param__text {
-          border: 1px solid #bfdbfe !important;
+          border: 1px solid rgba(237,116,35,0.3) !important;
           border-radius: 8px !important;
           font-family: 'Fira Code', monospace;
           font-size: 0.83rem !important;
@@ -636,14 +637,14 @@ async function bootstrap(): Promise<void> {
           padding: 12px !important;
         }
         .swagger-ui textarea.body-param__text:focus {
-          border-color: #0e6ba8 !important;
+          border-color: #ED7423 !important;
           outline: none;
-          box-shadow: 0 0 0 3px rgba(14,107,168,0.15) !important;
+          box-shadow: 0 0 0 3px rgba(237,116,35,0.15) !important;
         }
 
         /* ── Botón Execute ─────────────────────────────────────── */
         .swagger-ui .btn.execute {
-          background: linear-gradient(135deg, #0f2544, #0e6ba8) !important;
+          background: linear-gradient(135deg, #0C133A, #ED7423) !important;
           color: #fff !important;
           border: none !important;
           border-radius: 8px !important;
@@ -656,7 +657,7 @@ async function bootstrap(): Promise<void> {
         }
         .swagger-ui .btn.execute:hover {
           transform: translateY(-2px) !important;
-          box-shadow: 0 6px 16px rgba(14,107,168,0.4) !important;
+          box-shadow: 0 6px 16px rgba(237,116,35,0.4) !important;
         }
         .swagger-ui .btn.execute:active { transform: translateY(0) !important; }
 
@@ -680,19 +681,19 @@ async function bootstrap(): Promise<void> {
         }
         /* Highlight de código JSON en respuesta */
         .swagger-ui .highlight-code pre {
-          background: #0f2544 !important;
+          background: #0C133A !important;
           border-radius: 8px !important;
           font-size: 0.8rem !important;
           padding: 14px !important;
           color: #e2e8f0 !important;
         }
-        .swagger-ui .microlight { color: #93c5fd !important; }
+        .swagger-ui .microlight { color: #05C6DF !important; }
 
         /* ── Curl ──────────────────────────────────────────────── */
-        .swagger-ui .curl-command { background: #0f2544 !important; border-radius: 8px !important; }
-        .swagger-ui .curl-command .curl { color: #bfdbfe !important; font-size: 0.8rem !important; }
+        .swagger-ui .curl-command { background: #0C133A !important; border-radius: 8px !important; }
+        .swagger-ui .curl-command .curl { color: rgba(5,198,223,0.85) !important; font-size: 0.8rem !important; }
         .swagger-ui .copy-to-clipboard {
-          background: #0e6ba8 !important;
+          background: #ED7423 !important;
           border-radius: 4px !important;
           border: none !important;
         }
@@ -708,19 +709,19 @@ async function bootstrap(): Promise<void> {
           transition: border 0.2s !important;
         }
         .swagger-ui input:focus, .swagger-ui select:focus {
-          border-color: #0e6ba8 !important;
-          box-shadow: 0 0 0 3px rgba(14,107,168,0.12) !important;
+          border-color: #ED7423 !important;
+          box-shadow: 0 0 0 3px rgba(237,116,35,0.15) !important;
           outline: none !important;
         }
 
         /* ── Modal de Autorización ─────────────────────────────── */
         .swagger-ui .dialog-ux .modal-ux {
           border-radius: 16px !important;
-          box-shadow: 0 20px 60px rgba(15,37,68,0.3) !important;
-          border: 1px solid #bfdbfe !important;
+          box-shadow: 0 20px 60px rgba(12,19,58,0.35) !important;
+          border: 1px solid rgba(237,116,35,0.25) !important;
         }
         .swagger-ui .dialog-ux .modal-ux-header {
-          background: linear-gradient(135deg, #0f2544, #0e6ba8) !important;
+          background: linear-gradient(135deg, #0C133A, #ED7423) !important;
           border-radius: 14px 14px 0 0 !important;
           padding: 20px 24px !important;
         }
@@ -732,7 +733,7 @@ async function bootstrap(): Promise<void> {
         .swagger-ui .dialog-ux .modal-ux-header button svg { fill: rgba(255,255,255,0.7); }
         .swagger-ui .auth-container .wrapper { padding: 20px 24px !important; }
         .swagger-ui .dialog-ux .btn.authorize {
-          background: #0e6ba8 !important;
+          background: #ED7423 !important;
           color: #fff !important;
           border-radius: 8px !important;
         }
@@ -746,7 +747,7 @@ async function bootstrap(): Promise<void> {
           box-shadow: 0 2px 8px rgba(15,37,68,0.06);
         }
         .swagger-ui section.models h4 {
-          color: #0f2544 !important;
+          color: #0C133A !important;
           font-weight: 800 !important;
           font-size: 0.95rem !important;
           padding: 14px 20px !important;
@@ -758,19 +759,19 @@ async function bootstrap(): Promise<void> {
           background: #fafafa;
           border-top: 1px solid #f0f0f0;
         }
-        .swagger-ui .model-title { color: #0f2544 !important; font-weight: 700 !important; }
+        .swagger-ui .model-title { color: #0C133A !important; font-weight: 700 !important; }
         .swagger-ui .model { color: #374151; font-size: 0.85rem; }
-        .swagger-ui .property-row .property-name { color: #0e6ba8 !important; font-weight: 600 !important; }
+        .swagger-ui .property-row .property-name { color: #ED7423 !important; font-weight: 600 !important; }
 
         /* ── Scrollbar ─────────────────────────────────────────── */
         ::-webkit-scrollbar { width: 6px; height: 6px; }
         ::-webkit-scrollbar-track { background: #f1f5f9; border-radius: 3px; }
-        ::-webkit-scrollbar-thumb { background: #0e6ba8; border-radius: 3px; }
-        ::-webkit-scrollbar-thumb:hover { background: #0f2544; }
+        ::-webkit-scrollbar-thumb { background: #ED7423; border-radius: 3px; }
+        ::-webkit-scrollbar-thumb:hover { background: #0C133A; }
 
         /* ── Filter / Buscar ───────────────────────────────────── */
         .swagger-ui .filter .operation-filter-input {
-          border: 1px solid #bfdbfe !important;
+          border: 1px solid rgba(237,116,35,0.3) !important;
           border-radius: 8px !important;
           padding: 8px 14px !important;
           font-size: 0.88rem !important;
@@ -778,22 +779,22 @@ async function bootstrap(): Promise<void> {
           transition: all 0.2s !important;
         }
         .swagger-ui .filter .operation-filter-input:focus {
-          border-color: #0e6ba8 !important;
-          box-shadow: 0 0 0 3px rgba(14,107,168,0.12) !important;
+          border-color: #ED7423 !important;
+          box-shadow: 0 0 0 3px rgba(237,116,35,0.15) !important;
           outline: none !important;
         }
 
         /* ── Try it out button ─────────────────────────────────── */
         .swagger-ui .try-out__btn {
-          border: 1px solid #0e6ba8 !important;
-          color: #0e6ba8 !important;
+          border: 1px solid #ED7423 !important;
+          color: #ED7423 !important;
           border-radius: 6px !important;
           font-weight: 600 !important;
           background: transparent !important;
           transition: all 0.2s !important;
         }
         .swagger-ui .try-out__btn:hover {
-          background: #0e6ba8 !important;
+          background: #ED7423 !important;
           color: #fff !important;
         }
         .swagger-ui .try-out__btn.cancel {
