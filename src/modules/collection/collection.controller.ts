@@ -8,6 +8,7 @@ import {
 } from '@nestjs/common';
 import {
   ApiBody,
+  ApiExcludeEndpoint,
   ApiHeader,
   ApiOperation,
   ApiResponse,
@@ -24,12 +25,13 @@ import {
   RCV_COLLECTION_ACTIVATE_RESPONSE,
 } from '../../common/swagger/api-docs.constants';
 
-@ApiTags('4. Cobranza (Collection)')
+@ApiTags('4. Cobranza RCV')
 @Controller('v1/external/collection')
 export class CollectionController {
   constructor(private readonly collectionService: CollectionService) {}
 
   @Post('search')
+  @ApiExcludeEndpoint()
   @HttpCode(HttpStatus.OK)
   @ApiOperation({
     summary: 'Buscar recibos pendientes por RIF/cédula',
@@ -55,6 +57,7 @@ export class CollectionController {
   }
 
   @Post('notific')
+  @ApiExcludeEndpoint()
   @HttpCode(HttpStatus.OK)
   @ApiSecurity('apikey')
   @ApiOperation({
@@ -87,6 +90,7 @@ export class CollectionController {
   }
 
   @Post('collect')
+  @ApiExcludeEndpoint()
   @HttpCode(HttpStatus.OK)
   @ApiSecurity('apikey')
   @ApiOperation({

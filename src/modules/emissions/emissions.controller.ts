@@ -1,6 +1,7 @@
 import { Body, Controller, Headers, HttpCode, HttpStatus, Post } from '@nestjs/common';
 import {
   ApiBody,
+  ApiExcludeEndpoint,
   ApiHeader,
   ApiOperation,
   ApiResponse,
@@ -18,12 +19,13 @@ import {
   RCV_EMISSION_EXAMPLE,
 } from '../../common/swagger/api-docs.constants';
 
-@ApiTags('3. Emisión Automóvil (RCV)')
+@ApiTags('3. Emisión RCV')
 @Controller('v1')
 export class EmissionsController {
   constructor(private readonly emissionsService: EmissionsService) {}
 
   @Post('emissions/automobile/vehicle')
+  @ApiExcludeEndpoint()
   @HttpCode(HttpStatus.OK)
   @ApiOperation({
     summary: 'Paso 5a · Buscar vehículo por placa',
@@ -53,6 +55,7 @@ export class EmissionsController {
   }
 
   @Post('emissions/automobile/serial')
+  @ApiExcludeEndpoint()
   @HttpCode(HttpStatus.OK)
   @ApiOperation({
     summary: 'Paso 5a · Buscar vehículo por serial',

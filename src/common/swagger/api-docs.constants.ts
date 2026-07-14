@@ -1,43 +1,33 @@
-/** Orden de secciones en Swagger UI (flujo RCV de arriba hacia abajo). */
+/** Orden de secciones Swagger — solo flujo RCV Exélixi → Sis2000. */
 export const SWAGGER_TAG_ORDER = [
   '1. Catálogo vehículo (inma)',
   '2. Catálogos y cotización (valrep)',
-  '3. Emisión Automóvil (RCV)',
-  '4. Cobranza (Collection)',
-  'personas',
-  'Emisión Personas (Funerario)',
-  'Documentos',
-  'app',
-  'client',
+  '3. Emisión RCV',
+  '4. Cobranza RCV',
+  '5. Documentos (post-emisión)',
 ] as const;
 
 export const SWAGGER_API_DESCRIPTION = `
-API NestJS sobre **Sis2000** para el flujo RCV Exélixi (OCR → Formulario → Emisión → Pagos).
+**RCV Exélixi → Sis2000** (OCR → Formulario → Emisión → Pagos).
+
+Solo endpoints del flujo RCV en producción. Todos ejecutan SP o SQL directo contra Sis2000.
 
 ---
 
-### Flujo RCV recomendado
+| Paso | Endpoint | Sis2000 |
+|------|----------|---------|
+| 1 | \`GET /inma/anios\` → \`POST /inma/marcas\` → \`modelo\` → \`version\` → \`categorias-uso\` | \`VInma\` |
+| 2 | \`GET /valrep/states\` → \`cities\` → \`POST /valrep/getLists\` | \`maestados\`, \`maciudades\`, \`maparent\` |
+| 3 | \`POST /valrep/planes/v2\` | \`spBuscaPlan\` |
+| 4 | \`POST /valrep/cotizacion\` | \`spCalculoAuto\` |
+| 5 | \`POST /external/validateEmissionAuto\` | \`speeValidateAutomovilGeneral\` |
+| 6 | \`POST /external/createEmissionAuto\` | \`sp_pre_emision_Automovil_RCV2\` |
+| 7 | \`POST /external/collection/activate\` | \`spCobroSis_Ad\` + \`cbreporte_pago\` |
+| 8 | \`POST /documents/conductor-habitual\` | PDF anexo (post-emisión) |
 
-| Paso | Endpoint | Descripción |
-|------|----------|-------------|
-| 1 | \`GET /inma/anios\` → \`POST /inma/marcas\` → \`modelo\` → \`version\` | Catálogo del vehículo |
-| 2 | \`GET /valrep/states\` → \`GET /valrep/cities\` | Ubicación tomador |
-| 3 | \`POST /valrep/planes/v2\` | Planes RCV (\`spBuscaPlan\`) |
-| 4 | \`POST /valrep/cotizacion\` | Prima (\`spCalculoAuto\`) |
-| 5 | \`POST /external/validateEmissionAuto\` | Validar placa/serial |
-| 6 | \`POST /external/createEmissionAuto\` | Emitir (\`sp_pre_emision_Automovil_RCV2\`) |
-| 7 | \`POST /external/collection/activate\` | Cobrar + ingreso de caja |
+**Auth:** header \`apikey\` (\`maclient_api.xtoken\`) en pasos 6, 7 y 8.
 
----
-
-### Autenticación
-
-Header \`apikey\`: token del canal en \`maclient_api.xtoken\`. Requerido en emisión y cobro.
-
-### Cobro (validado QA ingreso #183034)
-
-\`spCobroSis_Ad\` + UPSERT en \`cbreporte_pago\` — igual que SysIP \`collectReceip\`.
-PDF: \`/sis2000/ingreso_caja/{transaccion}/\`
+**Cobro validado QA:** ingreso #183034 · póliza \`18-1-0000078926\`
 `.trim();
 
 export const APIKEY_HEADER = {

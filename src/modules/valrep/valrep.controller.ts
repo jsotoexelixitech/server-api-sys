@@ -1,5 +1,5 @@
 import { Body, Controller, Get, HttpCode, HttpStatus, Post, Query, BadRequestException } from '@nestjs/common';
-import { ApiBody, ApiOperation, ApiQuery, ApiResponse, ApiTags } from '@nestjs/swagger';
+import { ApiBody, ApiExcludeEndpoint, ApiOperation, ApiQuery, ApiResponse, ApiTags } from '@nestjs/swagger';
 import { GetPlanesV2Dto } from './dto/get-planes-v2.dto';
 import { GetCitiesDto } from './dto/get-cities.dto';
 import { GetCotizacionAutoDto } from './dto/get-cotizacion-auto.dto';
@@ -21,6 +21,7 @@ export class ValrepController {
   // ── GET /api/v1/valrep/matipos ─────────────────────────────────────────
 
   @Get('matipos')
+  @ApiExcludeEndpoint()
   @ApiOperation({ summary: 'Lista de tipos de vehículos', description: 'Consulta la tabla `matipos`. Necesario para filtrar marcas por tipo.' })
   @ApiResponse({ status: 200, schema: { example: { status: true, data: [{ ctipo: 1, xtipo: 'PARTICULARES' }, { ctipo: 2, xtipo: 'RUSTICOS' }] } } })
   @Api500()
@@ -32,6 +33,7 @@ export class ValrepController {
   // ── POST /api/v1/valrep/planesPer ──────────────────────────────────────
 
   @Post('planesPer')
+  @ApiExcludeEndpoint()
   @HttpCode(HttpStatus.OK)
   @ApiOperation({
     summary: 'Planes de personas vigentes (ramo 9 = Funerario)',
@@ -56,6 +58,7 @@ export class ValrepController {
   // ── POST /api/v1/valrep/macategtr ──────────────────────────────────────
 
   @Post('macategtr')
+  @ApiExcludeEndpoint()
   @HttpCode(HttpStatus.OK)
   @ApiOperation({ summary: 'Categorías de uso por tipo de vehículo', description: 'Filtra `macategtr` por `ctipo`. El `ctipo` viene de `/inma/version`.' })
   @ApiBody({ schema: { example: { ctipo: 3 }, description: 'Tipo de vehículo numérico (ver /valrep/matipos)' } })
@@ -106,11 +109,9 @@ export class ValrepController {
   @Post('getLists')
   @HttpCode(HttpStatus.OK)
   @ApiOperation({
-    summary: 'Lista de catálogo genérico',
-    description:
-      'Replica el endpoint `POST /api/v1/valrep/getLists` de La Mundial. ' +
-      'PARENTESCOS se lee de `maparent` en Sis2000. ' +
-      'SEXO, EDOCIVIL, FRECUENCIAS y MATIPCANAL son valores fijos del dominio de seguros.',
+    summary: 'Paso 2c · Listas de catálogo (sexo, parentescos, etc.)',
+    description: 'Dominios: `SEXO`, `EDOCIVIL`, `PARENTESCOS`, `FRECUENCIAS`, `MATIPCANAL`. Parentescos desde `maparent`.',
+    operationId: 'valrepGetLists',
   })
   @ApiBody({
     schema: {
@@ -179,6 +180,7 @@ export class ValrepController {
   // ── POST /api/v1/valrep/frecuencia ─────────────────────────────────────
 
   @Post('frecuencia')
+  @ApiExcludeEndpoint()
   @HttpCode(HttpStatus.OK)
   @ApiOperation({ summary: 'Obtener frecuencias de un plan', description: 'Devuelve las frecuencias válidas para un cplan desde maplanes_frec.' })
   @ApiBody({ schema: { example: { cplan: 'FUNBAS' } } })

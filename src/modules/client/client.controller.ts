@@ -1,8 +1,9 @@
 import { BadRequestException, Controller, Get, Param } from '@nestjs/common';
-import { ApiOperation, ApiParam, ApiResponse, ApiTags } from '@nestjs/swagger';
+import { ApiExcludeController, ApiOperation, ApiParam, ApiResponse, ApiTags } from '@nestjs/swagger';
 import { ClientService } from './client.service';
 import { ApiCommonErrors } from '../../common/swagger/api-error-responses';
 
+@ApiExcludeController()
 @ApiTags('client')
 @Controller('v1/client')
 export class ClientController {

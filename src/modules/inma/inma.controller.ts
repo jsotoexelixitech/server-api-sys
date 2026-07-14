@@ -1,5 +1,5 @@
 import { Body, Controller, Get, HttpCode, HttpStatus, Param, Post } from '@nestjs/common';
-import { ApiBody, ApiOperation, ApiParam, ApiResponse, ApiTags } from '@nestjs/swagger';
+import { ApiBody, ApiExcludeEndpoint, ApiOperation, ApiParam, ApiResponse, ApiTags } from '@nestjs/swagger';
 import { InmaService } from './inma.service';
 import { GetMarcasDto } from './dto/get-marcas.dto';
 import { GetModeloDto } from './dto/get-modelo.dto';
@@ -47,6 +47,7 @@ export class InmaController {
   // ── POST /api/v1/inma/marca/:ctipo ────────────────────────────────────────
 
   @Post('marca/:ctipo')
+  @ApiExcludeEndpoint()
   @HttpCode(HttpStatus.OK)
   @ApiOperation({ summary: 'Marcas disponibles filtradas por tipo de vehículo', description: '`ctipo`: 1=Particular, 2=Rústico, 3=Carga, 4=Moto, 5=Remolque, 6=Autobús, 8=Minibús, 9=Pick-up' })
   @ApiParam({ name: 'ctipo', type: Number, description: 'Tipo de vehículo (ver /valrep/matipos)', example: 1 })
@@ -62,7 +63,11 @@ export class InmaController {
 
   @Post('modelo')
   @HttpCode(HttpStatus.OK)
-  @ApiOperation({ summary: 'Modelos disponibles por año y marca', description: 'Réplica de `POST /modelo` del Express original. Consulta `VInma`. Queries parametrizadas.' })
+  @ApiOperation({
+    summary: 'Paso 1c · Modelos por año y marca',
+    description: '**Siguiente:** `POST /inma/version`.',
+    operationId: 'inmaModelo',
+  })
   @ApiBody({ type: GetModeloDto })
   @ApiResponse({ status: 200, schema: { example: { status: true, data: { info: [{ cmodelo: '001', cmarca: '083', xmodelo: 'LOWBOY' }] } } } })
   @ApiCommonErrors()
@@ -107,7 +112,11 @@ export class InmaController {
 
   @Post('categorias-uso')
   @HttpCode(HttpStatus.OK)
-  @ApiOperation({ summary: 'Categorías de uso para un vehículo', description: 'Obtiene el `ctipo` del vehículo desde `VInma` y devuelve las categorías de `macategtr`. Réplica de `POST /getCategoriasUso`.' })
+  @ApiOperation({
+    summary: 'Paso 1e · Categorías de uso del vehículo',
+    description: 'Obtiene `ctipo` desde `VInma` y categorías en `macategtr`. Usado en cotización y emisión.',
+    operationId: 'inmaCategoriasUso',
+  })
   @ApiBody({ type: GetCategoriasUsoDto })
   @ApiResponse({
     status: 200,

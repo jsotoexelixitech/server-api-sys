@@ -41,9 +41,9 @@ async function bootstrap(): Promise<void> {
 
   if (swaggerPath) {
     const swaggerConfig = new DocumentBuilder()
-      .setTitle('Exelixi Tech — nest-api · La Mundial')
+      .setTitle('Exelixi · RCV → Sis2000')
       .setDescription(SWAGGER_API_DESCRIPTION)
-      .setVersion('1.1.0')
+      .setVersion('1.2.0-rcv')
       .addApiKey(
         {
           type: 'apiKey',
@@ -56,20 +56,16 @@ async function bootstrap(): Promise<void> {
       .addBearerAuth()
       .addServer('http://192.168.8.120:3002', 'srv001 — QA/Producción Exélixi')
       .addServer('http://localhost:3002', 'Desarrollo local')
-      .addTag('1. Catálogo vehículo (inma)', 'Paso 1 del flujo RCV: año, marca, modelo, versión (`VInma`)')
-      .addTag('2. Catálogos y cotización (valrep)', 'Pasos 2–4: estados, ciudades, planes (`spBuscaPlan`), prima (`spCalculoAuto`)')
-      .addTag('3. Emisión Automóvil (RCV)', 'Pasos 5–6: validar vehículo y emitir (`sp_pre_emision_Automovil_RCV2`)')
-      .addTag('4. Cobranza (Collection)', 'Paso 7: cobro e ingreso de caja (`spCobroSis_Ad` + `cbreporte_pago`)')
-      .addTag('personas', 'Planes y emisión funeraria (ramo 9)')
-      .addTag('Emisión Personas (Funerario)', 'Endpoints legacy funerario vía external')
-      .addTag('Documentos', 'PDF anexos (conductor habitual, etc.)')
-      .addTag('app', 'Utilidades de aplicación')
-      .addTag('client', 'Consultas de cliente')
+      .addTag('1. Catálogo vehículo (inma)', 'Paso 1 · `VInma`')
+      .addTag('2. Catálogos y cotización (valrep)', 'Pasos 2–4 · estados, planes, prima')
+      .addTag('3. Emisión RCV', 'Pasos 5–6 · validar y emitir')
+      .addTag('4. Cobranza RCV', 'Paso 7 · `activate` (ingreso de caja)')
+      .addTag('5. Documentos (post-emisión)', 'Paso 8 · anexo conductor habitual')
       .build();
 
     const document = SwaggerModule.createDocument(app, swaggerConfig);
     SwaggerModule.setup(swaggerPath, app, document, {
-      customSiteTitle: 'Exelixi · nest-api Docs',
+      customSiteTitle: 'Exelixi · RCV Sis2000 API',
       swaggerOptions: {
         persistAuthorization: true,
         docExpansion: 'list',
@@ -81,13 +77,9 @@ async function bootstrap(): Promise<void> {
           const order = [
             '1. Catálogo vehículo (inma)',
             '2. Catálogos y cotización (valrep)',
-            '3. Emisión Automóvil (RCV)',
-            '4. Cobranza (Collection)',
-            'personas',
-            'Emisión Personas (Funerario)',
-            'Documentos',
-            'app',
-            'client',
+            '3. Emisión RCV',
+            '4. Cobranza RCV',
+            '5. Documentos (post-emisión)',
           ];
           const ai = order.indexOf(a);
           const bi = order.indexOf(b);

@@ -1,11 +1,12 @@
 import { Body, Controller, Headers, HttpCode, HttpStatus, Post } from '@nestjs/common';
-import { ApiBody, ApiHeader, ApiOperation, ApiResponse, ApiTags } from '@nestjs/swagger';
+import { ApiExcludeController, ApiBody, ApiHeader, ApiOperation, ApiResponse, ApiTags } from '@nestjs/swagger';
 import { PersonasService } from './personas.service';
 import { GetPlanesPerDto } from './dto/get-planes-per.dto';
 import { CotizacionPerDto } from './dto/cotizacion-per.dto';
 import { CreateEmissionPersonDto } from './dto/create-emission-person.dto';
 import { Api401, Api500, ApiCommonErrors } from '../../common/swagger/api-error-responses';
 
+@ApiExcludeController()
 @ApiTags('personas')
 @Controller('v1/personas')
 export class PersonasController {

@@ -1,12 +1,12 @@
 import { Controller, Post, Get, Param, Body, Res, Req, HttpStatus, Logger } from '@nestjs/common';
-import { ApiTags, ApiOperation, ApiResponse } from '@nestjs/swagger';
+import { ApiExcludeEndpoint, ApiTags, ApiOperation, ApiResponse, ApiBody, ApiSecurity, ApiHeader } from '@nestjs/swagger';
 import { Response, Request } from 'express';
 import { DocumentsService } from './documents.service';
 import { GenerateConductorPdfDto } from './dto/generate-conductor.dto';
 import * as path from 'path';
 import * as fs from 'fs';
 
-@ApiTags('Documentos')
+@ApiTags('5. Documentos (post-emisión)')
 @Controller('v1/documents')
 export class DocumentsController {
   private readonly logger = new Logger(DocumentsController.name);
@@ -14,10 +14,31 @@ export class DocumentsController {
   constructor(private readonly documentsService: DocumentsService) {}
 
   @Post('conductor-habitual')
-  @ApiOperation({ summary: 'Genera el anexo de Conductor Habitual en PDF' })
-  @ApiResponse({ status: 201, description: 'PDF generado exitosamente.' })
-  @ApiResponse({ status: 400, description: 'Parámetros inválidos.' })
-  @ApiResponse({ status: 500, description: 'Error interno al generar el documento.' })
+  @ApiSecurity('apikey')
+  @ApiHeader({
+    name: 'apikey',
+    description: 'Token del canal (`maclient_api.xtoken`).',
+    required: false,
+  })
+  @ApiOperation({
+    summary: 'Paso 8 · Anexo Conductor Habitual (PDF)',
+    description:
+      'Genera PDF tras la emisión. Lo invoca **emision-api** cuando el tomador declaró conductor distinto. ' +
+      'Devuelve URL para descarga.',
+    operationId: 'rcvConductorHabitualPdf',
+  })
+  @ApiBody({ type: GenerateConductorPdfDto })
+  @ApiResponse({
+    status: 201,
+    description: 'PDF generado.',
+    schema: {
+      example: {
+        success: true,
+        message: 'PDF generado exitosamente',
+        url: 'http://192.168.8.120:3002/api/v1/documents/pdf/conductor-18-1-0000078926.pdf',
+      },
+    },
+  })
   async generateConductorHabitual(
     @Body() dto: GenerateConductorPdfDto,
     @Req() req: Request,
@@ -47,6 +68,7 @@ export class DocumentsController {
   }
 
   @Get('pdf/:filename')
+  @ApiExcludeEndpoint()
   @ApiOperation({ summary: 'Descarga o visualiza un PDF generado' })
   async getPdf(@Param('filename') filename: string, @Req() req: Request, @Res() res: Response) {
     const tempDir = path.join(process.cwd(), 'temp-pdfs');
