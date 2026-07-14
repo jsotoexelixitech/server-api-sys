@@ -134,34 +134,47 @@ async function bootstrap(): Promise<void> {
 
     document.body.insertBefore(nav, document.body.firstChild);
 
-    /* Scroll spy */
+    /* Encuentra el elemento de sección por data-tag (robusto ante caracteres especiales) */
+    function findSection(tag) {
+      var found = null;
+      document.querySelectorAll('.opblock-tag[data-tag]').forEach(function(el) {
+        if (el.getAttribute('data-tag') === tag) found = el;
+      });
+      return found;
+    }
+
+    function setActive(tag) {
+      nav.querySelectorAll('.sb-item').forEach(function(el) {
+        el.classList.toggle('active', el.getAttribute('data-tag') === tag);
+      });
+    }
+
+    /* Scroll spy con IntersectionObserver */
     var io = new IntersectionObserver(function(entries) {
       entries.forEach(function(e) {
-        if (e.isIntersecting) {
-          var t = e.target.getAttribute('data-tag');
-          nav.querySelectorAll('.sb-item').forEach(function(el) {
-            el.classList.toggle('active', el.getAttribute('data-tag') === t);
-          });
-        }
+        if (e.isIntersecting) setActive(e.target.getAttribute('data-tag'));
       });
-    }, { rootMargin: '-80px 0px -55% 0px', threshold: 0 });
+    }, { rootMargin: '-60px 0px -55% 0px', threshold: 0 });
 
-    setTimeout(function() {
-      document.querySelectorAll('.opblock-tag[data-tag]').forEach(function(el) { io.observe(el); });
-      var first = nav.querySelector('.sb-item');
-      if (first) first.classList.add('active');
-    }, 2000);
+    function initSpyAndNav() {
+      document.querySelectorAll('.opblock-tag[data-tag]').forEach(function(el) {
+        io.observe(el);
+      });
+    }
+    setTimeout(initSpyAndNav, 2000);
+    setTimeout(initSpyAndNav, 4000); /* segundo intento por si carga tarde */
 
     /* Click → scroll */
-    nav.querySelectorAll('.sb-item').forEach(function(el) {
-      el.addEventListener('click', function(e) {
+    nav.querySelectorAll('.sb-item').forEach(function(item) {
+      item.addEventListener('click', function(e) {
         e.preventDefault();
-        var tag = el.getAttribute('data-tag');
-        var target = document.querySelector('.opblock-tag[data-tag="' + tag + '"]');
-        if (target) window.scrollTo({ top: target.getBoundingClientRect().top + window.scrollY - 60, behavior: 'smooth' });
-        nav.querySelectorAll('.sb-item').forEach(function(x) { x.classList.remove('active'); });
-        el.classList.add('active');
-        /* cerrar en móvil */
+        var tag = item.getAttribute('data-tag');
+        var target = findSection(tag);
+        if (target) {
+          var top = target.getBoundingClientRect().top + window.pageYOffset - 58;
+          window.scrollTo({ top: top, behavior: 'smooth' });
+          setActive(tag);
+        }
         nav.classList.remove('open');
         var ov = document.getElementById('exelixi-overlay');
         if (ov) ov.classList.remove('visible');
