@@ -506,35 +506,11 @@ export class CollectionService {
     return `'${recibos.join("','")}'`;
   }
 
-  private cbreporteColumns: { ctipopago: boolean; freporte: boolean } | null = null;
-
-  /** Detecta columnas opcionales de cbreporte_pago (QA puede diferir de prod). */
-  private async getCbreporteColumns(): Promise<{ ctipopago: boolean; freporte: boolean }> {
-    if (this.cbreporteColumns) return this.cbreporteColumns;
-    const result = await this.db.request().query(`
-      SELECT LOWER(COLUMN_NAME) AS col
-      FROM INFORMATION_SCHEMA.COLUMNS
-      WHERE TABLE_NAME = 'cbreporte_pago'
-        AND COLUMN_NAME IN ('ctipopago', 'freporte')
-    `);
-    const cols = new Set(
-      (result.recordset as { col: string }[]).map((r) => r.col),
-    );
-    this.cbreporteColumns = {
-      ctipopago: cols.has('ctipopago'),
-      freporte: cols.has('freporte'),
-    };
-    this.logger.log(
-      `cbreporte_pago columns: ctipopago=${this.cbreporteColumns.ctipopago} freporte=${this.cbreporteColumns.freporte}`,
-    );
-    return this.cbreporteColumns;
-  }
-
   /**
-   * UPSERT en cbreporte_pago — igual que SysIP collectReceip → Soport.insert.
-   * El ingreso de caja lee freporte (Fecha Operación) y MABANCO_DESTINO (cbanco_destino + ctipopago).
+   * UPSERT en cbreporte_pago via spUpsertCbreportePago_Ad.
+   * El SP maneja internamente la compatibilidad QA/PROD (COL_LENGTH para ctipopago/freporte).
    */
-  private async insertSoporteRows(
+  private async upsertSoporteRows(
     ctransaccion: number,
     soporte: SoporteRow[],
     cusuario: number,
@@ -544,148 +520,62 @@ export class CollectionService {
   ): Promise<void> {
     const T = this.db.types;
     const operacion = fingresoOperacion ?? new Date();
-    const cols = await this.getCbreporteColumns();
-
-    const extraSet = [
-      cols.ctipopago ? 'ctipopago = @ctipopago' : null,
-      cols.freporte ? 'freporte = @freporte' : null,
-    ]
-      .filter(Boolean)
-      .join(', ');
-
-    const extraInsertCols = [
-      cols.ctipopago ? 'ctipopago' : null,
-      cols.freporte ? 'freporte' : null,
-    ].filter(Boolean);
-
-    const extraInsertVals = [
-      cols.ctipopago ? '@ctipopago' : null,
-      cols.freporte ? '@freporte' : null,
-    ].filter(Boolean);
 
     for (let i = 0; i < soporte.length; i++) {
       const s = soporte[i];
       const npago = i + 1;
 
-      const bindSoporte = (req: ReturnType<MssqlService['request']>) => {
-        req.input('ctransaccion', T.Numeric(18, 0), ctransaccion);
-        req.input('npago', T.Numeric(18, 0), npago);
-        req.input('casegurado', T.Numeric(18, 0), casegurado);
-        req.input('cmoneda', T.Char(4), s.cmoneda);
-        req.input('cbanco', T.Numeric(18, 2), s.cbanco ?? null);
-        req.input('cbanco_destino', T.Numeric(18, 2), s.cbanco_destino ?? null);
-        if (cols.ctipopago) {
-          req.input('ctipopago', T.Numeric(), s.ctipopago ?? null);
-        }
-        req.input('mpago', T.Numeric(18, 2), s.mpago);
-        req.input('mpagoext', T.Numeric(18, 2), s.mpagoext);
-        req.input('mpagoigtf', T.Numeric(18, 2), s.mpagoigtf ?? 0);
-        req.input('mpagoigtfext', T.Numeric(18, 2), s.mpagoigtfext ?? 0);
-        req.input('mtotal', T.Numeric(18, 2), s.mtotal);
-        req.input('mtotalext', T.Numeric(18, 2), s.mtotalext);
-        req.input('ptasamon', T.Numeric(13, 6), s.ptasamon);
-        req.input('ptasaref', T.Numeric(18, 2), s.ptasaref ?? 0);
-        req.input('xreferencia', T.VarChar(100), s.xreferencia);
-        req.input('xruta', T.VarChar(100), s.xruta ?? 'Sin soporte');
-        req.input('cprog', T.Char(20), cprog);
-        req.input('cusuario', T.Numeric(18, 0), cusuario);
-        req.input('fingreso', T.DateTime, operacion);
-        if (cols.freporte) {
-          req.input('freporte', T.DateTime, operacion);
-        }
-      };
+      const req = this.db.request();
+      req.input('ctransaccion',   T.Numeric(18, 0), ctransaccion);
+      req.input('npago',          T.Numeric(18, 0), npago);
+      req.input('casegurado',     T.Numeric(18, 0), casegurado);
+      req.input('cmoneda',        T.Char(4),        s.cmoneda);
+      req.input('cbanco',         T.Numeric(18, 2), s.cbanco         ?? null);
+      req.input('cbanco_destino', T.Numeric(18, 2), s.cbanco_destino ?? null);
+      req.input('ctipopago',      T.Numeric(10, 0), s.ctipopago      ?? null);
+      req.input('mpago',          T.Numeric(18, 2), s.mpago);
+      req.input('mpagoext',       T.Numeric(18, 2), s.mpagoext);
+      req.input('mpagoigtf',      T.Numeric(18, 2), s.mpagoigtf      ?? 0);
+      req.input('mpagoigtfext',   T.Numeric(18, 2), s.mpagoigtfext   ?? 0);
+      req.input('mtotal',         T.Numeric(18, 2), s.mtotal);
+      req.input('mtotalext',      T.Numeric(18, 2), s.mtotalext);
+      req.input('ptasamon',       T.Numeric(13, 6), s.ptasamon);
+      req.input('ptasaref',       T.Numeric(18, 2), s.ptasaref       ?? 0);
+      req.input('xreferencia',    T.VarChar(30),    s.xreferencia);
+      req.input('xruta',          T.VarChar(100),   s.xruta          ?? 'Sin soporte');
+      req.input('cusuario',       T.Numeric(18, 0), cusuario);
+      req.input('fingreso',       T.DateTime,       operacion);
+      req.input('freporte',       T.DateTime,       operacion);
+      req.input('cprog',          T.Char(20),       cprog);
+      req.output('accion',        T.Char(1));
+      req.output('mensaje',       T.VarChar(500));
 
-      const baseSet = `
-        casegurado = @casegurado, cmoneda = @cmoneda, cbanco = @cbanco,
-        cbanco_destino = @cbanco_destino,
-        mpago = @mpago, mpagoext = @mpagoext, mpagoigtf = @mpagoigtf,
-        mpagoigtfext = @mpagoigtfext, mtotal = @mtotal, mtotalext = @mtotalext,
-        ptasamon = @ptasamon, ptasaref = @ptasaref, xreferencia = @xreferencia,
-        xruta = @xruta, cprog = @cprog, cusuario = @cusuario,
-        fingreso = @fingreso${extraSet ? `, ${extraSet}` : ''}
-      `;
+      const result = await req.execute('spUpsertCbreportePago_Ad');
+      const accion  = String(result.output['accion']  ?? '').trim();
+      const mensaje = String(result.output['mensaje'] ?? '').trim();
 
-      const upd = this.db.request();
-      bindSoporte(upd);
-      const updResult = await upd.query(`
-        UPDATE cbreporte_pago SET ${baseSet}
-        WHERE ctransaccion = @ctransaccion AND npago = @npago
-      `);
-
-      if ((updResult.rowsAffected[0] ?? 0) > 0) {
-        this.logger.log(
-          `upsertSoporte: UPDATE ctransaccion=${ctransaccion} npago=${npago} ` +
-            `cbanco_destino=${s.cbanco_destino} ctipopago=${s.ctipopago}`,
+      if (accion === 'E') {
+        throw new BadRequestException(
+          `spUpsertCbreportePago_Ad fila ${npago}: ${mensaje}`,
         );
-        continue;
       }
 
-      const ins = this.db.request();
-      bindSoporte(ins);
-      const insertExtra =
-        extraInsertCols.length > 0
-          ? `, ${extraInsertCols.join(', ')}`
-          : '';
-      const valuesExtra =
-        extraInsertVals.length > 0
-          ? `, ${extraInsertVals.join(', ')}`
-          : '';
-
-      try {
-        await ins.query(`
-          INSERT INTO cbreporte_pago (
-            ctransaccion, npago, casegurado, cmoneda, cbanco, cbanco_destino,
-            mpago, mpagoext, mpagoigtf, mpagoigtfext, mtotal, mtotalext,
-            ptasamon, ptasaref, xreferencia, xruta, cusuario,
-            fingreso, cprog${insertExtra}
-          ) VALUES (
-            @ctransaccion, @npago, @casegurado, @cmoneda, @cbanco, @cbanco_destino,
-            @mpago, @mpagoext, @mpagoigtf, @mpagoigtfext, @mtotal, @mtotalext,
-            @ptasamon, @ptasaref, @xreferencia, @xruta, @cusuario,
-            @fingreso, @cprog${valuesExtra}
-          )
-        `);
-        this.logger.log(
-          `upsertSoporte: INSERT ctransaccion=${ctransaccion} npago=${npago} ` +
-            `cbanco_destino=${s.cbanco_destino} ctipopago=${s.ctipopago} ` +
-            `freporte=${cols.freporte ? operacion.toISOString() : 'n/a'}`,
-        );
-      } catch (err) {
-        const msg = parseSPError(err).toLowerCase();
-        if (msg.includes('duplicate') || msg.includes('duplicad') || msg.includes('primary key')) {
-          const retry = this.db.request();
-          bindSoporte(retry);
-          await retry.query(`
-            UPDATE cbreporte_pago SET ${baseSet}
-            WHERE ctransaccion = @ctransaccion AND npago = @npago
-          `);
-          continue;
-        }
-        throw err;
-      }
+      this.logger.log(
+        `upsertSoporte [${accion}] ctransaccion=${ctransaccion} npago=${npago} ` +
+          `cbanco_destino=${s.cbanco_destino} ctipopago=${s.ctipopago} ` +
+          `freporte=${operacion.toISOString()}`,
+      );
     }
   }
 
-  /** Verifica que cbreporte_pago tenga banco destino y fecha operación tras el cobro. */
+  /** Verifica que cbreporte_pago tenga banco destino y fecha de operación tras el cobro. */
   private async verifySoporteGuardado(ctransaccion: number): Promise<void> {
-    const cols = await this.getCbreporteColumns();
     const T = this.db.types;
     const req = this.db.request();
     req.input('ctransaccion', T.Numeric(18, 0), ctransaccion);
 
-    const selectCols = [
-      'cbanco',
-      'cbanco_destino',
-      'fingreso',
-      'xreferencia',
-      cols.ctipopago ? 'ctipopago' : null,
-      cols.freporte ? 'freporte' : null,
-    ]
-      .filter(Boolean)
-      .join(', ');
-
     const result = await req.query(`
-      SELECT TOP 1 ${selectCols}
+      SELECT TOP 1 cbanco_destino, ctipopago, freporte, fingreso, xreferencia
       FROM cbreporte_pago WHERE ctransaccion = @ctransaccion
     `);
     if (!result.recordset.length) {
@@ -694,11 +584,9 @@ export class CollectionService {
       );
     }
     const row = result.recordset[0] as Record<string, unknown>;
-    const fechaOk = cols.freporte
-      ? row['freporte'] != null
-      : row['fingreso'] != null;
-    const incompleto = row['cbanco_destino'] == null || !fechaOk;
-    if (incompleto) {
+    const fechaOk = (row['freporte'] ?? row['fingreso']) != null;
+
+    if (row['cbanco_destino'] == null || !fechaOk) {
       this.logger.error(
         `verifySoporte INCOMPLETO ctransaccion=${ctransaccion} ` +
           `cbanco_destino=${row['cbanco_destino']} ctipopago=${row['ctipopago'] ?? 'n/a'} ` +
@@ -708,11 +596,7 @@ export class CollectionService {
         `Ingreso ${ctransaccion}: faltan banco destino o fecha operación en cbreporte_pago.`,
       );
     }
-    if (cols.ctipopago && row['ctipopago'] == null) {
-      this.logger.warn(
-        `verifySoporte: ctipopago NULL en ctransaccion=${ctransaccion} — banco destino puede salir vacío en PDF`,
-      );
-    }
+
     this.logger.log(
       `verifySoporte OK ctransaccion=${ctransaccion} destino=${row['cbanco_destino']} ` +
         `tipo=${row['ctipopago'] ?? 'n/a'} fecha=${row['freporte'] ?? row['fingreso']}`,
@@ -787,7 +671,7 @@ export class CollectionService {
       throw new BadRequestException(String(result.output['mensaje'] ?? 'spNotificaPago falló'));
     }
     const transaccion = Number(result.output['transaccion']);
-    await this.insertSoporteRows(
+    await this.upsertSoporteRows(
       transaccion,
       payload.soporte,
       payload.cusuario,
@@ -859,7 +743,7 @@ export class CollectionService {
       }
 
       const transaccion = Number(result.output['transaccion']);
-      await this.insertSoporteRows(
+      await this.upsertSoporteRows(
         transaccion,
         payload.soporte,
         payload.cusuario,
