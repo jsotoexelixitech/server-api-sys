@@ -7,7 +7,7 @@ import { GetVersionDto } from './dto/get-version.dto';
 import { GetCategoriasUsoDto } from './dto/get-categorias-uso.dto';
 import { Api404, Api500, ApiCommonErrors } from '../../common/swagger/api-error-responses';
 
-@ApiTags('inma')
+@ApiTags('1. Catálogo vehículo (inma)')
 @Controller('v1/inma')
 export class InmaController {
   constructor(private readonly inmaService: InmaService) {}
@@ -15,7 +15,11 @@ export class InmaController {
   // ── GET /api/v1/inma/anios ────────────────────────────────────────────────
 
   @Get('anios')
-  @ApiOperation({ summary: 'Rango de años disponibles', description: 'Devuelve el año mínimo y máximo registrados en `VInma`.' })
+  @ApiOperation({
+    summary: 'Paso 1a · Rango de años',
+    description: 'Primer paso del catálogo vehículo. Año min/max en `VInma`.',
+    operationId: 'inmaAnios',
+  })
   @ApiResponse({ status: 200, schema: { example: { status: true, data: { min: 1950, max: 2028 } } } })
   @Api500()
   async getAnios() {
@@ -27,7 +31,11 @@ export class InmaController {
 
   @Post('marcas')
   @HttpCode(HttpStatus.OK)
-  @ApiOperation({ summary: 'Marcas disponibles para un año', description: 'Filtra `VInma` por año y devuelve las marcas únicas.' })
+  @ApiOperation({
+    summary: 'Paso 1b · Marcas por año',
+    description: 'Tras elegir año en `anios`. **Siguiente:** `POST /inma/modelo`.',
+    operationId: 'inmaMarcas',
+  })
   @ApiBody({ type: GetMarcasDto })
   @ApiResponse({ status: 200, schema: { example: { status: true, data: { marcas: [{ cmarca: '074', xmarca: 'TOYOTA' }] } } } })
   @ApiCommonErrors()
@@ -67,7 +75,13 @@ export class InmaController {
 
   @Post('version')
   @HttpCode(HttpStatus.OK)
-  @ApiOperation({ summary: 'Versiones disponibles por año, marca y modelo', description: 'Devuelve `ctipo` (tipo de vehículo), `mvalor`, `npasajero`, `ccategotr` y la clasificación.' })
+  @ApiOperation({
+    summary: 'Paso 1d · Versiones (incluye ctipo y suma asegurada)',
+    description:
+      'Devuelve `ctipo`, `mvalor` (suma asegurada), `ccategotr`. ' +
+      'Datos necesarios para `valrep/cotizacion` y emisión.',
+    operationId: 'inmaVersion',
+  })
   @ApiBody({ type: GetVersionDto })
   @ApiResponse({
     status: 200,

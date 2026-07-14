@@ -5,6 +5,10 @@ import { ConfigService } from '@nestjs/config';
 import { AppModule } from './app.module';
 import { AllExceptionsFilter } from './common/filters/all-exceptions.filter';
 import { ResponseInterceptor } from './common/interceptors/response.interceptor';
+import {
+  SWAGGER_API_DESCRIPTION,
+  SWAGGER_TAG_ORDER,
+} from './common/swagger/api-docs.constants';
 
 async function bootstrap(): Promise<void> {
   const app = await NestFactory.create(AppModule, {
@@ -38,13 +42,9 @@ async function bootstrap(): Promise<void> {
 
   if (swaggerPath) {
     const swaggerConfig = new DocumentBuilder()
-      .setTitle('Exelixi Tech - API La Mundial (nest-api)')
-      .setDescription(
-        'API NestJS sobre Sis2000 para el flujo RCV Exélixi: catálogos, cotización, emisión, cobro e ingreso de caja.\n\n' +
-        '**Flujo recomendado RCV:** validateEmissionAuto → createEmissionAuto → **POST /collection/activate**.\n\n' +
-        'El cobro replica SysIP `collectReceip`: `spCobroSis_Ad` + soporte en `cbreporte_pago`.',
-      )
-      .setVersion('1.0.0')
+      .setTitle('Exelixi Tech — nest-api · La Mundial')
+      .setDescription(SWAGGER_API_DESCRIPTION)
+      .setVersion('1.1.0')
       .addApiKey(
         {
           type: 'apiKey',
@@ -57,11 +57,11 @@ async function bootstrap(): Promise<void> {
       .addBearerAuth()
       .addServer('http://192.168.8.120:3002', 'srv001 — QA/Producción Exélixi')
       .addServer('http://localhost:3002', 'Desarrollo local')
-      .addTag('Emisión Automóvil (RCV)', 'Validar vehículo, emitir póliza RCV (`sp_pre_emision_Automovil_RCV2`)')
-      .addTag('Cobranza (Collection)', 'Cobro de recibos e ingreso de caja (`spCobroSis_Ad` + `cbreporte_pago`)')
-      .addTag('valrep', 'Planes, estados, ciudades, cotización auto (`spBuscaPlan`, `spCalculoAuto`)')
-      .addTag('inma', 'Catálogo vehículos: marcas, modelos, versiones, años')
-      .addTag('personas', 'Emisión y planes funerarios (ramo 9)')
+      .addTag('1. Catálogo vehículo (inma)', 'Paso 1 del flujo RCV: año, marca, modelo, versión (`VInma`)')
+      .addTag('2. Catálogos y cotización (valrep)', 'Pasos 2–4: estados, ciudades, planes (`spBuscaPlan`), prima (`spCalculoAuto`)')
+      .addTag('3. Emisión Automóvil (RCV)', 'Pasos 5–6: validar vehículo y emitir (`sp_pre_emision_Automovil_RCV2`)')
+      .addTag('4. Cobranza (Collection)', 'Paso 7: cobro e ingreso de caja (`spCobroSis_Ad` + `cbreporte_pago`)')
+      .addTag('personas', 'Planes y emisión funeraria (ramo 9)')
       .addTag('Emisión Personas (Funerario)', 'Endpoints legacy funerario vía external')
       .addTag('Documentos', 'PDF anexos (conductor habitual, etc.)')
       .addTag('app', 'Utilidades de aplicación')
@@ -70,7 +70,20 @@ async function bootstrap(): Promise<void> {
 
     const document = SwaggerModule.createDocument(app, swaggerConfig);
     SwaggerModule.setup(swaggerPath, app, document, {
-      swaggerOptions: { persistAuthorization: true, docExpansion: 'list', filter: true },
+      customSiteTitle: 'Exelixi · nest-api Docs',
+      swaggerOptions: {
+        persistAuthorization: true,
+        docExpansion: 'list',
+        filter: true,
+        displayRequestDuration: true,
+        tryItOutEnabled: true,
+        tagsSorter: (a: string, b: string) => {
+          const order = SWAGGER_TAG_ORDER as readonly string[];
+          const ai = order.indexOf(a);
+          const bi = order.indexOf(b);
+          return (ai === -1 ? 999 : ai) - (bi === -1 ? 999 : bi);
+        },
+      },
     });
   }
 

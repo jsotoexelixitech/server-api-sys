@@ -18,23 +18,13 @@ import { CollectionService } from './collection.service';
 import { CollectionSearchDto } from './dto/collection-search.dto';
 import { CollectionPaymentDto } from './dto/collection-payment.dto';
 import { Api401, ApiCommonErrors } from '../../common/swagger/api-error-responses';
+import {
+  APIKEY_HEADER,
+  RCV_COLLECTION_ACTIVATE_BODY,
+  RCV_COLLECTION_ACTIVATE_RESPONSE,
+} from '../../common/swagger/api-docs.constants';
 
-const APIKEY_HEADER = {
-  name: 'apikey',
-  description:
-    'Token del canal en `maclient_api`. Obligatorio en producción; en QA interno puede omitirse.',
-  required: false,
-};
-
-const ACTIVATE_BODY_EXAMPLE = {
-  cnrecibo: '18-100272044',
-  mpago: 7.24,
-  xreferencia: '219551279300',
-  fpago: '2026-07-14',
-  cbanco_ref: '0134',
-};
-
-@ApiTags('Cobranza (Collection)')
+@ApiTags('4. Cobranza (Collection)')
 @Controller('v1/external/collection')
 export class CollectionController {
   constructor(private readonly collectionService: CollectionService) {}
@@ -43,8 +33,8 @@ export class CollectionController {
   @HttpCode(HttpStatus.OK)
   @ApiOperation({
     summary: 'Buscar recibos pendientes por RIF/cédula',
-    description:
-      'Ejecuta `spSearchForCustomerByReceipt`. Devuelve recibos con `iestadorec` pendiente de cobro para el cliente.',
+    description: 'Opcional. Ejecuta `spSearchForCustomerByReceipt` para listar recibos sin cobrar.',
+    operationId: 'collectionSearchByClient',
   })
   @ApiBody({ type: CollectionSearchDto })
   @ApiResponse({
@@ -107,7 +97,7 @@ export class CollectionController {
       '(banco origen/destino, `ctipopago`, `freporte`). Alineado con SysIP `collectReceip`.',
   })
   @ApiHeader(APIKEY_HEADER)
-  @ApiBody({ type: CollectionPaymentDto, examples: { pagoMovil: { value: ACTIVATE_BODY_EXAMPLE } } })
+  @ApiBody({ type: CollectionPaymentDto, examples: { pagoMovil: { value: RCV_COLLECTION_ACTIVATE_BODY } } })
   @ApiResponse({
     status: 200,
     schema: {
@@ -139,43 +129,29 @@ export class CollectionController {
   @HttpCode(HttpStatus.OK)
   @ApiSecurity('apikey')
   @ApiOperation({
-    summary: 'Activar recibo tras pago bancario (recomendado Exélixi)',
+    summary: 'Paso 7 · Activar recibo tras pago (recomendado Exélixi)',
     description:
-      'Endpoint usado por **emision-api** tras emitir la póliza. ' +
-      'Flujo validado en QA (ingreso #183034):\n' +
-      '1. `buildCollectionPayload` — resuelve bancos desde `pago_movil` / referencia\n' +
-      '2. `spCobroSis_Ad` — crea ingreso en `cbreporte_tran` y marca recibo cobrado\n' +
-      '3. UPSERT en `cbreporte_pago` — banco origen, banco destino (35), `ctipopago` (3), `freporte`\n\n' +
-      'No ejecuta `spNotificaPago`. PDF ingreso de caja: `/sis2000/ingreso_caja/{transaccion}/`.',
+      'Usado por **emision-api** tras emitir. Flujo validado QA (ingreso **#183034**):\n\n' +
+      '1. `buildCollectionPayload` — bancos desde `pago_movil`\n' +
+      '2. `spCobroSis_Ad` — ingreso en `cbreporte_tran`\n' +
+      '3. UPSERT `cbreporte_pago` — banco origen/destino, `ctipopago`=3, `freporte`\n\n' +
+      'PDF: `https://qaapi.lamundialdeseguros.com/sis2000/ingreso_caja/{transaccion}/`',
+    operationId: 'rcvActivateReceipt',
   })
   @ApiHeader(APIKEY_HEADER)
   @ApiBody({
     type: CollectionPaymentDto,
     examples: {
       pagoMovil: {
-        summary: 'Pago móvil verificado (caso Exélixi)',
-        value: ACTIVATE_BODY_EXAMPLE,
+        summary: 'Pago móvil verificado (caso Exélixi jul-2026)',
+        value: RCV_COLLECTION_ACTIVATE_BODY,
       },
     },
   })
   @ApiResponse({
     status: 200,
     description: 'Recibo cobrado; ingreso de caja generado.',
-    schema: {
-      example: {
-        status: true,
-        result: {
-          message: 'Recibo cobrado exitosamente.',
-          cobro: {
-            transaccion: 183034,
-            cnpoliza: '18-1-0000078926',
-            fanopol: 2026,
-            fmespol: 7,
-            mensaje: 'Cobro realizado.',
-          },
-        },
-      },
-    },
+    schema: { example: RCV_COLLECTION_ACTIVATE_RESPONSE },
   })
   @Api401()
   @ApiCommonErrors()

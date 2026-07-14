@@ -5,11 +5,12 @@ import { GetCitiesDto } from './dto/get-cities.dto';
 import { GetCotizacionAutoDto } from './dto/get-cotizacion-auto.dto';
 import { ValrepService } from './valrep.service';
 import { Api500, ApiCommonErrors } from '../../common/swagger/api-error-responses';
+import { RCV_COTIZACION_EXAMPLE } from '../../common/swagger/api-docs.constants';
 
 import { PersonasService } from '../personas/personas.service';
 import { GetPlanesPerDto } from '../personas/dto/get-planes-per.dto';
 
-@ApiTags('valrep')
+@ApiTags('2. Catálogos y cotización (valrep)')
 @Controller('v1/valrep')
 export class ValrepController {
   constructor(
@@ -69,7 +70,11 @@ export class ValrepController {
   // ── GET /api/v1/valrep/states ───────────────────────────────────────────
 
   @Get('states')
-  @ApiOperation({ summary: 'Lista de estados de Venezuela', description: 'Consulta `maestados` en Sis2000. Reemplaza el proxy a La Mundial.' })
+  @ApiOperation({
+    summary: 'Paso 2a · Estados de Venezuela',
+    description: 'Consulta `maestados` (cpais=58). Usar `cestado` en `/cities`.',
+    operationId: 'valrepStates',
+  })
   @ApiResponse({
     status: 200,
     schema: { example: { status: true, data: { states: [{ cestado: 1, xdescripcion_l: 'Distrito Capital' }, { cestado: 2, xdescripcion_l: 'Amazonas' }] } } },
@@ -83,7 +88,11 @@ export class ValrepController {
   // ── GET /api/v1/valrep/cities ───────────────────────────────────────────
 
   @Get('cities')
-  @ApiOperation({ summary: 'Lista de ciudades de Venezuela', description: 'Consulta `maciudades`. Si se pasa `cestado` filtra por estado.' })
+  @ApiOperation({
+    summary: 'Paso 2b · Ciudades por estado',
+    description: 'Consulta `maciudades`. Omitir `cestado` para listar todas.',
+    operationId: 'valrepCities',
+  })
   @ApiQuery({ name: 'cestado', required: false, type: Number, example: 1, description: 'Código de estado (de /states). Omitir para todas.' })
   @ApiResponse({ status: 200, schema: { example: { status: true, data: { cities: [{ cciudad: 128, xdescripcion_l: 'Caracas' }] } } } })
   @ApiCommonErrors()
@@ -139,10 +148,11 @@ export class ValrepController {
   @Post('planes/v2')
   @HttpCode(HttpStatus.OK)
   @ApiOperation({
-    summary: 'Planes disponibles (v2)',
+    summary: 'Paso 3 · Planes RCV disponibles',
     description:
-      'Ejecuta `spBuscaPlan` y enriquece con parentescos y coberturas. ' +
-      'Réplica del Express original con todos los bugs corregidos (queries parametrizadas, catch vacíos eliminados).',
+      'Ejecuta `spBuscaPlan` + parentescos y coberturas. ' +
+      'El `cplan` devuelto se usa en `POST /valrep/cotizacion`.',
+    operationId: 'valrepPlanesV2',
   })
   @ApiBody({ type: GetPlanesV2Dto })
   @ApiResponse({
@@ -185,15 +195,17 @@ export class ValrepController {
   @Post('cotizacion')
   @HttpCode(HttpStatus.OK)
   @ApiOperation({
-    summary: 'Cotizar prima RCV (spCalculoAuto)',
+    summary: 'Paso 4 · Cotizar prima RCV',
     description:
-      'Llama a `spCalculoAuto` en Sis2000 con el código de plan real devuelto por `valrep/planes/v2`. ' +
-      'Acepta cualquier cplan válido en Sis2000 (no solo una lista fija).',
+      'Ejecuta `spCalculoAuto`. Requiere `cplan` de `planes/v2` y datos del vehículo (marca, modelo, año, suma asegurada).\n\n' +
+      '**Siguiente paso:** `POST /external/validateEmissionAuto`',
+    operationId: 'valrepCotizacionAuto',
   })
   @ApiBody({ type: GetCotizacionAutoDto })
   @ApiResponse({
     status: 200,
-    schema: { example: { status: true, data: { mprimaext: 119.65, mprima: 60853.02, ptasa: 508.6004 } } },
+    description: 'Prima calculada (Bs y USD).',
+    schema: { example: { status: true, data: RCV_COTIZACION_EXAMPLE } },
   })
   @ApiResponse({ status: 400, description: 'cplan inválido, datos del vehículo incorrectos o prima = 0.' })
   @Api500()
