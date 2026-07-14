@@ -70,42 +70,71 @@ async function bootstrap(): Promise<void> {
       customCssUrl: 'https://fonts.googleapis.com/css2?family=Inter:ital,wght@0,400;0,500;0,600;0,700;0,800;1,400&display=swap',
       customJsStr: `
 (function() {
-  var STEPS = [
-    { n: 1, short: 'Catálogo Vehículo',    tag: '1. Catálogo vehículo (inma)' },
-    { n: 2, short: 'Catálogos & Cotización', tag: '2. Catálogos y cotización (valrep)' },
-    { n: 3, short: 'Emisión RCV',           tag: '3. Emisión RCV' },
-    { n: 4, short: 'Cobranza RCV',          tag: '4. Cobranza RCV' },
-    { n: 5, short: 'Documentos',            tag: '5. Documentos (post-emisión)' },
+  var SECTIONS = [
+    { label: 'Catálogo de Vehículos',     tag: '1. Catálogo vehículo (inma)' },
+    { label: 'Catálogos y Cotización',    tag: '2. Catálogos y cotización (valrep)' },
+    { label: 'Emisión RCV',               tag: '3. Emisión RCV' },
+    { label: 'Cobranza RCV',             tag: '4. Cobranza RCV' },
+    { label: 'Documentos',               tag: '5. Documentos (post-emisión)' },
   ];
+
+  /* ── Hamburger toggle (móvil) ───────────────────────────── */
+  function buildToggle() {
+    if (document.getElementById('exelixi-toggle')) return;
+    var btn = document.createElement('button');
+    btn.id = 'exelixi-toggle';
+    btn.setAttribute('aria-label', 'Abrir menú');
+    btn.innerHTML = '<span></span><span></span><span></span>';
+    document.body.appendChild(btn);
+    btn.addEventListener('click', function() {
+      var nav = document.getElementById('exelixi-sidebar');
+      var overlay = document.getElementById('exelixi-overlay');
+      if (nav) nav.classList.toggle('open');
+      if (overlay) overlay.classList.toggle('visible');
+    });
+    var ov = document.createElement('div');
+    ov.id = 'exelixi-overlay';
+    ov.addEventListener('click', function() {
+      var nav = document.getElementById('exelixi-sidebar');
+      if (nav) nav.classList.remove('open');
+      ov.classList.remove('visible');
+    });
+    document.body.appendChild(ov);
+  }
 
   /* ── Sidebar ────────────────────────────────────────────── */
   function buildSidebar() {
     if (document.getElementById('exelixi-sidebar')) return;
     var nav = document.createElement('nav');
     nav.id = 'exelixi-sidebar';
+    nav.setAttribute('aria-label', 'Navegación de documentación');
+
     nav.innerHTML =
       '<div class="sb-brand">'
       + '<span class="sb-bolt">&#9889;</span>'
-      + '<div><div class="sb-name">Exélixi</div><div class="sb-env">QA &middot; RCV Sis2000</div></div>'
+      + '<div><div class="sb-name">Exélixi API</div><div class="sb-tagline">RCV &rarr; Sis2000</div></div>'
       + '</div>'
-      + '<div class="sb-section-label">FLUJO DE EMISIÓN</div>'
-      + STEPS.map(function(s, i) {
-          return '<a class="sb-item" data-tag="' + s.tag + '" href="#" onclick="return false;">'
-            + '<div class="sb-num-wrap"><div class="sb-num">' + s.n + '</div>'
-            + (i < STEPS.length - 1 ? '<div class="sb-line"></div>' : '') + '</div>'
-            + '<div class="sb-label-wrap"><div class="sb-step-label">' + s.short + '</div></div>'
-            + '</a>';
+      + '<div class="sb-search-wrap"><input class="sb-search" placeholder="Buscar sección..." type="text" /></div>'
+      + '<div class="sb-nav-label">MÓDULOS</div>'
+      + '<ul class="sb-list">'
+      + SECTIONS.map(function(s) {
+          return '<li><a class="sb-item" data-tag="' + s.tag + '" href="#" onclick="return false;">'
+            + '<span class="sb-dot"></span>'
+            + '<span class="sb-label">' + s.label + '</span>'
+            + '</a></li>';
         }).join('')
+      + '</ul>'
       + '<div class="sb-spacer"></div>'
-      + '<div class="sb-bottom">'
-      + '<div class="sb-ver">API v3.0</div>'
-      + '<div class="sb-env-tags">'
-      + '<a class="sb-env-tag active" href="#">QA</a>'
-      + '<a class="sb-env-tag" href="#">PROD</a>'
+      + '<div class="sb-footer">'
+      + '<div class="sb-ver-row"><span class="sb-ver-label">Versión</span><span class="sb-ver-val">v3.0</span></div>'
+      + '<div class="sb-env-row">'
+      + '<a class="sb-env-badge active" href="#">QA</a>'
+      + '<a class="sb-env-badge" href="#">PROD</a>'
       + '</div></div>';
+
     document.body.insertBefore(nav, document.body.firstChild);
 
-    /* scroll spy */
+    /* Scroll spy */
     var io = new IntersectionObserver(function(entries) {
       entries.forEach(function(e) {
         if (e.isIntersecting) {
@@ -115,7 +144,7 @@ async function bootstrap(): Promise<void> {
           });
         }
       });
-    }, { rootMargin: '-80px 0px -50% 0px', threshold: 0 });
+    }, { rootMargin: '-80px 0px -55% 0px', threshold: 0 });
 
     setTimeout(function() {
       document.querySelectorAll('.opblock-tag[data-tag]').forEach(function(el) { io.observe(el); });
@@ -123,54 +152,60 @@ async function bootstrap(): Promise<void> {
       if (first) first.classList.add('active');
     }, 2000);
 
-    /* click → scroll */
+    /* Click → scroll */
     nav.querySelectorAll('.sb-item').forEach(function(el) {
       el.addEventListener('click', function(e) {
         e.preventDefault();
         var tag = el.getAttribute('data-tag');
         var target = document.querySelector('.opblock-tag[data-tag="' + tag + '"]');
-        if (target) window.scrollTo({ top: target.getBoundingClientRect().top + window.scrollY - 72, behavior: 'smooth' });
+        if (target) window.scrollTo({ top: target.getBoundingClientRect().top + window.scrollY - 60, behavior: 'smooth' });
         nav.querySelectorAll('.sb-item').forEach(function(x) { x.classList.remove('active'); });
         el.classList.add('active');
+        /* cerrar en móvil */
+        nav.classList.remove('open');
+        var ov = document.getElementById('exelixi-overlay');
+        if (ov) ov.classList.remove('visible');
       });
     });
+
+    /* Filtro de búsqueda */
+    var searchInput = nav.querySelector('.sb-search');
+    if (searchInput) {
+      searchInput.addEventListener('input', function() {
+        var q = searchInput.value.toLowerCase();
+        nav.querySelectorAll('.sb-item').forEach(function(el) {
+          var text = el.querySelector('.sb-label') ? el.querySelector('.sb-label').textContent.toLowerCase() : '';
+          el.parentElement.style.display = text.includes(q) ? '' : 'none';
+        });
+      });
+    }
   }
 
-  /* ── Flow stepper banner ────────────────────────────────── */
-  function buildFlowBanner() {
-    if (document.getElementById('exelixi-flow')) return;
-    var wrapper = document.querySelector('#swagger-ui .wrapper') || document.querySelector('.swagger-ui .wrapper');
-    if (!wrapper) return;
-    var banner = document.createElement('div');
-    banner.id = 'exelixi-flow';
-    banner.innerHTML = '<div class="ef-title">Flujo de Emisión RCV &mdash; 5 pasos</div><div class="ef-steps">'
-      + STEPS.map(function(s, i) {
-          return '<div class="ef-step"><div class="ef-circle">' + s.n + '</div><div class="ef-slabel">' + s.short + '</div></div>'
-            + (i < STEPS.length - 1 ? '<div class="ef-arrow">&#8594;</div>' : '');
-        }).join('')
-      + '</div>';
-    wrapper.insertBefore(banner, wrapper.firstChild);
-  }
-
-  /* ── PASO badges en secciones ───────────────────────────── */
-  function addBadges() {
+  /* ── Limpiar prefijos numéricos de las secciones ────────── */
+  function cleanSectionTitles() {
     document.querySelectorAll('.opblock-tag[data-tag]').forEach(function(el) {
-      if (el.querySelector('.exelixi-pb')) return;
-      var tag = el.getAttribute('data-tag') || '';
-      var m = tag.match(/^(\\d+)\\./);
-      if (!m) return;
-      var b = document.createElement('span');
-      b.className = 'exelixi-pb';
-      b.textContent = 'PASO ' + m[1];
-      var anchor = el.querySelector('span') || el.querySelector('a');
-      if (anchor) anchor.prepend(b);
+      if (el.getAttribute('data-cleaned')) return;
+      var anchor = el.querySelector('a') || el.querySelector('span.nostyle');
+      if (!anchor) return;
+      var textNode = Array.from(anchor.childNodes).find(function(n) { return n.nodeType === 3; });
+      if (textNode) {
+        textNode.textContent = textNode.textContent.replace(/^\\d+\\.\\s*/, '');
+      }
+      el.setAttribute('data-cleaned', '1');
     });
   }
 
-  var obs = new MutationObserver(function() { buildSidebar(); buildFlowBanner(); addBadges(); });
+  var built = false;
+  var obs = new MutationObserver(function() {
+    if (!built) { buildToggle(); buildSidebar(); built = true; }
+    cleanSectionTitles();
+  });
   obs.observe(document.body, { childList: true, subtree: true });
-  setTimeout(function() { buildSidebar(); buildFlowBanner(); addBadges(); }, 800);
-  setTimeout(function() { buildFlowBanner(); addBadges(); }, 2500);
+  setTimeout(function() {
+    if (!built) { buildToggle(); buildSidebar(); built = true; }
+    cleanSectionTitles();
+  }, 800);
+  setTimeout(cleanSectionTitles, 2500);
 })();
       `,
       customCss: `
@@ -235,83 +270,92 @@ async function bootstrap(): Promise<void> {
           margin-top: 3px; font-family: 'Inter', sans-serif;
         }
 
-        /* Section label */
-        .sb-section-label {
-          color: rgba(255,255,255,0.3); font-size: 0.6rem; font-weight: 700;
-          letter-spacing: 0.15em; text-transform: uppercase;
-          padding: 16px 16px 6px; font-family: 'Inter', sans-serif;
-          flex-shrink: 0;
+        /* Search */
+        .sb-search-wrap { padding: 10px 14px 4px; flex-shrink: 0; }
+        .sb-search {
+          width: 100%; padding: 7px 10px;
+          background: rgba(255,255,255,0.07);
+          border: 1px solid rgba(255,255,255,0.1);
+          border-radius: 7px; color: #fff; font-size: 0.8rem;
+          font-family: 'Inter', sans-serif; outline: none;
+          transition: border 0.2s, background 0.2s;
+        }
+        .sb-search::placeholder { color: rgba(255,255,255,0.3); }
+        .sb-search:focus { border-color: #0e6ba8; background: rgba(14,107,168,0.15); }
+
+        /* Nav label */
+        .sb-nav-label {
+          color: rgba(255,255,255,0.28); font-size: 0.58rem; font-weight: 700;
+          letter-spacing: 0.16em; text-transform: uppercase;
+          padding: 14px 16px 4px; font-family: 'Inter', sans-serif; flex-shrink: 0;
         }
 
-        /* Step items */
+        /* Nav list */
+        .sb-list { list-style: none; margin: 0; padding: 0; flex-shrink: 0; }
+        .sb-list li { margin: 0; }
+
+        /* Nav items */
         .sb-item {
-          display: flex; align-items: flex-start; gap: 0;
-          padding: 0 16px 0 14px;
-          text-decoration: none !important;
-          cursor: pointer; position: relative;
+          display: flex; align-items: center; gap: 10px;
+          padding: 10px 16px 10px 14px;
+          text-decoration: none !important; cursor: pointer;
           border-left: 3px solid transparent;
-          transition: border-color 0.2s, background 0.2s;
-          flex-shrink: 0;
+          transition: background 0.15s, border-color 0.15s;
         }
-        .sb-item:hover { background: rgba(255,255,255,0.05); border-left-color: rgba(14,107,168,0.6); }
-        .sb-item.active { background: rgba(14,107,168,0.18); border-left-color: #0e6ba8; }
+        .sb-item:hover { background: rgba(255,255,255,0.06); border-left-color: rgba(14,107,168,0.5); }
+        .sb-item.active { background: rgba(14,107,168,0.2); border-left-color: #0e6ba8; }
 
-        .sb-num-wrap {
-          display: flex; flex-direction: column; align-items: center;
-          padding-top: 12px; margin-right: 10px;
-          flex-shrink: 0;
+        .sb-dot {
+          width: 7px; height: 7px; border-radius: 50%;
+          background: rgba(255,255,255,0.2); flex-shrink: 0;
+          transition: background 0.2s, box-shadow 0.2s;
         }
-        .sb-num {
-          width: 26px; height: 26px; border-radius: 50%;
-          background: rgba(255,255,255,0.1);
-          color: rgba(255,255,255,0.75); font-size: 0.72rem; font-weight: 800;
-          display: flex; align-items: center; justify-content: center;
-          transition: all 0.25s; font-family: 'Inter', sans-serif;
-          border: 1px solid rgba(255,255,255,0.12);
-          flex-shrink: 0;
-        }
-        .sb-item.active .sb-num {
-          background: #0e6ba8; color: #fff; border-color: #0e6ba8;
-          box-shadow: 0 0 14px rgba(14,107,168,0.7);
-        }
-        .sb-line {
-          width: 2px; flex: 1; min-height: 20px;
-          background: rgba(255,255,255,0.08);
-          margin-top: 4px;
-        }
+        .sb-item.active .sb-dot { background: #60a5fa; box-shadow: 0 0 8px rgba(96,165,250,0.7); }
+        .sb-item:hover .sb-dot { background: rgba(255,255,255,0.5); }
 
-        .sb-label-wrap { padding: 13px 0 13px; }
-        .sb-step-label {
-          color: rgba(255,255,255,0.6); font-size: 0.78rem; font-weight: 500;
-          line-height: 1.3; transition: color 0.2s; font-family: 'Inter', sans-serif;
+        .sb-label {
+          color: rgba(255,255,255,0.6); font-size: 0.8rem; font-weight: 500;
+          line-height: 1.3; transition: color 0.15s; font-family: 'Inter', sans-serif;
         }
-        .sb-item:hover .sb-step-label { color: rgba(255,255,255,0.9); }
-        .sb-item.active .sb-step-label { color: #fff; font-weight: 600; }
+        .sb-item:hover .sb-label { color: rgba(255,255,255,0.92); }
+        .sb-item.active .sb-label { color: #fff; font-weight: 600; }
 
-        /* Bottom */
-        .sb-spacer { flex: 1; }
-        .sb-bottom {
-          padding: 14px 16px;
-          border-top: 1px solid rgba(255,255,255,0.07);
-          flex-shrink: 0;
-        }
-        .sb-ver {
+        /* Footer */
+        .sb-spacer { flex: 1; min-height: 16px; }
+        .sb-footer { padding: 12px 16px; border-top: 1px solid rgba(255,255,255,0.07); flex-shrink: 0; }
+        .sb-ver-row { display: flex; justify-content: space-between; align-items: center; margin-bottom: 8px; }
+        .sb-ver-label {
           color: rgba(255,255,255,0.25); font-size: 0.62rem; font-weight: 600;
-          letter-spacing: 0.1em; text-transform: uppercase; margin-bottom: 8px;
-          font-family: 'Inter', sans-serif;
+          letter-spacing: 0.1em; text-transform: uppercase; font-family: 'Inter', sans-serif;
         }
-        .sb-env-tags { display: flex; gap: 6px; }
-        .sb-env-tag {
+        .sb-ver-val { color: #60a5fa; font-size: 0.68rem; font-weight: 700; font-family: 'Inter', sans-serif; }
+        .sb-env-row { display: flex; gap: 6px; }
+        .sb-env-badge {
           color: rgba(255,255,255,0.4) !important; font-size: 0.68rem; font-weight: 600;
-          padding: 3px 10px; border-radius: 4px;
-          border: 1px solid rgba(255,255,255,0.12);
-          text-decoration: none !important; transition: all 0.2s;
-          font-family: 'Inter', sans-serif;
+          padding: 3px 10px; border-radius: 5px; border: 1px solid rgba(255,255,255,0.12);
+          text-decoration: none !important; transition: all 0.2s; font-family: 'Inter', sans-serif;
         }
-        .sb-env-tag.active, .sb-env-tag:hover {
-          color: #fff !important; border-color: #0e6ba8;
-          background: rgba(14,107,168,0.35);
+        .sb-env-badge.active, .sb-env-badge:hover {
+          color: #fff !important; border-color: #0e6ba8; background: rgba(14,107,168,0.4);
         }
+
+        /* ── Hamburger toggle ──────────────────────────────────── */
+        #exelixi-toggle {
+          display: none; position: fixed; top: 10px; left: 12px; z-index: 800;
+          background: #0f2544; border: 1px solid rgba(255,255,255,0.15);
+          border-radius: 8px; padding: 8px 10px; cursor: pointer;
+          flex-direction: column; gap: 5px; align-items: center;
+          box-shadow: 0 3px 12px rgba(0,0,0,0.4);
+        }
+        #exelixi-toggle span {
+          display: block; width: 20px; height: 2px;
+          background: #fff; border-radius: 2px; transition: all 0.25s;
+        }
+        #exelixi-overlay {
+          display: none; position: fixed; inset: 0;
+          background: rgba(0,0,0,0.5); z-index: 550;
+        }
+        #exelixi-overlay.visible { display: block; }
 
         /* ════════════════════════════════════════════════════════
            LAYOUT — push content right
@@ -320,56 +364,6 @@ async function bootstrap(): Promise<void> {
           margin-left: 210px !important;
           width: calc(100% - 210px) !important;
           min-height: 100vh;
-        }
-
-        /* ════════════════════════════════════════════════════════
-           FLOW BANNER
-        ════════════════════════════════════════════════════════ */
-        #exelixi-flow {
-          background: #fff;
-          border-radius: 14px;
-          padding: 18px 24px 20px;
-          margin: 16px 0 20px;
-          box-shadow: 0 2px 12px rgba(15,37,68,0.08);
-          border: 1px solid #e2e8f0;
-        }
-        .ef-title {
-          font-size: 0.67rem; font-weight: 700; letter-spacing: 0.12em;
-          text-transform: uppercase; color: #9ca3af;
-          margin-bottom: 14px; font-family: 'Inter', sans-serif;
-        }
-        .ef-steps { display: flex; align-items: flex-start; gap: 6px; flex-wrap: wrap; }
-        .ef-step { display: flex; flex-direction: column; align-items: center; gap: 7px; }
-        .ef-circle {
-          width: 38px; height: 38px; border-radius: 50%;
-          background: linear-gradient(135deg, #0f2544 0%, #0e6ba8 100%);
-          color: #fff; font-size: 0.9rem; font-weight: 800;
-          display: flex; align-items: center; justify-content: center;
-          box-shadow: 0 3px 12px rgba(14,107,168,0.35);
-          font-family: 'Inter', sans-serif;
-        }
-        .ef-slabel {
-          font-size: 0.66rem; font-weight: 600; color: #4b5563;
-          text-align: center; max-width: 75px; line-height: 1.25;
-          font-family: 'Inter', sans-serif;
-        }
-        .ef-arrow {
-          color: #0e6ba8; font-size: 1.3rem; opacity: 0.55;
-          margin-top: 10px; flex-shrink: 0;
-        }
-
-        /* ════════════════════════════════════════════════════════
-           PASO badge
-        ════════════════════════════════════════════════════════ */
-        .exelixi-pb {
-          display: inline-flex; align-items: center;
-          background: linear-gradient(90deg, #0f2544, #0e6ba8);
-          color: #fff; font-size: 0.58rem; font-weight: 800;
-          letter-spacing: 0.12em; padding: 2px 9px;
-          border-radius: 20px; margin-right: 10px;
-          vertical-align: middle; text-transform: uppercase;
-          font-family: 'Inter', sans-serif;
-          box-shadow: 0 1px 5px rgba(14,107,168,0.4);
         }
 
         /* ════════════════════════════════════════════════════════
@@ -767,6 +761,68 @@ async function bootstrap(): Promise<void> {
         @keyframes fadeSlide {
           from { opacity: 0; transform: translateY(-6px); }
           to   { opacity: 1; transform: translateY(0); }
+        }
+
+        /* ════════════════════════════════════════════════════════
+           RESPONSIVE
+        ════════════════════════════════════════════════════════ */
+
+        /* Tablet: sidebar más angosta */
+        @media (max-width: 1024px) and (min-width: 769px) {
+          #exelixi-sidebar { width: 180px; }
+          #swagger-ui { margin-left: 180px !important; width: calc(100% - 180px) !important; }
+          .sb-name { font-size: 0.95rem; }
+          .sb-label { font-size: 0.75rem; }
+        }
+
+        /* Móvil: sidebar oculta, toggle visible */
+        @media (max-width: 768px) {
+          #exelixi-sidebar {
+            width: 240px;
+            transform: translateX(-100%);
+            transition: transform 0.3s ease;
+            z-index: 700;
+          }
+          #exelixi-sidebar.open { transform: translateX(0); }
+
+          #swagger-ui {
+            margin-left: 0 !important;
+            width: 100% !important;
+          }
+
+          #exelixi-toggle {
+            display: flex !important;
+          }
+
+          .swagger-ui .topbar .topbar-wrapper {
+            padding-left: 56px !important;
+          }
+
+          .swagger-ui .information-container {
+            padding: 20px 16px 16px !important;
+          }
+
+          .swagger-ui .info .title { font-size: 1.4rem !important; }
+
+          .swagger-ui .opblock-tag {
+            padding: 12px 14px !important;
+          }
+
+          .swagger-ui .opblock-summary-path {
+            font-size: 0.78rem !important;
+            word-break: break-all;
+          }
+
+          .swagger-ui .wrapper { padding: 0 12px 32px; }
+        }
+
+        /* Móvil pequeño */
+        @media (max-width: 480px) {
+          .swagger-ui .opblock-summary-method {
+            min-width: 52px !important;
+            font-size: 0.65rem !important;
+          }
+          .swagger-ui .info .title { font-size: 1.2rem !important; }
         }
       `,
       swaggerOptions: {
