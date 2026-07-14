@@ -66,13 +66,169 @@ async function bootstrap(): Promise<void> {
     const document = SwaggerModule.createDocument(app, swaggerConfig);
     SwaggerModule.setup(swaggerPath, app, document, {
       customSiteTitle: 'Exelixi · RCV Sis2000 API',
+      customfavIcon: 'https://exelixitech.com/favicon.ico',
+      customCss: `
+        /* ── Barra superior ─────────────────────────────────── */
+        .swagger-ui .topbar {
+          background: linear-gradient(135deg, #0f2544 0%, #1a3a6b 60%, #0e6ba8 100%);
+          padding: 10px 0;
+          box-shadow: 0 2px 8px rgba(0,0,0,0.35);
+        }
+        .swagger-ui .topbar .topbar-wrapper {
+          align-items: center;
+          gap: 16px;
+        }
+        .swagger-ui .topbar .topbar-wrapper img {
+          display: none;
+        }
+        .swagger-ui .topbar .topbar-wrapper::before {
+          content: 'Exélixi · RCV → Sis2000';
+          color: #ffffff;
+          font-size: 1.2rem;
+          font-weight: 700;
+          letter-spacing: 0.03em;
+          padding-left: 24px;
+          font-family: 'Inter', 'Segoe UI', sans-serif;
+        }
+        /* ── Título y descripción ────────────────────────────── */
+        .swagger-ui .info .title {
+          color: #0f2544;
+          font-size: 2rem;
+          font-weight: 800;
+        }
+        .swagger-ui .info .description p {
+          font-size: 0.93rem;
+          color: #374151;
+          line-height: 1.6;
+        }
+        .swagger-ui .info .description table {
+          border-collapse: collapse;
+          width: 100%;
+          margin: 12px 0;
+          font-size: 0.88rem;
+        }
+        .swagger-ui .info .description th {
+          background: #0f2544;
+          color: #fff;
+          padding: 7px 12px;
+          text-align: left;
+        }
+        .swagger-ui .info .description td {
+          padding: 6px 12px;
+          border-bottom: 1px solid #e5e7eb;
+        }
+        .swagger-ui .info .description tr:nth-child(even) td {
+          background: #f0f5ff;
+        }
+        /* ── Versión badge ───────────────────────────────────── */
+        .swagger-ui .info .version-stamp .version {
+          background: #0e6ba8;
+          color: #fff;
+          border-radius: 4px;
+          padding: 2px 8px;
+          font-size: 0.75rem;
+          font-weight: 600;
+        }
+        /* ── Tags / secciones ────────────────────────────────── */
+        .swagger-ui .opblock-tag {
+          background: #f0f5ff;
+          border-left: 4px solid #0e6ba8 !important;
+          border-radius: 6px !important;
+          margin-bottom: 6px !important;
+          font-size: 1rem !important;
+          font-weight: 700 !important;
+          color: #0f2544 !important;
+          padding: 10px 16px !important;
+          transition: background 0.2s;
+        }
+        .swagger-ui .opblock-tag:hover {
+          background: #dbeafe !important;
+        }
+        .swagger-ui .opblock-tag small {
+          color: #6b7280;
+          font-weight: 400;
+          font-size: 0.8rem;
+        }
+        /* ── Bloques de endpoint POST ────────────────────────── */
+        .swagger-ui .opblock.opblock-post {
+          border-color: #0e6ba8 !important;
+          background: #f0f8ff !important;
+          border-radius: 6px !important;
+          margin-bottom: 4px !important;
+        }
+        .swagger-ui .opblock.opblock-post .opblock-summary-method {
+          background: #0e6ba8 !important;
+          border-radius: 4px;
+          font-weight: 700;
+          font-size: 0.78rem;
+          min-width: 64px;
+        }
+        /* ── Bloques GET ─────────────────────────────────────── */
+        .swagger-ui .opblock.opblock-get {
+          border-color: #059669 !important;
+          background: #f0fdf4 !important;
+          border-radius: 6px !important;
+          margin-bottom: 4px !important;
+        }
+        .swagger-ui .opblock.opblock-get .opblock-summary-method {
+          background: #059669 !important;
+          border-radius: 4px;
+          font-weight: 700;
+          font-size: 0.78rem;
+          min-width: 64px;
+        }
+        /* ── Botones ─────────────────────────────────────────── */
+        .swagger-ui .btn.execute {
+          background: #0f2544 !important;
+          color: #fff !important;
+          border: none !important;
+          border-radius: 5px !important;
+          font-weight: 700;
+          letter-spacing: 0.03em;
+          padding: 7px 22px !important;
+        }
+        .swagger-ui .btn.execute:hover {
+          background: #0e6ba8 !important;
+        }
+        .swagger-ui .btn.authorize {
+          border-color: #0e6ba8 !important;
+          color: #0e6ba8 !important;
+          border-radius: 5px !important;
+          font-weight: 600;
+        }
+        .swagger-ui .btn.authorize svg { fill: #0e6ba8; }
+        /* ── Código de respuesta ─────────────────────────────── */
+        .swagger-ui .response-col_status .response-undocumented {
+          color: #6b7280;
+        }
+        .swagger-ui table.responses-table .response-col_status {
+          font-weight: 700;
+          color: #0f2544;
+        }
+        /* ── Scrollbar sutil ─────────────────────────────────── */
+        ::-webkit-scrollbar { width: 6px; height: 6px; }
+        ::-webkit-scrollbar-track { background: #f1f5f9; }
+        ::-webkit-scrollbar-thumb { background: #0e6ba8; border-radius: 3px; }
+        /* ── Fondo general ───────────────────────────────────── */
+        body { background: #f8fafc; }
+        .swagger-ui { font-family: 'Inter', 'Segoe UI', Arial, sans-serif; }
+        /* ── Schemas al pie ──────────────────────────────────── */
+        .swagger-ui section.models {
+          border: 1px solid #e2e8f0;
+          border-radius: 8px;
+          background: #fff;
+        }
+        .swagger-ui section.models h4 {
+          color: #0f2544;
+          font-weight: 700;
+        }
+      `,
       swaggerOptions: {
         persistAuthorization: true,
         docExpansion: 'list',
         filter: true,
         displayRequestDuration: true,
         tryItOutEnabled: true,
-        // Array literal inline: swagger-ui-init.js se ejecuta en el browser sin imports Node.
         tagsSorter: (a: string, b: string) => {
           const order = [
             '1. Catálogo vehículo (inma)',
