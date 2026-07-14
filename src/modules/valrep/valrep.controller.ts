@@ -1,8 +1,9 @@
-import { Body, Controller, Get, HttpCode, HttpStatus, Post, Query, BadRequestException } from '@nestjs/common';
+import { Body, Controller, Get, HttpCode, HttpStatus, Post, Query } from '@nestjs/common';
 import { ApiBody, ApiExcludeEndpoint, ApiOperation, ApiQuery, ApiResponse, ApiTags } from '@nestjs/swagger';
 import { GetPlanesV2Dto } from './dto/get-planes-v2.dto';
 import { GetCitiesDto } from './dto/get-cities.dto';
 import { GetCotizacionAutoDto } from './dto/get-cotizacion-auto.dto';
+import { GetFrecuenciaDto } from './dto/get-frecuencia.dto';
 import { ValrepService } from './valrep.service';
 import { Api500, ApiCommonErrors } from '../../common/swagger/api-error-responses';
 import { RCV_COTIZACION_EXAMPLE } from '../../common/swagger/api-docs.constants';
@@ -152,7 +153,7 @@ export class ValrepController {
     summary: 'Paso 3 · Planes RCV disponibles',
     description:
       'Ejecuta `spBuscaPlan` + parentescos y coberturas. ' +
-      'El `cplan` devuelto se usa en `POST /valrep/cotizacion`.',
+      'El `cplan` devuelto se usa en `POST /valrep/frecuencia` y luego en `POST /valrep/cotizacion`.',
     operationId: 'valrepPlanesV2',
   })
   @ApiBody({ type: GetPlanesV2Dto })
@@ -180,14 +181,33 @@ export class ValrepController {
   // ── POST /api/v1/valrep/frecuencia ─────────────────────────────────────
 
   @Post('frecuencia')
-  @ApiExcludeEndpoint()
   @HttpCode(HttpStatus.OK)
-  @ApiOperation({ summary: 'Obtener frecuencias de un plan', description: 'Devuelve las frecuencias válidas para un cplan desde maplanes_frec.' })
-  @ApiBody({ schema: { example: { cplan: 'FUNBAS' } } })
-  @ApiResponse({ status: 200, schema: { example: { status: true, data: { frecuencias: [{ cvalor: 'M', xdescripcion: 'MENSUAL' }] } } } })
+  @ApiOperation({
+    summary: 'Paso 3b · Frecuencias del plan',
+    description:
+      'Consulta `maplanes_frec` y devuelve las frecuencias de pago válidas para el `cplan` elegido en `planes/v2`.\n\n' +
+      '**Siguiente paso:** `POST /valrep/cotizacion` (usar `cvalor` como frecuencia en emisión).',
+    operationId: 'valrepFrecuencia',
+  })
+  @ApiBody({ type: GetFrecuenciaDto })
+  @ApiResponse({
+    status: 200,
+    schema: {
+      example: {
+        status: true,
+        data: {
+          frecuencias: [
+            { cvalor: 'A', xdescripcion: 'ANUAL' },
+            { cvalor: 'S', xdescripcion: 'SEMESTRAL' },
+            { cvalor: 'M', xdescripcion: 'MENSUAL' },
+          ],
+        },
+      },
+    },
+  })
+  @ApiResponse({ status: 400, description: 'cplan requerido o inválido' })
   @Api500()
-  async getFrecuencia(@Body() body: { cplan?: string }) {
-    if (!body.cplan) throw new BadRequestException('El parámetro cplan es requerido');
+  async getFrecuencia(@Body() body: GetFrecuenciaDto) {
     const frecuencias = await this.valrepService.getFrecuencia(body.cplan);
     return { status: true, data: { frecuencias } };
   }
@@ -199,7 +219,7 @@ export class ValrepController {
   @ApiOperation({
     summary: 'Paso 4 · Cotizar prima RCV',
     description:
-      'Ejecuta `spCalculoAuto`. Requiere `cplan` de `planes/v2` y datos del vehículo (marca, modelo, año, suma asegurada).\n\n' +
+      'Ejecuta `spCalculoAuto`. Requiere `cplan` de `planes/v2`, frecuencia de `frecuencia` y datos del vehículo (marca, modelo, año, suma asegurada).\n\n' +
       '**Siguiente paso:** `POST /external/validateEmissionAuto`',
     operationId: 'valrepCotizacionAuto',
   })

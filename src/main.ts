@@ -57,7 +57,7 @@ async function bootstrap(): Promise<void> {
       .addServer('http://192.168.8.120:3002', 'srv001 — QA/Producción Exélixi')
       .addServer('http://localhost:3002', 'Desarrollo local')
       .addTag('1. Catálogo vehículo (inma)', 'Paso 1 · `VInma`')
-      .addTag('2. Catálogos y cotización (valrep)', 'Pasos 2–4 · estados, planes, prima')
+      .addTag('2. Catálogos y cotización (valrep)', 'Pasos 2–4 · estados, planes, frecuencias, prima')
       .addTag('3. Emisión RCV', 'Pasos 5–6 · validar y emitir')
       .addTag('4. Cobranza RCV', 'Paso 7 · `activate` (ingreso de caja)')
       .addTag('5. Documentos (post-emisión)', 'Paso 8 · anexo conductor habitual')
