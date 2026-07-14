@@ -7,7 +7,6 @@ import { AllExceptionsFilter } from './common/filters/all-exceptions.filter';
 import { ResponseInterceptor } from './common/interceptors/response.interceptor';
 import {
   SWAGGER_API_DESCRIPTION,
-  SWAGGER_TAG_ORDER,
 } from './common/swagger/api-docs.constants';
 
 async function bootstrap(): Promise<void> {
@@ -77,8 +76,19 @@ async function bootstrap(): Promise<void> {
         filter: true,
         displayRequestDuration: true,
         tryItOutEnabled: true,
+        // Array literal inline: swagger-ui-init.js se ejecuta en el browser sin imports Node.
         tagsSorter: (a: string, b: string) => {
-          const order = SWAGGER_TAG_ORDER as readonly string[];
+          const order = [
+            '1. Catálogo vehículo (inma)',
+            '2. Catálogos y cotización (valrep)',
+            '3. Emisión Automóvil (RCV)',
+            '4. Cobranza (Collection)',
+            'personas',
+            'Emisión Personas (Funerario)',
+            'Documentos',
+            'app',
+            'client',
+          ];
           const ai = order.indexOf(a);
           const bi = order.indexOf(b);
           return (ai === -1 ? 999 : ai) - (bi === -1 ? 999 : bi);
