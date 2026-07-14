@@ -245,59 +245,25 @@ export class CollectionService {
   }
 
   /**
-   * Igual que SysIP buildcollectReceiptPayload + getPaymentData:
-   * cbanco_destino = hint canal (35 pago móvil) || maclient_api; ctipopago = maclient_api.
+   * Igual que SysIP buildcollectReceiptPayload: cbanco_destino del canal (35/31)
+   * y ctipopago de maclient_api — sin reemplazar por lookup en MABANCO_DESTINO.
    */
-  private async resolveDestinoSoporte(
+  private resolveDestinoSoporte(
     channelHint: number | null,
     client: ApiClientRow,
     body: CollectionPaymentDto,
-  ): Promise<MabancoDestinoPair> {
-    let cbanco_destino =
+  ): MabancoDestinoPair {
+    const cbanco_destino =
       channelHint ??
       (body.cbanco_destino != null ? Number(body.cbanco_destino) : null) ??
-      (client.cbanco_destino != null ? Number(client.cbanco_destino) : null);
+      (client.cbanco_destino != null ? Number(client.cbanco_destino) : null) ??
+      35;
 
-    let ctipopago =
+    const ctipopago =
       client.ctipopago != null
         ? Number(client.ctipopago)
         : parseInt(process.env.LAMUNDIAL_CTIPOPAGO ?? '3', 10);
 
-    const T = this.db.types;
-    const verify = this.db.request();
-    verify.input('bd', T.Numeric(18, 2), cbanco_destino);
-    verify.input('tp', T.Numeric(), ctipopago);
-    const pair = await verify.query(`
-      SELECT TOP 1 CBANCO_DESTINO, CTIPOPAGO
-      FROM MABANCO_DESTINO
-      WHERE BACTIVO = 1
-        AND CBANCO_DESTINO = @bd AND CTIPOPAGO = @tp
-    `);
-    if (pair.recordset.length) {
-      const row = pair.recordset[0] as Record<string, unknown>;
-      return {
-        cbanco_destino: Number(row['CBANCO_DESTINO']),
-        ctipopago: Number(row['CTIPOPAGO']),
-      };
-    }
-
-    const byTipo = this.db.request();
-    byTipo.input('tp', T.Numeric(), ctipopago);
-    const tipoRow = await byTipo.query(`
-      SELECT TOP 1 CBANCO_DESTINO, CTIPOPAGO
-      FROM MABANCO_DESTINO
-      WHERE BACTIVO = 1 AND CTIPOPAGO = @tp
-      ORDER BY CUSUARIOCREACION DESC
-    `);
-    if (tipoRow.recordset.length) {
-      const row = tipoRow.recordset[0] as Record<string, unknown>;
-      return {
-        cbanco_destino: Number(row['CBANCO_DESTINO']),
-        ctipopago: Number(row['CTIPOPAGO']),
-      };
-    }
-
-    if (cbanco_destino == null) cbanco_destino = 30;
     return { cbanco_destino, ctipopago };
   }
 
@@ -335,7 +301,7 @@ export class CollectionService {
       cbanco = await this.resolveCbancoFromRef(bancoOrigenRef);
     }
 
-    const destinoPair = await this.resolveDestinoSoporte(channelHint, client, body);
+    const destinoPair = this.resolveDestinoSoporte(channelHint, client, body);
 
     return {
       cbanco,
@@ -497,6 +463,11 @@ export class CollectionService {
 
     const cusuario = body.cusuario ?? client.cci_rif ?? 4;
 
+    this.logger.log(
+      `buildPayload cnrecibo=${body.cnrecibo} cbanco=${cbanco} cbanco_destino=${banks.cbanco_destino} ` +
+        `ctipopago=${banks.ctipopago} freporte=${fingresoOperacion.toISOString()}`,
+    );
+
     return {
       asegurados: [],
       cmoneda_pago: 'Bs',
@@ -643,7 +614,37 @@ export class CollectionService {
     }
   }
 
-  /** Notifica el pago (spNotificaPago QA: incluye @soporte, sin @cmoneda_pago). */
+  /** Verifica que cbreporte_pago tenga banco destino y fecha operación tras el cobro. */
+  private async verifySoporteGuardado(ctransaccion: number): Promise<void> {
+    const T = this.db.types;
+    const req = this.db.request();
+    req.input('ctransaccion', T.Numeric(18, 0), ctransaccion);
+    const result = await req.query(`
+      SELECT TOP 1 cbanco, cbanco_destino, ctipopago, freporte, fingreso, xreferencia
+      FROM cbreporte_pago WHERE ctransaccion = @ctransaccion
+    `);
+    if (!result.recordset.length) {
+      throw new BadRequestException(
+        `Ingreso ${ctransaccion}: no se creó fila en cbreporte_pago (soporte de pago).`,
+      );
+    }
+    const row = result.recordset[0] as Record<string, unknown>;
+    const incompleto =
+      row['cbanco_destino'] == null || row['ctipopago'] == null || row['freporte'] == null;
+    if (incompleto) {
+      this.logger.error(
+        `verifySoporte INCOMPLETO ctransaccion=${ctransaccion} ` +
+          `cbanco_destino=${row['cbanco_destino']} ctipopago=${row['ctipopago']} freporte=${row['freporte']}`,
+      );
+      throw new BadRequestException(
+        `Ingreso ${ctransaccion}: faltan banco destino, tipo pago o fecha operación en cbreporte_pago.`,
+      );
+    }
+    this.logger.log(
+      `verifySoporte OK ctransaccion=${ctransaccion} destino=${row['cbanco_destino']} ` +
+        `tipo=${row['ctipopago']} freporte=${row['freporte']}`,
+    );
+  }
   async notifyPayment(payload: CollectionPayload) {
     const T = this.db.types;
     const req = this.db.request();
@@ -793,6 +794,7 @@ export class CollectionService {
         payload.ctenedor,
         payload.fingresoOperacion,
       );
+      await this.verifySoporteGuardado(transaccion);
       if (payload.fingresoOperacion) {
         const T = this.db.types;
         const upd = this.db.request();
