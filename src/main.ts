@@ -70,27 +70,56 @@ async function bootstrap(): Promise<void> {
       customCssUrl: 'https://fonts.googleapis.com/css2?family=Inter:ital,wght@0,400;0,500;0,600;0,700;0,800;1,400&display=swap',
       customJsStr: `
 (function() {
-  var SECTIONS = [
-    { label: 'Catálogo de Vehículos',     tag: '1. Catálogo vehículo (inma)' },
-    { label: 'Catálogos y Cotización',    tag: '2. Catálogos y cotización (valrep)' },
-    { label: 'Emisión RCV',               tag: '3. Emisión RCV' },
-    { label: 'Cobranza RCV',             tag: '4. Cobranza RCV' },
-    { label: 'Documentos',               tag: '5. Documentos (post-emisión)' },
-  ];
+  /* ─────────────────────────────────────────────────────────
+     Lee los tags directamente del DOM de Swagger UI.
+     Funciona con cualquier número de secciones/APIs.
+  ───────────────────────────────────────────────────────── */
 
-  /* ── Hamburger toggle (móvil) ───────────────────────────── */
+  var HEADER_H = 38; /* altura del topbar */
+
+  /* Obtiene las secciones actuales del DOM */
+  function readSections() {
+    var seen = {};
+    var list = [];
+    document.querySelectorAll('.opblock-tag[data-tag]').forEach(function(el) {
+      var tag = el.getAttribute('data-tag');
+      if (!tag || seen[tag]) return;
+      seen[tag] = true;
+      var label = tag.replace(/^\\d+\\.\\s*/, '').trim();
+      list.push({ tag: tag, label: label, el: el });
+    });
+    return list;
+  }
+
+  /* Scroll al elemento de sección — usa scrollIntoView siempre */
+  function scrollTo(el) {
+    el.scrollIntoView({ behavior: 'smooth', block: 'start' });
+    /* compensar el topbar fijo */
+    setTimeout(function() { window.scrollBy(0, -HEADER_H - 4); }, 350);
+  }
+
+  /* Marca activo en sidebar */
+  function setActive(tag) {
+    var nav = document.getElementById('exelixi-sidebar');
+    if (!nav) return;
+    nav.querySelectorAll('.sb-item').forEach(function(el) {
+      el.classList.toggle('active', el.getAttribute('data-tag') === tag);
+    });
+  }
+
+  /* ── Toggle hamburguesa (móvil) ─────────────────────────── */
   function buildToggle() {
     if (document.getElementById('exelixi-toggle')) return;
     var btn = document.createElement('button');
     btn.id = 'exelixi-toggle';
-    btn.setAttribute('aria-label', 'Abrir menú');
+    btn.setAttribute('aria-label', 'Menú');
     btn.innerHTML = '<span></span><span></span><span></span>';
     document.body.appendChild(btn);
     btn.addEventListener('click', function() {
       var nav = document.getElementById('exelixi-sidebar');
-      var overlay = document.getElementById('exelixi-overlay');
+      var ov  = document.getElementById('exelixi-overlay');
       if (nav) nav.classList.toggle('open');
-      if (overlay) overlay.classList.toggle('visible');
+      if (ov)  ov.classList.toggle('visible');
     });
     var ov = document.createElement('div');
     ov.id = 'exelixi-overlay';
@@ -102,23 +131,33 @@ async function bootstrap(): Promise<void> {
     document.body.appendChild(ov);
   }
 
-  /* ── Sidebar ────────────────────────────────────────────── */
+  /* ── Construye o reconstruye el sidebar ─────────────────── */
+  var lastCount = 0;
   function buildSidebar() {
-    if (document.getElementById('exelixi-sidebar')) return;
+    var sections = readSections();
+    if (sections.length === 0) return;           /* aún no renderizó */
+    if (sections.length === lastCount) return;   /* sin cambios */
+    lastCount = sections.length;
+
+    var existing = document.getElementById('exelixi-sidebar');
+    if (existing) existing.remove();
+
     var nav = document.createElement('nav');
     nav.id = 'exelixi-sidebar';
-    nav.setAttribute('aria-label', 'Navegación de documentación');
 
     nav.innerHTML =
       '<div class="sb-brand">'
       + '<span class="sb-bolt">&#9889;</span>'
-      + '<div><div class="sb-name">Exélixi API</div><div class="sb-tagline">RCV &rarr; Sis2000</div></div>'
+      + '<div><div class="sb-name">Exélixi API</div>'
+      + '<div class="sb-tagline">Sis2000 · Documentación</div></div>'
       + '</div>'
-      + '<div class="sb-search-wrap"><input class="sb-search" placeholder="Buscar sección..." type="text" /></div>'
-      + '<div class="sb-nav-label">MÓDULOS</div>'
+      + '<div class="sb-search-wrap">'
+      + '<input class="sb-search" placeholder="&#128269; Buscar..." type="text" />'
+      + '</div>'
+      + '<div class="sb-nav-label">MÓDULOS (' + sections.length + ')</div>'
       + '<ul class="sb-list">'
-      + SECTIONS.map(function(s) {
-          return '<li><a class="sb-item" data-tag="' + s.tag + '" href="#" onclick="return false;">'
+      + sections.map(function(s) {
+          return '<li><a class="sb-item" data-tag="' + s.tag.replace(/"/g, '&quot;') + '">'
             + '<span class="sb-dot"></span>'
             + '<span class="sb-label">' + s.label + '</span>'
             + '</a></li>';
@@ -126,53 +165,29 @@ async function bootstrap(): Promise<void> {
       + '</ul>'
       + '<div class="sb-spacer"></div>'
       + '<div class="sb-footer">'
-      + '<div class="sb-ver-row"><span class="sb-ver-label">Versión</span><span class="sb-ver-val">v3.0</span></div>'
+      + '<div class="sb-ver-row">'
+      + '<span class="sb-ver-label">API</span>'
+      + '<span class="sb-ver-val">v3.0-rcv</span>'
+      + '</div>'
       + '<div class="sb-env-row">'
-      + '<a class="sb-env-badge active" href="#">QA</a>'
-      + '<a class="sb-env-badge" href="#">PROD</a>'
+      + '<a class="sb-env-badge active">QA</a>'
+      + '<a class="sb-env-badge">PROD</a>'
       + '</div></div>';
 
     document.body.insertBefore(nav, document.body.firstChild);
 
-    /* Encuentra el elemento de sección por data-tag (robusto ante caracteres especiales) */
-    function findSection(tag) {
-      var found = null;
-      document.querySelectorAll('.opblock-tag[data-tag]').forEach(function(el) {
-        if (el.getAttribute('data-tag') === tag) found = el;
-      });
-      return found;
-    }
-
-    function setActive(tag) {
-      nav.querySelectorAll('.sb-item').forEach(function(el) {
-        el.classList.toggle('active', el.getAttribute('data-tag') === tag);
-      });
-    }
-
-    /* Scroll spy con IntersectionObserver */
-    var io = new IntersectionObserver(function(entries) {
-      entries.forEach(function(e) {
-        if (e.isIntersecting) setActive(e.target.getAttribute('data-tag'));
-      });
-    }, { rootMargin: '-60px 0px -55% 0px', threshold: 0 });
-
-    function initSpyAndNav() {
-      document.querySelectorAll('.opblock-tag[data-tag]').forEach(function(el) {
-        io.observe(el);
-      });
-    }
-    setTimeout(initSpyAndNav, 2000);
-    setTimeout(initSpyAndNav, 4000); /* segundo intento por si carga tarde */
-
-    /* Click → scroll */
+    /* ── Clicks ─────────────────────────── */
     nav.querySelectorAll('.sb-item').forEach(function(item) {
       item.addEventListener('click', function(e) {
         e.preventDefault();
         var tag = item.getAttribute('data-tag');
-        var target = findSection(tag);
+        /* buscar el elemento de sección por atributo, no por selector CSS */
+        var target = null;
+        document.querySelectorAll('.opblock-tag[data-tag]').forEach(function(el) {
+          if (el.getAttribute('data-tag') === tag) target = el;
+        });
         if (target) {
-          var top = target.getBoundingClientRect().top + window.pageYOffset - 58;
-          window.scrollTo({ top: top, behavior: 'smooth' });
+          scrollTo(target);
           setActive(tag);
         }
         nav.classList.remove('open');
@@ -181,44 +196,69 @@ async function bootstrap(): Promise<void> {
       });
     });
 
-    /* Filtro de búsqueda */
-    var searchInput = nav.querySelector('.sb-search');
-    if (searchInput) {
-      searchInput.addEventListener('input', function() {
-        var q = searchInput.value.toLowerCase();
-        nav.querySelectorAll('.sb-item').forEach(function(el) {
-          var text = el.querySelector('.sb-label') ? el.querySelector('.sb-label').textContent.toLowerCase() : '';
-          el.parentElement.style.display = text.includes(q) ? '' : 'none';
+    /* ── Buscar / filtrar ───────────────── */
+    var inp = nav.querySelector('.sb-search');
+    if (inp) {
+      inp.addEventListener('input', function() {
+        var q = inp.value.toLowerCase();
+        nav.querySelectorAll('li').forEach(function(li) {
+          var lbl = li.querySelector('.sb-label');
+          li.style.display = (!q || (lbl && lbl.textContent.toLowerCase().indexOf(q) >= 0)) ? '' : 'none';
         });
       });
     }
+
+    /* ── Scroll-spy ─────────────────────── */
+    var io = new IntersectionObserver(function(entries) {
+      entries.forEach(function(e) {
+        if (e.isIntersecting) setActive(e.target.getAttribute('data-tag'));
+      });
+    }, { rootMargin: '-' + HEADER_H + 'px 0px -55% 0px', threshold: 0 });
+
+    sections.forEach(function(s) { io.observe(s.el); });
+    if (sections.length > 0) setActive(sections[0].tag);
   }
 
-  /* ── Limpiar prefijos numéricos de las secciones ────────── */
-  function cleanSectionTitles() {
+  /* ── Limpiar prefijos "N. " visibles en las secciones ──── */
+  function cleanTitles() {
     document.querySelectorAll('.opblock-tag[data-tag]').forEach(function(el) {
-      if (el.getAttribute('data-cleaned')) return;
-      var anchor = el.querySelector('a') || el.querySelector('span.nostyle');
-      if (!anchor) return;
-      var textNode = Array.from(anchor.childNodes).find(function(n) { return n.nodeType === 3; });
-      if (textNode) {
-        textNode.textContent = textNode.textContent.replace(/^\\d+\\.\\s*/, '');
-      }
-      el.setAttribute('data-cleaned', '1');
+      if (el.dataset.cleaned) return;
+      el.dataset.cleaned = '1';
+      /* buscar nodo de texto directo */
+      var a = el.querySelector('a') || el.querySelector('span');
+      if (!a) return;
+      a.childNodes.forEach(function(n) {
+        if (n.nodeType === 3) n.textContent = n.textContent.replace(/^\\d+\\.\\s*/, '');
+      });
     });
   }
 
-  var built = false;
-  var obs = new MutationObserver(function() {
-    if (!built) { buildToggle(); buildSidebar(); built = true; }
-    cleanSectionTitles();
+  /* ── Init con reintentos ────────────────────────────────── */
+  function tryInit() {
+    buildToggle();
+    buildSidebar();
+    cleanTitles();
+  }
+
+  /* Primer intento rápido */
+  setTimeout(tryInit, 600);
+
+  /* Observer para cuando Swagger termina de renderizar */
+  var obs = new MutationObserver(function(mutations) {
+    var relevant = mutations.some(function(m) {
+      return Array.from(m.addedNodes).some(function(n) {
+        return n.nodeType === 1 && (
+          n.classList && (n.classList.contains('opblock-tag') || n.classList.contains('opblock-tag-section'))
+          || (n.querySelector && n.querySelector('.opblock-tag'))
+        );
+      });
+    });
+    if (relevant) { buildSidebar(); cleanTitles(); }
   });
   obs.observe(document.body, { childList: true, subtree: true });
-  setTimeout(function() {
-    if (!built) { buildToggle(); buildSidebar(); built = true; }
-    cleanSectionTitles();
-  }, 800);
-  setTimeout(cleanSectionTitles, 2500);
+
+  /* Reintentos de seguridad */
+  [1500, 3000, 5000].forEach(function(t) { setTimeout(tryInit, t); });
 })();
       `,
       customCss: `
