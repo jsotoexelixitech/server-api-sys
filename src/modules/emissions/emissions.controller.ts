@@ -139,7 +139,7 @@ export class EmissionsController {
         result: {
           status: false,
           code: 'PLATE_ALREADY_INSURED',
-          error: 'Ya existe una póliza vigente registrada con la misma placa. Verifica los datos del carnet de circulación.',
+          error: 'Ya existe una póliza vigente registrada con la misma placa.',
         },
       },
     },
@@ -153,8 +153,7 @@ export class EmissionsController {
         result: {
           status: false,
           code: 'SERIAL_ALREADY_INSURED',
-          error:
-            'Ya existe una póliza vigente registrada con el mismo serial de carrocería. Verifica los datos del carnet de circulación.',
+          error: 'Ya existe una póliza vigente registrada con el mismo serial de carrocería.',
         },
       },
     },

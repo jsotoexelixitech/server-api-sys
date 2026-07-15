@@ -35,18 +35,14 @@ export function formatValidateAutoError(rawMessage: string): FormattedValidateAu
   ) {
     return {
       code: 'SERIAL_ALREADY_INSURED',
-      message:
-        'Ya existe una póliza vigente registrada con el mismo serial de carrocería. ' +
-        'Verifica los datos del carnet de circulación.',
+      message: 'Ya existe una póliza vigente registrada con el mismo serial de carrocería.',
     };
   }
 
   if (lower.includes('placa')) {
     return {
       code: 'PLATE_ALREADY_INSURED',
-      message:
-        'Ya existe una póliza vigente registrada con la misma placa. ' +
-        'Verifica los datos del carnet de circulación.',
+      message: 'Ya existe una póliza vigente registrada con la misma placa.',
     };
   }
 
