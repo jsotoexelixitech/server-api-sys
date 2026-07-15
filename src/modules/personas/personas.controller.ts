@@ -100,7 +100,7 @@ export class PersonasController {
   @ApiOperation({
     summary: 'Funerario paso 6 · Emitir póliza de personas',
     description:
-      'Inserta en la vista `eePoliza_Personas_General`. Requiere header `apikey` en producción. ' +
+      'Ejecuta `sp_pre_emision_Personas_General` → `sp_emision_Personas_General` (mismo flujo que SysIP producción). Requiere header `apikey` en producción. ' +
       'Alias interno Exélixi de `POST /external/createEmissionPerson`.',
     operationId: 'funerarioPersonasEmision',
   })

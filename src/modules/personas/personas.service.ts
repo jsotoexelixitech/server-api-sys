@@ -65,6 +65,98 @@ export class PersonasService {
     private readonly config: ConfigService,
   ) {}
 
+  private intField(value: unknown): number | null {
+    if (value == null || String(value).trim() === '') return null;
+    const n = parseInt(String(value), 10);
+    return Number.isNaN(n) ? null : n;
+  }
+
+  /** Flags char(1) que espera sp_pre_emision_Personas_General. */
+  private spCharFlag(value: unknown, defaultVal = '0'): string {
+    if (value == null || String(value).trim() === '') return defaultVal;
+    return String(value).trim().charAt(0);
+  }
+
+  /** Último recordset con cnpoliza (sp_emision anidado en sp_pre_emision). */
+  private extractEmissionRow(result: {
+    recordset?: Record<string, unknown>[];
+    recordsets?: Record<string, unknown>[][];
+  }): Record<string, unknown> {
+    if (result.recordsets?.length) {
+      for (let i = result.recordsets.length - 1; i >= 0; i--) {
+        const rs = result.recordsets[i];
+        if (rs?.length && rs[0]?.['cnpoliza']) return rs[0];
+      }
+    }
+    if (result.recordset?.length && result.recordset[0]?.['cnpoliza']) {
+      return result.recordset[0];
+    }
+    return {};
+  }
+
+  /** JSON de asegurados al formato OPENJSON de sp_pre_emision_Personas_General. */
+  private mapAseguradosForSp(
+    lista: Record<string, unknown>[],
+    getPar: (p: unknown) => number,
+  ): string | null {
+    if (!lista.length) return null;
+    const mapped = lista.map((a) => ({
+      tipo_cedula_asegurado: String(a.icedula_asegurado ?? a.tipoDoc ?? 'V').charAt(0),
+      rif_asegurado: this.intField(a.xrif_asegurado ?? a.identificacion),
+      nombre_asegurado: a.xnombre_asegurado ?? a.nombre ?? null,
+      apellido_asegurado: a.xapellido_asegurado ?? a.apellido ?? null,
+      sexo_asegurado: String(
+        a.isexo_asegurado ?? (a.sexo ? String(a.sexo)[0].toUpperCase() : 'M'),
+      ).charAt(0),
+      estado_civil_asegurado: String(a.iestado_civil_asegurado ?? 'S').charAt(0),
+      fnac_asegurado: a.fnac_asegurado ?? a.fechaNac ?? null,
+      nparentesco_asegurado: getPar(a.nparentesco_asegurado ?? a.parentesco),
+    }));
+    return JSON.stringify(mapped);
+  }
+
+  /** JSON de beneficiarios al formato OPENJSON de sp_pre_emision_Personas_General. */
+  private mapBeneficiariosForSp(
+    lista: Record<string, unknown>[],
+    getPar: (p: unknown) => number,
+  ): string | null {
+    if (!lista.length) return null;
+    const mapped = lista.map((b) => ({
+      tipo_cedula_beneficiario: String(b.icedula_beneficiario ?? b.tipoDoc ?? 'V').charAt(0),
+      rif_beneficiario: this.intField(b.xrif_beneficiario ?? b.identificacion),
+      nombre_beneficiario: b.xnombre_beneficiario ?? b.nombre ?? null,
+      apellido_beneficiario: b.xapellido_beneficiario ?? b.apellido ?? null,
+      sexo_beneficiario: String(
+        b.isexo_beneficiario ?? (b.sexo ? String(b.sexo)[0].toUpperCase() : 'M'),
+      ).charAt(0),
+      estado_civil_beneficiario: String(b.iestado_civil_beneficiario ?? 'S').charAt(0),
+      fnac_beneficiario: b.fnac_beneficiario ?? b.fechaNac ?? null,
+      nparentesco_beneficiario: getPar(b.nparentesco_beneficiario ?? b.parentesco),
+    }));
+    return JSON.stringify(mapped);
+  }
+
+  private async lookupEmissionByTitular(rifTitular: number): Promise<Record<string, unknown>> {
+    const T = this.db.types;
+    const req = this.db.request();
+    req.input('casegurado', T.Numeric(9, 0), rifTitular);
+    const result = await req.query(`
+      SELECT TOP 1
+        pol.cpoliza,
+        pol.cnpoliza,
+        pol.fanopol,
+        pol.fmespol,
+        rec.cnrecibo,
+        rec.qcuotas
+      FROM adpoliza pol
+      INNER JOIN adrecibos rec
+        ON rec.cnpoliza = pol.cnpoliza AND rec.qcuotas = 1
+      WHERE pol.casegurado = @casegurado
+      ORDER BY pol.femision DESC, rec.cnrecibo DESC
+    `);
+    return (result.recordset?.[0] ?? {}) as Record<string, unknown>;
+  }
+
   private get defaultRamo(): number {
     return this.config.get<number>('LAMUNDIAL_RAMO_PERSON', 9);
   }
@@ -307,7 +399,7 @@ export class PersonasService {
     }
   }
 
-  // ── Emisión de póliza de personas (vista eePoliza_Personas_General) ────────
+  // ── Emisión de póliza de personas (sp_pre_emision_Personas_General) ────────
 
   async createEmissionPerson(apikey: string, body: CreateEmissionPersonDto) {
     const release = await emisionMutex.acquire();
@@ -405,9 +497,13 @@ export class PersonasService {
         fhasta = d.toISOString().slice(0, 10);
       }
 
-      const ctipocanal = (b['ctipocanal'] ?? (canal['ctipocanal'] === 'A' ? canal['ctipocanal'] : null)) as string | null;
-      const ccanalalt = (b['ccanalalt'] ?? (canal['ctipocanal'] === 'A' ? canal['ccanalalt'] : null)) as number | null;
-      const cscanalalt = (b['cscanalalt'] ?? (canal['ctipocanal'] === 'A' ? canal['cscanalalt'] : null)) as number | null;
+      const canalCtipo = canal['ctipocanal'] as string | null | undefined;
+      const ctipocanal = (b['ctipocanal'] ??
+        ((canalCtipo === 'T' || canalCtipo === 'A' || canalCtipo === 'D') ? canalCtipo : null)) as string | null;
+      const ccanalalt = (b['ccanalalt'] ??
+        ((canalCtipo === 'T' || canalCtipo === 'A' || canalCtipo === 'D') ? canal['ccanalalt'] : null)) as number | null;
+      const cscanalalt = (b['cscanalalt'] ??
+        ((canalCtipo === 'T' || canalCtipo === 'A' || canalCtipo === 'D') ? canal['cscanalalt'] : null)) as number | null;
 
       const getPar = (p: any) => {
         if (typeof p === 'number') return p;
@@ -578,167 +674,138 @@ export class PersonasService {
            };
         }
 
-        // Si useFallback === true, simplemente dejamos que la ejecución continúe hacia abajo 
-        // para insertar en eePoliza_Personas_General (Sis2000 local).
-        this.logger.log(`=== INICIO FALLBACK LOCAL EMISION FUNERARIO ===`);
-      // === FIN LLAMADA API LA MUNDIAL ===
+        // Emisión local vía SP de producción (SysIP fb_organizacion_swagger / main actual).
+        this.logger.log(`=== INICIO EMISION LOCAL SP sp_pre_emision_Personas_General ===`);
 
-      const fields: Record<string, { type: unknown; value: unknown }> = {
-        cnpoliza_rel:          { type: T.NVarChar(30),   value: b['poliza'] ? String(b['poliza']) : null },
-        cramo:                 { type: T.Int,            value: b['cramo'] },
-        cplan:                 { type: T.NVarChar(10),   value: b['plan'] },
-        icedula_tomador:       { type: T.Char(1),        value: b['tipo_cedula_tomador'] ?? b['cedula_tomador'] },
-        xrif_tomador:          { type: T.Numeric(9),     value: b['rif_tomador'] },
-        xnombre_tomador:       { type: T.NVarChar(250),  value: b['nombre_tomador'] },
-        xapellido_tomador:     { type: T.NVarChar(250),  value: b['apellido_tomador'] },
-        isexo_tomador:         { type: T.Char(1),        value: b['sexo_tomador'] },
-        iestado_civil_tomador: { type: T.Char(1),        value: b['estado_civil_tomador'] },
-        fnac_tomador:          { type: T.Date,           value: b['fnac_tomador'] },
-        cestado_tomador:       { type: T.NVarChar(100),  value: b['estado_tomador'] != null ? String(b['estado_tomador']) : null },
-        cciudad_tomador:       { type: T.NVarChar(100),  value: b['ciudad_tomador'] != null ? String(b['ciudad_tomador']) : null },
-        xdireccion_tomador:    { type: T.NVarChar(1000), value: b['direccion_tomador'] },
-        xtelefono_tomador:     { type: T.NVarChar(250),  value: b['telefono_tomador'] },
-        xcorreo_tomador:       { type: T.NVarChar(250),  value: b['correo_tomador'] },
-        icedula_titular:       { type: T.Char(1),        value: b['tipo_cedula_titular'] ?? b['cedula_titular'] },
-        xrif_titular:          { type: T.Numeric(9),     value: b['rif_titular'] },
-        xnombre_titular:       { type: T.NVarChar(250),  value: b['nombre_titular'] },
-        xapellido_titular:     { type: T.NVarChar(250),  value: b['apellido_titular'] },
-        isexo_titular:         { type: T.Char(1),        value: b['sexo_titular'] },
-        iestado_civil_titular: { type: T.Char(1),        value: b['estado_civil_titular'] },
-        fnac_titular:          { type: T.DateTime,       value: b['fnac_titular'] },
-        cestado_titular:       { type: T.NVarChar(100),  value: b['estado_titular'] != null ? String(b['estado_titular']) : null },
-        cciudad_titular:       { type: T.NVarChar(100),  value: b['ciudad_titular'] != null ? String(b['ciudad_titular']) : null },
-        xdireccion_titular:    { type: T.NVarChar(1000), value: b['direccion_titular'] },
-        xtelefono_titular:     { type: T.NVarChar(250),  value: b['telefono_titular'] },
-        xcorreo_titular:       { type: T.NVarChar(250),  value: b['correo_titular'] },
-        cpersona_politica:     { type: T.Int,            value: b['dec_persona_politica'] ?? null },
-        cterm_y_cod:           { type: T.Int,            value: b['dec_term_y_cod'] ?? null },
-        cdiagnos_enferm:       { type: T.Int,            value: b['dec_diagnos_enferm'] ?? null },
-        xdiagnos_enferm:       { type: T.NVarChar(250),  value: b['dec_descrip_enferm'] ?? null },
-        cproductor:            { type: T.Int,            value: b['productor'] ?? canal['cproductor'] },
-        ctipocanal:            { type: T.Char(1),        value: ctipocanal },
-        ccanalalt:             { type: T.Int,            value: ccanalalt },
-        cscanalalt:            { type: T.Int,            value: cscanalalt },
-        ptasamon:              { type: T.Numeric(18, 6), value: ptasamonResolved },
-        msumaaseg:             { type: T.Numeric(18, 2), value: msumaasegResolved },
-        cmoneda:               { type: T.NVarChar(6),    value: b['cmoneda'] ?? null },
-        mprimaext:             { type: T.Numeric(18, 2), value: b['prima'] },
-        ifrecuencia:           { type: T.Char(1),        value: b['frecuencia'] },
-        femision:              { type: T.DateTime,       value: femision },
-        fdesde:                { type: T.Date,           value: fdesde },
-        fhasta:                { type: T.Date,           value: fhasta },
-        xcanal_venta:          { type: T.NVarChar(250),  value: canal['xcanal_venta'] ?? null },
-        corigen_rel:           { type: T.Char(2),        value: canal['corigen_rel'] ?? null },
-        api:                   { type: T.NVarChar(100),  value: 'EmissionGeneral' },
-        method:                { type: T.NVarChar(100),  value: 'createEmmisionPersonGeneral' },
-        cprog:                 { type: T.Char(20),       value: 'eePoliza_PerGe' },
-        ifuente:               { type: T.Char(10),       value: canal['ifuente_api'] ?? canal['ifuente'] ?? 'API' },
-        fingreso:              { type: T.DateTime,       value: new Date() },
-        cpoliza:               { type: T.Numeric(19, 0), value: null },
-        cnpoliza:              { type: T.VarChar(30),    value: null },
-        cproces:               { type: T.Numeric(13, 0), value: null },
-      };
+        const req = this.db.request();
+        const params: Record<string, { type: unknown; value: unknown }> = {
+          cnpoliza_rel: { type: T.NVarChar(30), value: b['poliza'] ? String(b['poliza']) : null },
+          cramo: { type: T.Int, value: this.intField(b['cramo']) ?? 9 },
+          cplan: { type: T.NVarChar(10), value: String(b['plan'] ?? '') },
+          icedula_tomador: {
+            type: T.Char(1),
+            value: String(b['tipo_cedula_tomador'] ?? b['cedula_tomador'] ?? 'V').charAt(0),
+          },
+          xrif_tomador: { type: T.Numeric(11, 0), value: this.intField(b['rif_tomador']) },
+          xnombre_tomador: { type: T.NVarChar(250), value: b['nombre_tomador'] ?? null },
+          xapellido_tomador: { type: T.NVarChar(250), value: b['apellido_tomador'] ?? null },
+          isexo_tomador: { type: T.Char(1), value: b['sexo_tomador'] ?? null },
+          iestado_civil_tomador: { type: T.Char(1), value: b['estado_civil_tomador'] ?? null },
+          fnac_tomador: { type: T.Date, value: b['fnac_tomador'] ?? null },
+          cestado_tomador: { type: T.SmallInt, value: this.intField(b['estado_tomador']) },
+          cciudad_tomador: { type: T.SmallInt, value: this.intField(b['ciudad_tomador']) },
+          xdireccion_tomador: { type: T.NVarChar(1000), value: b['direccion_tomador'] ?? null },
+          xtelefono_tomador: { type: T.NVarChar(250), value: b['telefono_tomador'] ?? null },
+          xcorreo_tomador: { type: T.NVarChar(250), value: b['correo_tomador'] ?? null },
+          icedula_titular: {
+            type: T.Char(1),
+            value: String(b['tipo_cedula_titular'] ?? b['cedula_titular'] ?? 'V').charAt(0),
+          },
+          xrif_titular: { type: T.Numeric(11, 0), value: this.intField(b['rif_titular']) },
+          xnombre_titular: { type: T.NVarChar(250), value: b['nombre_titular'] ?? null },
+          xapellido_titular: { type: T.NVarChar(250), value: b['apellido_titular'] ?? null },
+          isexo_titular: { type: T.Char(1), value: b['sexo_titular'] ?? null },
+          iestado_civil_titular: { type: T.Char(1), value: b['estado_civil_titular'] ?? null },
+          fnac_titular: { type: T.DateTime, value: b['fnac_titular'] ?? null },
+          cestado_titular: { type: T.SmallInt, value: this.intField(b['estado_titular']) },
+          cciudad_titular: { type: T.SmallInt, value: this.intField(b['ciudad_titular']) },
+          xdireccion_titular: { type: T.NVarChar(1000), value: b['direccion_titular'] ?? null },
+          xtelefono_titular: { type: T.NVarChar(250), value: b['telefono_titular'] ?? null },
+          xcorreo_titular: { type: T.NVarChar(250), value: b['correo_titular'] ?? null },
+          cpersona_politica: { type: T.Char(1), value: this.spCharFlag(b['dec_persona_politica']) },
+          cterm_y_cod: { type: T.Char(1), value: this.spCharFlag(b['dec_term_y_cod'], '1') },
+          cdiagnos_enferm: { type: T.Char(1), value: this.spCharFlag(b['dec_diagnos_enferm']) },
+          xdiagnos_enferm: { type: T.NVarChar(250), value: b['dec_descrip_enferm'] ?? null },
+          cproductor: {
+            type: T.Int,
+            value: this.intField(b['productor'] ?? canal['cproductor']) ?? 80080,
+          },
+          ctipocanal: { type: T.Char(1), value: ctipocanal },
+          ccanalalt: { type: T.Int, value: ccanalalt },
+          cscanalalt: { type: T.Int, value: cscanalalt },
+          ptasamon: { type: T.Numeric(18, 6), value: ptasamonResolved },
+          msumaaseg: { type: T.Numeric(18, 2), value: msumaasegResolved },
+          cmoneda: {
+            type: T.NVarChar(4),
+            value: b['cmoneda'] ? String(b['cmoneda']).slice(0, 4) : null,
+          },
+          mprimaext: { type: T.Numeric(18, 2), value: b['prima'] },
+          ifrecuencia: { type: T.Char(1), value: String(b['frecuencia'] ?? 'M').charAt(0) },
+          femision: { type: T.DateTime, value: femision },
+          fdesde: { type: T.Date, value: fdesde },
+          fhasta: { type: T.Date, value: fhasta },
+          xcanal_venta: { type: T.NVarChar(250), value: canal['xcanal_venta'] ?? null },
+          corigen_rel: { type: T.Char(2), value: canal['corigen_rel'] ?? null },
+          api: { type: T.NVarChar(100), value: 'EmissionGeneral' },
+          method: { type: T.NVarChar(100), value: 'createEmmisionPersonGeneral' },
+          cprog: { type: T.Char(20), value: 'eePoliza_PerGe' },
+          ifuente: {
+            type: T.Char(10),
+            value: String(canal['ifuente_api'] ?? canal['ifuente'] ?? 'API').slice(0, 10),
+          },
+          fingreso: { type: T.DateTime, value: new Date() },
+          cpoliza: { type: T.Numeric(19, 0), value: null },
+          cnpoliza: { type: T.VarChar(30), value: null },
+          cproces: { type: T.Numeric(13, 0), value: null },
+          asegurados: {
+            type: T.NVarChar(5000),
+            value: this.mapAseguradosForSp(asegurados as Record<string, unknown>[], getPar),
+          },
+          beneficiarios: {
+            type: T.NVarChar(5000),
+            value: this.mapBeneficiariosForSp(beneficiarios as Record<string, unknown>[], getPar),
+          },
+        };
 
-      const colList = Object.keys(fields).join(', ');
-      const valList = Object.keys(fields).map((c) => `@${c}`).join(', ');
-
-      this.logger.log(`_createEmissionPerson: asegurados count = ${asegurados.length}`);
-
-      // IMPORTANTE: Limpiar tablas de staging por el problema de concurrencia viejo (además del Mutex)
-      await this.db.request().query('DELETE FROM eePoliza_Salud_Aseg');
-      await this.db.request().query('DELETE FROM eePoliza_Salud_Ben');
-
-      // 4. Insertar asegurados en tabla temporal (misma conexión del pool)
-      for (const a of asegurados as Record<string, any>[]) {
-        const reqAseg = this.db.request();
-        reqAseg.input('icedula_asegurado', T.Char(1), a.icedula_asegurado ?? a.tipoDoc ?? 'V');
-        reqAseg.input('xrif_asegurado', T.Numeric(13, 0), a.xrif_asegurado ?? a.identificacion);
-        reqAseg.input('xnombre_asegurado', T.NVarChar(120), a.xnombre_asegurado ?? a.nombre);
-        reqAseg.input('xapellido_asegurado', T.NVarChar(120), a.xapellido_asegurado ?? a.apellido);
-        reqAseg.input('fnac_asegurado', T.DateTime, a.fnac_asegurado ?? a.fechaNac);
-        reqAseg.input('isexo_asegurado', T.Char(1), a.isexo_asegurado ?? (a.sexo ? String(a.sexo)[0].toUpperCase() : 'M'));
-        reqAseg.input('nparentesco_asegurado', T.Int, getPar(a.nparentesco_asegurado ?? a.parentesco));
-        reqAseg.input('iestado_civil_asegurado', T.Char(1), a.iestado_civil_asegurado ?? 'S');
-        await reqAseg.query(`
-          INSERT INTO eePoliza_Salud_Aseg (
-            icedula_asegurado, xrif_asegurado, xnombre_asegurado, xapellido_asegurado,
-            fnac_asegurado, isexo_asegurado, nparentesco_asegurado, iestado_civil_asegurado
-          ) VALUES (
-            @icedula_asegurado, @xrif_asegurado, @xnombre_asegurado, @xapellido_asegurado,
-            @fnac_asegurado, @isexo_asegurado, @nparentesco_asegurado, @iestado_civil_asegurado
-          )
-        `);
-      }
-
-      for (const a of beneficiarios as Record<string, any>[]) {
-        const reqBen = this.db.request();
-        reqBen.input('icedula_beneficiario', T.Char(1), a.icedula_beneficiario ?? a.tipoDoc ?? 'V');
-        reqBen.input('xrif_beneficiario', T.Numeric(13, 0), a.xrif_beneficiario ?? a.identificacion);
-        reqBen.input('xnombre_beneficiario', T.NVarChar(120), a.xnombre_beneficiario ?? a.nombre);
-        reqBen.input('xapellido_beneficiario', T.NVarChar(120), a.xapellido_beneficiario ?? a.apellido);
-        reqBen.input('fnac_beneficiario', T.DateTime, a.fnac_beneficiario ?? a.fechaNac);
-        reqBen.input('isexo_beneficiario', T.Char(1), a.isexo_beneficiario ?? (a.sexo ? String(a.sexo)[0].toUpperCase() : 'M'));
-        reqBen.input('nparentesco_beneficiario', T.Int, getPar(a.nparentesco_beneficiario ?? a.parentesco));
-        await reqBen.query(`
-          INSERT INTO eePoliza_Salud_Ben (
-            icedula_beneficiario, xrif_beneficiario, xnombre_beneficiario, xapellido_beneficiario,
-            fnac_beneficiario, isexo_beneficiario, nparentesco_beneficiario
-          ) VALUES (
-            @icedula_beneficiario, @xrif_beneficiario, @xnombre_beneficiario, @xapellido_beneficiario,
-            @fnac_beneficiario, @isexo_beneficiario, @nparentesco_beneficiario
-          )
-        `);
-      }
-
-      const fieldsLog = Object.keys(fields).reduce((acc, k) => { acc[k] = fields[k].value; return acc; }, {} as Record<string, any>);
-      this.logger.log(`createEmissionPerson fields: ${JSON.stringify(fieldsLog)}`);
-      this.logger.log(`createEmissionPerson: INSERT eePoliza_Personas_General plan=${b['plan']} rif=${b['rif_titular']}`);
-
-      // 5. INSERT principal — el trigger eePoliza_Personas_General lee las tablas temporales
-      const reqInsert = this.db.request();
-      Object.keys(fields).forEach((c) => reqInsert.input(c, (fields[c] as { type: any }).type, (fields[c] as { value: unknown }).value));
-
-      const insertResult = await reqInsert.query(`
-        INSERT INTO eePoliza_Personas_General (${colList})
-        VALUES (${valList})
-      `);
-
-      // El trigger devuelve el resultado en recordset[0]
-      let row: Record<string, any> = {};
-      if (insertResult.recordsets && insertResult.recordsets.length > 0) {
-        for (const rs of insertResult.recordsets) {
-          if (rs && rs.length > 0 && rs[0]['cnpoliza']) {
-            row = rs[0];
-            break;
-          }
-        }
-      }
-      if (Object.keys(row).length === 0 && insertResult.recordset && insertResult.recordset.length > 0) {
-        row = insertResult.recordset[0];
-      }
-
-      this.logger.log(`createEmissionPerson: insertResult = ${JSON.stringify(insertResult)}`);
-
-      if (Object.keys(row).length === 0 || !row['cnpoliza']) {
-        this.logger.error('createEmissionPerson: INSERT no devolvió cnpoliza. Estructura: ' + JSON.stringify(insertResult));
-        throw new InternalServerErrorException(
-          'Error al crear la emisión de personas: no se recibió resultado de la vista eePoliza_Personas_General.',
+        Object.entries(params).forEach(([key, field]) =>
+          req.input(key, (field as { type: unknown }).type, (field as { value: unknown }).value),
         );
-      }
 
-      const cnpoliza = String(row['cnpoliza'] ?? '').trim();
-      const cnrecibo = String(row['cnrecibo'] ?? '').trim();
-      const fanopol = row['fanopol'] as number | undefined;
-      const fmespol = row['fmespol'] as number | undefined;
-      const ncuota = (row['qcuotas'] ?? row['ncuota']) as number | undefined;
+        this.logger.log(
+          `createEmissionPerson: EXEC sp_pre_emision_Personas_General plan=${b['plan']} rif=${b['rif_titular']}`,
+        );
 
-      const pdfBase = (this.config.get<string>('POLICY_PDF_URL') ?? this.config.get<string>('URLPoliza') ?? '').trim().replace(/\/$/, '');
-      const urlpoliza = pdfBase && cnpoliza && fanopol != null && fmespol != null
-        ? `${pdfBase}/${cnpoliza}/${fanopol}/${fmespol}/`
-        : pdfBase && cnpoliza ? `${pdfBase}/${cnpoliza}/` : '';
+        let spResult: {
+          recordset?: Record<string, unknown>[];
+          recordsets?: Record<string, unknown>[][];
+        };
+        try {
+          spResult = await req.execute('sp_pre_emision_Personas_General');
+        } catch (spErr) {
+          const msg = parseSPError(spErr);
+          this.logger.error(`createEmissionPerson SP error: ${msg}`);
+          throw new BadRequestException(msg);
+        }
 
-      this.logger.log(`createEmissionPerson: emitida OK cnpoliza=${cnpoliza}`);
-      return { message: 'Emisión registrada exitosamente.', cnpoliza, cnrecibo, urlpoliza, ncuota, fanopol, fmespol };
+        let row = this.extractEmissionRow(spResult);
+        const rifTitular = this.intField(b['rif_titular']);
+        if (!row['cnpoliza'] && rifTitular) {
+          this.logger.warn(`createEmissionPerson: SP sin cnpoliza; lookup titular=${rifTitular}`);
+          row = await this.lookupEmissionByTitular(rifTitular);
+        }
+
+        if (!row['cnpoliza']) {
+          this.logger.error(
+            `createEmissionPerson: sp_pre_emision sin cnpoliza. recordsets=${spResult.recordsets?.length ?? 0}`,
+          );
+          throw new InternalServerErrorException(
+            'Error al crear la emisión de personas: sp_pre_emision_Personas_General no devolvió cnpoliza.',
+          );
+        }
+
+        const cnpoliza = String(row['cnpoliza'] ?? '').trim();
+        const cnrecibo = String(row['cnrecibo'] ?? '').trim();
+        const fanopol = row['fanopol'] as number | undefined;
+        const fmespol = row['fmespol'] as number | undefined;
+        const ncuota = (row['qcuotas'] ?? row['ncuota']) as number | undefined;
+
+        const pdfBase = (this.config.get<string>('POLICY_PDF_URL') ?? this.config.get<string>('URLPoliza') ?? '').trim().replace(/\/$/, '');
+        const urlpoliza = pdfBase && cnpoliza && fanopol != null && fmespol != null
+          ? `${pdfBase}/${cnpoliza}/${fanopol}/${fmespol}/`
+          : pdfBase && cnpoliza ? `${pdfBase}/${cnpoliza}/` : '';
+
+        this.logger.log(`createEmissionPerson: emitida OK cnpoliza=${cnpoliza}`);
+        return { message: 'Emisión registrada exitosamente.', cnpoliza, cnrecibo, urlpoliza, ncuota, fanopol, fmespol };
 
     } catch (err) {
       if (err instanceof BadRequestException || err instanceof UnauthorizedException) throw err;
