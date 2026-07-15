@@ -443,6 +443,126 @@ export class ValrepService {
     }
   }
 
+  // ── Funerario: catálogo valrep (pasos 1–3, fb_organizacion_swagger) ────────
+
+  private resolveEntidadItem(body: { citem?: string; centidad?: string }) {
+    const citem = body.citem?.trim() ? String(body.citem).trim() : null;
+    const centidad = citem && body.centidad?.trim()
+      ? String(body.centidad).trim()
+      : null;
+    return { citem, centidad };
+  }
+
+  /** Paso 1 funerario — spBuscaProductosEntidad. */
+  async getProductosPersonas(
+    body: { citem?: string; centidad?: string },
+  ): Promise<Record<string, unknown>[]> {
+    try {
+      const T = this.db.types;
+      const { citem, centidad } = this.resolveEntidadItem(body);
+      const req = this.db.request();
+      req.input('citem', T.NVarChar(20), citem);
+      req.input('centidad', T.Char(1), centidad);
+      req.output('berror', T.Bit, false);
+      req.output('mensaje', T.NVarChar(500), '');
+
+      const result = await req.execute('spBuscaProductosEntidad');
+      const mensaje: string = result.output['mensaje'] ?? '';
+      if (result.output['berror']) {
+        throw new BadRequestException(mensaje || 'No se pudieron obtener los productos.');
+      }
+      if (mensaje) this.logger.log(`spBuscaProductosEntidad: ${mensaje}`);
+      return (result.recordset ?? []) as Record<string, unknown>[];
+    } catch (err) {
+      if (err instanceof BadRequestException) throw err;
+      const msg = err instanceof Error ? err.message : String(err);
+      this.logger.error(`getProductosPersonas: ${msg}`);
+      throw new InternalServerErrorException(
+        'Error al obtener productos de personas.',
+      );
+    }
+  }
+
+  /** Paso 2 funerario — spBuscaPlanProducto + parentescos. */
+  async getPlanesProducto(body: {
+    cproducto: string;
+    citem?: string;
+    centidad?: string;
+  }): Promise<{ planes: PlanItem[]; mensaje: string }> {
+    try {
+      const T = this.db.types;
+      const { citem, centidad } = this.resolveEntidadItem(body);
+      const req = this.db.request();
+      req.input('cproducto', T.NVarChar(10), String(body.cproducto).trim());
+      req.input('citem', T.NVarChar(20), citem);
+      req.input('centidad', T.Char(1), centidad);
+      req.output('mensaje', T.NVarChar(1000), '');
+
+      const result = await req.execute('spBuscaPlanProducto');
+      const mensaje: string = result.output['mensaje'] ?? '';
+      const recordset = (result.recordset ?? []) as PlanItem[];
+      const planes = await this.enrichWithParentescos(recordset);
+      if (mensaje) this.logger.log(`spBuscaPlanProducto: ${mensaje}`);
+      return { planes, mensaje };
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : String(err);
+      this.logger.error(`getPlanesProducto cproducto=${body.cproducto}: ${msg}`);
+      throw new InternalServerErrorException(
+        'Error al obtener planes del producto.',
+      );
+    }
+  }
+
+  /** Paso 3 funerario — spBuscaDetallePlan (detalle + parentescos + coberturas). */
+  async getPlanesDetallePersonas(
+    body: { cramo: number; cplan: string },
+  ): Promise<PlanItem[]> {
+    try {
+      const T = this.db.types;
+      const req = this.db.request();
+      req.input('cramo', T.Int, body.cramo);
+      req.input('cplan', T.VarChar(10), String(body.cplan).trim());
+      req.output('berror', T.Bit, false);
+      req.output('mensaje', T.NVarChar(1000), '');
+
+      const result = await req.execute('spBuscaDetallePlan');
+      const berror = Boolean(result.output['berror']);
+      const mensaje: string = result.output['mensaje'] ?? '';
+
+      if (berror) {
+        throw new BadRequestException(
+          mensaje || 'No se encontraron detalles para este plan.',
+        );
+      }
+
+      const sets = result.recordsets as [
+        PlanItem[]?,
+        ParentescoPlan[]?,
+        CoberturaPlan[]?,
+      ] | undefined;
+      const base = sets?.[0] ?? (result.recordset ?? []) as PlanItem[];
+      if (!base.length) {
+        throw new BadRequestException('No se encontraron detalles para este plan.');
+      }
+
+      const plan = { ...base[0] } as PlanItem;
+      if (sets?.[1]?.length) plan.parentescos = sets[1];
+      if (sets?.[2]?.length) plan.coberturas = sets[2];
+
+      if (mensaje) this.logger.log(`spBuscaDetallePlan: ${mensaje}`);
+      return [plan];
+    } catch (err) {
+      if (err instanceof BadRequestException) throw err;
+      const msg = err instanceof Error ? err.message : String(err);
+      this.logger.error(
+        `getPlanesDetallePersonas cramo=${body.cramo} cplan=${body.cplan}: ${msg}`,
+      );
+      throw new InternalServerErrorException(
+        'Error al obtener el detalle del plan.',
+      );
+    }
+  }
+
   private async enrichWithCoberturas(planes: PlanItem[]): Promise<PlanItem[]> {
     for (const plan of planes) {
       try {

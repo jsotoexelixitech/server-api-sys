@@ -4,6 +4,9 @@ import { GetPlanesV2Dto } from './dto/get-planes-v2.dto';
 import { GetCitiesDto } from './dto/get-cities.dto';
 import { GetCotizacionAutoDto } from './dto/get-cotizacion-auto.dto';
 import { GetFrecuenciaDto } from './dto/get-frecuencia.dto';
+import { GetProductosPersonasDto } from './dto/get-productos-personas.dto';
+import { GetPlanesProductoDto } from './dto/get-planes-producto.dto';
+import { GetPlanesDetallePersonasDto } from './dto/get-planes-detalle-personas.dto';
 import { ValrepService } from './valrep.service';
 import { Api500, ApiCommonErrors } from '../../common/swagger/api-error-responses';
 import { RCV_COTIZACION_EXAMPLE } from '../../common/swagger/api-docs.constants';
@@ -143,6 +146,98 @@ export class ValrepController {
   async getLists(@Body() body: { cdominio?: string; xtipo_orden?: string }) {
     const listas = await this.valrepService.getLists(body.cdominio ?? '');
     return { status: true, data: { listas } };
+  }
+
+  // ── Funerario: pasos 1–3 (catálogo valrep, fb_organizacion_swagger) ───────
+
+  @Post('productos')
+  @HttpCode(HttpStatus.OK)
+  @ApiOperation({
+    summary: 'Funerario paso 1 · Productos de personas',
+    description:
+      'Ejecuta `spBuscaProductosEntidad`. Primer paso del flujo funerario documentado en La Mundial.\n\n' +
+      '**Siguiente paso:** `POST /valrep/planes/producto` con el `cproducto` elegido.',
+    operationId: 'funerarioValrepProductos',
+  })
+  @ApiBody({ type: GetProductosPersonasDto })
+  @ApiResponse({
+    status: 200,
+    schema: {
+      example: {
+        status: true,
+        data: {
+          productos: [
+            { cproducto: 57, xproducto: 'FUNERARIO INDIVIDUAL' },
+          ],
+        },
+      },
+    },
+  })
+  @ApiCommonErrors()
+  async getProductosPersonas(@Body() dto: GetProductosPersonasDto) {
+    const productos = await this.valrepService.getProductosPersonas(dto);
+    return { status: true, data: { productos } };
+  }
+
+  @Post('planes/producto')
+  @HttpCode(HttpStatus.OK)
+  @ApiOperation({
+    summary: 'Funerario paso 2 · Planes por producto',
+    description:
+      'Ejecuta `spBuscaPlanProducto` y enriquece con parentescos/edades.\n\n' +
+      '**Siguiente paso:** `POST /valrep/planes/detalle` con `cramo` y `cplan`.',
+    operationId: 'funerarioValrepPlanesProducto',
+  })
+  @ApiBody({ type: GetPlanesProductoDto })
+  @ApiResponse({
+    status: 200,
+    schema: {
+      example: {
+        status: true,
+        data: {
+          plan: [{ cramo: 9, cplan: '4', xplan: 'Plan Funerario Básico', parentescos: [] }],
+          mensaje: '',
+        },
+      },
+    },
+  })
+  @ApiCommonErrors()
+  async getPlanesProducto(@Body() dto: GetPlanesProductoDto) {
+    const { planes, mensaje } = await this.valrepService.getPlanesProducto(dto);
+    return { status: true, data: { plan: planes, mensaje } };
+  }
+
+  @Post('planes/detalle')
+  @HttpCode(HttpStatus.OK)
+  @ApiOperation({
+    summary: 'Funerario paso 3 · Detalle del plan',
+    description:
+      'Ejecuta `spBuscaDetallePlan` (detalle operativo, parentescos y coberturas).\n\n' +
+      '**Siguiente paso:** `POST /external/getCotizacionPer` o `POST /personas/cotizacion`.',
+    operationId: 'funerarioValrepPlanesDetalle',
+  })
+  @ApiBody({ type: GetPlanesDetallePersonasDto })
+  @ApiResponse({
+    status: 200,
+    schema: {
+      example: {
+        status: true,
+        data: {
+          plan: [{
+            cramo: 9,
+            cplan: '4',
+            xplan: 'Plan Funerario Básico',
+            parentescos: [{ cparen: 1, xparentesco: 'TITULAR', min_edad: 18, max_edad: 75 }],
+            coberturas: [{ ccobertura: '01', xcobertura: 'SERVICIO FUNERARIO' }],
+          }],
+        },
+      },
+    },
+  })
+  @ApiCommonErrors()
+  async getPlanesDetallePersonas(@Body() dto: GetPlanesDetallePersonasDto) {
+    const plan = await this.valrepService.getPlanesDetallePersonas(dto);
+    return { status: true, data: { plan } };
   }
 
   // ── POST /api/v1/valrep/planes/v2 ──────────────────────────────────────
