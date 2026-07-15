@@ -1,13 +1,14 @@
 import { Body, Controller, Headers, HttpCode, HttpStatus, Post } from '@nestjs/common';
-import { ApiExcludeController, ApiBody, ApiHeader, ApiOperation, ApiResponse, ApiTags } from '@nestjs/swagger';
+import { ApiBody, ApiHeader, ApiOperation, ApiResponse, ApiSecurity, ApiTags } from '@nestjs/swagger';
 import { PersonasService } from './personas.service';
 import { GetPlanesPerDto } from './dto/get-planes-per.dto';
 import { CotizacionPerDto } from './dto/cotizacion-per.dto';
 import { CreateEmissionPersonDto } from './dto/create-emission-person.dto';
+import { ValidateEmissionPersonDto } from '../emissions/dto/validate-emission-person.dto';
 import { Api401, Api500, ApiCommonErrors } from '../../common/swagger/api-error-responses';
+import { APIKEY_HEADER } from '../../common/swagger/api-docs.constants';
 
-@ApiExcludeController()
-@ApiTags('personas')
+@ApiTags('6. Emisión Funerario (personas)')
 @Controller('v1/personas')
 export class PersonasController {
   constructor(private readonly personasService: PersonasService) {}
@@ -62,18 +63,48 @@ export class PersonasController {
     return { status: true, data };
   }
 
+  // ── POST /api/v1/personas/validacion ───────────────────────────────────────
+
+  @Post('validacion')
+  @HttpCode(HttpStatus.OK)
+  @ApiOperation({
+    summary: 'Funerario paso 5 · Validar emisión de personas',
+    description:
+      'Ejecuta `speeValidatePersonGeneral` antes de emitir. ' +
+      'Alias interno Exélixi de `POST /external/validateEmissionPerson`.',
+    operationId: 'funerarioPersonasValidacion',
+  })
+  @ApiBody({ type: ValidateEmissionPersonDto })
+  @ApiResponse({
+    status: 200,
+    schema: { example: { status: true, result: { status: true, message: 'Persona válida para emisión.' } } },
+  })
+  @ApiResponse({
+    status: 200,
+    description: 'Validación rechazada (póliza vigente, regla de negocio)',
+    schema: { example: { status: false, result: { status: false, error: 'Póliza vigente con el mismo asegurado.' } } },
+  })
+  @ApiCommonErrors()
+  async validar(@Body() dto: ValidateEmissionPersonDto) {
+    const result = await this.personasService.validateEmissionPerson(
+      dto as unknown as Record<string, unknown>,
+    );
+    return { status: result.status, result };
+  }
+
   // ── POST /api/v1/personas/emision ─────────────────────────────────────────
 
   @Post('emision')
   @HttpCode(HttpStatus.OK)
+  @ApiSecurity('apikey')
   @ApiOperation({
-    summary: 'Emitir póliza de personas (Funerario)',
+    summary: 'Funerario paso 6 · Emitir póliza de personas',
     description:
-      'Inserta en la vista `eePoliza_Personas_General` (trigger INSTEAD OF INSERT). ' +
-      'Requiere header `apikey` (se valida contra `maclient_api`). ' +
-      'Devuelve `cnpoliza`, `cnrecibo` y `urlpoliza`.',
+      'Inserta en la vista `eePoliza_Personas_General`. Requiere header `apikey` en producción. ' +
+      'Alias interno Exélixi de `POST /external/createEmissionPerson`.',
+    operationId: 'funerarioPersonasEmision',
   })
-  @ApiHeader({ name: 'apikey', description: 'Token de autenticación del canal emisor (opcional en QA interno)', required: false })
+  @ApiHeader(APIKEY_HEADER)
   @ApiBody({ type: CreateEmissionPersonDto })
   @ApiResponse({
     status: 200,
