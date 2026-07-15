@@ -88,16 +88,15 @@ export class EmissionsController {
     summary: 'Validar placa/serial (pre-plan o con plan)',
     description:
       'Ejecuta `speeValidateAutomovilGeneral`. Comprueba en Sis2000 si la placa o el serial ya tienen póliza vigente.\n\n' +
-      '**Uso 1 — Formulario Exélixi (antes de elegir plan):** envía solo `placa`, `serial_carroceria` y opcional `serial_motor`. ' +
-      'No incluyas `plan`; el servidor aplica `LAMUNDIAL_PLAN_DEFAULT` (por defecto `RCVBAS`). ' +
-      'Es el mismo check que hace el front en el paso 3 del formulario vía `POST /valrep/validate-vehicle`.\n\n' +
+      '**Uso 1 — Formulario Exélixi (antes de elegir plan):** envía solo `placa` y `serial_carroceria` (carnet de circulación). ' +
+      'No incluyas `plan` (el servidor usa `LAMUNDIAL_PLAN_DEFAULT` / `RCVBAS`) ni serial de motor.\n\n' +
       '**Uso 2 — Re-validación con plan:** incluye `plan` con el código elegido en cotización (debe coincidir al emitir).\n\n' +
       '**Probar en Swagger:** Try it out → ejemplo *Pre-plan (sin plan)* → Execute.\n\n' +
-      '**curl (sin plan):**\n' +
+      '**curl (solo carnet):**\n' +
       '```\n' +
       'curl -X POST http://localhost:3002/api/v1/external/validateEmissionAuto \\\n' +
       '  -H "Content-Type: application/json" \\\n' +
-      '  -d \'{"placa":"AE886C","serial_carroceria":"SC1S6ZMV3024323","serial_motor":"SC1S6ZMV3024323"}\'\n' +
+      '  -d \'{"placa":"AE886C","serial_carroceria":"SC1S6ZMV3024323"}\'\n' +
       '```\n\n' +
       '**Siguiente paso (tras planes/cotización):** `POST /external/createEmissionAuto`',
     operationId: 'rcvValidateEmissionAuto',
@@ -108,7 +107,7 @@ export class EmissionsController {
       prePlan: {
         summary: 'Pre-plan (sin plan) — Formulario Exélixi',
         description:
-          'Validación temprana: solo placa y serial. El plan se resuelve en servidor (`RCVBAS` por defecto).',
+          'Validación temprana con datos del carnet: placa + serial de carrocería. Sin plan ni serial de motor.',
         value: RCV_VALIDATE_PRE_PLAN_BODY,
       },
       withPlan: {

@@ -20,15 +20,12 @@ export class ValidateEmissionAutoDto {
   @MaxLength(7, { message: 'La placa no debe exceder 7 caracteres.' })
   placa: string;
 
-  @ApiProperty({ example: 'SC1S6ZMV3024323', description: 'Serial de carrocería del vehículo' })
+  @ApiProperty({
+    example: 'SC1S6ZMV3024323',
+    description: 'Serial de carrocería del carnet de circulación (campo obligatorio junto con la placa).',
+  })
   @IsString({ message: 'El serial de carrocería debe ser texto.' })
   @IsNotEmpty({ message: 'El serial de carrocería es requerido.' })
   @MaxLength(30, { message: 'El serial de carrocería no debe exceder 30 caracteres.' })
   serial_carroceria: string;
-
-  @ApiPropertyOptional({ example: null, description: 'Serial de motor (null si no aplica)' })
-  @IsOptional()
-  @IsString({ message: 'El serial de motor debe ser texto.' })
-  @MaxLength(30, { message: 'El serial de motor no debe exceder 30 caracteres.' })
-  serial_motor?: string | null;
 }

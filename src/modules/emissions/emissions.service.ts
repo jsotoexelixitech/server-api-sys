@@ -163,7 +163,7 @@ export class EmissionsService {
     req.input('cplan', T.VarChar(10), cplan);
     req.input('xplaca', T.VarChar(15), body.placa);
     req.input('xsercar', T.VarChar(60), body.serial_carroceria);
-    req.input('xsermot', T.VarChar(60), body.serial_motor ?? body.serial_carroceria);
+    req.input('xsermot', T.VarChar(60), null);
     try {
       await req.execute('speeValidateAutomovilGeneral');
       return { status: true, message: 'Vehículo válido para emisión.' };

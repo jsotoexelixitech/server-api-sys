@@ -39,7 +39,7 @@ Solo endpoints del flujo RCV en producción. Todos ejecutan SP o SQL directo con
 
 **Auth:** header \`apikey\` (\`maclient_api.xtoken\`) en pasos 6, 7 y 8.
 
-**Probar validación pre-plan (Swagger o curl):** body solo con \`placa\`, \`serial_carroceria\` y opcional \`serial_motor\`. No envíes \`plan\`.
+**Probar validación pre-plan (Swagger o curl):** body solo con \`placa\` y \`serial_carroceria\` (carnet). No envíes \`plan\` ni serial de motor.
 
 **Cobro validado QA:** ingreso #183034 · póliza \`18-1-0000078926\`
 `.trim();
@@ -89,11 +89,10 @@ export const RCV_COTIZACION_EXAMPLE = {
   ptasa: 723.999,
 };
 
-/** Validación temprana Formulario Exélixi — sin plan (usa LAMUNDIAL_PLAN_DEFAULT / RCVBAS). */
+/** Validación temprana Formulario Exélixi — carnet: placa + serial carrocería (sin plan ni motor). */
 export const RCV_VALIDATE_PRE_PLAN_BODY = {
   placa: 'AE886C',
   serial_carroceria: 'SC1S6ZMV3024323',
-  serial_motor: 'SC1S6ZMV3024323',
 };
 
 /** Re-validación con plan ya elegido (opcional, antes de emitir). */
@@ -101,5 +100,4 @@ export const RCV_VALIDATE_WITH_PLAN_BODY = {
   plan: 'RCVBAS',
   placa: 'AE886C',
   serial_carroceria: 'SC1S6ZMV3024323',
-  serial_motor: 'SC1S6ZMV3024323',
 };
