@@ -5,6 +5,7 @@ export const SWAGGER_TAG_ORDER = [
   '3. Emisión RCV',
   '4. Cobranza RCV',
   '5. Documentos (post-emisión)',
+  '6. Emisión Funerario (personas)',
 ] as const;
 
 export const SWAGGER_API_DESCRIPTION = `

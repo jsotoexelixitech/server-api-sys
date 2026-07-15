@@ -61,6 +61,7 @@ async function bootstrap(): Promise<void> {
       .addTag('3. Emisión RCV', 'Pasos 5–6 · validar y emitir')
       .addTag('4. Cobranza RCV', 'Paso 7 · `activate` (ingreso de caja)')
       .addTag('5. Documentos (post-emisión)', 'Paso 8 · anexo conductor habitual')
+      .addTag('6. Emisión Funerario (personas)', 'Pasos 1–6 · valrep productos/planes + cotizar/validar/emitir')
       .build();
 
     const document = SwaggerModule.createDocument(app, swaggerConfig);

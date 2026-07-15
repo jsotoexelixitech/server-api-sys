@@ -50,6 +50,12 @@ export interface CotizacionPerResult {
   ptasa: number;
 }
 
+/** Formato legacy SysIP (`/app/getCotizacionPer`, `/external/getCotizacionPer`). */
+export interface CotizacionPerLegacyResult {
+  data: { total_asegurado: { mprima: number; mprimaext: number }[] }[];
+  total_extension: { mprimatotal: number; mprimatotalext: number };
+}
+
 @Injectable()
 export class PersonasService {
   private readonly logger = new Logger(PersonasService.name);
@@ -246,6 +252,40 @@ export class PersonasService {
       this.logger.error(`getCotizacionPer: ${msg}`);
       throw new BadRequestException(msg);
     }
+  }
+
+  /**
+   * Cotización por asegurado en formato legacy SysIP (external/app).
+   * Réplica de `appModel.spGetCotizacionPer` + `externalChannelsController.getCotizacionPerson`.
+   */
+  async buildCotizacionPerLegacyResult(
+    dto: CotizacionPerDto,
+  ): Promise<CotizacionPerLegacyResult> {
+    const data: CotizacionPerLegacyResult['data'] = [];
+    let mprimatotal = 0;
+    let mprimatotalext = 0;
+
+    for (const asegurado of dto.asegurados) {
+      const result = await this.getCotizacionPer({
+        ...dto,
+        asegurados: [asegurado],
+      });
+      data.push({
+        total_asegurado: [
+          { mprima: result.mprima, mprimaext: result.mprimaext },
+        ],
+      });
+      mprimatotal += result.mprima;
+      mprimatotalext += result.mprimaext;
+    }
+
+    return {
+      data,
+      total_extension: {
+        mprimatotal: parseFloat(mprimatotal.toFixed(2)),
+        mprimatotalext: parseFloat(mprimatotalext.toFixed(2)),
+      },
+    };
   }
 
   // ── Validación de persona (speeValidatePersonGeneral) ──────────────────────

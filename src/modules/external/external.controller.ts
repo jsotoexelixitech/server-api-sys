@@ -1,21 +1,70 @@
 import { Body, Controller, Headers, HttpCode, HttpStatus, Post } from '@nestjs/common';
-import { ApiExcludeController, ApiBody, ApiHeader, ApiOperation, ApiResponse, ApiTags } from '@nestjs/swagger';
+import {
+  ApiBody,
+  ApiHeader,
+  ApiOperation,
+  ApiResponse,
+  ApiSecurity,
+  ApiTags,
+} from '@nestjs/swagger';
 import { PersonasService } from '../personas/personas.service';
 import { CreateEmissionPersonDto } from '../personas/dto/create-emission-person.dto';
+import { CotizacionPerDto } from '../personas/dto/cotizacion-per.dto';
 import { ValidateEmissionPersonDto } from '../emissions/dto/validate-emission-person.dto';
 import { Api401, Api500, ApiCommonErrors } from '../../common/swagger/api-error-responses';
+import { APIKEY_HEADER } from '../../common/swagger/api-docs.constants';
 
-@ApiExcludeController()
-@ApiTags('Emisión Personas (Funerario)')
+@ApiTags('6. Emisión Funerario (personas)')
 @Controller('v1/external')
 export class ExternalController {
   constructor(private readonly personasService: PersonasService) {}
 
+  @Post('getCotizacionPer')
+  @HttpCode(HttpStatus.OK)
+  @ApiSecurity('apikey')
+  @ApiOperation({
+    summary: 'Funerario paso 4 · Cotización de personas',
+    description:
+      'Ejecuta `spCalculoPer` por cada asegurado. Formato legacy SysIP (`result.data` + `total_extension`).\n\n' +
+      '**Flujo funerario (fb_organizacion_swagger):**\n' +
+      '1. `POST /valrep/productos` → 2. `POST /valrep/planes/producto` → 3. `POST /valrep/planes/detalle` → ' +
+      '**4. este endpoint** → 5. `validateEmissionPerson` → 6. `createEmissionPerson`.\n\n' +
+      'Equivalente interno Exélixi: `POST /personas/cotizacion` (formato plano).',
+    operationId: 'funerarioExternalGetCotizacionPer',
+  })
+  @ApiHeader(APIKEY_HEADER)
+  @ApiBody({ type: CotizacionPerDto })
+  @ApiResponse({
+    status: 200,
+    schema: {
+      example: {
+        status: true,
+        result: {
+          data: [{ total_asegurado: [{ mprima: 12178.03, mprimaext: 16.78 }] }],
+          total_extension: { mprimatotal: 12178.03, mprimatotalext: 16.78 },
+        },
+      },
+    },
+  })
+  @ApiResponse({ status: 400, description: 'Parámetros inválidos o prima cero.' })
+  @Api401()
+  @ApiCommonErrors()
+  async getCotizacionPer(
+    @Headers('apikey') _apikey: string,
+    @Body() dto: CotizacionPerDto,
+  ) {
+    const result = await this.personasService.buildCotizacionPerLegacyResult(dto);
+    return { status: true, result };
+  }
+
   @Post('validateEmissionPerson')
   @HttpCode(HttpStatus.OK)
   @ApiOperation({
-    summary: 'Validar emisión de personas',
-    description: 'Valida los datos antes de emitir. Actualmente es un paso de paso que devuelve status: true si los datos están correctos según el DTO.',
+    summary: 'Funerario paso 5 · Validar emisión de personas',
+    description:
+      'Ejecuta `speeValidatePersonGeneral` antes de emitir. ' +
+      'Paso previo a `POST /external/createEmissionPerson`.',
+    operationId: 'funerarioExternalValidateEmissionPerson',
   })
   @ApiBody({ type: ValidateEmissionPersonDto })
   @ApiResponse({
@@ -35,11 +84,15 @@ export class ExternalController {
 
   @Post('createEmissionPerson')
   @HttpCode(HttpStatus.OK)
+  @ApiSecurity('apikey')
   @ApiOperation({
-    summary: 'Emitir póliza de personas (Funerario) - Interfaz externa',
-    description: 'Inserta en la vista `eePoliza_Personas_General`. Requiere header `apikey`.',
+    summary: 'Funerario paso 6 · Emitir póliza de personas',
+    description:
+      'Inserta en la vista `eePoliza_Personas_General` (trigger INSTEAD OF INSERT). ' +
+      'Requiere header `apikey` en producción.',
+    operationId: 'funerarioExternalCreateEmissionPerson',
   })
-  @ApiHeader({ name: 'apikey', description: 'Token de autenticación del canal emisor (opcional en QA interno)', required: false })
+  @ApiHeader(APIKEY_HEADER)
   @ApiBody({ type: CreateEmissionPersonDto })
   @ApiResponse({
     status: 200,
