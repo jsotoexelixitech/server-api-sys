@@ -17,6 +17,8 @@ import {
   APIKEY_HEADER,
   RCV_COTIZACION_EXAMPLE,
   RCV_EMISSION_EXAMPLE,
+  RCV_VALIDATE_PRE_PLAN_BODY,
+  RCV_VALIDATE_WITH_PLAN_BODY,
 } from '../../common/swagger/api-docs.constants';
 
 @ApiTags('3. Emisión RCV')
@@ -83,13 +85,39 @@ export class EmissionsController {
   @Post('external/validateEmissionAuto')
   @HttpCode(HttpStatus.OK)
   @ApiOperation({
-    summary: 'Paso 5b · Validar vehículo para emisión',
+    summary: 'Validar placa/serial (pre-plan o con plan)',
     description:
-      'Ejecuta `speeValidateAutomovilGeneral`. Bloquea emisión si existe póliza vigente con la misma placa o serial.\n\n' +
-      '**Siguiente paso:** `POST /external/createEmissionAuto`',
+      'Ejecuta `speeValidateAutomovilGeneral`. Comprueba en Sis2000 si la placa o el serial ya tienen póliza vigente.\n\n' +
+      '**Uso 1 — Formulario Exélixi (antes de elegir plan):** envía solo `placa`, `serial_carroceria` y opcional `serial_motor`. ' +
+      'No incluyas `plan`; el servidor aplica `LAMUNDIAL_PLAN_DEFAULT` (por defecto `RCVBAS`). ' +
+      'Es el mismo check que hace el front en el paso 3 del formulario vía `POST /valrep/validate-vehicle`.\n\n' +
+      '**Uso 2 — Re-validación con plan:** incluye `plan` con el código elegido en cotización (debe coincidir al emitir).\n\n' +
+      '**Probar en Swagger:** Try it out → ejemplo *Pre-plan (sin plan)* → Execute.\n\n' +
+      '**curl (sin plan):**\n' +
+      '```\n' +
+      'curl -X POST http://localhost:3002/api/v1/external/validateEmissionAuto \\\n' +
+      '  -H "Content-Type: application/json" \\\n' +
+      '  -d \'{"placa":"AE886C","serial_carroceria":"SC1S6ZMV3024323","serial_motor":"SC1S6ZMV3024323"}\'\n' +
+      '```\n\n' +
+      '**Siguiente paso (tras planes/cotización):** `POST /external/createEmissionAuto`',
     operationId: 'rcvValidateEmissionAuto',
   })
-  @ApiBody({ type: ValidateEmissionAutoDto })
+  @ApiBody({
+    type: ValidateEmissionAutoDto,
+    examples: {
+      prePlan: {
+        summary: 'Pre-plan (sin plan) — Formulario Exélixi',
+        description:
+          'Validación temprana: solo placa y serial. El plan se resuelve en servidor (`RCVBAS` por defecto).',
+        value: RCV_VALIDATE_PRE_PLAN_BODY,
+      },
+      withPlan: {
+        summary: 'Con plan elegido',
+        description: 'Re-validación opcional antes de emitir; `plan` debe ser el mismo que en cotización/emisión.',
+        value: RCV_VALIDATE_WITH_PLAN_BODY,
+      },
+    },
+  })
   @ApiResponse({
     status: 200,
     description: 'Vehículo apto para emisión.',

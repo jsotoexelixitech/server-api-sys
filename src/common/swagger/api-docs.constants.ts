@@ -15,18 +15,31 @@ Solo endpoints del flujo RCV en producción. Todos ejecutan SP o SQL directo con
 
 ---
 
+### Flujo Exélixi (wizard)
+
+| Paso wizard | Módulo | Acción | Endpoint nest-api |
+|-------------|--------|--------|-------------------|
+| 3 | Formulario | Validar placa/serial **antes de elegir plan** | \`POST /external/validateEmissionAuto\` (sin \`plan\` → \`RCVBAS\`) |
+| 4 | Emisión | Planes + cotización | \`POST /valrep/planes/v2\` → \`POST /valrep/cotizacion\` |
+| 5 | Pagos | Emitir + cobrar | \`POST /external/createEmissionAuto\` → \`POST /external/collection/activate\` |
+
+### Referencia técnica (Sis2000)
+
 | Paso | Endpoint | Sis2000 |
 |------|----------|---------|
 | 1 | \`GET /inma/anios\` → \`POST /inma/marcas\` → \`modelo\` → \`version\` → \`categorias-uso\` | \`VInma\` |
 | 2 | \`GET /valrep/states\` → \`cities\` → \`POST /valrep/getLists\` | \`maestados\`, \`maciudades\`, \`maparent\` |
 | 3 | \`POST /valrep/planes/v2\` | \`spBuscaPlan\` |
 | 4 | \`POST /valrep/cotizacion\` | \`spCalculoAuto\` |
-| 5 | \`POST /external/validateEmissionAuto\` | \`speeValidateAutomovilGeneral\` |
+| 5a | \`POST /external/validateEmissionAuto\` **sin plan** (Formulario, pre-plan) | \`speeValidateAutomovilGeneral\` |
+| 5b | \`POST /external/validateEmissionAuto\` **con plan** (re-validación opcional) | \`speeValidateAutomovilGeneral\` |
 | 6 | \`POST /external/createEmissionAuto\` | \`sp_pre_emision_Automovil_RCV2\` |
 | 7 | \`POST /external/collection/activate\` | \`spCobroSis_Ad\` + \`cbreporte_pago\` |
 | 8 | \`POST /documents/conductor-habitual\` | PDF anexo (post-emisión) |
 
 **Auth:** header \`apikey\` (\`maclient_api.xtoken\`) en pasos 6, 7 y 8.
+
+**Probar validación pre-plan (Swagger o curl):** body solo con \`placa\`, \`serial_carroceria\` y opcional \`serial_motor\`. No envíes \`plan\`.
 
 **Cobro validado QA:** ingreso #183034 · póliza \`18-1-0000078926\`
 `.trim();
@@ -74,4 +87,19 @@ export const RCV_COTIZACION_EXAMPLE = {
   mprimaext: 0.01,
   mprima: 7.24,
   ptasa: 723.999,
+};
+
+/** Validación temprana Formulario Exélixi — sin plan (usa LAMUNDIAL_PLAN_DEFAULT / RCVBAS). */
+export const RCV_VALIDATE_PRE_PLAN_BODY = {
+  placa: 'AE886C',
+  serial_carroceria: 'SC1S6ZMV3024323',
+  serial_motor: 'SC1S6ZMV3024323',
+};
+
+/** Re-validación con plan ya elegido (opcional, antes de emitir). */
+export const RCV_VALIDATE_WITH_PLAN_BODY = {
+  plan: 'RCVBAS',
+  placa: 'AE886C',
+  serial_carroceria: 'SC1S6ZMV3024323',
+  serial_motor: 'SC1S6ZMV3024323',
 };

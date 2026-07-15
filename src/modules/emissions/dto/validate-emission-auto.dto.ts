@@ -2,11 +2,17 @@ import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
 import { IsNotEmpty, IsOptional, IsString, MaxLength } from 'class-validator';
 
 export class ValidateEmissionAutoDto {
-  @ApiProperty({ example: 'RCVBAS', description: 'Código del plan a emitir' })
+  @ApiPropertyOptional({
+    example: 'RCVBAS',
+    description:
+      'Código del plan a emitir. **Opcional** en validación temprana (Formulario Exélixi, antes de elegir plan): ' +
+      'si se omite, el servidor usa `LAMUNDIAL_PLAN_DEFAULT` o `RCVBAS`. ' +
+      'En emisión definitiva debe coincidir con el plan cotizado.',
+  })
+  @IsOptional()
   @IsString({ message: 'El plan debe ser texto.' })
-  @IsNotEmpty({ message: 'El plan es requerido.' })
   @MaxLength(6, { message: 'El plan no debe exceder 6 caracteres.' })
-  plan: string;
+  plan?: string;
 
   @ApiProperty({ example: 'AE886C', description: 'Placa del vehículo' })
   @IsString({ message: 'La placa debe ser texto.' })

@@ -158,10 +158,12 @@ export class EmissionsService {
   async validateEmissionAuto(body: Record<string, unknown>) {
     const req = this.db.request();
     const T = this.db.types;
-    req.input('cplan', T.VarChar(10), body.plan);
+    const defaultPlan = this.config.get<string>('LAMUNDIAL_PLAN_DEFAULT', 'RCVBAS');
+    const cplan = String(body.plan ?? defaultPlan).trim() || defaultPlan;
+    req.input('cplan', T.VarChar(10), cplan);
     req.input('xplaca', T.VarChar(15), body.placa);
     req.input('xsercar', T.VarChar(60), body.serial_carroceria);
-    req.input('xsermot', T.VarChar(60), body.serial_motor);
+    req.input('xsermot', T.VarChar(60), body.serial_motor ?? body.serial_carroceria);
     try {
       await req.execute('speeValidateAutomovilGeneral');
       return { status: true, message: 'Vehículo válido para emisión.' };
