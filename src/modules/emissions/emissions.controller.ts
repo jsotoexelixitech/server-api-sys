@@ -121,18 +121,40 @@ export class EmissionsController {
     status: 200,
     description: 'Vehículo apto para emisión.',
     schema: {
-      example: { status: true, result: { status: true, message: 'Vehículo válido para emisión.' } },
+      example: {
+        status: true,
+        result: {
+          status: true,
+          message: 'El vehículo puede asegurarse. No hay póliza vigente con esta placa ni serial.',
+        },
+      },
     },
   })
   @ApiResponse({
     status: 200,
-    description: 'Validación rechazada.',
+    description: 'Póliza vigente detectada por placa.',
     schema: {
       example: {
         status: false,
         result: {
           status: false,
-          error: 'Se ha detectado la existencia de una póliza vigente con la misma placa del vehículo.',
+          code: 'PLATE_ALREADY_INSURED',
+          error: 'Ya existe una póliza vigente registrada con la misma placa. Verifica los datos del carnet de circulación.',
+        },
+      },
+    },
+  })
+  @ApiResponse({
+    status: 200,
+    description: 'Póliza vigente detectada por serial de carrocería.',
+    schema: {
+      example: {
+        status: false,
+        result: {
+          status: false,
+          code: 'SERIAL_ALREADY_INSURED',
+          error:
+            'Ya existe una póliza vigente registrada con el mismo serial de carrocería. Verifica los datos del carnet de circulación.',
         },
       },
     },

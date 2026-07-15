@@ -6,7 +6,7 @@ import {
 } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { MssqlService } from '../../database/mssql.service';
-import { parseSPError } from '../../common/helpers/sp-error.helper';
+import { parseSPError, formatValidateAutoError } from '../../common/helpers/sp-error.helper';
 
 @Injectable()
 export class EmissionsService {
@@ -166,11 +166,12 @@ export class EmissionsService {
     req.input('xsermot', T.VarChar(60), null);
     try {
       await req.execute('speeValidateAutomovilGeneral');
-      return { status: true, message: 'Vehículo válido para emisión.' };
+      return { status: true, message: 'El vehículo puede asegurarse. No hay póliza vigente con esta placa ni serial.' };
     } catch (err) {
-      const msg = parseSPError(err);
-      this.logger.warn(`validateEmissionAuto (SP validation error): ${msg}`);
-      return { status: false, error: msg };
+      const raw = parseSPError(err);
+      const formatted = formatValidateAutoError(raw);
+      this.logger.warn(`validateEmissionAuto (SP): ${raw} → ${formatted.code}`);
+      return { status: false, error: formatted.message, code: formatted.code };
     }
   }
 
