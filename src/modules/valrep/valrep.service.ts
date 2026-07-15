@@ -446,25 +446,206 @@ export class ValrepService {
   // ── Funerario: catálogo valrep (pasos 1–3, fb_organizacion_swagger) ────────
 
   private resolveEntidadItem(body: { citem?: string; centidad?: string }) {
-    const citem = body.citem?.trim() ? String(body.citem).trim() : null;
-    const centidad = citem && body.centidad?.trim()
-      ? String(body.centidad).trim()
-      : null;
+    let citem: string | null = null;
+    let centidad: string | null = null;
+
+    if (body.citem?.trim()) {
+      citem = String(body.citem).trim();
+      centidad = body.centidad?.trim() ? String(body.centidad).trim() : null;
+    } else if (body.centidad?.trim() && body.centidad.trim() !== 'G') {
+      centidad = String(body.centidad).trim();
+    }
+
     return { citem, centidad };
   }
 
-  /** Paso 1 funerario — spBuscaProductosEntidad. */
+  private isMissingProcedure(err: unknown): boolean {
+    if (!err || typeof err !== 'object') return false;
+    const e = err as { message?: string; number?: number };
+    return (
+      e.number === 2812 ||
+      /could not find stored procedure/i.test(e.message ?? '')
+    );
+  }
+
+  /** Fallback SQL cuando los SP nuevos (2026) aún no están en Sis2000. */
+  private async getProductosPersonasSql(
+    citem: string | null,
+    centidad: string | null,
+  ): Promise<Record<string, unknown>[]> {
+    const T = this.db.types;
+    const req = this.db.request();
+    req.input('citem', T.NVarChar(20), citem);
+    req.input('centidad', T.Char(1), centidad);
+
+    const result = await req.query<Record<string, unknown>>(`
+      SELECT DISTINCT
+        TRIM(p.cproducto) AS cproducto,
+        TRIM(p.xdescripcion_l) AS xproducto,
+        p.cramo,
+        TRIM(p.xabreviatura) AS xabreviatura,
+        TRIM(p.xdescripcion_c) AS xlogo,
+        p.xform,
+        p.iproductor,
+        p.icanal
+      FROM maproductos p
+      INNER JOIN maplanes_per mp ON TRIM(mp.cproducto) = TRIM(p.cproducto)
+      WHERE mp.iestado = 'V'
+        AND (
+          @centidad IS NULL
+          OR (
+            CASE
+              WHEN @centidad = 'P' THEN p.iproductor
+              WHEN @centidad = 'C' THEN p.icanal
+              ELSE 1
+            END = 1
+            AND EXISTS (
+              SELECT 1
+              FROM mausuplan u
+              WHERE u.cramo = mp.cramo
+                AND TRIM(u.cplan) = TRIM(mp.cplan)
+                AND u.centidad = @centidad
+                AND u.itipouso = 'A'
+                AND (u.citem IS NULL OR (@citem IS NOT NULL AND u.citem = @citem))
+            )
+            AND NOT EXISTS (
+              SELECT 1
+              FROM mausuplan u
+              WHERE u.cramo = mp.cramo
+                AND TRIM(u.cplan) = TRIM(mp.cplan)
+                AND u.centidad = @centidad
+                AND u.itipouso = 'E'
+                AND (u.citem IS NULL OR (@citem IS NOT NULL AND u.citem = @citem))
+            )
+          )
+        )
+      ORDER BY TRIM(p.cproducto)
+    `);
+
+    const rows = (result.recordset ?? []) as Record<string, unknown>[];
+    if (!rows.length) {
+      throw new BadRequestException('No se encuentra planes asociados');
+    }
+    return rows;
+  }
+
+  private async getPlanesProductoSql(
+    cproducto: string,
+    citem: string | null,
+    centidad: string | null,
+  ): Promise<{ planes: PlanItem[]; mensaje: string }> {
+    const T = this.db.types;
+    const req = this.db.request();
+    req.input('cproducto', T.NVarChar(10), cproducto);
+    req.input('citem', T.NVarChar(20), citem);
+    req.input('centidad', T.Char(1), centidad);
+
+    const result = await req.query<PlanItem>(`
+      SELECT
+        TRIM(b.cplan) AS cplan,
+        TRIM(b.xplan) AS xplan,
+        b.cramo,
+        TRIM(b.cproducto) AS cproducto,
+        TRIM(b.cmoneda) AS cmoneda,
+        b.iestado
+      FROM maplanes_per b
+      WHERE b.iestado = 'V'
+        AND TRIM(b.cproducto) = @cproducto
+        AND (
+          @citem IS NULL
+          OR (
+            @centidad IS NOT NULL
+            AND CONCAT(TRIM(b.cplan), b.cramo) IN (
+              SELECT CONCAT(TRIM(cplan), cramo)
+              FROM mausuplan
+              WHERE centidad = @centidad AND citem = @citem AND itipouso = 'A'
+              UNION ALL
+              SELECT CONCAT(TRIM(cplan), cramo)
+              FROM mausuplan
+              WHERE centidad = @centidad AND citem IS NULL AND itipouso = 'A'
+            )
+            AND CONCAT(TRIM(b.cplan), b.cramo) NOT IN (
+              SELECT CONCAT(TRIM(cplan), cramo)
+              FROM mausuplan
+              WHERE centidad = @centidad AND citem = @citem AND itipouso = 'E'
+              UNION ALL
+              SELECT CONCAT(TRIM(cplan), cramo)
+              FROM mausuplan
+              WHERE centidad = @centidad AND citem IS NULL AND itipouso = 'E'
+            )
+          )
+        )
+      ORDER BY TRIM(b.cplan)
+    `);
+
+    const recordset = (result.recordset ?? []) as PlanItem[];
+    if (!recordset.length) {
+      throw new BadRequestException('No se encuentra planes asociados');
+    }
+
+    const planes = await this.enrichWithParentescos(recordset);
+    return { planes, mensaje: 'Planes encontrados' };
+  }
+
+  private async getPlanesDetallePersonasSql(
+    cramo: number,
+    cplan: string,
+  ): Promise<PlanItem[]> {
+    const T = this.db.types;
+    const req = this.db.request();
+    req.input('cramo', T.Int, cramo);
+    req.input('cplan', T.VarChar(10), cplan);
+
+    const result = await req.query<PlanItem>(`
+      SELECT
+        b.cramo,
+        TRIM(b.cplan) AS cplan,
+        TRIM(b.xplan) AS xplan,
+        TRIM(b.cproducto) AS cproducto,
+        TRIM(b.cmoneda) AS cmoneda,
+        b.iestado,
+        b.itarifa,
+        b.itiporen
+      FROM maplanes_per b
+      WHERE b.cramo = @cramo AND TRIM(b.cplan) = @cplan
+      UNION ALL
+      SELECT
+        b.cramo,
+        TRIM(b.cplan) AS cplan,
+        TRIM(b.xplan) AS xplan,
+        TRIM(b.cproducto) AS cproducto,
+        TRIM(b.cmoneda) AS cmoneda,
+        b.iestado,
+        NULL AS itarifa,
+        b.itiporen
+      FROM maplanes b
+      WHERE b.cramo = @cramo AND TRIM(b.cplan) = @cplan
+    `);
+
+    const base = (result.recordset ?? []) as PlanItem[];
+    if (!base.length) {
+      throw new BadRequestException('No se encontraron detalles para este plan.');
+    }
+
+    const [enriched] = await this.enrichWithCoberturas(
+      await this.enrichWithParentescos([{ ...base[0] }]),
+    );
+    return [enriched];
+  }
+
+  /** Paso 1 funerario — spBuscaProductosEntidad (con fallback SQL). */
   async getProductosPersonas(
     body: { citem?: string; centidad?: string },
   ): Promise<Record<string, unknown>[]> {
+    const { citem, centidad } = this.resolveEntidadItem(body);
+
     try {
       const T = this.db.types;
-      const { citem, centidad } = this.resolveEntidadItem(body);
       const req = this.db.request();
       req.input('citem', T.NVarChar(20), citem);
       req.input('centidad', T.Char(1), centidad);
       req.output('berror', T.Bit, false);
-      req.output('mensaje', T.NVarChar(500), '');
+      req.output('mensaje', T.NVarChar(60), '');
 
       const result = await req.execute('spBuscaProductosEntidad');
       const mensaje: string = result.output['mensaje'] ?? '';
@@ -475,6 +656,12 @@ export class ValrepService {
       return (result.recordset ?? []) as Record<string, unknown>[];
     } catch (err) {
       if (err instanceof BadRequestException) throw err;
+      if (this.isMissingProcedure(err)) {
+        this.logger.warn(
+          'spBuscaProductosEntidad no disponible; usando consulta SQL de respaldo.',
+        );
+        return this.getProductosPersonasSql(citem, centidad);
+      }
       const msg = err instanceof Error ? err.message : String(err);
       this.logger.error(`getProductosPersonas: ${msg}`);
       throw new InternalServerErrorException(
@@ -483,47 +670,61 @@ export class ValrepService {
     }
   }
 
-  /** Paso 2 funerario — spBuscaPlanProducto + parentescos. */
+  /** Paso 2 funerario — spBuscaPlanProducto + parentescos (con fallback SQL). */
   async getPlanesProducto(body: {
     cproducto: string;
     citem?: string;
     centidad?: string;
   }): Promise<{ planes: PlanItem[]; mensaje: string }> {
+    const cproducto = String(body.cproducto).trim();
+    const { citem, centidad } = this.resolveEntidadItem(body);
+
     try {
       const T = this.db.types;
-      const { citem, centidad } = this.resolveEntidadItem(body);
       const req = this.db.request();
-      req.input('cproducto', T.NVarChar(10), String(body.cproducto).trim());
+      req.input('cproducto', T.NVarChar(10), cproducto);
       req.input('citem', T.NVarChar(20), citem);
       req.input('centidad', T.Char(1), centidad);
-      req.output('mensaje', T.NVarChar(1000), '');
+      req.output('mensaje', T.NVarChar(60), '');
 
       const result = await req.execute('spBuscaPlanProducto');
       const mensaje: string = result.output['mensaje'] ?? '';
       const recordset = (result.recordset ?? []) as PlanItem[];
+      if (!recordset.length) {
+        throw new BadRequestException(mensaje || 'No se encuentra planes asociados');
+      }
       const planes = await this.enrichWithParentescos(recordset);
       if (mensaje) this.logger.log(`spBuscaPlanProducto: ${mensaje}`);
       return { planes, mensaje };
     } catch (err) {
+      if (err instanceof BadRequestException) throw err;
+      if (this.isMissingProcedure(err)) {
+        this.logger.warn(
+          'spBuscaPlanProducto no disponible; usando consulta SQL de respaldo.',
+        );
+        return this.getPlanesProductoSql(cproducto, citem, centidad);
+      }
       const msg = err instanceof Error ? err.message : String(err);
-      this.logger.error(`getPlanesProducto cproducto=${body.cproducto}: ${msg}`);
+      this.logger.error(`getPlanesProducto cproducto=${cproducto}: ${msg}`);
       throw new InternalServerErrorException(
         'Error al obtener planes del producto.',
       );
     }
   }
 
-  /** Paso 3 funerario — spBuscaDetallePlan (detalle + parentescos + coberturas). */
+  /** Paso 3 funerario — spBuscaDetallePlan (con fallback SQL). */
   async getPlanesDetallePersonas(
     body: { cramo: number; cplan: string },
   ): Promise<PlanItem[]> {
+    const cplan = String(body.cplan).trim();
+
     try {
       const T = this.db.types;
       const req = this.db.request();
       req.input('cramo', T.Int, body.cramo);
-      req.input('cplan', T.VarChar(10), String(body.cplan).trim());
+      req.input('cplan', T.VarChar(10), cplan);
       req.output('berror', T.Bit, false);
-      req.output('mensaje', T.NVarChar(1000), '');
+      req.output('mensaje', T.NVarChar(60), '');
 
       const result = await req.execute('spBuscaDetallePlan');
       const berror = Boolean(result.output['berror']);
@@ -553,9 +754,15 @@ export class ValrepService {
       return [plan];
     } catch (err) {
       if (err instanceof BadRequestException) throw err;
+      if (this.isMissingProcedure(err)) {
+        this.logger.warn(
+          'spBuscaDetallePlan no disponible; usando consulta SQL de respaldo.',
+        );
+        return this.getPlanesDetallePersonasSql(body.cramo, cplan);
+      }
       const msg = err instanceof Error ? err.message : String(err);
       this.logger.error(
-        `getPlanesDetallePersonas cramo=${body.cramo} cplan=${body.cplan}: ${msg}`,
+        `getPlanesDetallePersonas cramo=${body.cramo} cplan=${cplan}: ${msg}`,
       );
       throw new InternalServerErrorException(
         'Error al obtener el detalle del plan.',
