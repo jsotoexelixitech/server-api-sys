@@ -1,21 +1,26 @@
-import { ApiPropertyOptional } from '@nestjs/swagger';
-import { IsOptional, IsString } from 'class-validator';
+import { ApiProperty } from '@nestjs/swagger';
+import { IsIn, IsNotEmpty, IsString } from 'class-validator';
 
-/** Body para POST /valrep/productos (funerario — spBuscaProductosEntidad). */
+/**
+ * Body para POST /valrep/productos.
+ * Réplica de SysIP valrepController.getProducts (fb_organizacion_swagger).
+ * Nota: la ruta SysIP NO usa spBuscaProductosEntidad; usa SQL legacy getProducts.
+ */
 export class GetProductosPersonasDto {
-  @ApiPropertyOptional({
+  @ApiProperty({
     example: '80080',
-    description: 'Código de ítem/productor. Si se envía, también debe enviarse centidad.',
+    description: 'Código de productor o canal (citem).',
   })
-  @IsOptional()
   @IsString()
-  citem?: string;
+  @IsNotEmpty()
+  citem: string;
 
-  @ApiPropertyOptional({
+  @ApiProperty({
     example: 'P',
-    description: 'Tipo de entidad (ej. P=productor). Solo aplica cuando viene citem.',
+    description: 'P = productor, C = canal.',
+    enum: ['P', 'C'],
   })
-  @IsOptional()
   @IsString()
-  centidad?: string;
+  @IsIn(['P', 'C'])
+  centidad: string;
 }

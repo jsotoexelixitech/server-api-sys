@@ -155,7 +155,9 @@ export class ValrepController {
   @ApiOperation({
     summary: 'Funerario paso 1 · Productos de personas',
     description:
-      'Ejecuta `spBuscaProductosEntidad`. Primer paso del flujo funerario documentado en La Mundial.\n\n' +
+      'Réplica de SysIP `Valrep.getProducts` (ruta real en fb_organizacion_swagger).\n\n' +
+      'Requiere `citem` + `centidad` (P=productor, C=canal). El swagger de La Mundial documenta ' +
+      '`spBuscaProductosEntidad`, pero la ruta `/valrep/productos` está cableada a `getProducts`.\n\n' +
       '**Siguiente paso:** `POST /valrep/planes/producto` con el `cproducto` elegido.',
     operationId: 'funerarioValrepProductos',
   })
@@ -165,18 +167,16 @@ export class ValrepController {
     schema: {
       example: {
         status: true,
-        data: {
-          productos: [
-            { cproducto: 57, xproducto: 'FUNERARIO INDIVIDUAL' },
-          ],
-        },
+        data: [
+          { cproducto: '57', xproducto: 'FUNERARIO INDIVIDUAL', cramo: 9 },
+        ],
       },
     },
   })
   @ApiCommonErrors()
   async getProductosPersonas(@Body() dto: GetProductosPersonasDto) {
     const productos = await this.valrepService.getProductosPersonas(dto);
-    return { status: true, data: { productos } };
+    return { status: true, data: productos };
   }
 
   @Post('planes/producto')

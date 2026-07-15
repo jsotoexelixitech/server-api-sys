@@ -461,70 +461,89 @@ export class ValrepService {
 
   private isMissingProcedure(err: unknown): boolean {
     if (!err || typeof err !== 'object') return false;
-    const e = err as { message?: string; number?: number };
+    const e = err as { message?: string; number?: number; code?: string };
     return (
       e.number === 2812 ||
+      e.code === 'EREQUEST' ||
       /could not find stored procedure/i.test(e.message ?? '')
     );
   }
 
-  /** Fallback SQL cuando los SP nuevos (2026) aún no están en Sis2000. */
-  private async getProductosPersonasSql(
-    citem: string | null,
-    centidad: string | null,
+  /** Filtro mausuplan (réplica Valrep.getProducts — fb_organizacion_swagger). */
+  private mausuplanFilter(alias: string): string {
+    return `
+      EXISTS (
+        SELECT 1 FROM mausuplan u
+        WHERE u.cramo = ${alias}.cramo AND u.cplan = ${alias}.cplan
+          AND u.centidad = @centidad AND u.citem = @citem AND u.itipouso = 'A'
+        UNION ALL
+        SELECT 1 FROM mausuplan u
+        WHERE u.cramo = ${alias}.cramo AND u.cplan = ${alias}.cplan
+          AND u.centidad = @centidad AND u.citem IS NULL AND u.itipouso = 'A'
+      )
+      AND NOT EXISTS (
+        SELECT 1 FROM mausuplan u
+        WHERE u.cramo = ${alias}.cramo AND u.cplan = ${alias}.cplan
+          AND u.centidad = @centidad AND u.citem = @citem AND u.itipouso = 'E'
+        UNION ALL
+        SELECT 1 FROM mausuplan u
+        WHERE u.cramo = ${alias}.cramo AND u.cplan = ${alias}.cplan
+          AND u.centidad = @centidad AND u.citem IS NULL AND u.itipouso = 'E'
+      )
+    `;
+  }
+
+  /**
+   * Paso 1 funerario — getProducts legacy (SysIP route /productos → getProducts).
+   * El swagger documenta spBuscaProductosEntidad pero la ruta real usa esta consulta.
+   */
+  private async getProductsLegacy(
+    citem: string,
+    centidad: string,
   ): Promise<Record<string, unknown>[]> {
     const T = this.db.types;
     const req = this.db.request();
     req.input('citem', T.NVarChar(20), citem);
     req.input('centidad', T.Char(1), centidad);
 
+    const filterPer = this.mausuplanFilter('maplanes_per');
+    const filterLanes = this.mausuplanFilter('maplanes');
+
+    const inClause = centidad === 'P'
+      ? `
+        SELECT DISTINCT cproducto FROM maplanes_per WHERE (${filterPer})
+        UNION ALL
+        SELECT DISTINCT cproducto FROM maplanes WHERE (${filterLanes})
+        UNION ALL
+        SELECT '24' FROM maplanes WHERE (${filterLanes})
+      `
+      : `
+        SELECT '24' FROM maplanes WHERE (${filterLanes})
+        UNION ALL
+        SELECT DISTINCT cproducto FROM maplanes WHERE (${filterLanes})
+        UNION ALL
+        SELECT DISTINCT cproducto FROM maplanes_per WHERE (${filterPer})
+      `;
+
+    const entidadFlag = centidad === 'P' ? 'p.iproductor = 1' : 'p.icanal = 1';
+
     const result = await req.query<Record<string, unknown>>(`
-      SELECT DISTINCT
+      SELECT
         TRIM(p.cproducto) AS cproducto,
         TRIM(p.xdescripcion_l) AS xproducto,
+        TRIM(p.xdescripcion_l) AS xdescripcion_l,
         p.cramo,
-        TRIM(p.xabreviatura) AS xabreviatura,
-        TRIM(p.xdescripcion_c) AS xlogo,
-        p.xform,
         p.iproductor,
         p.icanal
       FROM maproductos p
-      INNER JOIN maplanes_per mp ON TRIM(mp.cproducto) = TRIM(p.cproducto)
-      WHERE mp.iestado = 'V'
-        AND (
-          @centidad IS NULL
-          OR (
-            CASE
-              WHEN @centidad = 'P' THEN p.iproductor
-              WHEN @centidad = 'C' THEN p.icanal
-              ELSE 1
-            END = 1
-            AND EXISTS (
-              SELECT 1
-              FROM mausuplan u
-              WHERE u.cramo = mp.cramo
-                AND TRIM(u.cplan) = TRIM(mp.cplan)
-                AND u.centidad = @centidad
-                AND u.itipouso = 'A'
-                AND (u.citem IS NULL OR (@citem IS NOT NULL AND u.citem = @citem))
-            )
-            AND NOT EXISTS (
-              SELECT 1
-              FROM mausuplan u
-              WHERE u.cramo = mp.cramo
-                AND TRIM(u.cplan) = TRIM(mp.cplan)
-                AND u.centidad = @centidad
-                AND u.itipouso = 'E'
-                AND (u.citem IS NULL OR (@citem IS NOT NULL AND u.citem = @citem))
-            )
-          )
-        )
+      WHERE ${entidadFlag}
+        AND TRIM(p.cproducto) IN (${inClause})
       ORDER BY TRIM(p.cproducto)
     `);
 
     const rows = (result.recordset ?? []) as Record<string, unknown>[];
     if (!rows.length) {
-      throw new BadRequestException('No se encuentra planes asociados');
+      throw new BadRequestException('No se encontraron productos para la entidad indicada.');
     }
     return rows;
   }
@@ -633,37 +652,19 @@ export class ValrepService {
     return [enriched];
   }
 
-  /** Paso 1 funerario — spBuscaProductosEntidad (con fallback SQL). */
+  /** Paso 1 funerario — getProducts legacy (SysIP /valrep/productos). */
   async getProductosPersonas(
-    body: { citem?: string; centidad?: string },
+    body: { citem: string; centidad: string },
   ): Promise<Record<string, unknown>[]> {
-    const { citem, centidad } = this.resolveEntidadItem(body);
+    const citem = String(body.citem).trim();
+    const centidad = String(body.centidad).trim().toUpperCase();
 
     try {
-      const T = this.db.types;
-      const req = this.db.request();
-      req.input('citem', T.NVarChar(20), citem);
-      req.input('centidad', T.Char(1), centidad);
-      req.output('berror', T.Bit, false);
-      req.output('mensaje', T.NVarChar(60), '');
-
-      const result = await req.execute('spBuscaProductosEntidad');
-      const mensaje: string = result.output['mensaje'] ?? '';
-      if (result.output['berror']) {
-        throw new BadRequestException(mensaje || 'No se pudieron obtener los productos.');
-      }
-      if (mensaje) this.logger.log(`spBuscaProductosEntidad: ${mensaje}`);
-      return (result.recordset ?? []) as Record<string, unknown>[];
+      return await this.getProductsLegacy(citem, centidad);
     } catch (err) {
       if (err instanceof BadRequestException) throw err;
-      if (this.isMissingProcedure(err)) {
-        this.logger.warn(
-          'spBuscaProductosEntidad no disponible; usando consulta SQL de respaldo.',
-        );
-        return this.getProductosPersonasSql(citem, centidad);
-      }
       const msg = err instanceof Error ? err.message : String(err);
-      this.logger.error(`getProductosPersonas: ${msg}`);
+      this.logger.error(`getProductosPersonas citem=${citem} centidad=${centidad}: ${msg}`);
       throw new InternalServerErrorException(
         'Error al obtener productos de personas.',
       );
