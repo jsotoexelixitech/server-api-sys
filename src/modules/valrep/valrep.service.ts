@@ -4,6 +4,7 @@ import {
   InternalServerErrorException,
   Logger,
 } from '@nestjs/common';
+import { ConfigService } from '@nestjs/config';
 import { MssqlService } from '../../database/mssql.service';
 import { GetPlanesV2Dto } from './dto/get-planes-v2.dto';
 import { GetCotizacionAutoDto } from './dto/get-cotizacion-auto.dto';
@@ -36,7 +37,10 @@ interface CoberturaPlan {
 export class ValrepService {
   private readonly logger = new Logger(ValrepService.name);
 
-  constructor(private readonly db: MssqlService) {}
+  constructor(
+    private readonly db: MssqlService,
+    private readonly config: ConfigService,
+  ) {}
 
   async getPlanesV2(body: GetPlanesV2Dto): Promise<PlanItem[]> {
     try {
@@ -460,34 +464,39 @@ export class ValrepService {
     return enriched;
   }
 
-  /** Paso 1 funerario — spBuscaProductosEntidad (SysIP getProductos). */
+  /** Paso 1 personas — SQL legacy getProducts (SysIP Express, no spBuscaProductosEntidad). */
   async getProductosPersonas(
     body: { citem: string; centidad: string },
   ): Promise<Record<string, unknown>[]> {
     const citem = String(body.citem).trim();
     const centidad = String(body.centidad).trim().toUpperCase();
 
+    if (centidad !== 'P' && centidad !== 'C') {
+      throw new BadRequestException('centidad debe ser P (productor) o C (canal).');
+    }
+
     try {
-      const T = this.db.types;
-      const req = this.db.request();
-      req.input('citem', T.NVarChar(20), citem);
-      req.input('centidad', T.Char(1), centidad);
-      req.output('berror', T.Bit, false);
-      req.output('mensaje', T.NVarChar(60), '');
+      let rows = await this.queryProductosLegacy(citem, centidad);
 
-      const result = await req.execute('spBuscaProductosEntidad');
-      const berror = Boolean(result.output['berror']);
-      const mensaje: string = result.output['mensaje'] ?? '';
-      const rows = (result.recordset ?? []) as Record<string, unknown>[];
+      if (
+        !rows.length &&
+        this.config.get<string>('CANAL_PRODUCTOS_QA_FALLBACK') === 'true'
+      ) {
+        this.logger.warn(
+          `getProductosPersonas: sin filas mausuplan — fallback maproductos citem=${citem}`,
+        );
+        rows = await this.queryProductosQaFallback(centidad);
+      }
 
-      if (berror || !rows.length) {
+      if (!rows.length) {
         throw new BadRequestException(
-          mensaje || 'No se encontraron productos para la entidad indicada.',
+          'No se encontraron productos para la entidad indicada.',
         );
       }
 
       return rows.map((row) => ({
         ...row,
+        cproducto: String(row['cproducto'] ?? '').trim(),
         xdescripcion_l: row['xproducto'] ?? row['xdescripcion_l'],
       }));
     } catch (err) {
@@ -498,6 +507,90 @@ export class ValrepService {
         'Error al obtener productos de personas.',
       );
     }
+  }
+
+  /**
+   * Réplica de Valrep.getProducts (backend-api-sys) con parámetros tipados.
+   * spBuscaProductosEntidad falla en QA con conversión varchar→int (citem EMB).
+   */
+  private async queryProductosLegacy(
+    citem: string,
+    centidad: 'P' | 'C',
+  ): Promise<Record<string, unknown>[]> {
+    const T = this.db.types;
+    const req = this.db.request();
+    req.input('citem', T.NVarChar(20), citem);
+    req.input('centidad', T.Char(1), centidad);
+
+    const usuplanFilter = `
+      EXISTS (
+        SELECT 1 FROM mausuplan
+        WHERE cramo = X.cramo AND cplan = X.cplan
+          AND centidad = @centidad AND citem = @citem AND itipouso = 'A'
+        UNION ALL
+        SELECT 1 FROM mausuplan
+        WHERE cramo = X.cramo AND cplan = X.cplan
+          AND centidad = @centidad AND citem IS NULL AND itipouso = 'A'
+      )
+      AND NOT EXISTS (
+        SELECT 1 FROM mausuplan
+        WHERE cramo = X.cramo AND cplan = X.cplan
+          AND centidad = @centidad AND citem = @citem AND itipouso = 'E'
+        UNION ALL
+        SELECT 1 FROM mausuplan
+        WHERE cramo = X.cramo AND cplan = X.cplan
+          AND centidad = @centidad AND citem IS NULL AND itipouso = 'E'
+      )
+    `;
+
+    const sql =
+      centidad === 'P'
+        ? `
+          SELECT m.*
+          FROM maproductos m
+          WHERE m.iproductor = 1
+            AND TRIM(m.cproducto) IN (
+              SELECT DISTINCT TRIM(p.cproducto)
+              FROM maplanes_per p
+              WHERE ${usuplanFilter.replace(/X\./g, 'p.')}
+              UNION ALL
+              SELECT '24'
+              FROM maplanes a
+              WHERE ${usuplanFilter.replace(/X\./g, 'a.')}
+            )
+        `
+        : `
+          SELECT m.*
+          FROM maproductos m
+          WHERE m.icanal = 1
+            AND TRIM(m.cproducto) IN (
+              SELECT '24'
+              FROM maplanes a
+              WHERE ${usuplanFilter.replace(/X\./g, 'a.')}
+              UNION ALL
+              SELECT DISTINCT TRIM(p.cproducto)
+              FROM maplanes_per p
+              WHERE ${usuplanFilter.replace(/X\./g, 'p.')}
+            )
+        `;
+
+    const result = await req.query<Record<string, unknown>>(sql);
+    return result.recordset ?? [];
+  }
+
+  /** Listado amplio QA cuando mausuplan no devuelve filas para el citem. */
+  private async queryProductosQaFallback(
+    centidad: 'P' | 'C',
+  ): Promise<Record<string, unknown>[]> {
+    const flag = centidad === 'P' ? 'iproductor' : 'icanal';
+    const result = await this.db.request().query<Record<string, unknown>>(`
+      SELECT TRIM(cproducto) AS cproducto, TRIM(xdescripcion_l) AS xdescripcion_l,
+             cramo, TRIM(xabreviatura) AS xabreviatura, iproductor, icanal
+      FROM maproductos
+      WHERE ${flag} = 1
+      ORDER BY cproducto
+    `);
+    return result.recordset ?? [];
   }
 
   /** Paso 2 funerario — spBuscaPlanProducto + parentescos vía spBuscaDetallePlan. */
