@@ -42,8 +42,12 @@ export class CotizacionPerDto {
   @IsNotEmpty()
   cplan: string;
 
-  @ApiProperty({ example: 'M', description: 'Frecuencia de pago.', enum: ['A', 'S', 'T', 'M'] })
-  @IsIn(['A', 'S', 'T', 'M'])
+  @ApiProperty({
+    example: 'M',
+    description: 'Frecuencia de pago. E = única/vigencia corta (viajero).',
+    enum: ['A', 'S', 'T', 'M', 'C', 'E'],
+  })
+  @IsIn(['A', 'S', 'T', 'M', 'C', 'E'])
   ifrecuencia: string;
 
   @ApiProperty({ type: [AseguradoPerDto], description: 'Lista de asegurados a cotizar.' })
