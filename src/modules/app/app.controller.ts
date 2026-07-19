@@ -1,9 +1,10 @@
 import { Body, Controller, HttpCode, HttpStatus, Post, BadRequestException } from '@nestjs/common';
-import { ApiBody, ApiOperation, ApiResponse, ApiTags } from '@nestjs/swagger';
+import { ApiExcludeController, ApiBody, ApiOperation, ApiResponse, ApiTags } from '@nestjs/swagger';
 import { PersonasService } from '../personas/personas.service';
 import { CotizacionPerDto } from '../personas/dto/cotizacion-per.dto';
 import { Api500, ApiCommonErrors } from '../../common/swagger/api-error-responses';
 
+@ApiExcludeController()
 @ApiTags('app')
 @Controller('v1/app')
 export class AppController {
@@ -59,45 +60,7 @@ export class AppController {
   })
   @ApiCommonErrors()
   async getCotizacionPer(@Body() dto: CotizacionPerDto) {
-    // La nueva API devuelve el cálculo por asegurado.
-    // Como el SP actual (spCalculoPer) lo llama de uno en uno y suma en personasService,
-    // reutilizamos la lógica de cotizar. Podríamos cotizar cada asegurado individualmente
-    // si necesitamos el breakdown, o devolver todo en un solo bucket si la UI acepta 1 solo total.
-    // La UI espera result.data[i].total_asegurado[0].mprimaext
-    
-    // Para no romper la cotización masiva, devolvemos el total de forma simulada en el index 0.
-    // O mejor, cotizamos individualmente para construir la respuesta exacta que espera la UI.
-    const resultData = [];
-    let mprimatotal = 0;
-    let mprimatotalext = 0;
-
-    for (const asegurado of dto.asegurados) {
-      const individualDto: CotizacionPerDto = {
-        ...dto,
-        asegurados: [asegurado]
-      };
-      const result = await this.personasService.getCotizacionPer(individualDto);
-      resultData.push({
-        total_asegurado: [
-          {
-            mprima: result.mprima,
-            mprimaext: result.mprimaext,
-          }
-        ]
-      });
-      mprimatotal += result.mprima;
-      mprimatotalext += result.mprimaext;
-    }
-
-    return {
-      status: true,
-      result: {
-        data: resultData,
-        total_extension: {
-          mprimatotal: parseFloat(mprimatotal.toFixed(2)),
-          mprimatotalext: parseFloat(mprimatotalext.toFixed(2)),
-        }
-      }
-    };
+    const result = await this.personasService.buildCotizacionPerLegacyResult(dto);
+    return { status: true, result };
   }
 }

@@ -1,9 +1,10 @@
 import { Body, Controller, HttpCode, HttpStatus, Post } from '@nestjs/common';
-import { ApiBody, ApiOperation, ApiResponse, ApiTags } from '@nestjs/swagger';
+import { ApiExcludeController, ApiBody, ApiOperation, ApiResponse, ApiTags } from '@nestjs/swagger';
 import { ChangesService } from './changes.service';
 import { ChangeClientDto } from './dto/change-client.dto';
 import { ApiCrudErrors } from '../../common/swagger/api-error-responses';
 
+@ApiExcludeController()
 @ApiTags('changes')
 @Controller('v1/changes')
 export class ChangesController {

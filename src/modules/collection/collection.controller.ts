@@ -6,22 +6,50 @@ import {
   HttpStatus,
   Post,
 } from '@nestjs/common';
-import { ApiBody, ApiHeader, ApiOperation, ApiResponse, ApiTags } from '@nestjs/swagger';
+import {
+  ApiBody,
+  ApiExcludeEndpoint,
+  ApiHeader,
+  ApiOperation,
+  ApiResponse,
+  ApiSecurity,
+  ApiTags,
+} from '@nestjs/swagger';
 import { CollectionService } from './collection.service';
 import { CollectionSearchDto } from './dto/collection-search.dto';
 import { CollectionPaymentDto } from './dto/collection-payment.dto';
 import { Api401, ApiCommonErrors } from '../../common/swagger/api-error-responses';
+import {
+  APIKEY_HEADER,
+  RCV_COLLECTION_ACTIVATE_BODY,
+  RCV_COLLECTION_ACTIVATE_RESPONSE,
+} from '../../common/swagger/api-docs.constants';
 
-@ApiTags('Cobranza (Collection)')
+@ApiTags('4. Cobranza RCV')
 @Controller('v1/external/collection')
 export class CollectionController {
   constructor(private readonly collectionService: CollectionService) {}
 
   @Post('search')
+  @ApiExcludeEndpoint()
   @HttpCode(HttpStatus.OK)
-  @ApiOperation({ summary: 'Buscar recibos pendientes por RIF/cédula' })
+  @ApiOperation({
+    summary: 'Buscar recibos pendientes por RIF/cédula',
+    description: 'Opcional. Ejecuta `spSearchForCustomerByReceipt` para listar recibos sin cobrar.',
+    operationId: 'collectionSearchByClient',
+  })
   @ApiBody({ type: CollectionSearchDto })
-  @ApiResponse({ status: 200, schema: { example: { status: true, result: { data: [] } } } })
+  @ApiResponse({
+    status: 200,
+    description: 'Búsqueda exitosa (puede devolver lista vacía).',
+    schema: {
+      example: {
+        status: true,
+        message: 'Operación exitosa',
+        result: { data: [{ cnrecibo: '18-100272044', cnpoliza: '18-1-0000078926', mmontorec: 7.24 }] },
+      },
+    },
+  })
   @ApiCommonErrors()
   async search(@Body() dto: CollectionSearchDto) {
     const result = await this.collectionService.searchByClient(dto.cci_rif);
@@ -29,10 +57,27 @@ export class CollectionController {
   }
 
   @Post('notific')
+  @ApiExcludeEndpoint()
   @HttpCode(HttpStatus.OK)
-  @ApiOperation({ summary: 'Notificar pago de recibo (spNotificaPago)' })
-  @ApiHeader({ name: 'apikey', description: 'Token del canal (opcional en QA interno; default Exelixi)', required: false })
+  @ApiSecurity('apikey')
+  @ApiOperation({
+    summary: '[Legacy] Notificar pago (spNotificaPago)',
+    description:
+      'Ruta heredada de SysIP. Registra notificación previa al cobro. ' +
+      '**Exélixi RCV no usa este endpoint** — usar `POST /activate`.',
+  })
+  @ApiHeader(APIKEY_HEADER)
   @ApiBody({ type: CollectionPaymentDto })
+  @ApiResponse({
+    status: 200,
+    schema: {
+      example: {
+        status: true,
+        message: 'Notificación registrada.',
+        result: { transaccion: 183034, mensaje: 'Cobro realizado.', ptasamon: 723.999 },
+      },
+    },
+  })
   @Api401()
   @ApiCommonErrors()
   async notific(
@@ -45,10 +90,34 @@ export class CollectionController {
   }
 
   @Post('collect')
+  @ApiExcludeEndpoint()
   @HttpCode(HttpStatus.OK)
-  @ApiOperation({ summary: 'Cobrar recibo notificado (spCobroSis_Ad)' })
-  @ApiHeader({ name: 'apikey', description: 'Token del canal (opcional en QA interno; default Exelixi)', required: false })
-  @ApiBody({ type: CollectionPaymentDto })
+  @ApiSecurity('apikey')
+  @ApiOperation({
+    summary: 'Cobrar recibo (spCobroSis_Ad + soporte)',
+    description:
+      'Igual que `activate` pero sin alias de respuesta Exélixi. ' +
+      'Flujo: `buildCollectionPayload` → `spCobroSis_Ad` → UPSERT en `cbreporte_pago` ' +
+      '(banco origen/destino, `ctipopago`, `freporte`). Alineado con SysIP `collectReceip`.',
+  })
+  @ApiHeader(APIKEY_HEADER)
+  @ApiBody({ type: CollectionPaymentDto, examples: { pagoMovil: { value: RCV_COLLECTION_ACTIVATE_BODY } } })
+  @ApiResponse({
+    status: 200,
+    schema: {
+      example: {
+        status: true,
+        message: 'Cobro registrado.',
+        result: {
+          transaccion: 183034,
+          cnpoliza: '18-1-0000078926',
+          fanopol: 2026,
+          fmespol: 7,
+          mensaje: 'Cobro realizado.',
+        },
+      },
+    },
+  })
   @Api401()
   @ApiCommonErrors()
   async collect(
@@ -62,11 +131,32 @@ export class CollectionController {
 
   @Post('activate')
   @HttpCode(HttpStatus.OK)
+  @ApiSecurity('apikey')
   @ApiOperation({
-    summary: 'Notificar + cobrar en un paso (activar recibo tras pago bancario)',
+    summary: 'Paso 7 · Activar recibo tras pago (recomendado Exélixi)',
+    description:
+      'Usado por **emision-api** tras emitir. Flujo validado QA (ingreso **#183034**):\n\n' +
+      '1. `buildCollectionPayload` — bancos desde `pago_movil`\n' +
+      '2. `spCobroSis_Ad` — ingreso en `cbreporte_tran`\n' +
+      '3. UPSERT `cbreporte_pago` — banco origen/destino, `ctipopago`=3, `freporte`\n\n' +
+      'PDF: `https://qaapi.lamundialdeseguros.com/sis2000/ingreso_caja/{transaccion}/`',
+    operationId: 'rcvActivateReceipt',
   })
-  @ApiHeader({ name: 'apikey', description: 'Token del canal (opcional en QA interno; default Exelixi)', required: false })
-  @ApiBody({ type: CollectionPaymentDto })
+  @ApiHeader(APIKEY_HEADER)
+  @ApiBody({
+    type: CollectionPaymentDto,
+    examples: {
+      pagoMovil: {
+        summary: 'Pago móvil verificado (caso Exélixi jul-2026)',
+        value: RCV_COLLECTION_ACTIVATE_BODY,
+      },
+    },
+  })
+  @ApiResponse({
+    status: 200,
+    description: 'Recibo cobrado; ingreso de caja generado.',
+    schema: { example: RCV_COLLECTION_ACTIVATE_RESPONSE },
+  })
   @Api401()
   @ApiCommonErrors()
   async activate(

@@ -1,20 +1,22 @@
-import { Body, Controller, Get, HttpCode, HttpStatus, Post, Query, BadRequestException } from '@nestjs/common';
-import { ApiBody, ApiOperation, ApiQuery, ApiResponse, ApiTags } from '@nestjs/swagger';
+import { BadRequestException, Body, Controller, Get, HttpCode, HttpStatus, Post, Query } from '@nestjs/common';
+import { ApiBody, ApiExcludeEndpoint, ApiOperation, ApiQuery, ApiResponse, ApiTags } from '@nestjs/swagger';
 import { GetPlanesV2Dto } from './dto/get-planes-v2.dto';
 import { GetCitiesDto } from './dto/get-cities.dto';
 import { GetCotizacionAutoDto } from './dto/get-cotizacion-auto.dto';
+import { GetFrecuenciaDto } from './dto/get-frecuencia.dto';
+import { GetProductosPersonasDto } from './dto/get-productos-personas.dto';
+import { GetPlanesProductoDto } from './dto/get-planes-producto.dto';
+import { GetPlanesDetallePersonasDto } from './dto/get-planes-detalle-personas.dto';
 import { ValrepService } from './valrep.service';
 import { ValrepCanalService } from './valrep-canal.service';
 import { Api500, ApiCommonErrors } from '../../common/swagger/api-error-responses';
+import { RCV_COTIZACION_EXAMPLE } from '../../common/swagger/api-docs.constants';
 
 import { PersonasService } from '../personas/personas.service';
 import { GetPlanesPerDto } from '../personas/dto/get-planes-per.dto';
-import { GetProductosCanalDto } from './dto/get-productos-canal.dto';
-import { GetPlanesProductoDto } from './dto/get-planes-producto.dto';
-import { GetPlanDetalleDto } from './dto/get-plan-detalle.dto';
 import { GetPlanPorDiasDto } from './dto/get-plan-por-dias.dto';
 
-@ApiTags('valrep')
+@ApiTags('2. Catálogos y cotización (valrep)')
 @Controller('v1/valrep')
 export class ValrepController {
   constructor(
@@ -26,6 +28,7 @@ export class ValrepController {
   // ── GET /api/v1/valrep/matipos ─────────────────────────────────────────
 
   @Get('matipos')
+  @ApiExcludeEndpoint()
   @ApiOperation({ summary: 'Lista de tipos de vehículos', description: 'Consulta la tabla `matipos`. Necesario para filtrar marcas por tipo.' })
   @ApiResponse({ status: 200, schema: { example: { status: true, data: [{ ctipo: 1, xtipo: 'PARTICULARES' }, { ctipo: 2, xtipo: 'RUSTICOS' }] } } })
   @Api500()
@@ -37,6 +40,7 @@ export class ValrepController {
   // ── POST /api/v1/valrep/planesPer ──────────────────────────────────────
 
   @Post('planesPer')
+  @ApiExcludeEndpoint()
   @HttpCode(HttpStatus.OK)
   @ApiOperation({
     summary: 'Planes de personas vigentes (ramo 9 = Funerario)',
@@ -61,6 +65,7 @@ export class ValrepController {
   // ── POST /api/v1/valrep/macategtr ──────────────────────────────────────
 
   @Post('macategtr')
+  @ApiExcludeEndpoint()
   @HttpCode(HttpStatus.OK)
   @ApiOperation({ summary: 'Categorías de uso por tipo de vehículo', description: 'Filtra `macategtr` por `ctipo`. El `ctipo` viene de `/inma/version`.' })
   @ApiBody({ schema: { example: { ctipo: 3 }, description: 'Tipo de vehículo numérico (ver /valrep/matipos)' } })
@@ -75,7 +80,11 @@ export class ValrepController {
   // ── GET /api/v1/valrep/states ───────────────────────────────────────────
 
   @Get('states')
-  @ApiOperation({ summary: 'Lista de estados de Venezuela', description: 'Consulta `maestados` en Sis2000. Reemplaza el proxy a La Mundial.' })
+  @ApiOperation({
+    summary: 'Paso 2a · Estados de Venezuela',
+    description: 'Consulta `maestados` (cpais=58). Usar `cestado` en `/cities`.',
+    operationId: 'valrepStates',
+  })
   @ApiResponse({
     status: 200,
     schema: { example: { status: true, data: { states: [{ cestado: 1, xdescripcion_l: 'Distrito Capital' }, { cestado: 2, xdescripcion_l: 'Amazonas' }] } } },
@@ -89,7 +98,11 @@ export class ValrepController {
   // ── GET /api/v1/valrep/cities ───────────────────────────────────────────
 
   @Get('cities')
-  @ApiOperation({ summary: 'Lista de ciudades de Venezuela', description: 'Consulta `maciudades`. Si se pasa `cestado` filtra por estado.' })
+  @ApiOperation({
+    summary: 'Paso 2b · Ciudades por estado',
+    description: 'Consulta `maciudades`. Omitir `cestado` para listar todas.',
+    operationId: 'valrepCities',
+  })
   @ApiQuery({ name: 'cestado', required: false, type: Number, example: 1, description: 'Código de estado (de /states). Omitir para todas.' })
   @ApiResponse({ status: 200, schema: { example: { status: true, data: { cities: [{ cciudad: 128, xdescripcion_l: 'Caracas' }] } } } })
   @ApiCommonErrors()
@@ -103,11 +116,9 @@ export class ValrepController {
   @Post('getLists')
   @HttpCode(HttpStatus.OK)
   @ApiOperation({
-    summary: 'Lista de catálogo genérico',
-    description:
-      'Replica el endpoint `POST /api/v1/valrep/getLists` de La Mundial. ' +
-      'PARENTESCOS se lee de `maparent` en Sis2000. ' +
-      'SEXO, EDOCIVIL, FRECUENCIAS y MATIPCANAL son valores fijos del dominio de seguros.',
+    summary: 'Paso 2c · Listas de catálogo (sexo, parentescos, etc.)',
+    description: 'Dominios: `SEXO`, `EDOCIVIL`, `PARENTESCOS`, `FRECUENCIAS`, `MATIPCANAL`. Parentescos desde `maparent`.',
+    operationId: 'valrepGetLists',
   })
   @ApiBody({
     schema: {
@@ -140,15 +151,108 @@ export class ValrepController {
     return { status: true, data: { listas } };
   }
 
+  // ── Funerario: pasos 1–3 (catálogo valrep, fb_organizacion_swagger) ───────
+
+  @Post('productos')
+  @HttpCode(HttpStatus.OK)
+  @ApiOperation({
+    summary: 'Funerario paso 1 · Productos de personas',
+    description:
+      'Réplica de SysIP `Valrep.getProducts` (ruta real en fb_organizacion_swagger).\n\n' +
+      'Requiere `citem` + `centidad` (P=productor, C=canal). El swagger de La Mundial documenta ' +
+      '`spBuscaProductosEntidad`, pero la ruta `/valrep/productos` está cableada a `getProducts`.\n\n' +
+      '**Siguiente paso:** `POST /valrep/planes/producto` con el `cproducto` elegido.',
+    operationId: 'funerarioValrepProductos',
+  })
+  @ApiBody({ type: GetProductosPersonasDto })
+  @ApiResponse({
+    status: 200,
+    schema: {
+      example: {
+        status: true,
+        data: [
+          { cproducto: '57', xproducto: 'FUNERARIO INDIVIDUAL', cramo: 9 },
+        ],
+      },
+    },
+  })
+  @ApiCommonErrors()
+  async getProductosPersonas(@Body() dto: GetProductosPersonasDto) {
+    const productos = await this.valrepService.getProductosPersonas(dto);
+    return { status: true, data: productos };
+  }
+
+  @Post('planes/producto')
+  @HttpCode(HttpStatus.OK)
+  @ApiOperation({
+    summary: 'Funerario paso 2 · Planes por producto',
+    description:
+      'Ejecuta `spBuscaPlanProducto` y enriquece con parentescos/edades.\n\n' +
+      '**Siguiente paso:** `POST /valrep/planes/detalle` con `cramo` y `cplan`.',
+    operationId: 'funerarioValrepPlanesProducto',
+  })
+  @ApiBody({ type: GetPlanesProductoDto })
+  @ApiResponse({
+    status: 200,
+    schema: {
+      example: {
+        status: true,
+        data: {
+          plan: [{ cramo: 9, cplan: '4', xplan: 'Plan Funerario Básico', parentescos: [] }],
+          mensaje: '',
+        },
+      },
+    },
+  })
+  @ApiCommonErrors()
+  async getPlanesProducto(@Body() dto: GetPlanesProductoDto) {
+    const { planes, mensaje } = await this.valrepService.getPlanesProducto(dto);
+    return { status: true, data: { plan: planes, mensaje } };
+  }
+
+  @Post('planes/detalle')
+  @HttpCode(HttpStatus.OK)
+  @ApiOperation({
+    summary: 'Funerario paso 3 · Detalle del plan',
+    description:
+      'Ejecuta `spBuscaDetallePlan` (detalle operativo, parentescos y coberturas).\n\n' +
+      '**Siguiente paso:** `POST /external/getCotizacionPer` (formato legacy) o `POST /personas/cotizacion` (formato Exélixi).',
+    operationId: 'funerarioValrepPlanesDetalle',
+  })
+  @ApiBody({ type: GetPlanesDetallePersonasDto })
+  @ApiResponse({
+    status: 200,
+    schema: {
+      example: {
+        status: true,
+        data: {
+          plan: [{
+            cramo: 9,
+            cplan: '4',
+            xplan: 'Plan Funerario Básico',
+            parentescos: [{ cparen: 1, xparentesco: 'TITULAR', min_edad: 18, max_edad: 75 }],
+            coberturas: [{ ccobertura: '01', xcobertura: 'SERVICIO FUNERARIO' }],
+          }],
+        },
+      },
+    },
+  })
+  @ApiCommonErrors()
+  async getPlanesDetallePersonas(@Body() dto: GetPlanesDetallePersonasDto) {
+    const plan = await this.valrepService.getPlanesDetallePersonas(dto);
+    return { status: true, data: { plan } };
+  }
+
   // ── POST /api/v1/valrep/planes/v2 ──────────────────────────────────────
 
   @Post('planes/v2')
   @HttpCode(HttpStatus.OK)
   @ApiOperation({
-    summary: 'Planes disponibles (v2)',
+    summary: 'Paso 3 · Planes RCV disponibles',
     description:
-      'Ejecuta `spBuscaPlan` y enriquece con parentescos y coberturas. ' +
-      'Réplica del Express original con todos los bugs corregidos (queries parametrizadas, catch vacíos eliminados).',
+      'Ejecuta `spBuscaPlan` + parentescos y coberturas. ' +
+      'El `cplan` devuelto se usa en `POST /valrep/frecuencia` y luego en `POST /valrep/cotizacion`.',
+    operationId: 'valrepPlanesV2',
   })
   @ApiBody({ type: GetPlanesV2Dto })
   @ApiResponse({
@@ -176,12 +280,32 @@ export class ValrepController {
 
   @Post('frecuencia')
   @HttpCode(HttpStatus.OK)
-  @ApiOperation({ summary: 'Obtener frecuencias de un plan', description: 'Devuelve las frecuencias válidas para un cplan desde maplanes_frec.' })
-  @ApiBody({ schema: { example: { cplan: 'FUNBAS' } } })
-  @ApiResponse({ status: 200, schema: { example: { status: true, data: { frecuencias: [{ cvalor: 'M', xdescripcion: 'MENSUAL' }] } } } })
+  @ApiOperation({
+    summary: 'Paso 3b · Frecuencias del plan',
+    description:
+      'Consulta `maplanes_frec` y devuelve las frecuencias de pago válidas para el `cplan` elegido en `planes/v2`.\n\n' +
+      '**Siguiente paso:** `POST /valrep/cotizacion` (usar `cvalor` como frecuencia en emisión).',
+    operationId: 'valrepFrecuencia',
+  })
+  @ApiBody({ type: GetFrecuenciaDto })
+  @ApiResponse({
+    status: 200,
+    schema: {
+      example: {
+        status: true,
+        data: {
+          frecuencias: [
+            { cvalor: 'A', xdescripcion: 'ANUAL' },
+            { cvalor: 'S', xdescripcion: 'SEMESTRAL' },
+            { cvalor: 'M', xdescripcion: 'MENSUAL' },
+          ],
+        },
+      },
+    },
+  })
+  @ApiResponse({ status: 400, description: 'cplan requerido o inválido' })
   @Api500()
-  async getFrecuencia(@Body() body: { cplan?: string }) {
-    if (!body.cplan) throw new BadRequestException('El parámetro cplan es requerido');
+  async getFrecuencia(@Body() body: GetFrecuenciaDto) {
     const frecuencias = await this.valrepService.getFrecuencia(body.cplan);
     return { status: true, data: { frecuencias } };
   }
@@ -191,15 +315,17 @@ export class ValrepController {
   @Post('cotizacion')
   @HttpCode(HttpStatus.OK)
   @ApiOperation({
-    summary: 'Cotizar prima RCV (spCalculoAuto)',
+    summary: 'Paso 4 · Cotizar prima RCV',
     description:
-      'Llama a `spCalculoAuto` en Sis2000 con el código de plan real devuelto por `valrep/planes/v2`. ' +
-      'Acepta cualquier cplan válido en Sis2000 (no solo una lista fija).',
+      'Ejecuta `spCalculoAuto`. Requiere `cplan` de `planes/v2`, frecuencia de `frecuencia` y datos del vehículo (marca, modelo, año, suma asegurada).\n\n' +
+      '**Siguiente paso:** `POST /external/validateEmissionAuto`',
+    operationId: 'valrepCotizacionAuto',
   })
   @ApiBody({ type: GetCotizacionAutoDto })
   @ApiResponse({
     status: 200,
-    schema: { example: { status: true, data: { mprimaext: 119.65, mprima: 60853.02, ptasa: 508.6004 } } },
+    description: 'Prima calculada (Bs y USD).',
+    schema: { example: { status: true, data: RCV_COTIZACION_EXAMPLE } },
   })
   @ApiResponse({ status: 400, description: 'cplan inválido, datos del vehículo incorrectos o prima = 0.' })
   @Api500()
@@ -208,44 +334,7 @@ export class ValrepController {
     return { status: true, data };
   }
 
-  // ── Canal alternativo: vida / viajero (nuevos — no afectan RCV) ───────────
-
-  @Post('productos')
-  @HttpCode(HttpStatus.OK)
-  @ApiOperation({
-    summary: 'Productos por canal (spBuscaProductosEntidad)',
-    description:
-      'Flujo personas/vida/viajero. Sin apikey. Opcional centidad/citem o env CANAL_DEFAULT_*.',
-  })
-  @ApiBody({ type: GetProductosCanalDto })
-  @Api500()
-  async getProductosCanal(@Body() dto: GetProductosCanalDto) {
-    const data = await this.valrepCanalService.getProductos(dto);
-    return { status: true, data };
-  }
-
-  @Post('planes/producto')
-  @HttpCode(HttpStatus.OK)
-  @ApiOperation({
-    summary: 'Planes por producto (spBuscaPlanProducto)',
-    description: 'Paso 2 del flujo canal. cproducto=1 vida, 24 viajero/auto especial.',
-  })
-  @ApiBody({ type: GetPlanesProductoDto })
-  @Api500()
-  async getPlanesProducto(@Body() dto: GetPlanesProductoDto) {
-    const data = await this.valrepCanalService.getPlanesProducto(dto);
-    return { status: true, data };
-  }
-
-  @Post('planes/detalle')
-  @HttpCode(HttpStatus.OK)
-  @ApiOperation({ summary: 'Detalle de plan personas (spBuscaDetallePlan)' })
-  @ApiBody({ type: GetPlanDetalleDto })
-  @ApiCommonErrors()
-  async getPlanDetalle(@Body() dto: GetPlanDetalleDto) {
-    const data = await this.valrepCanalService.getPlanDetalle(dto);
-    return { status: true, data };
-  }
+  // ── Viajero local: vigencia por días (no afecta RCV ni funerario) ─────────
 
   @Post('planes/por-dias')
   @HttpCode(HttpStatus.OK)

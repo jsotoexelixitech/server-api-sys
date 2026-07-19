@@ -1,5 +1,5 @@
 import { Body, Controller, Get, HttpCode, HttpStatus, Param, Post } from '@nestjs/common';
-import { ApiBody, ApiOperation, ApiParam, ApiResponse, ApiTags } from '@nestjs/swagger';
+import { ApiBody, ApiExcludeEndpoint, ApiOperation, ApiParam, ApiResponse, ApiTags } from '@nestjs/swagger';
 import { InmaService } from './inma.service';
 import { GetMarcasDto } from './dto/get-marcas.dto';
 import { GetModeloDto } from './dto/get-modelo.dto';
@@ -7,7 +7,7 @@ import { GetVersionDto } from './dto/get-version.dto';
 import { GetCategoriasUsoDto } from './dto/get-categorias-uso.dto';
 import { Api404, Api500, ApiCommonErrors } from '../../common/swagger/api-error-responses';
 
-@ApiTags('inma')
+@ApiTags('1. Catálogo vehículo (inma)')
 @Controller('v1/inma')
 export class InmaController {
   constructor(private readonly inmaService: InmaService) {}
@@ -15,7 +15,11 @@ export class InmaController {
   // ── GET /api/v1/inma/anios ────────────────────────────────────────────────
 
   @Get('anios')
-  @ApiOperation({ summary: 'Rango de años disponibles', description: 'Devuelve el año mínimo y máximo registrados en `VInma`.' })
+  @ApiOperation({
+    summary: 'Paso 1a · Rango de años',
+    description: 'Primer paso del catálogo vehículo. Año min/max en `VInma`.',
+    operationId: 'inmaAnios',
+  })
   @ApiResponse({ status: 200, schema: { example: { status: true, data: { min: 1950, max: 2028 } } } })
   @Api500()
   async getAnios() {
@@ -27,7 +31,11 @@ export class InmaController {
 
   @Post('marcas')
   @HttpCode(HttpStatus.OK)
-  @ApiOperation({ summary: 'Marcas disponibles para un año', description: 'Filtra `VInma` por año y devuelve las marcas únicas.' })
+  @ApiOperation({
+    summary: 'Paso 1b · Marcas por año',
+    description: 'Tras elegir año en `anios`. **Siguiente:** `POST /inma/modelo`.',
+    operationId: 'inmaMarcas',
+  })
   @ApiBody({ type: GetMarcasDto })
   @ApiResponse({ status: 200, schema: { example: { status: true, data: { marcas: [{ cmarca: '074', xmarca: 'TOYOTA' }] } } } })
   @ApiCommonErrors()
@@ -39,6 +47,7 @@ export class InmaController {
   // ── POST /api/v1/inma/marca/:ctipo ────────────────────────────────────────
 
   @Post('marca/:ctipo')
+  @ApiExcludeEndpoint()
   @HttpCode(HttpStatus.OK)
   @ApiOperation({ summary: 'Marcas disponibles filtradas por tipo de vehículo', description: '`ctipo`: 1=Particular, 2=Rústico, 3=Carga, 4=Moto, 5=Remolque, 6=Autobús, 8=Minibús, 9=Pick-up' })
   @ApiParam({ name: 'ctipo', type: Number, description: 'Tipo de vehículo (ver /valrep/matipos)', example: 1 })
@@ -54,7 +63,11 @@ export class InmaController {
 
   @Post('modelo')
   @HttpCode(HttpStatus.OK)
-  @ApiOperation({ summary: 'Modelos disponibles por año y marca', description: 'Réplica de `POST /modelo` del Express original. Consulta `VInma`. Queries parametrizadas.' })
+  @ApiOperation({
+    summary: 'Paso 1c · Modelos por año y marca',
+    description: '**Siguiente:** `POST /inma/version`.',
+    operationId: 'inmaModelo',
+  })
   @ApiBody({ type: GetModeloDto })
   @ApiResponse({ status: 200, schema: { example: { status: true, data: { info: [{ cmodelo: '001', cmarca: '083', xmodelo: 'LOWBOY' }] } } } })
   @ApiCommonErrors()
@@ -67,7 +80,13 @@ export class InmaController {
 
   @Post('version')
   @HttpCode(HttpStatus.OK)
-  @ApiOperation({ summary: 'Versiones disponibles por año, marca y modelo', description: 'Devuelve `ctipo` (tipo de vehículo), `mvalor`, `npasajero`, `ccategotr` y la clasificación.' })
+  @ApiOperation({
+    summary: 'Paso 1d · Versiones (incluye ctipo y suma asegurada)',
+    description:
+      'Devuelve `ctipo`, `mvalor` (suma asegurada), `ccategotr`. ' +
+      'Datos necesarios para `valrep/cotizacion` y emisión.',
+    operationId: 'inmaVersion',
+  })
   @ApiBody({ type: GetVersionDto })
   @ApiResponse({
     status: 200,
@@ -93,7 +112,11 @@ export class InmaController {
 
   @Post('categorias-uso')
   @HttpCode(HttpStatus.OK)
-  @ApiOperation({ summary: 'Categorías de uso para un vehículo', description: 'Obtiene el `ctipo` del vehículo desde `VInma` y devuelve las categorías de `macategtr`. Réplica de `POST /getCategoriasUso`.' })
+  @ApiOperation({
+    summary: 'Paso 1e · Categorías de uso del vehículo',
+    description: 'Obtiene `ctipo` desde `VInma` y categorías en `macategtr`. Usado en cotización y emisión.',
+    operationId: 'inmaCategoriasUso',
+  })
   @ApiBody({ type: GetCategoriasUsoDto })
   @ApiResponse({
     status: 200,

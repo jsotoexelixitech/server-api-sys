@@ -136,24 +136,17 @@ export class ValrepService {
 
   async getStates(): Promise<{ cestado: number; xdescripcion_l: string }[]> {
     try {
+      const T = this.db.types;
       const req = this.db.request();
-      let result = await req.query<{ cestado: number; xdescripcion_l: string }>(`
-        SELECT cestado, TRIM(xdescripcion_l) AS xdescripcion_l
-        FROM maestados
-        WHERE cpais = 58
-        ORDER BY xdescripcion_l
-      `);
-      let rows = result.recordset ?? [];
-      if (!rows.length) {
-        this.logger.warn('getStates: sin filas con cpais=58, consultando todos los estados');
-        result = await this.db.request().query(`
-          SELECT cestado, TRIM(xdescripcion_l) AS xdescripcion_l
-          FROM maestados
-          ORDER BY xdescripcion_l
-        `);
-        rows = result.recordset ?? [];
-      }
-      return rows;
+      req.input('xfiltros_json', T.NVarChar(500), JSON.stringify({ cpais: 58 }));
+      req.input('cusuario', T.Numeric(13, 0), 0);
+
+      const result = await req.execute('sp_ma_obtener_estados');
+      const rows = (result.recordset ?? []) as { cvalor: number; xdescripcion: string }[];
+      return rows.map((r) => ({
+        cestado: Number(r.cvalor),
+        xdescripcion_l: String(r.xdescripcion ?? '').trim(),
+      }));
     } catch (err) {
       const msg = err instanceof Error ? err.message : String(err);
       this.logger.error(`getStates: ${msg}`);
@@ -167,23 +160,21 @@ export class ValrepService {
     cestado?: number,
   ): Promise<{ cciudad: number; xdescripcion_l: string }[]> {
     try {
-      const req = this.db.request();
       const T = this.db.types;
+      const req = this.db.request();
+      req.input(
+        'xfiltros_json',
+        T.NVarChar(500),
+        cestado !== undefined ? JSON.stringify({ cestado }) : null,
+      );
+      req.input('cusuario', T.Numeric(13, 0), 0);
 
-      let query = `
-        SELECT cciudad, TRIM(xdescripcion_l) AS xdescripcion_l
-        FROM maciudades
-      `;
-
-      if (cestado !== undefined) {
-        req.input('cestado', T.Int, cestado);
-        query += ' WHERE cestado = @cestado';
-      }
-
-      query += ' ORDER BY xdescripcion_l';
-
-      const result = await req.query<{ cciudad: number; xdescripcion_l: string }>(query);
-      return result.recordset ?? [];
+      const result = await req.execute('sp_ma_obtener_ciudades');
+      const rows = (result.recordset ?? []) as { cvalor: number; xdescripcion: string }[];
+      return rows.map((r) => ({
+        cciudad: Number(r.cvalor),
+        xdescripcion_l: String(r.xdescripcion ?? '').trim(),
+      }));
     } catch (err) {
       const msg = err instanceof Error ? err.message : String(err);
       this.logger.error(`getCities: ${msg}`);
@@ -326,42 +317,9 @@ export class ValrepService {
     return planes;
   }
 
-  // ── getLists ───────────────────────────────────────────────────────────────
-  // Proxy hacia La Mundial QA. Si La Mundial falla, usa fallback de Sis2000
-  // (PARENTESCOS) o valores fijos del dominio (SEXO, EDOCIVIL, FRECUENCIAS).
+  // ── getLists (catálogos vía SP) ───────────────────────────────────────────
 
   private static readonly ALLOWED_DOMAINS = ['SEXO', 'EDOCIVIL', 'PARENTESCOS', 'FRECUENCIAS', 'MATIPCANAL'];
-
-  private static readonly FALLBACK_LISTS: Record<string, { cvalor: string; xdescripcion: string }[]> = {
-    SEXO: [
-      { cvalor: 'M', xdescripcion: 'Masculino' },
-      { cvalor: 'F', xdescripcion: 'Femenino' },
-    ],
-    EDOCIVIL: [
-      { cvalor: 'S', xdescripcion: 'Soltero(a)' },
-      { cvalor: 'C', xdescripcion: 'Casado(a)' },
-      { cvalor: 'D', xdescripcion: 'Divorciado(a)' },
-      { cvalor: 'V', xdescripcion: 'Viudo(a)' },
-      { cvalor: 'U', xdescripcion: 'Unión Estable de Hecho' },
-    ],
-    FRECUENCIAS: [
-      { cvalor: 'A', xdescripcion: 'Anual' },
-      { cvalor: 'S', xdescripcion: 'Semestral' },
-      { cvalor: 'T', xdescripcion: 'Trimestral' },
-      { cvalor: 'M', xdescripcion: 'Mensual' },
-    ],
-    MATIPCANAL: [
-      { cvalor: '1', xdescripcion: 'Directo' },
-      { cvalor: '2', xdescripcion: 'Broker' },
-      { cvalor: '3', xdescripcion: 'Banca-Seguros' },
-    ],
-    PARENTESCOS: [
-      { cvalor: 'T', xdescripcion: 'TITULAR' },
-      { cvalor: 'C', xdescripcion: 'CONYUGE' },
-      { cvalor: 'H', xdescripcion: 'HIJO(A)' },
-      { cvalor: 'P', xdescripcion: 'PADRE/MADRE' },
-    ],
-  };
 
   async getLists(cdominio: string): Promise<{ cvalor: string; xdescripcion: string }[]> {
     const domain = cdominio.toUpperCase().trim();
@@ -374,72 +332,232 @@ export class ValrepService {
 
     const T = this.db.types;
 
-    // PARENTESCOS → maparent (Sis2000 directo)
-    if (domain === 'PARENTESCOS') {
-      try {
-        const result = await this.db.request().query<{ cvalor: string; xdescripcion: string }>(`
-          SELECT TRIM(CAST(cparentesco AS VARCHAR(10))) AS cvalor,
-                 TRIM(xparentesco) AS xdescripcion
-          FROM maparent
-          ORDER BY cparentesco
-        `);
-        const rows = result.recordset ?? [];
-        if (rows.length > 0) {
-          this.logger.log(`getLists PARENTESCOS: ${rows.length} items de Sis2000`);
-          return rows;
+    try {
+      if (domain === 'PARENTESCOS') {
+        const result = await this.db.request().execute('sp_ma_obtener_parentescos');
+        const rows = (result.recordset ?? []) as { cvalor: string; xdescripcion: string }[];
+        if (!rows.length) {
+          throw new BadRequestException('No se encontraron parentescos.');
         }
-      } catch (err) {
-        const msg = err instanceof Error ? err.message : String(err);
-        this.logger.warn(`getLists PARENTESCOS DB: ${msg}`);
+        this.logger.log(`getLists PARENTESCOS: ${rows.length} items vía SP`);
+        return rows;
       }
-    } else {
-      // SEXO, EDOCIVIL, FRECUENCIAS, MATIPCANAL → macatvalores
-      try {
-        const req = this.db.request();
-        req.input('cdom', T.NVarChar(30), domain);
-        const result = await req.query<{ cvalor: string; xdescripcion: string }>(`
-          SELECT TRIM(cvalor) AS cvalor, TRIM(xdescripcion) AS xdescripcion
-          FROM macatvalores
-          WHERE cdominio = @cdom AND bactivo = 1
-          ORDER BY iorden, cvalor
-        `);
-        const rows = result.recordset ?? [];
-        if (rows.length > 0) {
-          this.logger.log(`getLists ${domain}: ${rows.length} items de macatvalores`);
-          return rows;
-        }
-      } catch (err) {
-        const msg = err instanceof Error ? err.message : String(err);
-        this.logger.warn(`getLists ${domain} DB: ${msg}`);
+
+      const req = this.db.request();
+      req.input('cdominio', T.VarChar(30), domain);
+      req.input('xtipo_orden', T.VarChar(4), 'ASC');
+      req.input('bactivos', T.Bit, true);
+      const result = await req.execute('sp_macat_obtener_valores_dominio');
+      const rows = (result.recordset ?? []) as { cvalor: string; xdescripcion: string }[];
+      if (!rows.length) {
+        throw new BadRequestException(`No se encontraron valores para el dominio ${domain}.`);
       }
+      this.logger.log(`getLists ${domain}: ${rows.length} items vía SP`);
+      return rows;
+    } catch (err) {
+      if (err instanceof BadRequestException) throw err;
+      const msg = err instanceof Error ? err.message : String(err);
+      this.logger.error(`getLists ${domain}: ${msg}`);
+      throw new InternalServerErrorException(`No se pudo obtener la lista ${domain}.`);
     }
-
-    const fallback = ValrepService.FALLBACK_LISTS[domain];
-    if (fallback?.length) {
-      this.logger.warn(`getLists ${domain}: usando valores fijos (${fallback.length} items)`);
-      return fallback;
-    }
-
-    throw new InternalServerErrorException(`No se pudo obtener la lista ${domain}.`);
   }
 
-  async getFrecuencia(cplan: string) {
+  async getFrecuencia(cplan: string, cramo?: number) {
     try {
       const T = this.db.types;
       const req = this.db.request();
       req.input('cplan', T.VarChar(10), cplan);
-      const result = await req.query<{ cvalor: string; xdescripcion: string }>(`
-        SELECT TRIM(ifrecuencia) AS cvalor, TRIM(xfrecuencia) AS xdescripcion
-        FROM maplanes_frec
-        WHERE cplan = @cplan
-      `);
-      const rows = result.recordset ?? [];
-      if (rows.length > 0) return rows;
-      return ValrepService.FALLBACK_LISTS['FRECUENCIAS'];
+      req.input('cramo', T.Int, cramo ?? null);
+      req.output('berror', T.Bit, false);
+      req.output('mensaje', T.NVarChar(60), '');
+
+      const result = await req.execute('spBuscaFrecuenciaPlan');
+      const rows = (result.recordset ?? []) as { cvalor: string; xdescripcion: string }[];
+      if (Boolean(result.output['berror']) || !rows.length) {
+        throw new BadRequestException(
+          String(result.output['mensaje'] ?? 'No se encontraron frecuencias para el plan.'),
+        );
+      }
+      return rows;
     } catch (err) {
+      if (err instanceof BadRequestException) throw err;
       const msg = err instanceof Error ? err.message : String(err);
       this.logger.error(`getFrecuencia cplan=${cplan}: ${msg}`);
       throw new InternalServerErrorException('Error al obtener las frecuencias.');
+    }
+  }
+
+  // ── Funerario: catálogo valrep (pasos 1–3, solo SP) ───────────────────────
+
+  private resolveEntidadItem(body: { citem?: string; centidad?: string }) {
+    let citem: string | null = null;
+    let centidad: string | null = null;
+
+    if (body.citem?.trim()) {
+      citem = String(body.citem).trim();
+      centidad = body.centidad?.trim() ? String(body.centidad).trim() : null;
+    } else if (body.centidad?.trim() && body.centidad.trim() !== 'G') {
+      centidad = String(body.centidad).trim();
+    }
+
+    return { citem, centidad };
+  }
+
+  private async fetchDetallePlanSp(
+    cramo: number,
+    cplan: string,
+  ): Promise<{
+    plan: PlanItem;
+    parentescos: ParentescoPlan[];
+    coberturas: CoberturaPlan[];
+  }> {
+    const T = this.db.types;
+    const req = this.db.request();
+    req.input('cramo', T.Int, cramo);
+    req.input('cplan', T.VarChar(10), cplan);
+    req.output('berror', T.Bit, false);
+    req.output('mensaje', T.NVarChar(60), '');
+
+    const result = await req.execute('spBuscaDetallePlan');
+    const berror = Boolean(result.output['berror']);
+    const mensaje: string = result.output['mensaje'] ?? '';
+
+    if (berror) {
+      throw new BadRequestException(
+        mensaje || 'No se encontraron detalles para este plan.',
+      );
+    }
+
+    const sets = result.recordsets as [
+      PlanItem[]?,
+      ParentescoPlan[]?,
+      CoberturaPlan[]?,
+    ] | undefined;
+    const base = sets?.[0] ?? ((result.recordset ?? []) as PlanItem[]);
+    if (!base.length) {
+      throw new BadRequestException('No se encontraron detalles para este plan.');
+    }
+
+    return {
+      plan: { ...base[0] } as PlanItem,
+      parentescos: sets?.[1] ?? [],
+      coberturas: sets?.[2] ?? [],
+    };
+  }
+
+  private async enrichPlanesWithDetalleSp(planes: PlanItem[]): Promise<PlanItem[]> {
+    const enriched: PlanItem[] = [];
+    for (const plan of planes) {
+      const cramo = Number(plan['cramo']);
+      const cplan = String(plan['cplan'] ?? '').trim();
+      const detalle = await this.fetchDetallePlanSp(cramo, cplan);
+      enriched.push({
+        ...plan,
+        parentescos: detalle.parentescos,
+        coberturas: detalle.coberturas,
+      });
+    }
+    return enriched;
+  }
+
+  /** Paso 1 funerario — spBuscaProductosEntidad (SysIP getProductos). */
+  async getProductosPersonas(
+    body: { citem: string; centidad: string },
+  ): Promise<Record<string, unknown>[]> {
+    const citem = String(body.citem).trim();
+    const centidad = String(body.centidad).trim().toUpperCase();
+
+    try {
+      const T = this.db.types;
+      const req = this.db.request();
+      req.input('citem', T.NVarChar(20), citem);
+      req.input('centidad', T.Char(1), centidad);
+      req.output('berror', T.Bit, false);
+      req.output('mensaje', T.NVarChar(60), '');
+
+      const result = await req.execute('spBuscaProductosEntidad');
+      const berror = Boolean(result.output['berror']);
+      const mensaje: string = result.output['mensaje'] ?? '';
+      const rows = (result.recordset ?? []) as Record<string, unknown>[];
+
+      if (berror || !rows.length) {
+        throw new BadRequestException(
+          mensaje || 'No se encontraron productos para la entidad indicada.',
+        );
+      }
+
+      return rows.map((row) => ({
+        ...row,
+        xdescripcion_l: row['xproducto'] ?? row['xdescripcion_l'],
+      }));
+    } catch (err) {
+      if (err instanceof BadRequestException) throw err;
+      const msg = err instanceof Error ? err.message : String(err);
+      this.logger.error(`getProductosPersonas citem=${citem} centidad=${centidad}: ${msg}`);
+      throw new InternalServerErrorException(
+        'Error al obtener productos de personas.',
+      );
+    }
+  }
+
+  /** Paso 2 funerario — spBuscaPlanProducto + parentescos vía spBuscaDetallePlan. */
+  async getPlanesProducto(body: {
+    cproducto: string;
+    citem?: string;
+    centidad?: string;
+  }): Promise<{ planes: PlanItem[]; mensaje: string }> {
+    const cproducto = String(body.cproducto).trim();
+    const { citem, centidad } = this.resolveEntidadItem(body);
+
+    try {
+      const T = this.db.types;
+      const req = this.db.request();
+      req.input('cproducto', T.NVarChar(10), cproducto);
+      req.input('citem', T.NVarChar(20), citem);
+      req.input('centidad', T.Char(1), centidad);
+      req.output('mensaje', T.NVarChar(60), '');
+
+      const result = await req.execute('spBuscaPlanProducto');
+      const mensaje: string = result.output['mensaje'] ?? '';
+      const recordset = (result.recordset ?? []) as PlanItem[];
+      if (!recordset.length) {
+        throw new BadRequestException(mensaje || 'No se encuentra planes asociados');
+      }
+
+      const planes = await this.enrichPlanesWithDetalleSp(recordset);
+      if (mensaje) this.logger.log(`spBuscaPlanProducto: ${mensaje}`);
+      return { planes, mensaje };
+    } catch (err) {
+      if (err instanceof BadRequestException) throw err;
+      const msg = err instanceof Error ? err.message : String(err);
+      this.logger.error(`getPlanesProducto cproducto=${cproducto}: ${msg}`);
+      throw new InternalServerErrorException(
+        'Error al obtener planes del producto.',
+      );
+    }
+  }
+
+  /** Paso 3 funerario — spBuscaDetallePlan. */
+  async getPlanesDetallePersonas(
+    body: { cramo: number; cplan: string },
+  ): Promise<PlanItem[]> {
+    const cplan = String(body.cplan).trim();
+
+    try {
+      const detalle = await this.fetchDetallePlanSp(body.cramo, cplan);
+      const plan = detalle.plan;
+      if (detalle.parentescos.length) plan.parentescos = detalle.parentescos;
+      if (detalle.coberturas.length) plan.coberturas = detalle.coberturas;
+      return [plan];
+    } catch (err) {
+      if (err instanceof BadRequestException) throw err;
+      const msg = err instanceof Error ? err.message : String(err);
+      this.logger.error(
+        `getPlanesDetallePersonas cramo=${body.cramo} cplan=${cplan}: ${msg}`,
+      );
+      throw new InternalServerErrorException(
+        'Error al obtener el detalle del plan.',
+      );
     }
   }
 

@@ -1,20 +1,24 @@
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
-import { IsIn, IsOptional, IsString } from 'class-validator';
+import { IsIn, IsNotEmpty, IsOptional, IsString } from 'class-validator';
 
-/** Body para spBuscaPlanProducto. */
+/** Body para POST /valrep/planes/producto (spBuscaPlanProducto). */
 export class GetPlanesProductoDto {
-  @ApiProperty({ example: '1', description: 'Código de producto (maproductos). Vida=1, viajero puede ser 24.' })
+  @ApiProperty({
+    example: '1',
+    description: 'Código de producto (maproductos). Vida=1, funerario=57, viajero=24.',
+  })
   @IsString()
+  @IsNotEmpty()
   cproducto!: string;
 
-  @ApiPropertyOptional({ example: 'C' })
+  @ApiPropertyOptional({ example: '80080', description: 'Ítem/productor (opcional).' })
+  @IsOptional()
+  @IsString()
+  citem?: string;
+
+  @ApiPropertyOptional({ example: 'C', description: 'P=productor, C=canal.' })
   @IsOptional()
   @IsString()
   @IsIn(['P', 'C'])
   centidad?: string;
-
-  @ApiPropertyOptional({ example: '80080' })
-  @IsOptional()
-  @IsString()
-  citem?: string;
 }
