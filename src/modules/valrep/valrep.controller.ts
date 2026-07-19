@@ -4,16 +4,22 @@ import { GetPlanesV2Dto } from './dto/get-planes-v2.dto';
 import { GetCitiesDto } from './dto/get-cities.dto';
 import { GetCotizacionAutoDto } from './dto/get-cotizacion-auto.dto';
 import { ValrepService } from './valrep.service';
+import { ValrepCanalService } from './valrep-canal.service';
 import { Api500, ApiCommonErrors } from '../../common/swagger/api-error-responses';
 
 import { PersonasService } from '../personas/personas.service';
 import { GetPlanesPerDto } from '../personas/dto/get-planes-per.dto';
+import { GetProductosCanalDto } from './dto/get-productos-canal.dto';
+import { GetPlanesProductoDto } from './dto/get-planes-producto.dto';
+import { GetPlanDetalleDto } from './dto/get-plan-detalle.dto';
+import { GetPlanPorDiasDto } from './dto/get-plan-por-dias.dto';
 
 @ApiTags('valrep')
 @Controller('v1/valrep')
 export class ValrepController {
   constructor(
     private readonly valrepService: ValrepService,
+    private readonly valrepCanalService: ValrepCanalService,
     private readonly personasService: PersonasService,
   ) {}
 
@@ -200,5 +206,77 @@ export class ValrepController {
   async getCotizacionAuto(@Body() dto: GetCotizacionAutoDto) {
     const data = await this.valrepService.getCotizacionAuto(dto);
     return { status: true, data };
+  }
+
+  // ── Canal alternativo: vida / viajero (nuevos — no afectan RCV) ───────────
+
+  @Post('productos')
+  @HttpCode(HttpStatus.OK)
+  @ApiOperation({
+    summary: 'Productos por canal (spBuscaProductosEntidad)',
+    description:
+      'Flujo personas/vida/viajero. Sin apikey. Opcional centidad/citem o env CANAL_DEFAULT_*.',
+  })
+  @ApiBody({ type: GetProductosCanalDto })
+  @Api500()
+  async getProductosCanal(@Body() dto: GetProductosCanalDto) {
+    const data = await this.valrepCanalService.getProductos(dto);
+    return { status: true, data };
+  }
+
+  @Post('planes/producto')
+  @HttpCode(HttpStatus.OK)
+  @ApiOperation({
+    summary: 'Planes por producto (spBuscaPlanProducto)',
+    description: 'Paso 2 del flujo canal. cproducto=1 vida, 24 viajero/auto especial.',
+  })
+  @ApiBody({ type: GetPlanesProductoDto })
+  @Api500()
+  async getPlanesProducto(@Body() dto: GetPlanesProductoDto) {
+    const data = await this.valrepCanalService.getPlanesProducto(dto);
+    return { status: true, data };
+  }
+
+  @Post('planes/detalle')
+  @HttpCode(HttpStatus.OK)
+  @ApiOperation({ summary: 'Detalle de plan personas (spBuscaDetallePlan)' })
+  @ApiBody({ type: GetPlanDetalleDto })
+  @ApiCommonErrors()
+  async getPlanDetalle(@Body() dto: GetPlanDetalleDto) {
+    const data = await this.valrepCanalService.getPlanDetalle(dto);
+    return { status: true, data };
+  }
+
+  @Post('planes/por-dias')
+  @HttpCode(HttpStatus.OK)
+  @ApiOperation({
+    summary: 'Plan por vigencia en días (viajero local)',
+    description: 'Busca en maplanes_frec por cramo + ndias (ej. 3 días).',
+  })
+  @ApiBody({ type: GetPlanPorDiasDto })
+  @ApiCommonErrors()
+  async getPlanPorDias(@Body() dto: GetPlanPorDiasDto) {
+    const data = await this.valrepCanalService.getPlanPorDias(dto);
+    return { status: true, data };
+  }
+
+  @Post('frecuencia/detalle')
+  @HttpCode(HttpStatus.OK)
+  @ApiOperation({
+    summary: 'Frecuencias de plan con ndias',
+    description: 'Complemento de /frecuencia — incluye ndias para vigencias cortas.',
+  })
+  @ApiBody({
+    schema: {
+      example: { cplan: '000101', cramo: 5 },
+      required: ['cplan'],
+      properties: { cplan: { type: 'string' }, cramo: { type: 'number' } },
+    },
+  })
+  @Api500()
+  async getFrecuenciaDetalle(@Body() body: { cplan?: string; cramo?: number }) {
+    if (!body.cplan) throw new BadRequestException('El parámetro cplan es requerido');
+    const frecuencias = await this.valrepCanalService.getFrecuenciaConDias(body.cplan, body.cramo);
+    return { status: true, data: { frecuencias } };
   }
 }
