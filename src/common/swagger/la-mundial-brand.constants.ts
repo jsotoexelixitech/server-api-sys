@@ -1,16 +1,18 @@
 /**
  * Manual de Identidad — La Mundial de Seguros (colores y tipografía oficiales).
- * Uso: documentación Swagger / UI estática. No altera contratos de la API.
+ * Logo: mismo asset que módulo emisión (`logo-lamundial-sidebar.png`).
  */
 export const LA_MUNDIAL_BRAND = {
   name: 'La Mundial de Seguros',
   shortName: 'La Mundial',
-  tagline: 'de Seguros · API RCV',
+  tagline: 'API RCV · Documentación',
 
-  /** Azul Pennsylvania (principal) */
+  /** Azul Pennsylvania (principal) — alineado a modulo-emision/index.css */
   blue: '#0F1A5A',
   blueDark: '#091133',
   blueLight: '#162a7f',
+  /** Acento gradiente sidebar (módulos) */
+  blueAccent: '#2E6DBF',
 
   /** Rojo Imperial (secundario) */
   red: '#E84F51',
@@ -22,8 +24,9 @@ export const LA_MUNDIAL_BRAND = {
   silverDark: '#777777',
   silverLight: '#dddddd',
 
-  logoUrl:
-    'https://lamundialdeseguros.com/wp-content/uploads/2022/06/Logotipo-La-Mundial-RGB-3.png',
+  /** Servido desde nest-api (`useStaticAssets` → /assets/brand/) */
+  logoUrl: '/assets/brand/logo-lamundial-sidebar.png',
+  faviconUrl: '/assets/brand/favicon-64.png',
 
   fontsCss:
     'https://fonts.googleapis.com/css2?family=Poppins:ital,wght@0,300;0,400;0,500;0,600;0,700;1,400&display=swap',

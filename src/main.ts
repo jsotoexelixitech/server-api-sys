@@ -1,5 +1,7 @@
 import { NestFactory } from '@nestjs/core';
 import { Logger, ValidationPipe } from '@nestjs/common';
+import { NestExpressApplication } from '@nestjs/platform-express';
+import { join } from 'path';
 import { DocumentBuilder, SwaggerModule } from '@nestjs/swagger';
 import { ConfigService } from '@nestjs/config';
 import { AppModule } from './app.module';
@@ -14,9 +16,11 @@ import {
 } from './common/swagger/la-mundial-brand.constants';
 
 async function bootstrap(): Promise<void> {
-  const app = await NestFactory.create(AppModule, {
+  const app = await NestFactory.create<NestExpressApplication>(AppModule, {
     logger: ['log', 'error', 'warn', 'debug', 'verbose'],
   });
+
+  app.useStaticAssets(join(__dirname, 'assets'), { prefix: '/assets' });
 
   const config = app.get(ConfigService);
   const port = config.get<number>('PORT', 3001);
@@ -71,7 +75,7 @@ async function bootstrap(): Promise<void> {
     const document = SwaggerModule.createDocument(app, swaggerConfig);
     SwaggerModule.setup(swaggerPath, app, document, {
       customSiteTitle: SWAGGER_BRAND_META.siteTitle,
-      customfavIcon: LA_MUNDIAL_BRAND.logoUrl,
+      customfavIcon: LA_MUNDIAL_BRAND.faviconUrl,
       customCssUrl: LA_MUNDIAL_BRAND.fontsCss,
       customJsStr: `
 (function() {
@@ -153,8 +157,7 @@ async function bootstrap(): Promise<void> {
     nav.innerHTML =
       '<div class="sb-brand">'
       + '<img class="sb-logo" src="${LA_MUNDIAL_BRAND.logoUrl}" alt="${LA_MUNDIAL_BRAND.name}" />'
-      + '<div><div class="sb-name">${LA_MUNDIAL_BRAND.shortName}</div>'
-      + '<div class="sb-tagline">${LA_MUNDIAL_BRAND.tagline}</div></div>'
+      + '<p class="sb-tagline">${LA_MUNDIAL_BRAND.tagline}</p>'
       + '</div>'
       + '<div class="sb-search-wrap">'
       + '<input class="sb-search" placeholder="&#128269; Buscar..." type="text" />'
@@ -293,7 +296,7 @@ async function bootstrap(): Promise<void> {
           position: fixed;
           left: 0; top: 0;
           width: 210px; height: 100vh;
-          background: linear-gradient(180deg, #091133 0%, #0F1A5A 55%, #162a7f 100%);
+          background: linear-gradient(180deg, #091133 0%, #0F1A5A 45%, #2E6DBF 100%);
           z-index: 600;
           display: flex;
           flex-direction: column;
@@ -308,29 +311,24 @@ async function bootstrap(): Promise<void> {
 
         /* Brand */
         .sb-brand {
-          display: flex; align-items: center; gap: 10px;
-          padding: 18px 14px 16px;
+          display: flex; flex-direction: column; align-items: center; text-align: center;
+          padding: 20px 12px 16px;
           border-bottom: 1px solid rgba(255,255,255,0.07);
           flex-shrink: 0;
         }
         .sb-logo {
-          max-height: 40px; max-width: 52px; width: auto; height: auto;
+          width: 100%; max-width: 168px; height: auto;
           object-fit: contain; flex-shrink: 0;
         }
-        .sb-bolt {
-          font-size: 1.8rem; line-height: 1;
-          filter: drop-shadow(0 0 10px rgba(232,79,81,0.9));
-        }
-        .sb-name {
-          color: #fff; font-weight: 800; font-size: 1.1rem;
-          letter-spacing: 0.01em; line-height: 1;
+        .sb-tagline {
+          margin: 10px 0 0; padding: 0;
+          color: ${LA_MUNDIAL_BRAND.silverLight}; font-size: 0.65rem; font-weight: 600;
+          letter-spacing: 0.06em; text-transform: uppercase;
           font-family: 'Poppins', sans-serif;
         }
-        .sb-env, .sb-tagline {
-          color: #162a7f; font-size: 0.64rem; font-weight: 600;
-          letter-spacing: 0.1em; text-transform: uppercase;
-          margin-top: 3px; font-family: 'Poppins', sans-serif;
-        }
+        .sb-bolt { display: none; }
+        .sb-name { display: none; }
+        .sb-env { display: none; }
 
         /* Search */
         .sb-search-wrap { padding: 10px 14px 4px; flex-shrink: 0; }
@@ -492,9 +490,9 @@ async function bootstrap(): Promise<void> {
         }
         .swagger-ui .info .description tr:last-child td { border-bottom: none; }
         .swagger-ui .info .description code {
-          background: rgba(5,198,223,0.08); color: #0F1A5A;
+          background: rgba(46,109,191,0.1); color: #0F1A5A;
           border-radius: 4px; padding: 1px 7px; font-size: 0.82em;
-          border: 1px solid rgba(5,198,223,0.3);
+          border: 1px solid rgba(46,109,191,0.35);
         }
 
         /* Auth button */
@@ -592,18 +590,18 @@ async function bootstrap(): Promise<void> {
         /* ── GET ───────────────────────────────────────────────── */
         .swagger-ui .opblock.opblock-get {
           border-color: #162a7f !important;
-          background: #f0fcfe !important;
+          background: #f3f6fc !important;
         }
-        .swagger-ui .opblock.opblock-get .opblock-summary { border-color: rgba(5,198,223,0.3) !important; }
+        .swagger-ui .opblock.opblock-get .opblock-summary { border-color: rgba(46,109,191,0.35) !important; }
         .swagger-ui .opblock.opblock-get .opblock-summary-method {
-          background: linear-gradient(135deg, #162a7f, #0F1A5A) !important;
+          background: linear-gradient(135deg, #2E6DBF, #0F1A5A) !important;
           border-radius: 6px !important;
           font-weight: 800 !important;
           font-size: 0.72rem !important;
           letter-spacing: 0.06em;
           min-width: 68px;
           text-align: center;
-          box-shadow: 0 2px 6px rgba(5,198,223,0.3);
+          box-shadow: 0 2px 6px rgba(46,109,191,0.35);
         }
 
         /* ── Summary path & description ────────────────────────── */
@@ -700,7 +698,7 @@ async function bootstrap(): Promise<void> {
 
         /* ── Curl ──────────────────────────────────────────────── */
         .swagger-ui .curl-command { background: #0F1A5A !important; border-radius: 8px !important; }
-        .swagger-ui .curl-command .curl { color: rgba(5,198,223,0.85) !important; font-size: 0.8rem !important; }
+        .swagger-ui .curl-command .curl { color: rgba(46,109,191,0.9) !important; font-size: 0.8rem !important; }
         .swagger-ui .copy-to-clipboard {
           background: #E84F51 !important;
           border-radius: 4px !important;

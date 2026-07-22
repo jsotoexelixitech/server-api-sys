@@ -4,6 +4,6 @@
   "sourceRoot": "src",
   "compilerOptions": {
     "deleteOutDir": true,
-    "assets": ["assets/**/*.pdf"]
+    "assets": ["assets/**/*.pdf", "assets/brand/**"]
   }
 }
