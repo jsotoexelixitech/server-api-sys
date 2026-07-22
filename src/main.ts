@@ -1,7 +1,9 @@
 import { NestFactory } from '@nestjs/core';
 import { Logger, ValidationPipe } from '@nestjs/common';
 import { NestExpressApplication } from '@nestjs/platform-express';
+import { existsSync } from 'fs';
 import { join } from 'path';
+import express from 'express';
 import { DocumentBuilder, SwaggerModule } from '@nestjs/swagger';
 import { ConfigService } from '@nestjs/config';
 import { AppModule } from './app.module';
@@ -15,12 +17,30 @@ import {
   SWAGGER_BRAND_META,
 } from './common/swagger/la-mundial-brand.constants';
 
+function resolveBrandAssetsDir(): string {
+  const candidates = [
+    join(__dirname, 'assets'),
+    join(process.cwd(), 'dist', 'assets'),
+    join(process.cwd(), 'src', 'assets'),
+  ];
+  for (const dir of candidates) {
+    if (existsSync(join(dir, 'brand', 'logo-lamundial-sidebar.png'))) {
+      return dir;
+    }
+  }
+  return join(__dirname, 'assets');
+}
+
 async function bootstrap(): Promise<void> {
+  const bootstrapLog = new Logger('Bootstrap');
   const app = await NestFactory.create<NestExpressApplication>(AppModule, {
     logger: ['log', 'error', 'warn', 'debug', 'verbose'],
   });
 
-  app.useStaticAssets(join(__dirname, 'assets'), { prefix: '/assets' });
+  const assetsDir = resolveBrandAssetsDir();
+  const logoOk = existsSync(join(assetsDir, 'brand', 'logo-lamundial-sidebar.png'));
+  bootstrapLog.log(`Brand assets dir=${assetsDir} logo=${logoOk ? 'OK' : 'MISSING'}`);
+  app.getHttpAdapter().getInstance().use('/assets', express.static(assetsDir, { index: false }));
 
   const config = app.get(ConfigService);
   const port = config.get<number>('PORT', 3001);
