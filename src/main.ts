@@ -8,6 +8,10 @@ import { ResponseInterceptor } from './common/interceptors/response.interceptor'
 import {
   SWAGGER_API_DESCRIPTION,
 } from './common/swagger/api-docs.constants';
+import {
+  LA_MUNDIAL_BRAND,
+  SWAGGER_BRAND_META,
+} from './common/swagger/la-mundial-brand.constants';
 
 async function bootstrap(): Promise<void> {
   const app = await NestFactory.create(AppModule, {
@@ -41,9 +45,9 @@ async function bootstrap(): Promise<void> {
 
   if (swaggerPath) {
     const swaggerConfig = new DocumentBuilder()
-      .setTitle('Exelixi · RCV → Sis2000')
+      .setTitle(SWAGGER_BRAND_META.title)
       .setDescription(SWAGGER_API_DESCRIPTION)
-      .setVersion('1.2.0-rcv')
+      .setVersion(SWAGGER_BRAND_META.version)
       .addApiKey(
         {
           type: 'apiKey',
@@ -54,7 +58,7 @@ async function bootstrap(): Promise<void> {
         'apikey',
       )
       .addBearerAuth()
-      .addServer('http://192.168.8.120:3002', 'srv001 — QA/Producción Exélixi')
+      .addServer('http://192.168.8.120:3002', 'srv001 — QA Sis2000')
       .addServer('http://localhost:3002', 'Desarrollo local')
       .addTag('1. Catálogo vehículo (inma)', 'Paso 1 · `VInma`')
       .addTag('2. Catálogos y cotización (valrep)', 'Pasos 2–4 · estados, planes, frecuencias, prima')
@@ -66,9 +70,9 @@ async function bootstrap(): Promise<void> {
 
     const document = SwaggerModule.createDocument(app, swaggerConfig);
     SwaggerModule.setup(swaggerPath, app, document, {
-      customSiteTitle: 'Exelixi · RCV Sis2000 API',
-      customfavIcon: 'https://exelixitech.com/favicon.ico',
-      customCssUrl: 'https://fonts.googleapis.com/css2?family=Manrope:wght@600;700;800&family=Inter:ital,wght@0,400;0,500;0,600;0,700;0,800;1,400&display=swap',
+      customSiteTitle: SWAGGER_BRAND_META.siteTitle,
+      customfavIcon: LA_MUNDIAL_BRAND.logoUrl,
+      customCssUrl: LA_MUNDIAL_BRAND.fontsCss,
       customJsStr: `
 (function() {
   /* ─────────────────────────────────────────────────────────
@@ -148,9 +152,9 @@ async function bootstrap(): Promise<void> {
 
     nav.innerHTML =
       '<div class="sb-brand">'
-      + '<span class="sb-bolt">&#9889;</span>'
-      + '<div><div class="sb-name">Exélixi API</div>'
-      + '<div class="sb-tagline">Documentación</div></div>'
+      + '<img class="sb-logo" src="${LA_MUNDIAL_BRAND.logoUrl}" alt="${LA_MUNDIAL_BRAND.name}" />'
+      + '<div><div class="sb-name">${LA_MUNDIAL_BRAND.shortName}</div>'
+      + '<div class="sb-tagline">${LA_MUNDIAL_BRAND.tagline}</div></div>'
       + '</div>'
       + '<div class="sb-search-wrap">'
       + '<input class="sb-search" placeholder="&#128269; Buscar..." type="text" />'
@@ -168,7 +172,7 @@ async function bootstrap(): Promise<void> {
       + '<div class="sb-footer">'
       + '<div class="sb-ver-row">'
       + '<span class="sb-ver-label">API</span>'
-      + '<span class="sb-ver-val">v3.0-rcv</span>'
+      + '<span class="sb-ver-val">${SWAGGER_BRAND_META.sidebarApiVersion}</span>'
       + '</div>'
       + '<div class="sb-env-row">'
       + '<a class="sb-env-badge active">QA</a>'
@@ -264,20 +268,20 @@ async function bootstrap(): Promise<void> {
       `,
       customCss: `
         /* ═══════════════════════════════════════════════════════
-           EXÉLIXI · SWAGGER THEME v4 — Paleta Corporativa Oficial
-           Oxford #0C133A · Pumpkin #ED7423 · SkyX #05C6DF
+           LA MUNDIAL DE SEGUROS · SWAGGER — Manual de identidad
+           Azul Pennsylvania #0F1A5A · Rojo Imperial #E84F51 · Plata #ACACAC · Poppins
         ═══════════════════════════════════════════════════════ */
-        @import url('https://fonts.googleapis.com/css2?family=Manrope:wght@600;700;800&family=Inter:ital,wght@0,400;0,500;0,600;0,700;0,800;1,400&display=swap');
+        @import url('${LA_MUNDIAL_BRAND.fontsCss}');
 
         /* ── Reset & base ──────────────────────────────────────── */
         *, *::before, *::after { box-sizing: border-box; }
         body {
           background: #f0f2f5;
-          font-family: 'Inter', 'Segoe UI', Arial, sans-serif !important;
+          font-family: 'Poppins', 'Segoe UI', Arial, sans-serif !important;
           margin: 0;
         }
         .swagger-ui {
-          font-family: 'Inter', 'Segoe UI', Arial, sans-serif !important;
+          font-family: 'Poppins', 'Segoe UI', Arial, sans-serif !important;
           max-width: none !important;
           margin: 0 !important;
         }
@@ -289,7 +293,7 @@ async function bootstrap(): Promise<void> {
           position: fixed;
           left: 0; top: 0;
           width: 210px; height: 100vh;
-          background: linear-gradient(180deg, #07092a 0%, #0C133A 55%, #1a2255 100%);
+          background: linear-gradient(180deg, #091133 0%, #0F1A5A 55%, #162a7f 100%);
           z-index: 600;
           display: flex;
           flex-direction: column;
@@ -305,23 +309,27 @@ async function bootstrap(): Promise<void> {
         /* Brand */
         .sb-brand {
           display: flex; align-items: center; gap: 10px;
-          padding: 22px 16px 18px;
+          padding: 18px 14px 16px;
           border-bottom: 1px solid rgba(255,255,255,0.07);
           flex-shrink: 0;
         }
+        .sb-logo {
+          max-height: 40px; max-width: 52px; width: auto; height: auto;
+          object-fit: contain; flex-shrink: 0;
+        }
         .sb-bolt {
           font-size: 1.8rem; line-height: 1;
-          filter: drop-shadow(0 0 10px rgba(237,116,35,0.9));
+          filter: drop-shadow(0 0 10px rgba(232,79,81,0.9));
         }
         .sb-name {
           color: #fff; font-weight: 800; font-size: 1.1rem;
           letter-spacing: 0.01em; line-height: 1;
-          font-family: 'Manrope', 'Inter', sans-serif;
+          font-family: 'Poppins', sans-serif;
         }
         .sb-env, .sb-tagline {
-          color: #05C6DF; font-size: 0.64rem; font-weight: 600;
+          color: #162a7f; font-size: 0.64rem; font-weight: 600;
           letter-spacing: 0.1em; text-transform: uppercase;
-          margin-top: 3px; font-family: 'Inter', sans-serif;
+          margin-top: 3px; font-family: 'Poppins', sans-serif;
         }
 
         /* Search */
@@ -331,17 +339,17 @@ async function bootstrap(): Promise<void> {
           background: rgba(255,255,255,0.07);
           border: 1px solid rgba(255,255,255,0.1);
           border-radius: 7px; color: #fff; font-size: 0.8rem;
-          font-family: 'Inter', sans-serif; outline: none;
+          font-family: 'Poppins', sans-serif; outline: none;
           transition: border 0.2s, background 0.2s;
         }
         .sb-search::placeholder { color: rgba(255,255,255,0.3); }
-        .sb-search:focus { border-color: #ED7423; background: rgba(237,116,35,0.12); }
+        .sb-search:focus { border-color: #E84F51; background: rgba(232,79,81,0.12); }
 
         /* Nav label */
         .sb-nav-label {
           color: rgba(255,255,255,0.28); font-size: 0.58rem; font-weight: 700;
           letter-spacing: 0.16em; text-transform: uppercase;
-          padding: 14px 16px 4px; font-family: 'Inter', sans-serif; flex-shrink: 0;
+          padding: 14px 16px 4px; font-family: 'Poppins', sans-serif; flex-shrink: 0;
         }
 
         /* Nav list */
@@ -356,20 +364,20 @@ async function bootstrap(): Promise<void> {
           border-left: 3px solid transparent;
           transition: background 0.15s, border-color 0.15s;
         }
-        .sb-item:hover { background: rgba(237,116,35,0.08); border-left-color: rgba(237,116,35,0.5); }
-        .sb-item.active { background: rgba(237,116,35,0.18); border-left-color: #ED7423; }
+        .sb-item:hover { background: rgba(232,79,81,0.08); border-left-color: rgba(232,79,81,0.5); }
+        .sb-item.active { background: rgba(232,79,81,0.18); border-left-color: #E84F51; }
 
         .sb-dot {
           width: 7px; height: 7px; border-radius: 50%;
           background: rgba(255,255,255,0.2); flex-shrink: 0;
           transition: background 0.2s, box-shadow 0.2s;
         }
-        .sb-item.active .sb-dot { background: #ED7423; box-shadow: 0 0 8px rgba(237,116,35,0.7); }
+        .sb-item.active .sb-dot { background: #E84F51; box-shadow: 0 0 8px rgba(232,79,81,0.7); }
         .sb-item:hover .sb-dot { background: rgba(255,255,255,0.5); }
 
         .sb-label {
           color: rgba(255,255,255,0.6); font-size: 0.8rem; font-weight: 500;
-          line-height: 1.3; transition: color 0.15s; font-family: 'Inter', sans-serif;
+          line-height: 1.3; transition: color 0.15s; font-family: 'Poppins', sans-serif;
         }
         .sb-item:hover .sb-label { color: rgba(255,255,255,0.92); }
         .sb-item.active .sb-label { color: #fff; font-weight: 600; }
@@ -380,23 +388,23 @@ async function bootstrap(): Promise<void> {
         .sb-ver-row { display: flex; justify-content: space-between; align-items: center; margin-bottom: 8px; }
         .sb-ver-label {
           color: rgba(255,255,255,0.25); font-size: 0.62rem; font-weight: 600;
-          letter-spacing: 0.1em; text-transform: uppercase; font-family: 'Inter', sans-serif;
+          letter-spacing: 0.1em; text-transform: uppercase; font-family: 'Poppins', sans-serif;
         }
-        .sb-ver-val { color: #05C6DF; font-size: 0.68rem; font-weight: 700; font-family: 'Inter', sans-serif; }
+        .sb-ver-val { color: #162a7f; font-size: 0.68rem; font-weight: 700; font-family: 'Poppins', sans-serif; }
         .sb-env-row { display: flex; gap: 6px; }
         .sb-env-badge {
           color: rgba(255,255,255,0.4) !important; font-size: 0.68rem; font-weight: 600;
           padding: 3px 10px; border-radius: 5px; border: 1px solid rgba(255,255,255,0.12);
-          text-decoration: none !important; transition: all 0.2s; font-family: 'Inter', sans-serif;
+          text-decoration: none !important; transition: all 0.2s; font-family: 'Poppins', sans-serif;
         }
         .sb-env-badge.active, .sb-env-badge:hover {
-          color: #fff !important; border-color: #ED7423; background: rgba(237,116,35,0.35);
+          color: #fff !important; border-color: #E84F51; background: rgba(232,79,81,0.35);
         }
 
         /* ── Hamburger toggle ──────────────────────────────────── */
         #exelixi-toggle {
           display: none; position: fixed; top: 10px; left: 12px; z-index: 800;
-          background: #0C133A; border: 1px solid rgba(255,255,255,0.15);
+          background: #0F1A5A; border: 1px solid rgba(255,255,255,0.15);
           border-radius: 8px; padding: 8px 10px; cursor: pointer;
           flex-direction: column; gap: 5px; align-items: center;
           box-shadow: 0 3px 12px rgba(0,0,0,0.4);
@@ -424,7 +432,7 @@ async function bootstrap(): Promise<void> {
            TOPBAR — delgada, solo info, sin duplicar sidebar
         ════════════════════════════════════════════════════════ */
         .swagger-ui .topbar {
-          background: #07092a;
+          background: #091133;
           padding: 0;
           box-shadow: 0 2px 8px rgba(0,0,0,0.5);
           position: sticky; top: 0; z-index: 500;
@@ -437,7 +445,7 @@ async function bootstrap(): Promise<void> {
           content: 'Documentación interna · No compartir externamente';
           color: rgba(255,255,255,0.28);
           font-size: 0.68rem; font-weight: 500; letter-spacing: 0.06em;
-          font-family: 'Inter', sans-serif; margin-right: auto;
+          font-family: 'Poppins', sans-serif; margin-right: auto;
         }
         .swagger-ui .topbar a { display: none !important; }
 
@@ -452,20 +460,20 @@ async function bootstrap(): Promise<void> {
         }
         .swagger-ui .info { margin: 0; }
         .swagger-ui .info .title {
-          color: #0C133A !important;
+          color: #0F1A5A !important;
           font-size: 1.8rem !important;
           font-weight: 800 !important;
           letter-spacing: -0.02em;
           line-height: 1.2;
-          font-family: 'Manrope', 'Inter', sans-serif !important;
+          font-family: 'Poppins', sans-serif !important;
         }
         .swagger-ui .info .title small.version-stamp { vertical-align: middle; margin-left: 12px; }
         .swagger-ui .info .version-stamp .version {
-          background: #ED7423; color: #fff;
+          background: #E84F51; color: #fff;
           border-radius: 20px; padding: 2px 12px;
           font-size: 0.65rem; font-weight: 700; letter-spacing: 0.08em; text-transform: uppercase;
         }
-        .swagger-ui .info a.link { color: #ED7423 !important; }
+        .swagger-ui .info a.link { color: #E84F51 !important; }
         .swagger-ui .info p, .swagger-ui .info li {
           color: #4b5563 !important; font-size: 0.88rem; line-height: 1.65;
         }
@@ -474,7 +482,7 @@ async function bootstrap(): Promise<void> {
           border: 1px solid #e2e8f0; border-radius: 8px; overflow: hidden;
         }
         .swagger-ui .info .description th {
-          background: #0C133A; color: #fff;
+          background: #0F1A5A; color: #fff;
           padding: 8px 14px; text-align: left; font-weight: 700;
           letter-spacing: 0.05em; text-transform: uppercase; font-size: 0.72rem;
         }
@@ -484,22 +492,22 @@ async function bootstrap(): Promise<void> {
         }
         .swagger-ui .info .description tr:last-child td { border-bottom: none; }
         .swagger-ui .info .description code {
-          background: rgba(5,198,223,0.08); color: #04A8BD;
+          background: rgba(5,198,223,0.08); color: #0F1A5A;
           border-radius: 4px; padding: 1px 7px; font-size: 0.82em;
           border: 1px solid rgba(5,198,223,0.3);
         }
 
         /* Auth button */
         .swagger-ui .auth-wrapper .btn.authorize {
-          background: #ED7423 !important;
-          border: 1px solid #ED7423 !important;
+          background: #E84F51 !important;
+          border: 1px solid #E84F51 !important;
           color: #fff !important; border-radius: 8px !important;
           font-weight: 700 !important; padding: 8px 20px !important;
           transition: all 0.2s ease !important;
         }
         .swagger-ui .auth-wrapper .btn.authorize:hover {
-          background: #0C133A !important;
-          box-shadow: 0 4px 12px rgba(237,116,35,0.35) !important;
+          background: #0F1A5A !important;
+          box-shadow: 0 4px 12px rgba(232,79,81,0.35) !important;
         }
         .swagger-ui .auth-wrapper .btn.authorize svg { fill: #fff; }
 
@@ -507,7 +515,7 @@ async function bootstrap(): Promise<void> {
         .swagger-ui .servers > label { color: #4b5563 !important; font-size: 0.82rem; }
         .swagger-ui .servers select {
           border: 1px solid #d1d5db !important; border-radius: 6px !important;
-          padding: 5px 10px; background: #fff !important; color: #0C133A !important;
+          padding: 5px 10px; background: #fff !important; color: #0F1A5A !important;
         }
 
         /* ════════════════════════════════════════════════════════
@@ -526,16 +534,16 @@ async function bootstrap(): Promise<void> {
           box-shadow: 0 2px 8px rgba(15,37,68,0.08) !important;
           cursor: pointer;
           transition: all 0.2s ease !important;
-          border-left: 5px solid #ED7423 !important;
+          border-left: 5px solid #E84F51 !important;
         }
         .swagger-ui .opblock-tag:hover {
           background: #fff9f5 !important;
-          box-shadow: 0 4px 16px rgba(237,116,35,0.12) !important;
+          box-shadow: 0 4px 16px rgba(232,79,81,0.12) !important;
           transform: translateX(2px);
         }
         .swagger-ui .opblock-tag span,
         .swagger-ui .opblock-tag a {
-          color: #0C133A !important;
+          color: #0F1A5A !important;
           font-size: 1rem !important;
           font-weight: 700 !important;
           text-decoration: none !important;
@@ -546,7 +554,7 @@ async function bootstrap(): Promise<void> {
           font-size: 0.8rem !important;
           margin-left: 8px;
         }
-        .swagger-ui .opblock-tag svg { fill: #ED7423 !important; }
+        .swagger-ui .opblock-tag svg { fill: #E84F51 !important; }
 
         /* ── Endpoints: contenedor ─────────────────────────────── */
         .swagger-ui .opblock-tag-section .opblock {
@@ -560,35 +568,35 @@ async function bootstrap(): Promise<void> {
           transform: translateX(2px);
         }
         .swagger-ui .opblock.is-open {
-          box-shadow: 0 4px 20px rgba(237,116,35,0.15) !important;
+          box-shadow: 0 4px 20px rgba(232,79,81,0.15) !important;
           transform: none;
         }
 
         /* ── POST ──────────────────────────────────────────────── */
         .swagger-ui .opblock.opblock-post {
-          border-color: #ED7423 !important;
+          border-color: #E84F51 !important;
           background: #fff9f5 !important;
         }
-        .swagger-ui .opblock.opblock-post .opblock-summary { border-color: rgba(237,116,35,0.25) !important; }
+        .swagger-ui .opblock.opblock-post .opblock-summary { border-color: rgba(232,79,81,0.25) !important; }
         .swagger-ui .opblock.opblock-post .opblock-summary-method {
-          background: linear-gradient(135deg, #ED7423, #C75D14) !important;
+          background: linear-gradient(135deg, #E84F51, #b23f44) !important;
           border-radius: 6px !important;
           font-weight: 800 !important;
           font-size: 0.72rem !important;
           letter-spacing: 0.06em;
           min-width: 68px;
           text-align: center;
-          box-shadow: 0 2px 6px rgba(237,116,35,0.35);
+          box-shadow: 0 2px 6px rgba(232,79,81,0.35);
         }
 
         /* ── GET ───────────────────────────────────────────────── */
         .swagger-ui .opblock.opblock-get {
-          border-color: #05C6DF !important;
+          border-color: #162a7f !important;
           background: #f0fcfe !important;
         }
         .swagger-ui .opblock.opblock-get .opblock-summary { border-color: rgba(5,198,223,0.3) !important; }
         .swagger-ui .opblock.opblock-get .opblock-summary-method {
-          background: linear-gradient(135deg, #05C6DF, #04A8BD) !important;
+          background: linear-gradient(135deg, #162a7f, #0F1A5A) !important;
           border-radius: 6px !important;
           font-weight: 800 !important;
           font-size: 0.72rem !important;
@@ -600,10 +608,10 @@ async function bootstrap(): Promise<void> {
 
         /* ── Summary path & description ────────────────────────── */
         .swagger-ui .opblock-summary-path {
-          font-family: 'Inter', monospace !important;
+          font-family: 'Poppins', monospace !important;
           font-size: 0.88rem !important;
           font-weight: 600 !important;
-          color: #0C133A !important;
+          color: #0F1A5A !important;
         }
         .swagger-ui .opblock-summary-description {
           color: #6b7280 !important;
@@ -618,7 +626,7 @@ async function bootstrap(): Promise<void> {
           padding: 10px 16px !important;
         }
         .swagger-ui .opblock-section-header h4 {
-          color: #0C133A !important;
+          color: #0F1A5A !important;
           font-weight: 700 !important;
           font-size: 0.85rem !important;
           letter-spacing: 0.04em;
@@ -628,9 +636,9 @@ async function bootstrap(): Promise<void> {
         /* ── Parámetros / Body ─────────────────────────────────── */
         .swagger-ui .parameters-col_description p { color: #374151; font-size: 0.86rem; }
         .swagger-ui .parameter__name { color: #0f2544 !important; font-weight: 700 !important; }
-        .swagger-ui .parameter__type { color: #ED7423 !important; font-size: 0.78rem; }
+        .swagger-ui .parameter__type { color: #E84F51 !important; font-size: 0.78rem; }
         .swagger-ui textarea.body-param__text {
-          border: 1px solid rgba(237,116,35,0.3) !important;
+          border: 1px solid rgba(232,79,81,0.3) !important;
           border-radius: 8px !important;
           font-family: 'Fira Code', monospace;
           font-size: 0.83rem !important;
@@ -638,14 +646,14 @@ async function bootstrap(): Promise<void> {
           padding: 12px !important;
         }
         .swagger-ui textarea.body-param__text:focus {
-          border-color: #ED7423 !important;
+          border-color: #E84F51 !important;
           outline: none;
-          box-shadow: 0 0 0 3px rgba(237,116,35,0.15) !important;
+          box-shadow: 0 0 0 3px rgba(232,79,81,0.15) !important;
         }
 
         /* ── Botón Execute ─────────────────────────────────────── */
         .swagger-ui .btn.execute {
-          background: linear-gradient(135deg, #0C133A, #ED7423) !important;
+          background: linear-gradient(135deg, #0F1A5A, #E84F51) !important;
           color: #fff !important;
           border: none !important;
           border-radius: 8px !important;
@@ -658,7 +666,7 @@ async function bootstrap(): Promise<void> {
         }
         .swagger-ui .btn.execute:hover {
           transform: translateY(-2px) !important;
-          box-shadow: 0 6px 16px rgba(237,116,35,0.4) !important;
+          box-shadow: 0 6px 16px rgba(232,79,81,0.4) !important;
         }
         .swagger-ui .btn.execute:active { transform: translateY(0) !important; }
 
@@ -682,19 +690,19 @@ async function bootstrap(): Promise<void> {
         }
         /* Highlight de código JSON en respuesta */
         .swagger-ui .highlight-code pre {
-          background: #0C133A !important;
+          background: #0F1A5A !important;
           border-radius: 8px !important;
           font-size: 0.8rem !important;
           padding: 14px !important;
           color: #e2e8f0 !important;
         }
-        .swagger-ui .microlight { color: #05C6DF !important; }
+        .swagger-ui .microlight { color: #162a7f !important; }
 
         /* ── Curl ──────────────────────────────────────────────── */
-        .swagger-ui .curl-command { background: #0C133A !important; border-radius: 8px !important; }
+        .swagger-ui .curl-command { background: #0F1A5A !important; border-radius: 8px !important; }
         .swagger-ui .curl-command .curl { color: rgba(5,198,223,0.85) !important; font-size: 0.8rem !important; }
         .swagger-ui .copy-to-clipboard {
-          background: #ED7423 !important;
+          background: #E84F51 !important;
           border-radius: 4px !important;
           border: none !important;
         }
@@ -705,13 +713,13 @@ async function bootstrap(): Promise<void> {
           border: 1px solid #d1d5db !important;
           border-radius: 6px !important;
           padding: 6px 10px !important;
-          font-family: 'Inter', sans-serif !important;
+          font-family: 'Poppins', sans-serif !important;
           font-size: 0.85rem !important;
           transition: border 0.2s !important;
         }
         .swagger-ui input:focus, .swagger-ui select:focus {
-          border-color: #ED7423 !important;
-          box-shadow: 0 0 0 3px rgba(237,116,35,0.15) !important;
+          border-color: #E84F51 !important;
+          box-shadow: 0 0 0 3px rgba(232,79,81,0.15) !important;
           outline: none !important;
         }
 
@@ -719,10 +727,10 @@ async function bootstrap(): Promise<void> {
         .swagger-ui .dialog-ux .modal-ux {
           border-radius: 16px !important;
           box-shadow: 0 20px 60px rgba(12,19,58,0.35) !important;
-          border: 1px solid rgba(237,116,35,0.25) !important;
+          border: 1px solid rgba(232,79,81,0.25) !important;
         }
         .swagger-ui .dialog-ux .modal-ux-header {
-          background: linear-gradient(135deg, #0C133A, #ED7423) !important;
+          background: linear-gradient(135deg, #0F1A5A, #E84F51) !important;
           border-radius: 14px 14px 0 0 !important;
           padding: 20px 24px !important;
         }
@@ -734,7 +742,7 @@ async function bootstrap(): Promise<void> {
         .swagger-ui .dialog-ux .modal-ux-header button svg { fill: rgba(255,255,255,0.7); }
         .swagger-ui .auth-container .wrapper { padding: 20px 24px !important; }
         .swagger-ui .dialog-ux .btn.authorize {
-          background: #ED7423 !important;
+          background: #E84F51 !important;
           color: #fff !important;
           border-radius: 8px !important;
         }
@@ -748,7 +756,7 @@ async function bootstrap(): Promise<void> {
           box-shadow: 0 2px 8px rgba(15,37,68,0.06);
         }
         .swagger-ui section.models h4 {
-          color: #0C133A !important;
+          color: #0F1A5A !important;
           font-weight: 800 !important;
           font-size: 0.95rem !important;
           padding: 14px 20px !important;
@@ -760,19 +768,19 @@ async function bootstrap(): Promise<void> {
           background: #fafafa;
           border-top: 1px solid #f0f0f0;
         }
-        .swagger-ui .model-title { color: #0C133A !important; font-weight: 700 !important; }
+        .swagger-ui .model-title { color: #0F1A5A !important; font-weight: 700 !important; }
         .swagger-ui .model { color: #374151; font-size: 0.85rem; }
-        .swagger-ui .property-row .property-name { color: #ED7423 !important; font-weight: 600 !important; }
+        .swagger-ui .property-row .property-name { color: #E84F51 !important; font-weight: 600 !important; }
 
         /* ── Scrollbar ─────────────────────────────────────────── */
         ::-webkit-scrollbar { width: 6px; height: 6px; }
         ::-webkit-scrollbar-track { background: #f1f5f9; border-radius: 3px; }
-        ::-webkit-scrollbar-thumb { background: #ED7423; border-radius: 3px; }
-        ::-webkit-scrollbar-thumb:hover { background: #0C133A; }
+        ::-webkit-scrollbar-thumb { background: #E84F51; border-radius: 3px; }
+        ::-webkit-scrollbar-thumb:hover { background: #0F1A5A; }
 
         /* ── Filter / Buscar ───────────────────────────────────── */
         .swagger-ui .filter .operation-filter-input {
-          border: 1px solid rgba(237,116,35,0.3) !important;
+          border: 1px solid rgba(232,79,81,0.3) !important;
           border-radius: 8px !important;
           padding: 8px 14px !important;
           font-size: 0.88rem !important;
@@ -780,22 +788,22 @@ async function bootstrap(): Promise<void> {
           transition: all 0.2s !important;
         }
         .swagger-ui .filter .operation-filter-input:focus {
-          border-color: #ED7423 !important;
-          box-shadow: 0 0 0 3px rgba(237,116,35,0.15) !important;
+          border-color: #E84F51 !important;
+          box-shadow: 0 0 0 3px rgba(232,79,81,0.15) !important;
           outline: none !important;
         }
 
         /* ── Try it out button ─────────────────────────────────── */
         .swagger-ui .try-out__btn {
-          border: 1px solid #ED7423 !important;
-          color: #ED7423 !important;
+          border: 1px solid #E84F51 !important;
+          color: #E84F51 !important;
           border-radius: 6px !important;
           font-weight: 600 !important;
           background: transparent !important;
           transition: all 0.2s !important;
         }
         .swagger-ui .try-out__btn:hover {
-          background: #ED7423 !important;
+          background: #E84F51 !important;
           color: #fff !important;
         }
         .swagger-ui .try-out__btn.cancel {

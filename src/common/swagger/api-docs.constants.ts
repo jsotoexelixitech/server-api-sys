@@ -9,9 +9,9 @@ export const SWAGGER_TAG_ORDER = [
 ] as const;
 
 export const SWAGGER_API_DESCRIPTION = `
-**RCV Exélixi → Sis2000** (OCR → Formulario → Emisión → Pagos).
+**La Mundial de Seguros · RCV → Sis2000** (catálogo, cotización, emisión y cobranza).
 
-Solo endpoints del flujo RCV en producción. Todos ejecutan SP o SQL directo contra Sis2000.
+Integración técnica del flujo RCV. Todos los endpoints ejecutan SP o SQL directo contra Sis2000.
 
 ---
 
