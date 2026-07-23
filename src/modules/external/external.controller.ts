@@ -88,7 +88,7 @@ export class ExternalController {
   @ApiOperation({
     summary: 'Funerario paso 6 · Emitir póliza de personas',
     description:
-      'Ejecuta `sp_pre_emision_Personas_General` → `sp_emision_Personas_General` (alineado con SysIP producción). ' +
+      'Ejecuta `sp_pre_emision_personas_general_nexus` → `sp_emision_personas_general_nexus` (QA Nexus; legacy SysIP: `sp_pre_emision_Personas_General`). ' +
       'Requiere header `apikey` en producción.',
     operationId: 'funerarioExternalCreateEmissionPerson',
   })

@@ -100,7 +100,7 @@ export class PersonasController {
   @ApiOperation({
     summary: 'Funerario paso 6 · Emitir póliza de personas',
     description:
-      'Ejecuta `sp_pre_emision_Personas_General` → `sp_emision_Personas_General` (mismo flujo que SysIP producción). Requiere header `apikey` en producción. ' +
+      'Ejecuta `sp_pre_emision_personas_general_nexus` → `sp_emision_personas_general_nexus` (QA Nexus; rollback: `SP_PRE_EMISION_PERSONAS_GENERAL=sp_pre_emision_Personas_General`). ' +
       'Alias interno Exélixi de `POST /external/createEmissionPerson`.',
     operationId: 'funerarioPersonasEmision',
   })

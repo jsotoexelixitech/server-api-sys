@@ -33,4 +33,7 @@ export const envValidationSchema = Joi.object({
 
   /** Pre-emisión RCV auto (local). Default: sp Nexus en QA Sis2000. */
   SP_PRE_EMISION_AUTO_RCV: Joi.string().default('sp_pre_emision_automovil_rcv_nexus'),
+
+  /** Pre-emisión personas/funerario (local). Default: sp Nexus en QA Sis2000. */
+  SP_PRE_EMISION_PERSONAS_GENERAL: Joi.string().default('sp_pre_emision_personas_general_nexus'),
 });

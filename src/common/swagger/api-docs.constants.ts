@@ -33,7 +33,7 @@ Integración técnica del flujo RCV. Todos los endpoints ejecutan SP o SQL direc
 | 4 | \`POST /valrep/cotizacion\` | \`spCalculoAuto\` |
 | 5a | \`POST /external/validateEmissionAuto\` **sin plan** (Formulario, pre-plan) | \`speeValidateAutomovilGeneral\` |
 | 5b | \`POST /external/validateEmissionAuto\` **con plan** (re-validación opcional) | \`speeValidateAutomovilGeneral\` |
-| 6 | \`POST /external/createEmissionAuto\` | \`sp_pre_emision_automovil_rcv_nexus\` |
+| 6 | \`POST /external/createEmissionAuto\` | \`sp_pre_emision_automovil_rcv_nexus\` → \`sp_emision_automovil_rcv_nexus\` |
 | 7 | \`POST /external/collection/activate\` | \`spCobroSis_Ad\` + \`cbreporte_pago\` |
 | 8 | \`POST /documents/conductor-habitual\` | PDF anexo (post-emisión) |
 
@@ -106,6 +106,7 @@ export const RCV_VALIDATE_WITH_PLAN_BODY = {
  * Body ejemplo Swagger — emisión nueva RCV.
  * No incluir `poliza`/`cnpoliza_rel` (Sis2000 genera `cnpoliza`).
  * No enviar `prima`/`mprima` en 0: omitir o usar totales de `POST /valrep/cotizacion`.
+ * `placa` y `serial_carroceria` deben ser únicos en QA (vhcerti vigente); cambiar en cada prueba.
  */
 export const RCV_CREATE_EMISSION_AUTO_BODY: Record<string, unknown> = {
   cramo: 18,
@@ -137,8 +138,8 @@ export const RCV_CREATE_EMISSION_AUTO_BODY: Record<string, unknown> = {
   version: '17',
   fano: 2024,
   color: 'Negro',
-  placa: 'TSTH001',
-  serial_carroceria: 'TH0015822024',
+  placa: 'NXSWG01',
+  serial_carroceria: 'NXSWG0158220240017',
   ccategoria_uso: 20,
   npuestos: 2,
   iplaca: 'N',
@@ -153,8 +154,8 @@ export const RCV_CREATE_EMISSION_AUTO_BODY: Record<string, unknown> = {
 /** Mismo flujo con prima tomada de cotización (opcional). */
 export const RCV_CREATE_EMISSION_AUTO_BODY_WITH_PRIMA: Record<string, unknown> = {
   ...RCV_CREATE_EMISSION_AUTO_BODY,
-  placa: 'TSTH002',
-  serial_carroceria: 'TH0025822024',
+  placa: 'NXSWG02',
+  serial_carroceria: 'NXSWG0258220240017',
   rif_tomador: 29640211,
   rif_titular: 29640211,
   mprimaext: 23.15,

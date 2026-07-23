@@ -172,7 +172,7 @@ export class EmissionsController {
   @ApiOperation({
     summary: 'Paso 6 · Emitir póliza RCV',
     description:
-      'Ejecuta `sp_pre_emision_automovil_rcv_nexus` (pre-emisión RCV Nexus; reemplaza `sp_pre_emision_Automovil_RCV2` en QA).\n\n' +
+      'Ejecuta `sp_pre_emision_automovil_rcv_nexus` → `sp_emision_automovil_rcv_nexus` (validación placa/serial vía `speeValidateAutomovilGeneral` dentro del pre-SP).\n\n' +
       'Devuelve `cnpoliza`, `cnrecibo`, `fanopol`, `fmespol` y URL del PDF.\n\n' +
       '**Siguiente paso (Exélixi):** `POST /external/collection/activate` con el `cnrecibo` y datos del pago móvil.',
     operationId: 'rcvCreateEmissionAuto',
@@ -189,7 +189,7 @@ export class EmissionsController {
       emisionNueva: {
         summary: 'Emisión nueva (recomendado)',
         description:
-          'Sin `poliza`. Sin `mprima`/`prima`: el SP calcula o usa Nexus. Vehículo/c plan de cotización previa.',
+          'Sin `poliza`. Sin `mprima`/`prima`. **Cambia `placa` y `serial_carroceria` en cada prueba** (Sis2000 rechaza duplicados vigentes). Opcional: `POST /external/validateEmissionAuto` antes.',
         value: RCV_CREATE_EMISSION_AUTO_BODY,
       },
       conPrimaCotizacion: {

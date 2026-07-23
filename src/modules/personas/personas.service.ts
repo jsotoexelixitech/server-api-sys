@@ -10,6 +10,7 @@ import { MssqlService } from '../../database/mssql.service';
 import { CotizacionPerDto } from './dto/cotizacion-per.dto';
 import { CreateEmissionPersonDto } from './dto/create-emission-person.dto';
 import { parseSPError } from '../../common/helpers/sp-error.helper';
+import { SP_PRE_EMISION_PERSONAS_GENERAL_NEXUS } from '../../config/sis2000-sp.constants';
 
 class Mutex {
   private queue: Array<(release: () => void) => void> = [];
@@ -65,13 +66,21 @@ export class PersonasService {
     private readonly config: ConfigService,
   ) {}
 
+  /** SP pre-emisión personas; override con SP_PRE_EMISION_PERSONAS_GENERAL en .env. */
+  private preEmisionPersonasSpName(): string {
+    return (
+      this.config.get<string>('SP_PRE_EMISION_PERSONAS_GENERAL') ??
+      SP_PRE_EMISION_PERSONAS_GENERAL_NEXUS
+    );
+  }
+
   private intField(value: unknown): number | null {
     if (value == null || String(value).trim() === '') return null;
     const n = parseInt(String(value), 10);
     return Number.isNaN(n) ? null : n;
   }
 
-  /** Flags char(1) que espera sp_pre_emision_Personas_General. */
+  /** Flags char(1) que espera el SP de pre-emisión personas (legacy / Nexus). */
   private spCharFlag(value: unknown, defaultVal = '0'): string {
     if (value == null || String(value).trim() === '') return defaultVal;
     return String(value).trim().charAt(0);
@@ -359,7 +368,7 @@ export class PersonasService {
     }
   }
 
-  // ── Emisión de póliza de personas (sp_pre_emision_Personas_General) ────────
+  // ── Emisión de póliza de personas (pre-SP configurable) ────────
 
   async createEmissionPerson(apikey: string, body: CreateEmissionPersonDto) {
     const release = await emisionMutex.acquire();
@@ -587,7 +596,8 @@ export class PersonasService {
         }
 
         // Emisión local vía SP de producción (SysIP fb_organizacion_swagger / main actual).
-        this.logger.log(`=== INICIO EMISION LOCAL SP sp_pre_emision_Personas_General ===`);
+        const preEmisionSp = this.preEmisionPersonasSpName();
+        this.logger.log(`=== INICIO EMISION LOCAL SP ${preEmisionSp} ===`);
 
         const req = this.db.request();
         const params: Record<string, { type: unknown; value: unknown }> = {
@@ -674,7 +684,7 @@ export class PersonasService {
         );
 
         this.logger.log(
-          `createEmissionPerson: EXEC sp_pre_emision_Personas_General plan=${b['plan']} rif=${b['rif_titular']}`,
+          `createEmissionPerson: EXEC ${preEmisionSp} plan=${b['plan']} rif=${b['rif_titular']}`,
         );
 
         let spResult: {
@@ -682,7 +692,7 @@ export class PersonasService {
           recordsets?: Record<string, unknown>[][];
         };
         try {
-          spResult = await req.execute('sp_pre_emision_Personas_General');
+          spResult = await req.execute(preEmisionSp);
         } catch (spErr) {
           const msg = parseSPError(spErr);
           this.logger.error(`createEmissionPerson SP error: ${msg}`);
@@ -701,7 +711,7 @@ export class PersonasService {
             `createEmissionPerson: sp_pre_emision sin cnpoliza. recordsets=${spResult.recordsets?.length ?? 0}`,
           );
           throw new InternalServerErrorException(
-            'Error al crear la emisión de personas: sp_pre_emision_Personas_General no devolvió cnpoliza.',
+            `Error al crear la emisión de personas: ${preEmisionSp} no devolvió cnpoliza.`,
           );
         }
 

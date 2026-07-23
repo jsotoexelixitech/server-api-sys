@@ -1,0 +1,11 @@
+-- Pre-emisión personas/funerario (Nexus).
+-- Reemplaza sp_pre_emision_Personas_General en QA Sis2000.
+-- Mismo contrato de parámetros que el legacy (ver sp_pre_emision_Personas_General.sql en esta carpeta).
+--
+-- Cadena esperada (Nexus):
+--   speeValidatePersonGeneral → contador Nexus → TMEMISION_* → sp_emision_personas_general_nexus
+--
+-- nest-api: POST /personas/emission (createEmissionPerson)
+-- Variable .env rollback: SP_PRE_EMISION_PERSONAS_GENERAL=sp_pre_emision_Personas_General
+--
+-- Desplegar el CREATE PROCEDURE completo en Sis2000 antes de usar el default de nest-api.
