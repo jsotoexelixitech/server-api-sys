@@ -7,6 +7,7 @@ import {
 import { ConfigService } from '@nestjs/config';
 import { MssqlService } from '../../database/mssql.service';
 import { parseSPError, formatValidateAutoError } from '../../common/helpers/sp-error.helper';
+import { SP_PRE_EMISION_AUTOMOVIL_RCV_NEXUS } from '../../config/sis2000-sp.constants';
 
 @Injectable()
 export class EmissionsService {
@@ -16,6 +17,14 @@ export class EmissionsService {
     private readonly db: MssqlService,
     private readonly config: ConfigService,
   ) {}
+
+  /** SP pre-emisión RCV (Nexus); override con SP_PRE_EMISION_AUTO_RCV en .env. */
+  private preEmisionAutoSpName(): string {
+    return (
+      this.config.get<string>('SP_PRE_EMISION_AUTO_RCV') ??
+      SP_PRE_EMISION_AUTOMOVIL_RCV_NEXUS
+    );
+  }
 
   private nvarchar(value: unknown): string | null {
     if (value == null || String(value).trim() === '') return null;
@@ -653,8 +662,9 @@ export class EmissionsService {
     );
 
     const xplaca = String(this.pick(b, 'xplaca', 'placa') ?? '').trim();
+    const preEmisionSp = this.preEmisionAutoSpName();
     this.logger.log(
-      `emitLocal: EXEC sp_pre_emision_Automovil_RCV2 placa=${xplaca} plan=${b['cplan'] ?? b['plan']} mprima=${mprima} ptasamon=${ptasamon}`,
+      `emitLocal: EXEC ${preEmisionSp} placa=${xplaca} plan=${b['cplan'] ?? b['plan']} mprima=${mprima} ptasamon=${ptasamon}`,
     );
 
     await this.syncPolVehCounter(
@@ -666,7 +676,7 @@ export class EmissionsService {
       recordsets?: Record<string, unknown>[][];
     };
     try {
-      spResult = await req.execute('sp_pre_emision_Automovil_RCV2');
+      spResult = await req.execute(preEmisionSp);
     } catch (err) {
       const msg = parseSPError(err);
       if (!this.isCounterCollisionMessage(msg)) throw err;
@@ -678,7 +688,7 @@ export class EmissionsService {
       Object.entries(params).forEach(([key, field]) =>
         retryReq.input(key, (field as { type: unknown }).type, (field as { value: unknown }).value),
       );
-      spResult = await retryReq.execute('sp_pre_emision_Automovil_RCV2');
+      spResult = await retryReq.execute(preEmisionSp);
     }
 
     let row = this.extractEmissionRow(
@@ -690,10 +700,10 @@ export class EmissionsService {
     }
     if (!row['cnpoliza']) {
       this.logger.error(
-        `emitLocal: sp_pre_emision_Automovil_RCV2 sin cnpoliza. recordsets=${spResult.recordsets?.length ?? 0}`,
+        `emitLocal: ${preEmisionSp} sin cnpoliza. recordsets=${spResult.recordsets?.length ?? 0}`,
       );
       throw new InternalServerErrorException(
-        'Emisión RCV2 sin cnpoliza/cnrecibo en respuesta de Sis2000.',
+        'Emisión RCV sin cnpoliza/cnrecibo en respuesta de Sis2000.',
       );
     }
 

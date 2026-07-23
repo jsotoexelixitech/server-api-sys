@@ -13,7 +13,11 @@ import {
 export class CreateEmissionAutoDto {
   // ── Póliza ────────────────────────────────────────────────────────────────
 
-  @ApiPropertyOptional({ example: 'POL-0001', description: 'Nro. de Póliza/Contrato (null = auto-generado)' })
+  @ApiPropertyOptional({
+    description:
+      'Solo vínculo con póliza previa (renovación). En emisión nueva **omitir** o null; Sis2000 genera `cnpoliza`.',
+    nullable: true,
+  })
   @IsOptional()
   @IsString()
   poliza?: string;
@@ -143,13 +147,17 @@ export class CreateEmissionAutoDto {
   @IsString()
   direccion_titular: string;
 
-  @ApiPropertyOptional()
+  @ApiPropertyOptional({
+    description: 'Conductor habitual (anexo). Omitir si no aplica.',
+  })
   @IsOptional()
-  conductor?: any;
+  conductor?: unknown;
 
-  @ApiPropertyOptional()
+  @ApiPropertyOptional({
+    description: 'Beneficiario preferencial. Omitir si no aplica.',
+  })
   @IsOptional()
-  beneficiario?: any;
+  beneficiario?: unknown;
 
   // ── Vehículo ──────────────────────────────────────────────────────────────
 
@@ -165,17 +173,17 @@ export class CreateEmissionAutoDto {
   @IsString()
   version: string;
 
-  @ApiPropertyOptional()
+  @ApiPropertyOptional({ description: 'Descripción marca (texto). Opcional si INMA trae códigos.' })
   @IsOptional()
   @IsString()
   xmarca?: string;
 
-  @ApiPropertyOptional()
+  @ApiPropertyOptional({ description: 'Descripción modelo (texto). Opcional.' })
   @IsOptional()
   @IsString()
   xmodelo?: string;
 
-  @ApiPropertyOptional()
+  @ApiPropertyOptional({ description: 'Descripción versión (texto). Opcional.' })
   @IsOptional()
   @IsString()
   xversion?: string;
@@ -275,17 +283,23 @@ export class CreateEmissionAutoDto {
   @IsNumber()
   msumaaseg?: number;
 
-  @ApiPropertyOptional()
+  @ApiPropertyOptional({
+    description: 'Prima Bs. Opcional: omitir o valor de cotización (> 0). No enviar 0.',
+  })
   @IsOptional()
   @IsNumber()
   mprima?: number;
 
-  @ApiPropertyOptional()
+  @ApiPropertyOptional({
+    description: 'Prima USD. Opcional: omitir o `mprimaext` de cotización (> 0). No enviar 0.',
+  })
   @IsOptional()
   @IsNumber()
   mprimaext?: number;
 
-  @ApiPropertyOptional()
+  @ApiPropertyOptional({
+    description: 'Tasa BCV (`ptasa` / `ptasamon`). Opcional si va con prima de cotización.',
+  })
   @IsOptional()
   @IsNumber()
   ptasa?: number;

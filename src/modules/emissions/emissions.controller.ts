@@ -19,6 +19,8 @@ import {
   RCV_EMISSION_EXAMPLE,
   RCV_VALIDATE_PRE_PLAN_BODY,
   RCV_VALIDATE_WITH_PLAN_BODY,
+  RCV_CREATE_EMISSION_AUTO_BODY,
+  RCV_CREATE_EMISSION_AUTO_BODY_WITH_PRIMA,
 } from '../../common/swagger/api-docs.constants';
 
 @ApiTags('3. Emisión RCV')
@@ -170,7 +172,7 @@ export class EmissionsController {
   @ApiOperation({
     summary: 'Paso 6 · Emitir póliza RCV',
     description:
-      'Ejecuta `sp_pre_emision_Automovil_RCV2` → `sp_emision_Automovil_RCV2` → `spGeneraCoberturasYRecibos_Auto_RCV2`.\n\n' +
+      'Ejecuta `sp_pre_emision_automovil_rcv_nexus` (pre-emisión RCV Nexus; reemplaza `sp_pre_emision_Automovil_RCV2` en QA).\n\n' +
       'Devuelve `cnpoliza`, `cnrecibo`, `fanopol`, `fmespol` y URL del PDF.\n\n' +
       '**Siguiente paso (Exélixi):** `POST /external/collection/activate` con el `cnrecibo` y datos del pago móvil.',
     operationId: 'rcvCreateEmissionAuto',
@@ -180,7 +182,22 @@ export class EmissionsController {
     type: CreateEmissionAutoDto,
     description:
       'Acepta formato La Mundial (`cplan`, `xplaca`, `femision`) e interno Exélixi (`plan`, `placa`). ' +
+      '**Emisión nueva:** no envíes `poliza`/`cnpoliza_rel`. ' +
+      '**Prima:** omitir (calcula Sis2000) o copiar de `POST /valrep/cotizacion`; no usar `0`. ' +
       'Campos extra del formulario se ignoran sin error.',
+    examples: {
+      emisionNueva: {
+        summary: 'Emisión nueva (recomendado)',
+        description:
+          'Sin `poliza`. Sin `mprima`/`prima`: el SP calcula o usa Nexus. Vehículo/c plan de cotización previa.',
+        value: RCV_CREATE_EMISSION_AUTO_BODY,
+      },
+      conPrimaCotizacion: {
+        summary: 'Con prima de cotización',
+        description: 'Tras `POST /valrep/cotizacion`, enviar `mprimaext`, `mprima` y `ptasa` (> 0).',
+        value: RCV_CREATE_EMISSION_AUTO_BODY_WITH_PRIMA,
+      },
+    },
   })
   @ApiResponse({
     status: 200,

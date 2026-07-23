@@ -30,4 +30,7 @@ export const envValidationSchema = Joi.object({
   EXTERNAL_API_URL_AUTO: Joi.string().optional(),
   EXTERNAL_API_KEY: Joi.string().optional(),
   EXTERNAL_BASIC_AUTH: Joi.string().optional(),
+
+  /** Pre-emisión RCV auto (local). Default: sp Nexus en QA Sis2000. */
+  SP_PRE_EMISION_AUTO_RCV: Joi.string().default('sp_pre_emision_automovil_rcv_nexus'),
 });

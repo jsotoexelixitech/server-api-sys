@@ -214,7 +214,9 @@ export class PersonasService {
     } catch (err) {
       const msg = err instanceof Error ? err.message : String(err);
       this.logger.error(`getPlanesPer: ${msg}`);
-      throw new InternalServerErrorException('Error al obtener los planes de personas.');
+      throw new InternalServerErrorException(
+        `Error al obtener los planes de personas: ${msg}`,
+      );
     }
   }
 
