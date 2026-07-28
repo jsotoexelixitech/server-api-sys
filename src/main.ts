@@ -88,11 +88,6 @@ async function bootstrap(): Promise<void> {
       .setTitle(SWAGGER_BRAND_META.title)
       .setDescription(SWAGGER_API_DESCRIPTION)
       .setVersion(SWAGGER_BRAND_META.version)
-      .setContact(
-        'Soporte API — La Mundial',
-        'https://www.lamundialdeseguros.com',
-        'integraciones@lamundialdeseguros.com',
-      )
       .addApiKey(
         {
           type: 'apiKey',

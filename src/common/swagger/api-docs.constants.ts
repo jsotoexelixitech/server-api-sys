@@ -77,18 +77,6 @@ Error de validación o negocio (HTTP 4xx):
 | \`serial_carroceria\` | Serial de carrocería (carnet) |
 | \`plan\` | Código del plan contratado (ej. \`RCVBAS\`) |
 | \`frecuencia\` | Periodicidad de pago (\`A\` anual, \`E\` única, etc.) |
-
----
-
-### Soporte
-
-| | |
-|---|---|
-| **Entorno QA** | Servidor HTTPS seleccionable arriba |
-| **Versión API** | Ver badge en el menú lateral |
-| **Contacto** | integraciones@lamundialdeseguros.com |
-
-*Documentación sujeta a cambios. Consulte el changelog antes de desplegar en producción.*
 `.trim();
 
 export const APIKEY_HEADER = {
