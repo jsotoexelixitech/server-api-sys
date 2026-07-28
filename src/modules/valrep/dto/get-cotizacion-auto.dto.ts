@@ -3,21 +3,21 @@ import { Type } from 'class-transformer';
 import { IsIn, IsInt, IsNotEmpty, IsOptional, IsString, Max, MaxLength, Min, MinLength } from 'class-validator';
 
 export class GetCotizacionAutoDto {
-  @ApiProperty({ example: '083', description: 'Código INMA de marca (1–5 chars)' })
+  @ApiProperty({ example: '083', description: 'Código de marca del catálogo vehicular' })
   @IsString()
   @IsNotEmpty()
   @MinLength(1)
   @MaxLength(5)
   cmarca: string;
 
-  @ApiProperty({ example: '001', description: 'Código INMA de modelo (1–5 chars)' })
+  @ApiProperty({ example: '001', description: 'Código de modelo del catálogo vehicular' })
   @IsString()
   @IsNotEmpty()
   @MinLength(1)
   @MaxLength(5)
   cmodelo: string;
 
-  @ApiProperty({ example: '03', description: 'Código INMA de versión (1–5 chars)' })
+  @ApiProperty({ example: '03', description: 'Código de versión del catálogo vehicular' })
   @IsString()
   @IsNotEmpty()
   @MinLength(1)
@@ -33,7 +33,7 @@ export class GetCotizacionAutoDto {
 
   @ApiProperty({
     example: 'RCVBAS',
-    description: 'Código de plan Sis2000 (cplan de spBuscaPlan / valrep/planes/v2)',
+    description: 'Código de plan obtenido de `POST /valrep/planes/v2`',
   })
   @IsString()
   @IsNotEmpty()

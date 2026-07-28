@@ -9,7 +9,7 @@ import { IsIn, IsNotEmpty, IsString } from 'class-validator';
 export class GetProductosPersonasDto {
   @ApiProperty({
     example: '80080',
-    description: 'Código de productor o canal (citem).',
+    description: 'Código de productor o comercializador (citem).',
   })
   @IsString()
   @IsNotEmpty()
@@ -17,7 +17,7 @@ export class GetProductosPersonasDto {
 
   @ApiProperty({
     example: 'P',
-    description: 'P = productor, C = canal.',
+    description: 'P = productor, C = comercializador.',
     enum: ['P', 'C'],
   })
   @IsString()

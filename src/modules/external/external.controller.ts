@@ -25,11 +25,8 @@ export class ExternalController {
   @ApiOperation({
     summary: 'Funerario paso 4 · Cotización de personas',
     description:
-      'Ejecuta `spCalculoPer` por cada asegurado. Formato legacy SysIP (`result.data` + `total_extension`).\n\n' +
-      '**Flujo funerario (fb_organizacion_swagger):**\n' +
-      '1. `POST /valrep/productos` → 2. `POST /valrep/planes/producto` → 3. `POST /valrep/planes/detalle` → ' +
-      '**4. este endpoint** → 5. `validateEmissionPerson` → 6. `createEmissionPerson`.\n\n' +
-      'Equivalente interno Exélixi: `POST /personas/cotizacion` (formato plano).',
+      'Cotización de personas con desglose por asegurado y totales de extensión.\n\n' +
+      '**Flujo recomendado:** productos → planes/producto → planes/detalle → cotización → validación → emisión.',
     operationId: 'funerarioExternalGetCotizacionPer',
   })
   @ApiHeader(APIKEY_HEADER)
@@ -61,9 +58,7 @@ export class ExternalController {
   @HttpCode(HttpStatus.OK)
   @ApiOperation({
     summary: 'Funerario paso 5 · Validar emisión de personas',
-    description:
-      'Ejecuta `speeValidatePersonGeneral` antes de emitir. ' +
-      'Paso previo a `POST /external/createEmissionPerson`.',
+    description: 'Valida reglas de negocio antes de emitir. Paso previo a `POST /external/createEmissionPerson`.',
     operationId: 'funerarioExternalValidateEmissionPerson',
   })
   @ApiBody({ type: ValidateEmissionPersonDto })
@@ -87,9 +82,7 @@ export class ExternalController {
   @ApiSecurity('apikey')
   @ApiOperation({
     summary: 'Funerario paso 6 · Emitir póliza de personas',
-    description:
-      'Ejecuta `sp_pre_emision_personas_general_nexus` → `sp_emision_personas_general_nexus`. ' +
-      'Requiere header `apikey` en producción.',
+    description: 'Emite la póliza de personas. Requiere clave de API en entornos públicos.',
     operationId: 'funerarioExternalCreateEmissionPerson',
   })
   @ApiHeader(APIKEY_HEADER)

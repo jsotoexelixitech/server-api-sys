@@ -21,10 +21,10 @@ export class DocumentsController {
     required: false,
   })
   @ApiOperation({
-    summary: 'Paso 8 · Anexo Conductor Habitual (PDF)',
+    summary: 'Anexo Conductor Habitual (PDF)',
     description:
-      'Genera PDF tras la emisión. Lo invoca **emision-api** cuando el tomador declaró conductor distinto. ' +
-      'Devuelve URL para descarga.',
+      'Genera el PDF del anexo de conductor habitual tras la emisión, ' +
+      'cuando el tomador declaró un conductor distinto. Devuelve URL para descarga.',
     operationId: 'rcvConductorHabitualPdf',
   })
   @ApiBody({ type: GenerateConductorPdfDto })

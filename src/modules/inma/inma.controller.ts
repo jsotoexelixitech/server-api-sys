@@ -17,7 +17,7 @@ export class InmaController {
   @Get('anios')
   @ApiOperation({
     summary: 'Paso 1a · Rango de años',
-    description: 'Primer paso del catálogo vehículo. Año min/max en `VInma`.',
+    description: 'Primer paso del catálogo vehicular. Devuelve el rango de años disponibles.',
     operationId: 'inmaAnios',
   })
   @ApiResponse({ status: 200, schema: { example: { status: true, data: { min: 1950, max: 2028 } } } })
@@ -114,7 +114,7 @@ export class InmaController {
   @HttpCode(HttpStatus.OK)
   @ApiOperation({
     summary: 'Paso 1e · Categorías de uso del vehículo',
-    description: 'Obtiene `ctipo` desde `VInma` y categorías en `macategtr`. Usado en cotización y emisión.',
+    description: 'Obtiene las categorías de uso del vehículo según marca, modelo, versión y año. Usado en cotización y emisión.',
     operationId: 'inmaCategoriasUso',
   })
   @ApiBody({ type: GetCategoriasUsoDto })
@@ -127,7 +127,7 @@ export class InmaController {
       },
     },
   })
-  @ApiResponse({ status: 404, description: 'El vehículo (marca/modelo/versión/año) no se encontró en VInma.' })
+  @ApiResponse({ status: 404, description: 'Vehículo no encontrado para la combinación marca/modelo/versión/año indicada.' })
   @ApiCommonErrors()
   @Api404()
   async getCategoriasUso(@Body() dto: GetCategoriasUsoDto) {

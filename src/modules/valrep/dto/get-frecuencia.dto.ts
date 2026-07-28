@@ -4,7 +4,7 @@ import { IsNotEmpty, IsString, MaxLength } from 'class-validator';
 export class GetFrecuenciaDto {
   @ApiProperty({
     example: 'RCVBAS',
-    description: 'Código de plan Sis2000 obtenido de `POST /valrep/planes/v2`',
+    description: 'Código de plan obtenido de `POST /valrep/planes/v2`',
   })
   @IsString()
   @IsNotEmpty()

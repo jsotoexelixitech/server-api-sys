@@ -79,7 +79,7 @@ export class ValrepController {
   @Get('states')
   @ApiOperation({
     summary: 'Paso 2a · Estados de Venezuela',
-    description: 'Consulta `maestados` (cpais=58). Usar `cestado` en `/cities`.',
+    description: 'Listado de estados de Venezuela. Use `cestado` en la consulta de ciudades.',
     operationId: 'valrepStates',
   })
   @ApiResponse({
@@ -97,7 +97,7 @@ export class ValrepController {
   @Get('cities')
   @ApiOperation({
     summary: 'Paso 2b · Ciudades por estado',
-    description: 'Consulta `maciudades`. Omitir `cestado` para listar todas.',
+    description: 'Ciudades por estado. Omitir `cestado` para listar todas.',
     operationId: 'valrepCities',
   })
   @ApiQuery({ name: 'cestado', required: false, type: Number, example: 1, description: 'Código de estado (de /states). Omitir para todas.' })
@@ -114,7 +114,7 @@ export class ValrepController {
   @HttpCode(HttpStatus.OK)
   @ApiOperation({
     summary: 'Paso 2c · Listas de catálogo (sexo, parentescos, etc.)',
-    description: 'Dominios: `SEXO`, `EDOCIVIL`, `PARENTESCOS`, `FRECUENCIAS`, `MATIPCANAL`. Parentescos desde `maparent`.',
+    description: 'Listas de catálogo: sexo, estado civil, parentescos, frecuencias de pago, etc.',
     operationId: 'valrepGetLists',
   })
   @ApiBody({
@@ -155,9 +155,7 @@ export class ValrepController {
   @ApiOperation({
     summary: 'Funerario paso 1 · Productos de personas',
     description:
-      'Réplica de SysIP `Valrep.getProducts` (ruta real en fb_organizacion_swagger).\n\n' +
-      'Requiere `citem` + `centidad` (P=productor, C=canal). El swagger de La Mundial documenta ' +
-      '`spBuscaProductosEntidad`, pero la ruta `/valrep/productos` está cableada a `getProducts`.\n\n' +
+      'Productos disponibles para pólizas de personas. Requiere `citem` y `centidad` (P = productor, C = comercializador).\n\n' +
       '**Siguiente paso:** `POST /valrep/planes/producto` con el `cproducto` elegido.',
     operationId: 'funerarioValrepProductos',
   })
@@ -184,7 +182,7 @@ export class ValrepController {
   @ApiOperation({
     summary: 'Funerario paso 2 · Planes por producto',
     description:
-      'Ejecuta `spBuscaPlanProducto` y enriquece con parentescos/edades.\n\n' +
+      'Planes asociados al producto seleccionado, con parentescos y rangos de edad permitidos.\n\n' +
       '**Siguiente paso:** `POST /valrep/planes/detalle` con `cramo` y `cplan`.',
     operationId: 'funerarioValrepPlanesProducto',
   })
@@ -212,8 +210,8 @@ export class ValrepController {
   @ApiOperation({
     summary: 'Funerario paso 3 · Detalle del plan',
     description:
-      'Ejecuta `spBuscaDetallePlan` (detalle operativo, parentescos y coberturas).\n\n' +
-      '**Siguiente paso:** `POST /external/getCotizacionPer` (formato legacy) o `POST /personas/cotizacion` (formato Exélixi).',
+      'Detalle del plan: coberturas, parentescos y condiciones operativas.\n\n' +
+      '**Siguiente paso:** `POST /external/getCotizacionPer` o `POST /personas/cotizacion`.',
     operationId: 'funerarioValrepPlanesDetalle',
   })
   @ApiBody({ type: GetPlanesDetallePersonasDto })
@@ -247,8 +245,8 @@ export class ValrepController {
   @ApiOperation({
     summary: 'Paso 3 · Planes RCV disponibles',
     description:
-      'Ejecuta `spBuscaPlan` + parentescos y coberturas. ' +
-      'El `cplan` devuelto se usa en `POST /valrep/frecuencia` y luego en `POST /valrep/cotizacion`.',
+      'Planes de automóvil disponibles con parentescos y coberturas. ' +
+      'El `cplan` devuelto se usa en frecuencia, cotización y emisión.',
     operationId: 'valrepPlanesV2',
   })
   @ApiBody({ type: GetPlanesV2Dto })
@@ -280,7 +278,7 @@ export class ValrepController {
   @ApiOperation({
     summary: 'Paso 3b · Frecuencias del plan',
     description:
-      'Consulta `maplanes_frec` y devuelve las frecuencias de pago válidas para el `cplan` elegido en `planes/v2`.\n\n' +
+      'Frecuencias de pago válidas para el plan elegido.\n\n' +
       '**Siguiente paso:** `POST /valrep/cotizacion` (usar `cvalor` como frecuencia en emisión).',
     operationId: 'valrepFrecuencia',
   })
@@ -314,7 +312,7 @@ export class ValrepController {
   @ApiOperation({
     summary: 'Paso 4 · Cotizar prima RCV',
     description:
-      'Ejecuta `spCalculoAuto`. Requiere `cplan` de `planes/v2`, frecuencia de `frecuencia` y datos del vehículo (marca, modelo, año, suma asegurada).\n\n' +
+      'Calcula la prima del automóvil. Requiere plan, frecuencia y datos del vehículo (marca, modelo, año, suma asegurada).\n\n' +
       '**Siguiente paso:** `POST /external/validateEmissionAuto`',
     operationId: 'valrepCotizacionAuto',
   })

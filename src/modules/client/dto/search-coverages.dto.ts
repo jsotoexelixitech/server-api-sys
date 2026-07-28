@@ -3,19 +3,19 @@ import { Type } from 'class-transformer';
 import { IsInt, IsNotEmpty, IsNumber, Min } from 'class-validator';
 
 export class SearchCoveragesDto {
-  @ApiProperty({ example: '900000000065412', description: 'Número de póliza (`adpoliza.cpoliza`)' })
+  @ApiProperty({ example: '900000000065412', description: 'Número de póliza' })
   @Type(() => Number)
   @IsNumber()
   @IsNotEmpty()
   cpoliza: number;
 
-  @ApiProperty({ example: 2025, description: 'Año de la póliza (`adpoliza.fanopol`)' })
+  @ApiProperty({ example: 2025, description: 'Año de la póliza' })
   @Type(() => Number)
   @IsInt()
   @Min(1900)
   fanopol: number;
 
-  @ApiProperty({ example: 9, description: 'Mes de la póliza (`adpoliza.fmespol`)' })
+  @ApiProperty({ example: 9, description: 'Mes de la póliza' })
   @Type(() => Number)
   @IsInt()
   @Min(1)

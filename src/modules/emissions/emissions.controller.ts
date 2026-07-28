@@ -87,34 +87,26 @@ export class EmissionsController {
   @Post('external/validateEmissionAuto')
   @HttpCode(HttpStatus.OK)
   @ApiOperation({
-    summary: 'Validar placa/serial (pre-plan o con plan)',
+    summary: 'Validar placa y serial de carrocería',
     description:
-      'Ejecuta `speeValidateAutomovilGeneral`. Comprueba en Sis2000 si la placa o el serial ya tienen póliza vigente.\n\n' +
-      '**Uso 1 — Formulario Exélixi (antes de elegir plan):** envía solo `placa` y `serial_carroceria` (carnet de circulación). ' +
-      'No incluyas `plan` (el servidor usa `LAMUNDIAL_PLAN_DEFAULT` / `RCVBAS`) ni serial de motor.\n\n' +
-      '**Uso 2 — Re-validación con plan:** incluye `plan` con el código elegido en cotización (debe coincidir al emitir).\n\n' +
-      '**Probar en Swagger:** Try it out → ejemplo *Pre-plan (sin plan)* → Execute.\n\n' +
-      '**curl (solo carnet):**\n' +
-      '```\n' +
-      'curl -X POST http://localhost:3002/api/v1/external/validateEmissionAuto \\\n' +
-      '  -H "Content-Type: application/json" \\\n' +
-      '  -d \'{"placa":"AE886C","serial_carroceria":"SC1S6ZMV3024323"}\'\n' +
-      '```\n\n' +
-      '**Siguiente paso (tras planes/cotización):** `POST /external/createEmissionAuto`',
+      'Comprueba si la placa o el serial de carrocería ya tienen una póliza vigente.\n\n' +
+      '**Validación temprana (antes de elegir plan):** envía solo `placa` y `serial_carroceria`. ' +
+      'No incluyas `plan` ni serial de motor.\n\n' +
+      '**Re-validación con plan:** incluye `plan` con el código elegido en cotización.\n\n' +
+      '**Siguiente paso:** `POST /external/createEmissionAuto`',
     operationId: 'rcvValidateEmissionAuto',
   })
   @ApiBody({
     type: ValidateEmissionAutoDto,
     examples: {
       prePlan: {
-        summary: 'Pre-plan (sin plan) — Formulario Exélixi',
-        description:
-          'Validación temprana con datos del carnet: placa + serial de carrocería. Sin plan ni serial de motor.',
+        summary: 'Pre-plan (sin plan)',
+        description: 'Validación con datos del carnet: placa y serial de carrocería.',
         value: RCV_VALIDATE_PRE_PLAN_BODY,
       },
       withPlan: {
         summary: 'Con plan elegido',
-        description: 'Re-validación opcional antes de emitir; `plan` debe ser el mismo que en cotización/emisión.',
+        description: 'Re-validación opcional antes de emitir; `plan` debe coincidir con cotización/emisión.',
         value: RCV_VALIDATE_WITH_PLAN_BODY,
       },
     },
@@ -170,26 +162,25 @@ export class EmissionsController {
   @HttpCode(HttpStatus.OK)
   @ApiSecurity('apikey')
   @ApiOperation({
-    summary: 'Paso 6 · Emitir póliza RCV',
+    summary: 'Emitir póliza de automóvil',
     description:
-      'Ejecuta `sp_pre_emision_automovil_rcv_nexus` → `sp_emision_automovil_rcv_nexus` (validación placa/serial vía `speeValidateAutomovilGeneral` dentro del pre-SP).\n\n' +
+      'Registra la emisión de la póliza y genera recibo. ' +
       'Devuelve `cnpoliza`, `cnrecibo`, `fanopol`, `fmespol` y URL del PDF.\n\n' +
-      '**Siguiente paso (Exélixi):** `POST /external/collection/activate` con el `cnrecibo` y datos del pago móvil.',
+      '**Siguiente paso:** `POST /external/collection/activate` con el `cnrecibo` y datos del pago.',
     operationId: 'rcvCreateEmissionAuto',
   })
   @ApiHeader(APIKEY_HEADER)
   @ApiBody({
     type: CreateEmissionAutoDto,
     description:
-      'Acepta formato La Mundial (`cplan`, `xplaca`, `femision`) e interno Exélixi (`plan`, `placa`). ' +
-      '**Emisión nueva:** no envíes `poliza`/`cnpoliza_rel`. ' +
-      '**Prima:** omitir (calcula Sis2000) o copiar de `POST /valrep/cotizacion`; no usar `0`. ' +
-      'Campos extra del formulario se ignoran sin error.',
+      'Acepta alias de campos (`cplan`/`plan`, `xplaca`/`placa`, etc.). ' +
+      '**Emisión nueva:** no envíe `poliza` ni `cnpoliza_rel`. ' +
+      '**Prima:** omitir o copiar totales de `POST /valrep/cotizacion`; no usar `0`.',
     examples: {
       emisionNueva: {
         summary: 'Emisión nueva (recomendado)',
         description:
-          'Sin `poliza`. Sin `mprima`/`prima`. **Cambia `placa` y `serial_carroceria` en cada prueba** (Sis2000 rechaza duplicados vigentes). Opcional: `POST /external/validateEmissionAuto` antes.',
+          'Sin `poliza`. Sin `mprima`/`prima`. Use placa y serial únicos en cada prueba de QA.',
         value: RCV_CREATE_EMISSION_AUTO_BODY,
       },
       conPrimaCotizacion: {
@@ -201,7 +192,7 @@ export class EmissionsController {
   })
   @ApiResponse({
     status: 200,
-    description: 'Póliza y recibo creados en Sis2000.',
+    description: 'Póliza y recibo generados correctamente.',
     schema: {
       example: {
         status: true,

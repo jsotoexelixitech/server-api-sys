@@ -107,7 +107,7 @@ export const RCV_EMISSION_EXAMPLE = {
   cnrecibo: '18-100272044',
   fanopol: 2026,
   fmespol: 7,
-  urlpoliza: 'https://qaapi.lamundialdeseguros.com/sis2000/poliza/18-1-0000078926/2026/7/',
+  urlpoliza: 'https://qaapi.lamundialdeseguros.com/poliza/18-1-0000078926/2026/7/',
 };
 
 export const RCV_COLLECTION_ACTIVATE_BODY = {

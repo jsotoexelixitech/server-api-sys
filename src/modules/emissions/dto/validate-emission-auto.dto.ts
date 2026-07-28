@@ -5,9 +5,8 @@ export class ValidateEmissionAutoDto {
   @ApiPropertyOptional({
     example: 'RCVBAS',
     description:
-      'Código del plan a emitir. **Opcional** en validación temprana (Formulario Exélixi, antes de elegir plan): ' +
-      'si se omite, el servidor usa `LAMUNDIAL_PLAN_DEFAULT` o `RCVBAS`. ' +
-      'En emisión definitiva debe coincidir con el plan cotizado.',
+      'Código del plan. Opcional en validación temprana (antes de elegir plan): si se omite, se usa el plan por defecto. ' +
+      'En emisión debe coincidir con el plan cotizado.',
   })
   @IsOptional()
   @IsString({ message: 'El plan debe ser texto.' })

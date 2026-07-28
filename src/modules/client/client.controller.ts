@@ -9,14 +9,10 @@ import { SearchCoveragesDto } from './dto/search-coverages.dto';
 export class ClientController {
   constructor(private readonly clientService: ClientService) {}
 
-  // ── GET /api/v1/client/search/policies/:cci_rif ──────────────────────────
-  // IMPORTANTE: esta ruta debe ir ANTES de /search/:cci_rif para evitar
-  // que NestJS interprete "policies" como el parámetro cci_rif.
-
   @Get('search/policies/:cci_rif')
   @ApiOperation({
     summary: 'Pólizas del asegurado',
-    description: 'Ejecuta `spGetPolizasAsegurado`. Devuelve las pólizas vigentes e históricas asociadas a la cédula/RIF.',
+    description: 'Devuelve las pólizas vigentes e históricas asociadas a la cédula o RIF del asegurado.',
   })
   @ApiParam({ name: 'cci_rif', type: String, example: '12345678', description: 'Cédula o RIF numérico del asegurado' })
   @ApiResponse({ status: 200, schema: { example: { status: true, result: { polizas: [{ cnpoliza: '18-1-0000011500', cramo: 18, cplan: 'RCVBAS' }] } } } })
@@ -30,12 +26,10 @@ export class ClientController {
     return { status: true, result: { polizas } };
   }
 
-  // ── GET /api/v1/client/search/:cci_rif ───────────────────────────────────
-
   @Get('search/:cci_rif')
   @ApiOperation({
     summary: 'Datos completos del cliente',
-    description: 'Consulta `maclient`, `maclient_tel`, `maclient_dir`, `maclient_correo` y `maclient_atr` para el RIF indicado.',
+    description: 'Consulta datos personales, teléfonos, direcciones y correos del cliente por cédula o RIF.',
   })
   @ApiParam({ name: 'cci_rif', type: String, example: '12345678', description: 'Cédula o RIF numérico del cliente' })
   @ApiResponse({
@@ -63,15 +57,13 @@ export class ClientController {
     return { status: true, data };
   }
 
-  // ── POST /api/v1/client/search/coverages ─────────────────────────────────
-
   @Post('search/coverages')
   @HttpCode(HttpStatus.OK)
   @ApiOperation({
     summary: 'Coberturas de una póliza',
     description:
-      'Consulta coberturas y datos de póliza por `cpoliza`, `fanopol` y `fmespol`. ' +
-      'Ejecuta `spGetCoverageClient` y devuelve `poliza` y `coberturas`.',
+      'Consulta coberturas y datos de la póliza por número de póliza, año y mes. ' +
+      'Devuelve información de la póliza y el detalle de coberturas contratadas.',
   })
   @ApiBody({ type: SearchCoveragesDto })
   @ApiResponse({

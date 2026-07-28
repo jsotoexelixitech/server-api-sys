@@ -5,7 +5,7 @@ import { IsNotEmpty, IsNumber, IsOptional, IsString, Matches } from 'class-valid
 export class CollectionPaymentDto {
   @ApiProperty({
     example: '18-100272044',
-    description: 'Número de recibo Sis2000 (`cnrecibo`) devuelto por `createEmissionAuto`.',
+    description: 'Número de recibo (`cnrecibo`) devuelto por la emisión.',
   })
   @IsString()
   @IsNotEmpty()
@@ -24,8 +24,7 @@ export class CollectionPaymentDto {
   @ApiProperty({
     example: '219551279300',
     description:
-      'Referencia bancaria del pago verificado. Debe existir en `pago_movil` o `trsypago`. ' +
-      'No usar IDs internos Exélixi (INT-...).',
+      'Referencia bancaria del pago verificado. Debe corresponder a un pago móvil registrado.',
   })
   @IsString()
   @IsNotEmpty()
@@ -33,7 +32,7 @@ export class CollectionPaymentDto {
 
   @ApiProperty({
     example: '2026-07-14',
-    description: 'Fecha del pago (YYYY-MM-DD). Alimenta `freporte` en el ingreso de caja.',
+    description: 'Fecha del pago (YYYY-MM-DD).',
   })
   @IsString()
   @Matches(/^\d{4}-\d{2}-\d{2}$/)
@@ -41,9 +40,7 @@ export class CollectionPaymentDto {
 
   @ApiPropertyOptional({
     example: 7,
-    description:
-      'ID de usuario Sis2000 (`seusuariosweb.cusuario`) que aparece como Cajero en el PDF. ' +
-      'SysIP canales externos usa 7. Si se omite, se resuelve desde configuración del canal.',
+    description: 'Usuario cajero que aparece en el comprobante PDF. Si se omite, se usa el valor por defecto del entorno.',
   })
   @IsOptional()
   @Type(() => Number)
@@ -52,7 +49,7 @@ export class CollectionPaymentDto {
 
   @ApiPropertyOptional({
     example: 30,
-    description: 'Código `cbanco` en `mabanco` (banco origen). Opcional si se envía `cbanco_ref`.',
+    description: 'Código del banco origen. Opcional si se envía `cbanco_ref`.',
   })
   @IsOptional()
   @Type(() => Number)
@@ -62,8 +59,7 @@ export class CollectionPaymentDto {
   @ApiPropertyOptional({
     example: '0134',
     description:
-      'Código ref. del banco origen (`pago_movil.banco_origen`). ' +
-      'Se resuelve a `cbanco` vía `mabanco` (ej. 0134 → BANCO MERCANTIL).',
+      'Código de referencia del banco origen (ej. 0134 = Banco Mercantil).',
   })
   @IsOptional()
   @IsString()
@@ -72,8 +68,7 @@ export class CollectionPaymentDto {
   @ApiPropertyOptional({
     example: 35,
     description:
-      'Código `cbanco_destino` para `MABANCO_DESTINO`. Pago móvil = 35, SyPago = 31. ' +
-      'Si se omite, se infiere de la referencia en `pago_movil`/`trsypago`.',
+      'Código del banco destino. Pago móvil = 35, SyPago = 31. Si se omite, se infiere de la referencia.',
   })
   @IsOptional()
   @Type(() => Number)

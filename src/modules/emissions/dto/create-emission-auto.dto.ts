@@ -15,7 +15,7 @@ export class CreateEmissionAutoDto {
 
   @ApiPropertyOptional({
     description:
-      'Solo vínculo con póliza previa (renovación). En emisión nueva **omitir** o null; Sis2000 genera `cnpoliza`.',
+      'Solo vínculo con póliza previa (renovación). En emisión nueva omitir o enviar null; el sistema genera `cnpoliza`.',
     nullable: true,
   })
   @IsOptional()

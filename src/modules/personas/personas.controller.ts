@@ -20,9 +20,8 @@ export class PersonasController {
   @ApiOperation({
     summary: 'Planes de personas vigentes (ramo 9 = Funerario)',
     description:
-      'Ejecuta `spBuscaPlan` con el ramo indicado (9 por defecto) y enriquece con ' +
-      'los parentescos y rangos de edad permitidos (`mapltarifas_per` / `mapledades_per`). ' +
-      'Réplica parametrizada del `getPlanesPer` del backend Express.',
+      'Planes de personas vigentes para el ramo indicado (9 = funerario por defecto), ' +
+      'con parentescos y rangos de edad permitidos.',
   })
   @ApiBody({ type: GetPlanesPerDto })
   @ApiResponse({
@@ -45,11 +44,9 @@ export class PersonasController {
   @Post('cotizacion')
   @HttpCode(HttpStatus.OK)
   @ApiOperation({
-    summary: 'Cotizar póliza de personas (spCalculoPer)',
+    summary: 'Cotizar póliza de personas',
     description:
-      'Ejecuta `spCalculoPer` por cada asegurado y suma las primas. ' +
-      'Devuelve `mprimaext` (USD), `mprima` (Bs) y `ptasa`. ' +
-      'Réplica parametrizada del `getCotizacionPer` del backend Express.',
+      'Calcula la prima por cada asegurado y devuelve totales en USD (`mprimaext`), bolívares (`mprima`) y tasa (`ptasa`).',
   })
   @ApiBody({ type: CotizacionPerDto })
   @ApiResponse({
@@ -69,9 +66,7 @@ export class PersonasController {
   @HttpCode(HttpStatus.OK)
   @ApiOperation({
     summary: 'Funerario paso 5 · Validar emisión de personas',
-    description:
-      'Ejecuta `speeValidatePersonGeneral` antes de emitir. ' +
-      'Alias interno Exélixi de `POST /external/validateEmissionPerson`.',
+    description: 'Valida que el asegurado cumple las reglas de negocio antes de emitir la póliza de personas.',
     operationId: 'funerarioPersonasValidacion',
   })
   @ApiBody({ type: ValidateEmissionPersonDto })
@@ -99,9 +94,7 @@ export class PersonasController {
   @ApiSecurity('apikey')
   @ApiOperation({
     summary: 'Funerario paso 6 · Emitir póliza de personas',
-    description:
-      'Ejecuta `sp_pre_emision_personas_general_nexus` → `sp_emision_personas_general_nexus`. ' +
-      'Alias interno Exélixi de `POST /external/createEmissionPerson`.',
+    description: 'Emite la póliza de personas y devuelve número de póliza y recibo.',
     operationId: 'funerarioPersonasEmision',
   })
   @ApiHeader(APIKEY_HEADER)

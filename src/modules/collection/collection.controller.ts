@@ -133,13 +133,11 @@ export class CollectionController {
   @HttpCode(HttpStatus.OK)
   @ApiSecurity('apikey')
   @ApiOperation({
-    summary: 'Paso 7 · Activar recibo tras pago (recomendado Exélixi)',
+    summary: 'Activar cobro del recibo',
     description:
-      'Usado por **emision-api** tras emitir. Flujo validado QA (ingreso **#183034**):\n\n' +
-      '1. `buildCollectionPayload` — bancos desde `pago_movil`\n' +
-      '2. `spCobroSis_Ad` — ingreso en `cbreporte_tran`\n' +
-      '3. UPSERT `cbreporte_pago` — banco origen/destino, `ctipopago`=3, `freporte`\n\n' +
-      'PDF: `https://qaapi.lamundialdeseguros.com/sis2000/ingreso_caja/{transaccion}/`',
+      'Registra el pago del recibo emitido y genera el ingreso de caja. ' +
+      'Use el `cnrecibo` devuelto por la emisión junto con los datos del pago móvil.\n\n' +
+      'Devuelve número de transacción, póliza asociada y confirmación del cobro.',
     operationId: 'rcvActivateReceipt',
   })
   @ApiHeader(APIKEY_HEADER)
@@ -147,7 +145,7 @@ export class CollectionController {
     type: CollectionPaymentDto,
     examples: {
       pagoMovil: {
-        summary: 'Pago móvil verificado (caso Exélixi jul-2026)',
+        summary: 'Pago móvil verificado (ejemplo QA)',
         value: RCV_COLLECTION_ACTIVATE_BODY,
       },
     },
