@@ -17,8 +17,10 @@ module.exports = {
       // ecosystem.config.js solo fuerza NODE_ENV=production para no hardcodear
       // el puerto aquí (cambiarlo en .env es suficiente).
       env_production: {
-        NODE_ENV:     'production',
-        SWAGGER_PATH: 'docs',   // vacío ('') para deshabilitar Swagger en prod
+        NODE_ENV:           'production',
+        SWAGGER_PATH:       'docs',   // vacío ('') para deshabilitar Swagger en prod
+        PUBLIC_API_PREFIX:  '/api-docs-nest-api',
+        PUBLIC_API_ORIGIN:  'https://cierrelmds.exelixitech.com',
       },
 
       // ── Comportamiento ante caídas ───────────────────────────────────────

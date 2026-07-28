@@ -13,6 +13,9 @@ export const SWAGGER_API_DESCRIPTION = `
 
 Integración técnica del flujo RCV. Todos los endpoints ejecutan SP o SQL directo contra Sis2000.
 
+**URL pública (HTTPS):** \`https://cierrelmds.exelixitech.com/api-docs-nest-api/docs\`  
+**Prefijo Apache:** \`/api-docs-nest-api/\` → \`:3002\` (mismo patrón que \`/nexus-api/\`, \`/pagos-api/\`).
+
 ---
 
 ### Flujo Exélixi (wizard)

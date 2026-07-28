@@ -6,6 +6,10 @@ export const envValidationSchema = Joi.object({
     .default('development'),
   PORT: Joi.number().default(3001),
   SWAGGER_PATH: Joi.string().default('docs'),
+  /** Prefijo HTTPS cierrelmds (ej. /api-docs-nest-api). Vacío = rutas en raíz (/docs, /api). */
+  PUBLIC_API_PREFIX: Joi.string().allow('').default(''),
+  /** Origen público para Swagger servers (sin barra final). */
+  PUBLIC_API_ORIGIN: Joi.string().uri().default('https://cierrelmds.exelixitech.com'),
   CORS_ORIGIN: Joi.string().default('*'),
 
   SERVER_BD: Joi.string().required(),
@@ -30,10 +34,4 @@ export const envValidationSchema = Joi.object({
   EXTERNAL_API_URL_AUTO: Joi.string().optional(),
   EXTERNAL_API_KEY: Joi.string().optional(),
   EXTERNAL_BASIC_AUTH: Joi.string().optional(),
-
-  /** Pre-emisión RCV auto (local). Default: sp Nexus en QA Sis2000. */
-  SP_PRE_EMISION_AUTO_RCV: Joi.string().default('sp_pre_emision_automovil_rcv_nexus'),
-
-  /** Pre-emisión personas/funerario (local). Default: sp Nexus en QA Sis2000. */
-  SP_PRE_EMISION_PERSONAS_GENERAL: Joi.string().default('sp_pre_emision_personas_general_nexus'),
 });

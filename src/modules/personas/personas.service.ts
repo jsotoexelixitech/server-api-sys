@@ -10,7 +10,12 @@ import { MssqlService } from '../../database/mssql.service';
 import { CotizacionPerDto } from './dto/cotizacion-per.dto';
 import { CreateEmissionPersonDto } from './dto/create-emission-person.dto';
 import { parseSPError } from '../../common/helpers/sp-error.helper';
-import { SP_PRE_EMISION_PERSONAS_GENERAL_NEXUS } from '../../config/sis2000-sp.constants';
+import { SP_PRE_EMISION_PERSONAS } from '../../config/sis2000-sp.constants';
+import {
+  assertViajeroCotizacion,
+  assertViajeroEmission,
+  isViajeroPlan,
+} from './viajero-emission.rules';
 
 class Mutex {
   private queue: Array<(release: () => void) => void> = [];
@@ -66,21 +71,13 @@ export class PersonasService {
     private readonly config: ConfigService,
   ) {}
 
-  /** SP pre-emisión personas; override con SP_PRE_EMISION_PERSONAS_GENERAL en .env. */
-  private preEmisionPersonasSpName(): string {
-    return (
-      this.config.get<string>('SP_PRE_EMISION_PERSONAS_GENERAL') ??
-      SP_PRE_EMISION_PERSONAS_GENERAL_NEXUS
-    );
-  }
-
   private intField(value: unknown): number | null {
     if (value == null || String(value).trim() === '') return null;
     const n = parseInt(String(value), 10);
     return Number.isNaN(n) ? null : n;
   }
 
-  /** Flags char(1) que espera el SP de pre-emisión personas (legacy / Nexus). */
+  /** Flags char(1) que espera el SP de pre-emisión personas. */
   private spCharFlag(value: unknown, defaultVal = '0'): string {
     if (value == null || String(value).trim() === '') return defaultVal;
     return String(value).trim().charAt(0);
@@ -103,7 +100,7 @@ export class PersonasService {
     return {};
   }
 
-  /** JSON de asegurados al formato OPENJSON de sp_pre_emision_Personas_General. */
+  /** JSON de asegurados al formato OPENJSON del pre-SP personas. */
   private mapAseguradosForSp(
     lista: Record<string, unknown>[],
     getPar: (p: unknown) => number,
@@ -124,7 +121,7 @@ export class PersonasService {
     return JSON.stringify(mapped);
   }
 
-  /** JSON de beneficiarios al formato OPENJSON de sp_pre_emision_Personas_General. */
+  /** JSON de beneficiarios al formato OPENJSON del pre-SP personas. */
   private mapBeneficiariosForSp(
     lista: Record<string, unknown>[],
     getPar: (p: unknown) => number,
@@ -264,6 +261,8 @@ export class PersonasService {
     try {
       const T = this.db.types;
       const ramo = body.cramo ?? this.defaultRamo;
+
+      assertViajeroCotizacion(ramo, body.cplan, body.asegurados.length);
 
       // Tasa: la enviada o NULL — spCalculoPer resuelve ptasamon desde mamonedas.
       const ptasamon = body.ptasamon ?? null;
@@ -447,11 +446,21 @@ export class PersonasService {
           ? (b['funeral'] as any)['asegurados']
           : []);
 
-      const beneficiarios = Array.isArray(b['beneficiarios'])
+      let beneficiarios = Array.isArray(b['beneficiarios'])
         ? b['beneficiarios']
         : (b['funeral'] && typeof b['funeral'] === 'object' && Array.isArray((b['funeral'] as any)['beneficiarios'])
           ? (b['funeral'] as any)['beneficiarios']
           : []);
+
+      assertViajeroEmission(
+        b,
+        asegurados as Record<string, unknown>[],
+        beneficiarios,
+      );
+      if (isViajeroPlan(this.intField(b['cramo']) ?? undefined, String(b['plan'] ?? ''))) {
+        beneficiarios = [];
+        b['beneficiarios'] = [];
+      }
 
       // === LLAMADA A LA NUEVA API QAAPISYS2000 (PRIMER INTENTO) ===
       const ENABLE_QAAPISYS2000 = false; // Deshabilitado para forzar la emisión local directa
@@ -596,7 +605,7 @@ export class PersonasService {
         }
 
         // Emisión local vía SP de producción (SysIP fb_organizacion_swagger / main actual).
-        const preEmisionSp = this.preEmisionPersonasSpName();
+        const preEmisionSp = SP_PRE_EMISION_PERSONAS;
         this.logger.log(`=== INICIO EMISION LOCAL SP ${preEmisionSp} ===`);
 
         const req = this.db.request();

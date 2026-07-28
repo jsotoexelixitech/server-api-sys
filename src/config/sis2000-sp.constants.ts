@@ -1,24 +1,25 @@
 /**
- * Nombres de SP Sis2000 usados por nest-api (emisión local).
- * Mismo contrato de parámetros que el SP legacy salvo indicación contraria en BD.
+ * Stored procedures Sis2000 usados por nest-api (emisión local directa).
  */
 
 // ── RCV automóvil ───────────────────────────────────────────────────────────
 
-export const SP_PRE_EMISION_AUTOMOVIL_RCV_NEXUS = 'sp_pre_emision_automovil_rcv_nexus';
+export const SP_PRE_EMISION_AUTO_RCV = 'sp_pre_emision_automovil_rcv_nexus';
 
-/** Invocado al final del pre-SP Nexus (no desde nest-api directamente). */
-export const SP_EMISION_AUTOMOVIL_RCV_NEXUS = 'sp_emision_automovil_rcv_nexus';
+/** Invocado al final del pre-SP (no desde nest-api directamente). */
+export const SP_EMISION_AUTO_RCV = 'sp_emision_automovil_rcv_nexus';
 
-/** @deprecated Solo referencia documental / rollback QA */
-export const SP_PRE_EMISION_AUTOMOVIL_RCV_LEGACY = 'sp_pre_emision_Automovil_RCV2';
+// ── Personas / funerario / viajero ──────────────────────────────────────────
 
-// ── Personas / funerario ────────────────────────────────────────────────────
+export const SP_PRE_EMISION_PERSONAS = 'sp_pre_emision_personas_general_nexus';
 
-export const SP_PRE_EMISION_PERSONAS_GENERAL_NEXUS = 'sp_pre_emision_personas_general_nexus';
+/** Invocado al final del pre-SP personas (no desde nest-api directamente). */
+export const SP_EMISION_PERSONAS = 'sp_emision_personas_general_nexus';
 
-/** Invocado al final del pre-SP Nexus personas (no desde nest-api directamente). */
-export const SP_EMISION_PERSONAS_GENERAL_NEXUS = 'sp_emision_personas_general_nexus';
+// ── Auxiliares RCV (nest-api → Sis2000) ─────────────────────────────────────
 
-/** @deprecated Solo referencia documental / rollback QA */
-export const SP_PRE_EMISION_PERSONAS_GENERAL_LEGACY = 'sp_pre_emision_Personas_General';
+export const SP_GET_MACLIENT_API = 'spGetMaclientApi';
+export const SP_SYNC_POL_VEH_COUNTER = 'spSyncPolVehCounter';
+export const SP_LOOKUP_EMISSION_RCV_BY_PLACA = 'spLookupEmissionRcvByPlaca';
+export const SP_SEARCH_VEHICLE_RCV = 'spSearchVehicleRcv';
+export const SP_APPLY_BENEFICIARIO_PREFERENCIAL_RCV = 'spApplyBeneficiarioPreferencialRcv';

@@ -16,6 +16,7 @@ import {
   LA_MUNDIAL_BRAND,
   SWAGGER_BRAND_META,
 } from './common/swagger/la-mundial-brand.constants';
+import { resolvePublicApiPaths } from './common/config/public-path';
 
 function resolveBrandAssetsDir(): string {
   const candidates = [
@@ -46,7 +47,14 @@ async function bootstrap(): Promise<void> {
   const port = config.get<number>('PORT', 3001);
   const corsOrigin = config.get<string>('CORS_ORIGIN', '*');
   const swaggerPath = config.get<string>('SWAGGER_PATH', 'docs');
+  const publicPaths = resolvePublicApiPaths({
+    publicApiPrefix: config.get<string>('PUBLIC_API_PREFIX'),
+    publicApiOrigin: config.get<string>('PUBLIC_API_ORIGIN'),
+  });
+  const brandLogoUrl = publicPaths.brandAssetUrl('brand/logo-lamundial-sidebar.png');
+  const brandFaviconUrl = publicPaths.brandAssetUrl('brand/favicon-64.png');
 
+  app.set('trust proxy', 1);
   app.setGlobalPrefix('api');
 
   app.enableCors({
@@ -82,8 +90,9 @@ async function bootstrap(): Promise<void> {
         'apikey',
       )
       .addBearerAuth()
-      .addServer('http://192.168.8.120:3002', 'srv001 — QA Sis2000')
-      .addServer('http://localhost:3002', 'Desarrollo local')
+      .addServer(publicPaths.publicBaseUrl, 'cierrelmds — HTTPS QA')
+      .addServer(`http://192.168.8.120:${port}${publicPaths.prefix}`, 'srv001 — QA Sis2000')
+      .addServer(`http://localhost:${port}${publicPaths.prefix}`, 'Desarrollo local')
       .addTag('1. Catálogo vehículo (inma)', 'Paso 1 · `VInma`')
       .addTag('2. Catálogos y cotización (valrep)', 'Pasos 2–4 · estados, planes, frecuencias, prima')
       .addTag('3. Emisión RCV', 'Pasos 5–6 · validar y emitir')
@@ -95,7 +104,7 @@ async function bootstrap(): Promise<void> {
     const document = SwaggerModule.createDocument(app, swaggerConfig);
     SwaggerModule.setup(swaggerPath, app, document, {
       customSiteTitle: SWAGGER_BRAND_META.siteTitle,
-      customfavIcon: LA_MUNDIAL_BRAND.faviconUrl,
+      customfavIcon: brandFaviconUrl,
       customCssUrl: LA_MUNDIAL_BRAND.fontsCss,
       customJsStr: `
 (function() {
@@ -176,7 +185,7 @@ async function bootstrap(): Promise<void> {
 
     nav.innerHTML =
       '<div class="sb-brand">'
-      + '<img class="sb-logo" src="${LA_MUNDIAL_BRAND.logoUrl}" alt="${LA_MUNDIAL_BRAND.name}" />'
+      + '<img class="sb-logo" src="${brandLogoUrl}" alt="${LA_MUNDIAL_BRAND.name}" />'
       + '<p class="sb-tagline">${LA_MUNDIAL_BRAND.tagline}</p>'
       + '</div>'
       + '<div class="sb-search-wrap">'
@@ -934,6 +943,11 @@ async function bootstrap(): Promise<void> {
   logger.log(`API listening on http://localhost:${port}/api`);
   if (swaggerPath) {
     logger.log(`Swagger docs:  http://localhost:${port}/${swaggerPath}`);
+    if (publicPaths.prefix) {
+      logger.log(
+        `Swagger HTTPS: ${publicPaths.publicBaseUrl}/${swaggerPath.replace(/^\/+/, '')}`,
+      );
+    }
   } else {
     logger.log('Swagger: deshabilitado (SWAGGER_PATH vacío)');
   }

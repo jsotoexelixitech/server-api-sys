@@ -7,7 +7,7 @@ import {
 import { ConfigService } from '@nestjs/config';
 import { MssqlService } from '../../database/mssql.service';
 import { parseSPError, formatValidateAutoError } from '../../common/helpers/sp-error.helper';
-import { SP_PRE_EMISION_AUTOMOVIL_RCV_NEXUS } from '../../config/sis2000-sp.constants';
+import { SP_PRE_EMISION_AUTO_RCV } from '../../config/sis2000-sp.constants';
 
 @Injectable()
 export class EmissionsService {
@@ -17,14 +17,6 @@ export class EmissionsService {
     private readonly db: MssqlService,
     private readonly config: ConfigService,
   ) {}
-
-  /** SP pre-emisión RCV (Nexus); override con SP_PRE_EMISION_AUTO_RCV en .env. */
-  private preEmisionAutoSpName(): string {
-    return (
-      this.config.get<string>('SP_PRE_EMISION_AUTO_RCV') ??
-      SP_PRE_EMISION_AUTOMOVIL_RCV_NEXUS
-    );
-  }
 
   private nvarchar(value: unknown): string | null {
     if (value == null || String(value).trim() === '') return null;
@@ -662,7 +654,7 @@ export class EmissionsService {
     );
 
     const xplaca = String(this.pick(b, 'xplaca', 'placa') ?? '').trim();
-    const preEmisionSp = this.preEmisionAutoSpName();
+    const preEmisionSp = SP_PRE_EMISION_AUTO_RCV;
     this.logger.log(
       `emitLocal: EXEC ${preEmisionSp} placa=${xplaca} plan=${b['cplan'] ?? b['plan']} mprima=${mprima} ptasamon=${ptasamon}`,
     );

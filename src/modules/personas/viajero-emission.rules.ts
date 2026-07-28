@@ -1,0 +1,114 @@
+import { BadRequestException } from '@nestjs/common';
+
+/** Ramo accidentes personales / viajero internacional (producto 26). */
+export const VIAJERO_RAMO = 5;
+
+/** Planes cuyo código empieza por VIAJ (VIAJE4, VIAJ10, VIAJE1, …). */
+export function isViajeroPlan(
+  cramo: number | null | undefined,
+  plan: string | null | undefined,
+): boolean {
+  if (cramo !== VIAJERO_RAMO) return false;
+  const code = String(plan ?? '').trim().toUpperCase();
+  return code.startsWith('VIAJ');
+}
+
+function rifDigits(value: unknown): string {
+  return String(value ?? '').replace(/\D/g, '');
+}
+
+function requireNonEmpty(value: unknown, label: string): void {
+  if (value === null || value === undefined || String(value).trim() === '') {
+    throw new BadRequestException(`Viajero: ${label} es requerido.`);
+  }
+}
+
+/** Cotización: un solo asegurado titular. */
+export function assertViajeroCotizacion(
+  cramo: number | undefined,
+  cplan: string,
+  aseguradosCount: number,
+): void {
+  if (!isViajeroPlan(cramo ?? VIAJERO_RAMO, cplan)) return;
+  if (aseguradosCount !== 1) {
+    throw new BadRequestException(
+      'Plan viajero (ramo 5): la cotización admite exactamente un asegurado (titular).',
+    );
+  }
+}
+
+/**
+ * Emisión viajero: solo tomador + un asegurado (titular).
+ * No beneficiarios; titular debe coincidir con el único asegurado.
+ */
+export function assertViajeroEmission(
+  body: Record<string, unknown>,
+  asegurados: Record<string, unknown>[],
+  beneficiarios: unknown[],
+): void {
+  const cramo = Number(body['cramo']);
+  const plan = String(body['plan'] ?? '');
+  if (!isViajeroPlan(cramo, plan)) return;
+
+  if (beneficiarios.length > 0) {
+    throw new BadRequestException(
+      'Plan viajero: no se admiten beneficiarios; solo tomador y asegurado.',
+    );
+  }
+
+  if (asegurados.length !== 1) {
+    throw new BadRequestException(
+      'Plan viajero: debe enviar exactamente un asegurado en asegurados[].',
+    );
+  }
+
+  const rifTitular = rifDigits(body['rif_titular']);
+  const rifTomador = rifDigits(body['rif_tomador']);
+  const rifAseg = rifDigits(
+    asegurados[0]['xrif_asegurado'] ?? asegurados[0]['identificacion'],
+  );
+
+  requireNonEmpty(rifTomador, 'rif_tomador');
+  requireNonEmpty(rifTitular, 'rif_titular');
+  requireNonEmpty(rifAseg, 'asegurados[0].xrif_asegurado');
+
+  if (rifTitular !== rifAseg) {
+    throw new BadRequestException(
+      'Plan viajero: rif_titular debe coincidir con asegurados[0].xrif_asegurado.',
+    );
+  }
+
+  const tomadorFields: ReadonlyArray<[string, string]> = [
+    ['nombre_tomador', 'nombre del tomador'],
+    ['apellido_tomador', 'apellido del tomador'],
+    ['fnac_tomador', 'fecha de nacimiento del tomador'],
+    ['estado_tomador', 'estado del tomador'],
+    ['ciudad_tomador', 'ciudad del tomador'],
+    ['direccion_tomador', 'dirección del tomador'],
+    ['telefono_tomador', 'teléfono del tomador'],
+    ['correo_tomador', 'correo del tomador'],
+  ];
+
+  const titularFields: ReadonlyArray<[string, string]> = [
+    ['nombre_titular', 'nombre del titular/asegurado'],
+    ['apellido_titular', 'apellido del titular/asegurado'],
+    ['fnac_titular', 'fecha de nacimiento del titular/asegurado'],
+    ['estado_titular', 'estado del titular/asegurado'],
+    ['ciudad_titular', 'ciudad del titular/asegurado'],
+    ['direccion_titular', 'dirección del titular/asegurado'],
+    ['telefono_titular', 'teléfono del titular/asegurado'],
+    ['correo_titular', 'correo del titular/asegurado'],
+  ];
+
+  for (const [key, label] of tomadorFields) {
+    requireNonEmpty(body[key], label);
+  }
+  for (const [key, label] of titularFields) {
+    requireNonEmpty(body[key], label);
+  }
+
+  const frec = String(body['frecuencia'] ?? 'M').charAt(0).toUpperCase();
+  if (frec !== 'E') {
+    throw new BadRequestException('Plan viajero: frecuencia debe ser "E" (única).');
+  }
+}
