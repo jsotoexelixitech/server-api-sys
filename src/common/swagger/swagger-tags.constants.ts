@@ -11,6 +11,15 @@ export const SWAGGER_TAGS = {
 
 export const SWAGGER_TAG_ORDER: string[] = Object.values(SWAGGER_TAGS);
 
+/** Sorter serializable en swagger-ui-init.js (sin imports de Node en el navegador). */
+export function createBrowserTagsSorter(): (a: string, b: string) => number {
+  return new Function(
+    'a',
+    'b',
+    `var order=${JSON.stringify(SWAGGER_TAG_ORDER)};var ai=order.indexOf(a);var bi=order.indexOf(b);return(ai===-1?999:ai)-(bi===-1?999:bi);`,
+  ) as (a: string, b: string) => number;
+}
+
 export const SWAGGER_TAG_DESCRIPTIONS: Record<string, string> = {
   [SWAGGER_TAGS.INMA]: 'Año, marca, modelo, versión y categoría de uso del vehículo.',
   [SWAGGER_TAGS.VALREP]: 'Estados, ciudades, planes, frecuencias y cálculo de prima.',

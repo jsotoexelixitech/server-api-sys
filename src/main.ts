@@ -14,8 +14,8 @@ import {
 } from './common/swagger/api-docs.constants';
 import {
   SWAGGER_TAG_DESCRIPTIONS,
-  SWAGGER_TAG_ORDER,
   SWAGGER_TAGS,
+  createBrowserTagsSorter,
 } from './common/swagger/swagger-tags.constants';
 import {
   LA_MUNDIAL_BRAND,
@@ -1037,11 +1037,7 @@ async function bootstrap(): Promise<void> {
         filter: true,
         displayRequestDuration: true,
         tryItOutEnabled: true,
-        tagsSorter: (a: string, b: string) => {
-          const ai = SWAGGER_TAG_ORDER.indexOf(a);
-          const bi = SWAGGER_TAG_ORDER.indexOf(b);
-          return (ai === -1 ? 999 : ai) - (bi === -1 ? 999 : bi);
-        },
+        tagsSorter: createBrowserTagsSorter(),
       },
     });
   }
