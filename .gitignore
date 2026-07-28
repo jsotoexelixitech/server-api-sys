@@ -32,3 +32,22 @@ Thumbs.db
 # Temporales
 *.tmp
 *.temp
+
+# Scripts debug locales (no parte del build)
+/check-*.cjs
+/create-trigger*.cjs
+/enable*.cjs
+/execute-trigger*.cjs
+/find-*.cjs
+/fix-*.cjs
+/kill-*.cjs
+/parse_*.cjs
+/read-*.cjs
+/simulate*.cjs
+/test-*.cjs
+/test_*.cjs
+/temp*.ts
+/extract.js
+/inspect_pdf.js
+/test.pdf
+*.rar

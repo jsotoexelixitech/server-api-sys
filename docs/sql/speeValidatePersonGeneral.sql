@@ -1,0 +1,91 @@
+CREATE PROCEDURE [dbo].[speeValidatePersonGeneral]
+		@cramo INT,
+		@cplan VARCHAR(10),
+		@femision DATE = NULL,
+		@fdesde DATE = NULL,
+		@fhasta DATE = NULL,
+		@xrif_titular VARCHAR(13),
+		@fnac_titular VARCHAR(60)
+
+AS
+BEGIN
+    SET NOCOUNT ON;
+		
+		DECLARE 
+		@edad INT,
+		@minedad char(3), 
+		@maxedad char(3), 
+		@error VARCHAR(200)
+		
+				
+		IF @cramo IS NOT NULL AND (@cplan IS NOT NULL AND @cramo != 25) BEGIN
+			IF NOT EXISTS (SELECT * FROM maplanes_per WHERE cramo = @cramo AND cplan = @cplan AND iestado = 'V') BEGIN
+					SET @error = 'Plan enviado no se encuentra registrado.'
+			END
+		END
+		
+		IF @cplan IS NULL BEGIN
+				SET @error = 'Plan enviado no se encuentra registrado.'
+    END
+		
+		IF @cramo IS NULL BEGIN
+			SELECT @cramo = cramo from maplanes_per WHERE cplan = @cplan and iestado = 'V'
+		END
+
+    IF @cramo IS NULL BEGIN
+				SET @error = 'Plan enviado no se encuentra registrado.'
+    END
+		
+		IF @femision IS NULL BEGIN 
+			SELECT @femision = GETDATE()
+		END 
+		
+		IF @fdesde IS NULL BEGIN 
+			SELECT @fdesde = @femision
+		END 
+		
+		IF @fhasta IS NULL BEGIN
+			SELECT @fhasta = DATEADD(year, 1, @fdesde) 
+		END
+		
+		IF (@xrif_titular IS NULL or @xrif_titular = '') BEGIN 
+				SET @error = 'Rif titular no debe estar vacío.'
+		END
+		
+		IF (@fnac_titular IS NULL or @xrif_titular = '') BEGIN 
+				SET @error = 'Fnac. Titular no debe estar vacío.'
+		END
+
+		IF @CPLAN NOT LIKE 'BANAC%' BEGIN
+			IF EXISTS (SELECT * FROM adpoliza WHERE casegurado = @xrif_titular AND cramo = @cramo AND cplan = @cplan AND fhasta > @fdesde AND iestado = 'V') BEGIN
+					SET @error = 'Se ha detectado la existencia de una póliza vigente con el mismo asegurado y ramo.'
+			END
+		END
+		
+		
+		SELECT @minedad = cemin_ase,  @maxedad = cemax_ase FROM mapledades_per A 
+		INNER JOIN maplanes_per B ON B.cramo = A.cramo and A.cplan = B.cplan AND A.fdesde_plan = B.fdesde_plan
+		WHERE A.cramo = @cramo and A.cplan = @cplan and A.cparen = 1
+
+		SELECT @edad = DATEDIFF(day, @fnac_titular, GETDATE()) / 365
+
+    IF (SELECT @maxedad - @edad FROM mapledades_per A 
+		INNER JOIN maplanes_per B ON B.cramo = A.cramo and A.cplan = B.cplan AND A.fdesde_plan = B.fdesde_plan
+		WHERE A.cramo = @cramo and A.cplan = @cplan and A.cparen = 1) < 0
+    BEGIN
+					SET @error = 'El asegurado/titular no cumple con los criterios de edad para este plan. (Min: ' + @minedad + ', Max: ' + @maxedad + ').'
+    END
+		
+		IF (SELECT @minedad - @edad FROM mapledades_per A 
+		INNER JOIN maplanes_per B ON B.cramo = A.cramo and A.cplan = B.cplan AND A.fdesde_plan = B.fdesde_plan
+		WHERE A.cramo = @cramo and A.cplan = @cplan and A.cparen = 1) > 0
+    BEGIN
+					SET @error = 'El asegurado/titular no cumple con los criterios de edad para este plan. (Min: ' + @minedad + ', Max: ' + @maxedad + ').'
+    END
+		
+		IF @error IS NOT NULL BEGIN
+			BEGIN ;THROW 99001, @error, 1; END
+    END
+			
+		
+END
