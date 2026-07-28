@@ -70,8 +70,8 @@ export class ClientController {
   @ApiOperation({
     summary: 'Coberturas de una póliza',
     description:
-      'Réplica de SysIP `POST /api/v1/client/search/coverages`. Ejecuta `spGetCoverageClient` ' +
-      'y devuelve datos de la póliza (`poliza`) y sus coberturas (`coberturas`).',
+      'Consulta coberturas y datos de póliza por `cpoliza`, `fanopol` y `fmespol`. ' +
+      'Ejecuta `spGetCoverageClient` y devuelve `poliza` y `coberturas`.',
   })
   @ApiBody({ type: SearchCoveragesDto })
   @ApiResponse({
