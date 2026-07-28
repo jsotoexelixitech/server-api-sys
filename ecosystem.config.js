@@ -12,10 +12,12 @@ module.exports = {
       exec_mode: 'fork',
       instances:  1,
 
-      // ── Entorno de producción ────────────────────────────────────────────
-      // PORT, credenciales de BD y demás viven en el archivo .env del servidor.
-      // ecosystem.config.js solo fuerza NODE_ENV=production para no hardcodear
-      // el puerto aquí (cambiarlo en .env es suficiente).
+      // ── Entorno ────────────────────────────────────────────────────────────
+      // PUBLIC_* también en `env` base: pm2 restart sin --env production las conserva.
+      env: {
+        PUBLIC_API_PREFIX: '/api-docs-nest-api',
+        PUBLIC_API_ORIGIN: 'https://cierrelmds.exelixitech.com',
+      },
       env_production: {
         NODE_ENV:           'production',
         SWAGGER_PATH:       'docs',   // vacío ('') para deshabilitar Swagger en prod

@@ -37,7 +37,7 @@ export function resolvePublicApiPaths(options: {
   const brandAssetUrl = (relativePath: string): string => {
     const clean = relativePath.replace(/^\/+/, '');
     if (!prefix) return `/assets/${clean}`;
-    return `assets/${clean}`;
+    return joinPublicPath(prefix, 'assets', clean);
   };
 
   return {
