@@ -65,8 +65,6 @@ Error de validación o negocio (HTTP 4xx):
 | 6 | Cobrar recibo | \`POST /external/collection/activate\` |
 | 7 | Documento anexo (opcional) | \`POST /documents/conductor-habitual\` |
 
-> **Pruebas QA:** use placa y serial únicos en cada emisión. No envíe \`mprima\` en \`0\`; omita el campo o copie los totales de la cotización.
-
 ---
 
 ### Glosario

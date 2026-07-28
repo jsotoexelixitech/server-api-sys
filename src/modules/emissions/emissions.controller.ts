@@ -179,8 +179,7 @@ export class EmissionsController {
     examples: {
       emisionNueva: {
         summary: 'Emisión nueva (recomendado)',
-        description:
-          'Sin `poliza`. Sin `mprima`/`prima`. Use placa y serial únicos en cada prueba de QA.',
+        description: 'Sin `poliza`. Sin `mprima`/`prima`.',
         value: RCV_CREATE_EMISSION_AUTO_BODY,
       },
       conPrimaCotizacion: {
