@@ -114,6 +114,23 @@ async function bootstrap(): Promise<void> {
      Funciona con cualquier número de secciones/APIs.
   ───────────────────────────────────────────────────────── */
 
+  /* Swagger UI inserta <base href="/">: ../assets se resuelve como /assets (404 en cierrelmds).
+     Usar rutas absolutas; fallback desde pathname si falta PUBLIC_API_PREFIX en el servidor. */
+  var NEXUS_BRAND_LOGO = '${brandLogoUrl}';
+  var NEXUS_BRAND_FAVICON = '${brandFaviconUrl}';
+  function nexusBrandAsset(rel) {
+    var path = window.location.pathname.replace(/\\/docs\\/?$/, '');
+    if (path) return path + '/assets/' + rel;
+    if (rel === 'brand/logo-lamundial-sidebar.png') return NEXUS_BRAND_LOGO;
+    if (rel === 'brand/favicon-64.png') return NEXUS_BRAND_FAVICON;
+    return '/assets/' + rel;
+  }
+  (function fixBrandAssets() {
+    document.querySelectorAll('link[rel="icon"], link[rel="shortcut icon"]').forEach(function(link) {
+      link.href = nexusBrandAsset('brand/favicon-64.png');
+    });
+  })();
+
   var HEADER_H = 38; /* altura del topbar */
 
   /* Obtiene las secciones actuales del DOM */
@@ -186,7 +203,7 @@ async function bootstrap(): Promise<void> {
 
     nav.innerHTML =
       '<div class="sb-brand">'
-      + '<img class="sb-logo" src="${brandLogoUrl}" alt="${LA_MUNDIAL_BRAND.name}" />'
+      + '<img class="sb-logo" src="' + nexusBrandAsset('brand/logo-lamundial-sidebar.png') + '" alt="${LA_MUNDIAL_BRAND.name}" />'
       + '<p class="sb-tagline">${LA_MUNDIAL_BRAND.tagline}</p>'
       + '</div>'
       + '<div class="sb-search-wrap">'

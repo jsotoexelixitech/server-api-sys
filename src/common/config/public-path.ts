@@ -19,7 +19,7 @@ export interface PublicApiPaths {
   prefix: string;
   origin: string;
   publicBaseUrl: string;
-  /** Ruta relativa desde /docs → ../assets/ (funciona directo :3002 y con prefijo Apache). */
+  /** Ruta absoluta (/api-docs-nest-api/assets/…); inmune al <base href="/"> de Swagger UI. */
   brandAssetUrl: (relativePath: string) => string;
 }
 
@@ -36,7 +36,7 @@ export function resolvePublicApiPaths(options: {
 
   const brandAssetUrl = (relativePath: string): string => {
     const clean = relativePath.replace(/^\/+/, '');
-    return `../assets/${clean}`;
+    return prefix ? joinPublicPath(prefix, 'assets', clean) : `/assets/${clean}`;
   };
 
   return {
