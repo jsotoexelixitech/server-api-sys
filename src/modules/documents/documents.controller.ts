@@ -17,7 +17,7 @@ export class DocumentsController {
   @ApiSecurity('apikey')
   @ApiHeader({
     name: 'apikey',
-    description: 'Token del canal (`maclient_api.xtoken`).',
+    description: 'Clave de acceso a la API (requerida en emisión, cobranza y documentos en producción).',
     required: false,
   })
   @ApiOperation({

@@ -3,29 +3,31 @@ import { SWAGGER_TAG_ORDER } from './swagger-tags.constants';
 export { SWAGGER_TAG_ORDER };
 
 export const SWAGGER_API_DESCRIPTION = `
-Bienvenido al **portal de integración** de La Mundial de Seguros.
+Bienvenido a la **documentación oficial de la API** de La Mundial de Seguros.
 
-Use esta documentación para conectar canales digitales con catálogo vehicular, cotización, emisión, cobranza, personas y consulta de clientes.
+Referencia técnica para catálogo vehicular, cotización, emisión, cobranza, personas y consulta de clientes.
 
 ---
 
 ### Inicio rápido
 
-1. Pulse **Authorize** (arriba a la derecha) e ingrese su \`apikey\` de canal.
-2. Seleccione el servidor **QA** en el desplegable de entornos.
-3. Siga el flujo recomendado en el menú lateral o use **Try it out** en cada endpoint.
+1. Seleccione el entorno **QA** en el desplegable de servidores (arriba).
+2. Explore los módulos en el menú lateral o use **Try it out** en cada endpoint.
+3. Catálogo y cotización se pueden probar **sin credenciales**. Para emisión, cobranza o documentos, use **Authorize** solo si dispone de clave de acceso.
 
 **Descargas:** [OpenAPI JSON](./docs-json) · [OpenAPI YAML](./docs-yaml)
 
 ---
 
-### Autenticación
+### Autenticación (solo operaciones protegidas)
 
-| Header | Valor | Cuándo |
-|--------|-------|--------|
-| \`apikey\` | Token del canal | Emisión, cobranza y documentos |
+La mayoría de endpoints (catálogo, estados, planes, cotización, consultas) **no requieren** credenciales en entorno de pruebas.
 
-En entornos de prueba internos el token puede omitirse; en QA/PROD públicos es obligatorio.
+| Header | Uso | Endpoints |
+|--------|-----|-----------|
+| \`apikey\` | Clave de acceso a la API | Emisión, cobranza y generación de documentos |
+
+En QA interno puede omitirse para pruebas. En entornos públicos, La Mundial entrega la clave a integradores autorizados.
 
 ---
 
@@ -94,9 +96,9 @@ Error de validación o negocio (HTTP 4xx):
 export const APIKEY_HEADER = {
   name: 'apikey',
   description:
-    'Token del canal asignado por La Mundial. Obligatorio en emisión, cobranza y documentos en entornos públicos.',
+    'Clave de acceso a la API (header opcional en pruebas). Requerida en emisión, cobranza y documentos en entornos públicos.',
   required: false,
-  example: 'tu-token-canal',
+  example: 'su-clave-api',
 };
 
 /** Caso real validado en QA (jul 2026). */

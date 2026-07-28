@@ -34,8 +34,8 @@ export const Api400 = () =>
 export const Api401 = () =>
   ApiResponse({
     status: 401,
-    description: 'apikey inválida o no autorizada.',
-    ...errorSchema(401, 'Token no encontrado.'),
+    description: 'Clave de API inválida o no autorizada.',
+    ...errorSchema(401, 'Credencial no válida.'),
   });
 
 /** 404 – Recurso no encontrado */

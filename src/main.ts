@@ -89,7 +89,7 @@ async function bootstrap(): Promise<void> {
       .setDescription(SWAGGER_API_DESCRIPTION)
       .setVersion(SWAGGER_BRAND_META.version)
       .setContact(
-        'Integraciones La Mundial',
+        'Soporte API — La Mundial',
         'https://www.lamundialdeseguros.com',
         'integraciones@lamundialdeseguros.com',
       )
@@ -99,7 +99,7 @@ async function bootstrap(): Promise<void> {
           name: 'apikey',
           in: 'header',
           description:
-            'Token del canal asignado por La Mundial. Requerido en emisión, cobranza y documentos.',
+            'Clave de acceso a la API. Solo necesaria en emisión, cobranza y documentos (opcional en pruebas internas).',
         },
         'apikey',
       )
@@ -362,7 +362,7 @@ async function bootstrap(): Promise<void> {
     var btn = document.querySelector('.swagger-ui .auth-wrapper .btn.authorize');
     if (btn && !btn.dataset.lmHint) {
       btn.dataset.lmHint = '1';
-      btn.setAttribute('title', 'Ingrese su apikey de canal La Mundial');
+      btn.setAttribute('title', 'Clave de API (solo emisión, cobranza y documentos)');
     }
   }
 
