@@ -1,10 +1,10 @@
-import { BadRequestException, Controller, Get, Param } from '@nestjs/common';
-import { ApiExcludeController, ApiOperation, ApiParam, ApiResponse, ApiTags } from '@nestjs/swagger';
+import { BadRequestException, Body, Controller, Get, HttpCode, HttpStatus, Param, Post } from '@nestjs/common';
+import { ApiBody, ApiOperation, ApiParam, ApiResponse, ApiTags } from '@nestjs/swagger';
 import { ClientService } from './client.service';
 import { ApiCommonErrors } from '../../common/swagger/api-error-responses';
+import { SearchCoveragesDto } from './dto/search-coverages.dto';
 
-@ApiExcludeController()
-@ApiTags('client')
+@ApiTags('7. Cliente (client)')
 @Controller('v1/client')
 export class ClientController {
   constructor(private readonly clientService: ClientService) {}
@@ -61,5 +61,51 @@ export class ClientController {
     }
     const data = await this.clientService.searchClient(cci_rif);
     return { status: true, data };
+  }
+
+  // ── POST /api/v1/client/search/coverages ─────────────────────────────────
+
+  @Post('search/coverages')
+  @HttpCode(HttpStatus.OK)
+  @ApiOperation({
+    summary: 'Coberturas de una póliza',
+    description:
+      'Réplica de SysIP `POST /api/v1/client/search/coverages`. Ejecuta `spGetCoverageClient` ' +
+      'y devuelve datos de la póliza (`poliza`) y sus coberturas (`coberturas`).',
+  })
+  @ApiBody({ type: SearchCoveragesDto })
+  @ApiResponse({
+    status: 200,
+    schema: {
+      example: {
+        status: true,
+        result: {
+          poliza: [
+            {
+              cpoliza: 900000000065412,
+              fanopol: 2025,
+              fmespol: 9,
+              cramo: 9,
+              cplan: 'COLFU1',
+              xplan: 'Plan I 2.000$ Funerario Colmena',
+            },
+          ],
+          coberturas: [
+            {
+              cramo: 9,
+              cplan: 'COLFU1',
+              ccobertura: 1,
+              xcobertura: 'Plan Colmena Funerario I',
+              msumaaseg: 2000,
+            },
+          ],
+        },
+      },
+    },
+  })
+  @ApiCommonErrors()
+  async searchCoverages(@Body() body: SearchCoveragesDto) {
+    const result = await this.clientService.searchCoverages(body);
+    return { status: true, result };
   }
 }

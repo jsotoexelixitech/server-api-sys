@@ -99,6 +99,7 @@ async function bootstrap(): Promise<void> {
       .addTag('4. Cobranza RCV', 'Paso 7 · `activate` (ingreso de caja)')
       .addTag('5. Documentos (post-emisión)', 'Paso 8 · anexo conductor habitual')
       .addTag('6. Emisión Funerario (personas)', 'Pasos 1–6 · valrep productos/planes + cotizar/validar/emitir')
+      .addTag('7. Cliente (client)', 'Consulta maclient, pólizas del asegurado y coberturas por póliza')
       .build();
 
     const document = SwaggerModule.createDocument(app, swaggerConfig);
@@ -928,6 +929,8 @@ async function bootstrap(): Promise<void> {
             '3. Emisión RCV',
             '4. Cobranza RCV',
             '5. Documentos (post-emisión)',
+            '6. Emisión Funerario (personas)',
+            '7. Cliente (client)',
           ];
           const ai = order.indexOf(a);
           const bi = order.indexOf(b);

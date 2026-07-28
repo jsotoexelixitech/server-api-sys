@@ -1,5 +1,7 @@
-import { Injectable, InternalServerErrorException, Logger, NotFoundException } from '@nestjs/common';
+import { Injectable, InternalServerErrorException, Logger } from '@nestjs/common';
 import { MssqlService } from '../../database/mssql.service';
+import { SP_GET_COVERAGE_CLIENT } from '../../config/sis2000-sp.constants';
+import { SearchCoveragesDto } from './dto/search-coverages.dto';
 
 export interface ClientData {
   client: Record<string, unknown>[];
@@ -91,6 +93,29 @@ export class ClientService {
       const msg = err instanceof Error ? err.message : String(err);
       this.logger.error(`searchPoliciesByClient: ${msg}`);
       throw new InternalServerErrorException('Error al buscar pólizas del cliente.');
+    }
+  }
+
+  // ── POST /api/v1/client/search/coverages ─────────────────────────────────
+
+  async searchCoverages(
+    body: SearchCoveragesDto,
+  ): Promise<{ poliza: Record<string, unknown>[]; coberturas: Record<string, unknown>[] }> {
+    try {
+      const req = this.db.request();
+      const T = this.db.types;
+      req.input('cpoliza', T.Numeric(18, 0), body.cpoliza);
+      req.input('fanopol', T.Int, body.fanopol);
+      req.input('fmespol', T.Int, body.fmespol);
+      const result = await req.execute(SP_GET_COVERAGE_CLIENT);
+      return {
+        poliza: (result.recordsets?.[0] as Record<string, unknown>[]) ?? [],
+        coberturas: (result.recordsets?.[1] as Record<string, unknown>[]) ?? [],
+      };
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : String(err);
+      this.logger.error(`searchCoverages: ${msg}`);
+      throw new InternalServerErrorException('Error al buscar coberturas de la póliza.');
     }
   }
 }

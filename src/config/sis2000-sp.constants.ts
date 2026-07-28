@@ -19,6 +19,7 @@ export const SP_EMISION_PERSONAS = 'sp_emision_personas_general_nexus';
 // ── Auxiliares RCV (nest-api → Sis2000) ─────────────────────────────────────
 
 export const SP_GET_MACLIENT_API = 'spGetMaclientApi';
+export const SP_GET_COVERAGE_CLIENT = 'spGetCoverageClient';
 export const SP_SYNC_POL_VEH_COUNTER = 'spSyncPolVehCounter';
 export const SP_LOOKUP_EMISSION_RCV_BY_PLACA = 'spLookupEmissionRcvByPlaca';
 export const SP_SEARCH_VEHICLE_RCV = 'spSearchVehicleRcv';
