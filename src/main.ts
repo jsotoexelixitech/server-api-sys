@@ -13,6 +13,11 @@ import {
   SWAGGER_API_DESCRIPTION,
 } from './common/swagger/api-docs.constants';
 import {
+  SWAGGER_TAG_DESCRIPTIONS,
+  SWAGGER_TAG_ORDER,
+  SWAGGER_TAGS,
+} from './common/swagger/swagger-tags.constants';
+import {
   LA_MUNDIAL_BRAND,
   SWAGGER_BRAND_META,
 } from './common/swagger/la-mundial-brand.constants';
@@ -75,31 +80,48 @@ async function bootstrap(): Promise<void> {
   app.useGlobalFilters(new AllExceptionsFilter());
   app.useGlobalInterceptors(new ResponseInterceptor());
 
+  const showInternalSwaggerServers =
+    config.get<string>('SWAGGER_SHOW_INTERNAL_SERVERS') === 'true' || !publicPaths.prefix;
+
   if (swaggerPath) {
-    const swaggerConfig = new DocumentBuilder()
+    const swaggerConfigBuilder = new DocumentBuilder()
       .setTitle(SWAGGER_BRAND_META.title)
       .setDescription(SWAGGER_API_DESCRIPTION)
       .setVersion(SWAGGER_BRAND_META.version)
+      .setContact(
+        'Integraciones La Mundial',
+        'https://www.lamundialdeseguros.com',
+        'integraciones@lamundialdeseguros.com',
+      )
       .addApiKey(
         {
           type: 'apiKey',
           name: 'apikey',
           in: 'header',
-          description: 'Token del canal (`maclient_api.xtoken`). Requerido en emisión y cobro.',
+          description:
+            'Token del canal asignado por La Mundial. Requerido en emisión, cobranza y documentos.',
         },
         'apikey',
       )
-      .addBearerAuth()
-      .addServer(publicPaths.publicBaseUrl, 'cierrelmds — HTTPS QA')
-      .addServer(`http://192.168.8.120:${port}${publicPaths.prefix}`, 'srv001 — QA')
-      .addServer(`http://localhost:${port}${publicPaths.prefix}`, 'Desarrollo local')
-      .addTag('1. Catálogo vehículo (inma)', 'Paso 1 · `VInma`')
-      .addTag('2. Catálogos y cotización (valrep)', 'Pasos 2–4 · estados, planes, frecuencias, prima')
-      .addTag('3. Emisión RCV', 'Pasos 5–6 · validar y emitir')
-      .addTag('4. Cobranza RCV', 'Paso 7 · `activate` (ingreso de caja)')
-      .addTag('5. Documentos (post-emisión)', 'Paso 8 · anexo conductor habitual')
-      .addTag('6. Emisión Funerario (personas)', 'Pasos 1–6 · valrep productos/planes + cotizar/validar/emitir')
-      .addTag('7. Cliente (client)', 'Consulta maclient, pólizas del asegurado y coberturas por póliza')
+      .addBearerAuth();
+
+    if (publicPaths.prefix) {
+      swaggerConfigBuilder.addServer(publicPaths.publicBaseUrl, 'La Mundial — QA (HTTPS)');
+    }
+    if (showInternalSwaggerServers) {
+      swaggerConfigBuilder
+        .addServer(`http://192.168.8.120:${port}${publicPaths.prefix}`, 'srv001 — QA interno')
+        .addServer(`http://localhost:${port}${publicPaths.prefix}`, 'Desarrollo local');
+    }
+
+    const swaggerConfig = swaggerConfigBuilder
+      .addTag(SWAGGER_TAGS.INMA, SWAGGER_TAG_DESCRIPTIONS[SWAGGER_TAGS.INMA])
+      .addTag(SWAGGER_TAGS.VALREP, SWAGGER_TAG_DESCRIPTIONS[SWAGGER_TAGS.VALREP])
+      .addTag(SWAGGER_TAGS.EMISSION, SWAGGER_TAG_DESCRIPTIONS[SWAGGER_TAGS.EMISSION])
+      .addTag(SWAGGER_TAGS.COLLECTION, SWAGGER_TAG_DESCRIPTIONS[SWAGGER_TAGS.COLLECTION])
+      .addTag(SWAGGER_TAGS.DOCUMENTS, SWAGGER_TAG_DESCRIPTIONS[SWAGGER_TAGS.DOCUMENTS])
+      .addTag(SWAGGER_TAGS.PERSONAS, SWAGGER_TAG_DESCRIPTIONS[SWAGGER_TAGS.PERSONAS])
+      .addTag(SWAGGER_TAGS.CLIENT, SWAGGER_TAG_DESCRIPTIONS[SWAGGER_TAGS.CLIENT])
       .build();
 
     const document = SwaggerModule.createDocument(app, swaggerConfig);
@@ -107,6 +129,8 @@ async function bootstrap(): Promise<void> {
       customSiteTitle: SWAGGER_BRAND_META.siteTitle,
       customfavIcon: brandFaviconUrl,
       customCssUrl: LA_MUNDIAL_BRAND.fontsCss,
+      jsonDocumentUrl: `${swaggerPath}-json`,
+      yamlDocumentUrl: `${swaggerPath}-yaml`,
       customJsStr: `
 (function() {
   /* ─────────────────────────────────────────────────────────
@@ -156,7 +180,7 @@ async function bootstrap(): Promise<void> {
 
   /* Marca activo en sidebar */
   function setActive(tag) {
-    var nav = document.getElementById('exelixi-sidebar');
+    var nav = document.getElementById('lm-sidebar');
     if (!nav) return;
     nav.querySelectorAll('.sb-item').forEach(function(el) {
       el.classList.toggle('active', el.getAttribute('data-tag') === tag);
@@ -165,22 +189,22 @@ async function bootstrap(): Promise<void> {
 
   /* ── Toggle hamburguesa (móvil) ─────────────────────────── */
   function buildToggle() {
-    if (document.getElementById('exelixi-toggle')) return;
+    if (document.getElementById('lm-toggle')) return;
     var btn = document.createElement('button');
-    btn.id = 'exelixi-toggle';
+    btn.id = 'lm-toggle';
     btn.setAttribute('aria-label', 'Menú');
     btn.innerHTML = '<span></span><span></span><span></span>';
     document.body.appendChild(btn);
     btn.addEventListener('click', function() {
-      var nav = document.getElementById('exelixi-sidebar');
-      var ov  = document.getElementById('exelixi-overlay');
+      var nav = document.getElementById('lm-sidebar');
+      var ov  = document.getElementById('lm-overlay');
       if (nav) nav.classList.toggle('open');
       if (ov)  ov.classList.toggle('visible');
     });
     var ov = document.createElement('div');
-    ov.id = 'exelixi-overlay';
+    ov.id = 'lm-overlay';
     ov.addEventListener('click', function() {
-      var nav = document.getElementById('exelixi-sidebar');
+      var nav = document.getElementById('lm-sidebar');
       if (nav) nav.classList.remove('open');
       ov.classList.remove('visible');
     });
@@ -195,11 +219,11 @@ async function bootstrap(): Promise<void> {
     if (sections.length === lastCount) return;   /* sin cambios */
     lastCount = sections.length;
 
-    var existing = document.getElementById('exelixi-sidebar');
+    var existing = document.getElementById('lm-sidebar');
     if (existing) existing.remove();
 
     var nav = document.createElement('nav');
-    nav.id = 'exelixi-sidebar';
+    nav.id = 'lm-sidebar';
 
     nav.innerHTML =
       '<div class="sb-brand">'
@@ -225,8 +249,8 @@ async function bootstrap(): Promise<void> {
       + '<span class="sb-ver-val">${SWAGGER_BRAND_META.sidebarApiVersion}</span>'
       + '</div>'
       + '<div class="sb-env-row">'
-      + '<a class="sb-env-badge active">QA</a>'
-      + '<a class="sb-env-badge">PROD</a>'
+      + '<a class="sb-env-badge active" data-env="QA" href="#">QA</a>'
+      + '<span class="sb-env-badge disabled" title="Disponible próximamente">PROD</span>'
       + '</div></div>';
 
     document.body.insertBefore(nav, document.body.firstChild);
@@ -246,7 +270,7 @@ async function bootstrap(): Promise<void> {
           setActive(tag);
         }
         nav.classList.remove('open');
-        var ov = document.getElementById('exelixi-overlay');
+        var ov = document.getElementById('lm-overlay');
         if (ov) ov.classList.remove('visible');
       });
     });
@@ -256,12 +280,28 @@ async function bootstrap(): Promise<void> {
     if (inp) {
       inp.addEventListener('input', function() {
         var q = inp.value.toLowerCase();
+        var visible = 0;
         nav.querySelectorAll('li').forEach(function(li) {
           var lbl = li.querySelector('.sb-label');
-          li.style.display = (!q || (lbl && lbl.textContent.toLowerCase().indexOf(q) >= 0)) ? '' : 'none';
+          var show = !q || (lbl && lbl.textContent.toLowerCase().indexOf(q) >= 0);
+          li.style.display = show ? '' : 'none';
+          if (show) visible++;
         });
+        var empty = nav.querySelector('.sb-empty');
+        if (q && visible === 0) {
+          if (!empty) {
+            empty = document.createElement('p');
+            empty.className = 'sb-empty';
+            empty.textContent = 'Sin resultados';
+            nav.querySelector('.sb-list').after(empty);
+          }
+        } else if (empty) {
+          empty.remove();
+        }
       });
     }
+
+    wireEnvBadges(nav);
 
     /* ── Scroll-spy ─────────────────────── */
     var io = new IntersectionObserver(function(entries) {
@@ -272,6 +312,28 @@ async function bootstrap(): Promise<void> {
 
     sections.forEach(function(s) { io.observe(s.el); });
     if (sections.length > 0) setActive(sections[0].tag);
+  }
+
+  /* ── QA / servidor Swagger ─────────────────────────────── */
+  function wireEnvBadges(nav) {
+    if (!nav || nav.dataset.envWired) return;
+    nav.dataset.envWired = '1';
+    nav.querySelectorAll('.sb-env-badge[data-env]').forEach(function(badge) {
+      badge.addEventListener('click', function(e) {
+        e.preventDefault();
+        var env = badge.getAttribute('data-env');
+        var select = document.querySelector('.swagger-ui .servers select');
+        if (!select || !env) return;
+        Array.from(select.options).forEach(function(opt, idx) {
+          if (opt.text.toUpperCase().indexOf(env) >= 0) {
+            select.selectedIndex = idx;
+            select.dispatchEvent(new Event('change', { bubbles: true }));
+          }
+        });
+        nav.querySelectorAll('.sb-env-badge').forEach(function(b) { b.classList.remove('active'); });
+        badge.classList.add('active');
+      });
+    });
   }
 
   /* ── Limpiar prefijos "N. " visibles en las secciones ──── */
@@ -293,6 +355,15 @@ async function bootstrap(): Promise<void> {
     buildToggle();
     buildSidebar();
     cleanTitles();
+    highlightAuthorize();
+  }
+
+  function highlightAuthorize() {
+    var btn = document.querySelector('.swagger-ui .auth-wrapper .btn.authorize');
+    if (btn && !btn.dataset.lmHint) {
+      btn.dataset.lmHint = '1';
+      btn.setAttribute('title', 'Ingrese su apikey de canal La Mundial');
+    }
   }
 
   /* Primer intento rápido */
@@ -339,7 +410,7 @@ async function bootstrap(): Promise<void> {
         /* ════════════════════════════════════════════════════════
            SIDEBAR
         ════════════════════════════════════════════════════════ */
-        #exelixi-sidebar {
+        #lm-sidebar {
           position: fixed;
           left: 0; top: 0;
           width: 210px; height: 100vh;
@@ -353,8 +424,8 @@ async function bootstrap(): Promise<void> {
           scrollbar-width: thin;
           scrollbar-color: rgba(255,255,255,0.12) transparent;
         }
-        #exelixi-sidebar::-webkit-scrollbar { width: 4px; }
-        #exelixi-sidebar::-webkit-scrollbar-thumb { background: rgba(255,255,255,0.15); border-radius: 2px; }
+        #lm-sidebar::-webkit-scrollbar { width: 4px; }
+        #lm-sidebar::-webkit-scrollbar-thumb { background: rgba(255,255,255,0.15); border-radius: 2px; }
 
         /* Brand */
         .sb-brand {
@@ -445,24 +516,31 @@ async function bootstrap(): Promise<void> {
         .sb-env-badge.active, .sb-env-badge:hover {
           color: #fff !important; border-color: #E84F51; background: rgba(232,79,81,0.35);
         }
+        .sb-env-badge.disabled {
+          opacity: 0.35; cursor: not-allowed; pointer-events: none;
+        }
+        .sb-empty {
+          color: rgba(255,255,255,0.45); font-size: 0.75rem; text-align: center;
+          padding: 8px 14px 0; margin: 0; font-family: 'Poppins', sans-serif;
+        }
 
         /* ── Hamburger toggle ──────────────────────────────────── */
-        #exelixi-toggle {
+        #lm-toggle {
           display: none; position: fixed; top: 10px; left: 12px; z-index: 800;
           background: #0F1A5A; border: 1px solid rgba(255,255,255,0.15);
           border-radius: 8px; padding: 8px 10px; cursor: pointer;
           flex-direction: column; gap: 5px; align-items: center;
           box-shadow: 0 3px 12px rgba(0,0,0,0.4);
         }
-        #exelixi-toggle span {
+        #lm-toggle span {
           display: block; width: 20px; height: 2px;
           background: #fff; border-radius: 2px; transition: all 0.25s;
         }
-        #exelixi-overlay {
+        #lm-overlay {
           display: none; position: fixed; inset: 0;
           background: rgba(0,0,0,0.5); z-index: 550;
         }
-        #exelixi-overlay.visible { display: block; }
+        #lm-overlay.visible { display: block; }
 
         /* ════════════════════════════════════════════════════════
            LAYOUT — push content right
@@ -536,6 +614,26 @@ async function bootstrap(): Promise<void> {
           color: #374151 !important;
         }
         .swagger-ui .info .description tr:last-child td { border-bottom: none; }
+        .swagger-ui .info .description h3 {
+          color: #0F1A5A !important; font-size: 1rem !important; font-weight: 700 !important;
+          margin: 28px 0 10px !important; padding-bottom: 6px;
+          border-bottom: 2px solid rgba(232,79,81,0.35);
+          font-family: 'Poppins', sans-serif !important;
+        }
+        .swagger-ui .info .description blockquote {
+          margin: 12px 0; padding: 10px 16px;
+          background: rgba(46,109,191,0.06); border-left: 4px solid #2E6DBF;
+          border-radius: 0 8px 8px 0; color: #374151 !important; font-size: 0.84rem;
+        }
+        .swagger-ui .info .description pre {
+          background: #0F1A5A !important; color: #e2e8f0 !important;
+          border-radius: 8px; padding: 12px 16px !important; font-size: 0.78rem;
+          border: none !important; margin: 8px 0 16px;
+        }
+        .swagger-ui .info .description pre code {
+          background: transparent !important; color: inherit !important; border: none !important;
+          padding: 0 !important;
+        }
         .swagger-ui .info .description code {
           background: rgba(46,109,191,0.1); color: #0F1A5A;
           border-radius: 4px; padding: 1px 7px; font-size: 0.82em;
@@ -877,7 +975,7 @@ async function bootstrap(): Promise<void> {
 
         /* Tablet: sidebar más angosta */
         @media (max-width: 1024px) and (min-width: 769px) {
-          #exelixi-sidebar { width: 180px; }
+          #lm-sidebar { width: 180px; }
           #swagger-ui { margin-left: 180px !important; width: calc(100% - 180px) !important; }
           .sb-name { font-size: 0.95rem; }
           .sb-label { font-size: 0.75rem; }
@@ -885,20 +983,20 @@ async function bootstrap(): Promise<void> {
 
         /* Móvil: sidebar oculta, toggle visible */
         @media (max-width: 768px) {
-          #exelixi-sidebar {
+          #lm-sidebar {
             width: 240px;
             transform: translateX(-100%);
             transition: transform 0.3s ease;
             z-index: 700;
           }
-          #exelixi-sidebar.open { transform: translateX(0); }
+          #lm-sidebar.open { transform: translateX(0); }
 
           #swagger-ui {
             margin-left: 0 !important;
             width: 100% !important;
           }
 
-          #exelixi-toggle {
+          #lm-toggle {
             display: flex !important;
           }
 
@@ -940,17 +1038,8 @@ async function bootstrap(): Promise<void> {
         displayRequestDuration: true,
         tryItOutEnabled: true,
         tagsSorter: (a: string, b: string) => {
-          const order = [
-            '1. Catálogo vehículo (inma)',
-            '2. Catálogos y cotización (valrep)',
-            '3. Emisión RCV',
-            '4. Cobranza RCV',
-            '5. Documentos (post-emisión)',
-            '6. Emisión Funerario (personas)',
-            '7. Cliente (client)',
-          ];
-          const ai = order.indexOf(a);
-          const bi = order.indexOf(b);
+          const ai = SWAGGER_TAG_ORDER.indexOf(a);
+          const bi = SWAGGER_TAG_ORDER.indexOf(b);
           return (ai === -1 ? 999 : ai) - (bi === -1 ? 999 : bi);
         },
       },

@@ -14,7 +14,7 @@ import { RCV_COTIZACION_EXAMPLE } from '../../common/swagger/api-docs.constants'
 import { PersonasService } from '../personas/personas.service';
 import { GetPlanesPerDto } from '../personas/dto/get-planes-per.dto';
 
-@ApiTags('2. Catálogos y cotización (valrep)')
+@ApiTags('2. Cotización y catálogos')
 @Controller('v1/valrep')
 export class ValrepController {
   constructor(

@@ -6,7 +6,7 @@ import { GenerateConductorPdfDto } from './dto/generate-conductor.dto';
 import * as path from 'path';
 import * as fs from 'fs';
 
-@ApiTags('5. Documentos (post-emisión)')
+@ApiTags('5. Documentos')
 @Controller('v1/documents')
 export class DocumentsController {
   private readonly logger = new Logger(DocumentsController.name);

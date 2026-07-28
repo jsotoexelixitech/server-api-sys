@@ -1,56 +1,100 @@
-/** Orden de secciones Swagger — flujos expuestos en la API La Mundial. */
-export const SWAGGER_TAG_ORDER = [
-  '1. Catálogo vehículo (inma)',
-  '2. Catálogos y cotización (valrep)',
-  '3. Emisión RCV',
-  '4. Cobranza RCV',
-  '5. Documentos (post-emisión)',
-  '6. Emisión Funerario (personas)',
-] as const;
+import { SWAGGER_TAG_ORDER } from './swagger-tags.constants';
+
+export { SWAGGER_TAG_ORDER };
 
 export const SWAGGER_API_DESCRIPTION = `
-**La Mundial de Seguros** — catálogo, cotización, emisión, cobranza, personas y consulta de clientes.
+Bienvenido al **portal de integración** de La Mundial de Seguros.
 
-Documentación de integración para canales digitales de La Mundial (formulario, emisión, pagos y servicios asociados).
-
-**URL pública (HTTPS):** \`https://cierrelmds.exelixitech.com/api-docs-nest-api/docs\`  
-**Prefijo Apache:** \`/api-docs-nest-api/\` → \`:3002\` (mismo patrón que \`/nexus-api/\`, \`/pagos-api/\`).
+Use esta documentación para conectar canales digitales con catálogo vehicular, cotización, emisión, cobranza, personas y consulta de clientes.
 
 ---
 
-### Flujo de emisión (wizard)
+### Inicio rápido
 
-| Paso wizard | Módulo | Acción | Endpoint nest-api |
-|-------------|--------|--------|-------------------|
-| 3 | Formulario | Validar placa/serial **antes de elegir plan** | \`POST /external/validateEmissionAuto\` (sin \`plan\` → \`RCVBAS\`) |
-| 4 | Emisión | Planes + cotización | \`POST /valrep/planes/v2\` → \`POST /valrep/cotizacion\` |
-| 5 | Pagos | Emitir + cobrar | \`POST /external/createEmissionAuto\` → \`POST /external/collection/activate\` |
+1. Pulse **Authorize** (arriba a la derecha) e ingrese su \`apikey\` de canal.
+2. Seleccione el servidor **QA** en el desplegable de entornos.
+3. Siga el flujo recomendado en el menú lateral o use **Try it out** en cada endpoint.
 
-### Referencia técnica
+**Descargas:** [OpenAPI JSON](./docs-json) · [OpenAPI YAML](./docs-yaml)
 
-| Paso | Endpoint | Recurso |
-|------|----------|---------|
-| 1 | \`GET /inma/anios\` → \`POST /inma/marcas\` → \`modelo\` → \`version\` → \`categorias-uso\` | \`VInma\` |
-| 2 | \`GET /valrep/states\` → \`cities\` → \`POST /valrep/getLists\` | \`maestados\`, \`maciudades\`, \`maparent\` |
-| 3 | \`POST /valrep/planes/v2\` | \`spBuscaPlan\` |
-| 4 | \`POST /valrep/cotizacion\` | \`spCalculoAuto\` |
-| 5a | \`POST /external/validateEmissionAuto\` **sin plan** (Formulario, pre-plan) | \`speeValidateAutomovilGeneral\` |
-| 5b | \`POST /external/validateEmissionAuto\` **con plan** (re-validación opcional) | \`speeValidateAutomovilGeneral\` |
-| 6 | \`POST /external/createEmissionAuto\` | \`sp_pre_emision_automovil_rcv_nexus\` → \`sp_emision_automovil_rcv_nexus\` |
-| 7 | \`POST /external/collection/activate\` | \`spCobroSis_Ad\` + \`cbreporte_pago\` |
-| 8 | \`POST /documents/conductor-habitual\` | PDF anexo (post-emisión) |
+---
 
-**Auth:** header \`apikey\` (\`maclient_api.xtoken\`) en pasos 6, 7 y 8.
+### Autenticación
 
-**Probar validación pre-plan (Swagger o curl):** body solo con \`placa\` y \`serial_carroceria\` (carnet). No envíes \`plan\` ni serial de motor.
+| Header | Valor | Cuándo |
+|--------|-------|--------|
+| \`apikey\` | Token del canal | Emisión, cobranza y documentos |
 
-**Cobro validado QA:** ingreso #183034 · póliza \`18-1-0000078926\`
+En entornos de prueba internos el token puede omitirse; en QA/PROD públicos es obligatorio.
+
+---
+
+### Contrato de respuesta
+
+Respuesta exitosa (HTTP 2xx):
+
+\`\`\`json
+{ "status": true, "result": { ... } }
+\`\`\`
+
+Algunos endpoints de catálogo/cotización usan \`data\` en lugar de \`result\`:
+
+\`\`\`json
+{ "status": true, "data": { ... } }
+\`\`\`
+
+Error de validación o negocio (HTTP 4xx):
+
+\`\`\`json
+{ "status": false, "message": "Descripción del error" }
+\`\`\`
+
+---
+
+### Flujo recomendado — automóvil (RCV)
+
+| # | Acción | Endpoint |
+|---|--------|----------|
+| 1 | Catálogo del vehículo | \`GET /inma/anios\` → marcas → modelo → versión |
+| 2 | Ubicación y listas | \`GET /valrep/states\` → \`cities\` → \`getLists\` |
+| 3 | Planes y prima | \`POST /valrep/planes/v2\` → \`POST /valrep/cotizacion\` |
+| 4 | Validar placa/serial | \`POST /external/validateEmissionAuto\` |
+| 5 | Emitir póliza | \`POST /external/createEmissionAuto\` |
+| 6 | Cobrar recibo | \`POST /external/collection/activate\` |
+| 7 | Documento anexo (opcional) | \`POST /documents/conductor-habitual\` |
+
+> **Pruebas QA:** use placa y serial únicos en cada emisión. No envíe \`mprima\` en \`0\`; omita el campo o copie los totales de la cotización.
+
+---
+
+### Glosario
+
+| Término | Descripción |
+|---------|-------------|
+| \`cnpoliza\` | Número de póliza emitida |
+| \`cnrecibo\` | Número de recibo a cobrar |
+| \`placa\` | Placa del vehículo asegurado |
+| \`serial_carroceria\` | Serial de carrocería (carnet) |
+| \`plan\` | Código del plan contratado (ej. \`RCVBAS\`) |
+| \`frecuencia\` | Periodicidad de pago (\`A\` anual, \`E\` única, etc.) |
+
+---
+
+### Soporte
+
+| | |
+|---|---|
+| **Entorno QA** | Servidor HTTPS seleccionable arriba |
+| **Versión API** | Ver badge en el menú lateral |
+| **Contacto** | integraciones@lamundialdeseguros.com |
+
+*Documentación sujeta a cambios. Consulte el changelog antes de desplegar en producción.*
 `.trim();
 
 export const APIKEY_HEADER = {
   name: 'apikey',
   description:
-    'Token del canal (`maclient_api.xtoken`). Obligatorio en producción; en QA interno puede omitirse.',
+    'Token del canal asignado por La Mundial. Obligatorio en emisión, cobranza y documentos en entornos públicos.',
   required: false,
   example: 'tu-token-canal',
 };
@@ -107,7 +151,7 @@ export const RCV_VALIDATE_WITH_PLAN_BODY = {
 
 /**
  * Body ejemplo Swagger — emisión nueva RCV.
- * No incluir `poliza`/`cnpoliza_rel` (Sis2000 genera `cnpoliza`).
+ * No incluir `poliza`/`cnpoliza_rel` (el sistema genera `cnpoliza`).
  * No enviar `prima`/`mprima` en 0: omitir o usar totales de `POST /valrep/cotizacion`.
  * `placa` y `serial_carroceria` deben ser únicos en QA (vhcerti vigente); cambiar en cada prueba.
  */

@@ -25,7 +25,7 @@ import {
   RCV_COLLECTION_ACTIVATE_RESPONSE,
 } from '../../common/swagger/api-docs.constants';
 
-@ApiTags('4. Cobranza RCV')
+@ApiTags('4. Cobranza')
 @Controller('v1/external/collection')
 export class CollectionController {
   constructor(private readonly collectionService: CollectionService) {}

@@ -5,7 +5,7 @@
 export const LA_MUNDIAL_BRAND = {
   name: 'La Mundial de Seguros',
   shortName: 'La Mundial',
-  tagline: 'Documentación de API',
+  tagline: 'Portal de integración',
 
   /** Azul Pennsylvania (principal) — alineado a modulo-emision/index.css */
   blue: '#0F1A5A',

@@ -8,7 +8,7 @@ import { ValidateEmissionPersonDto } from '../emissions/dto/validate-emission-pe
 import { Api401, Api500, ApiCommonErrors } from '../../common/swagger/api-error-responses';
 import { APIKEY_HEADER } from '../../common/swagger/api-docs.constants';
 
-@ApiTags('6. Emisión Funerario (personas)')
+@ApiTags('6. Emisión personas')
 @Controller('v1/personas')
 export class PersonasController {
   constructor(private readonly personasService: PersonasService) {}

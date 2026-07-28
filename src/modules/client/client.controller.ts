@@ -4,7 +4,7 @@ import { ClientService } from './client.service';
 import { ApiCommonErrors } from '../../common/swagger/api-error-responses';
 import { SearchCoveragesDto } from './dto/search-coverages.dto';
 
-@ApiTags('7. Cliente (client)')
+@ApiTags('7. Consulta de clientes')
 @Controller('v1/client')
 export class ClientController {
   constructor(private readonly clientService: ClientService) {}

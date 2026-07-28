@@ -7,7 +7,7 @@ import { GetVersionDto } from './dto/get-version.dto';
 import { GetCategoriasUsoDto } from './dto/get-categorias-uso.dto';
 import { Api404, Api500, ApiCommonErrors } from '../../common/swagger/api-error-responses';
 
-@ApiTags('1. Catálogo vehículo (inma)')
+@ApiTags('1. Catálogo vehicular')
 @Controller('v1/inma')
 export class InmaController {
   constructor(private readonly inmaService: InmaService) {}

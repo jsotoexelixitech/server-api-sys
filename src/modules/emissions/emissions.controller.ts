@@ -23,7 +23,7 @@ import {
   RCV_CREATE_EMISSION_AUTO_BODY_WITH_PRIMA,
 } from '../../common/swagger/api-docs.constants';
 
-@ApiTags('3. Emisión RCV')
+@ApiTags('3. Emisión automóvil')
 @Controller('v1')
 export class EmissionsController {
   constructor(private readonly emissionsService: EmissionsService) {}
