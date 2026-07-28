@@ -1,4 +1,4 @@
-/** Orden de secciones Swagger — flujos Exélixi expuestos en nest-api. */
+/** Orden de secciones Swagger — flujos expuestos en la API La Mundial. */
 export const SWAGGER_TAG_ORDER = [
   '1. Catálogo vehículo (inma)',
   '2. Catálogos y cotización (valrep)',
@@ -11,14 +11,14 @@ export const SWAGGER_TAG_ORDER = [
 export const SWAGGER_API_DESCRIPTION = `
 **La Mundial de Seguros** — catálogo, cotización, emisión, cobranza, personas y consulta de clientes.
 
-Documentación de integración para canales Exélixi (formulario, emisión, pagos y módulos asociados).
+Documentación de integración para canales digitales de La Mundial (formulario, emisión, pagos y servicios asociados).
 
 **URL pública (HTTPS):** \`https://cierrelmds.exelixitech.com/api-docs-nest-api/docs\`  
 **Prefijo Apache:** \`/api-docs-nest-api/\` → \`:3002\` (mismo patrón que \`/nexus-api/\`, \`/pagos-api/\`).
 
 ---
 
-### Flujo Exélixi (wizard)
+### Flujo de emisión (wizard)
 
 | Paso wizard | Módulo | Acción | Endpoint nest-api |
 |-------------|--------|--------|-------------------|
@@ -52,7 +52,7 @@ export const APIKEY_HEADER = {
   description:
     'Token del canal (`maclient_api.xtoken`). Obligatorio en producción; en QA interno puede omitirse.',
   required: false,
-  example: 'tu-token-canal-exelixi',
+  example: 'tu-token-canal',
 };
 
 /** Caso real validado en QA (jul 2026). */
@@ -92,7 +92,7 @@ export const RCV_COTIZACION_EXAMPLE = {
   ptasa: 723.999,
 };
 
-/** Validación temprana Formulario Exélixi — carnet: placa + serial carrocería (sin plan ni motor). */
+/** Validación temprana en formulario — carnet: placa + serial carrocería (sin plan ni motor). */
 export const RCV_VALIDATE_PRE_PLAN_BODY = {
   placa: 'AE886C',
   serial_carroceria: 'SC1S6ZMV3024323',
