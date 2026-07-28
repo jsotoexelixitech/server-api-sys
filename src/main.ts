@@ -91,7 +91,7 @@ async function bootstrap(): Promise<void> {
       )
       .addBearerAuth()
       .addServer(publicPaths.publicBaseUrl, 'cierrelmds — HTTPS QA')
-      .addServer(`http://192.168.8.120:${port}${publicPaths.prefix}`, 'srv001 — QA Sis2000')
+      .addServer(`http://192.168.8.120:${port}${publicPaths.prefix}`, 'srv001 — QA')
       .addServer(`http://localhost:${port}${publicPaths.prefix}`, 'Desarrollo local')
       .addTag('1. Catálogo vehículo (inma)', 'Paso 1 · `VInma`')
       .addTag('2. Catálogos y cotización (valrep)', 'Pasos 2–4 · estados, planes, frecuencias, prima')

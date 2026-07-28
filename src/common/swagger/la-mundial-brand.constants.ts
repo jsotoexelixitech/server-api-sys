@@ -5,7 +5,7 @@
 export const LA_MUNDIAL_BRAND = {
   name: 'La Mundial de Seguros',
   shortName: 'La Mundial',
-  tagline: 'API RCV · Documentación',
+  tagline: 'Documentación de API',
 
   /** Azul Pennsylvania (principal) — alineado a modulo-emision/index.css */
   blue: '#0F1A5A',
@@ -33,8 +33,8 @@ export const LA_MUNDIAL_BRAND = {
 } as const;
 
 export const SWAGGER_BRAND_META = {
-  title: 'La Mundial de Seguros · API RCV → Sis2000',
-  siteTitle: 'La Mundial de Seguros · API RCV',
-  version: '1.2.0-rcv',
-  sidebarApiVersion: 'v1.2-rcv',
+  title: 'La Mundial de Seguros · API',
+  siteTitle: 'La Mundial de Seguros · API',
+  version: '1.2.0',
+  sidebarApiVersion: 'v1.2',
 } as const;

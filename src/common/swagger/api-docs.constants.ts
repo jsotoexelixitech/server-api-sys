@@ -1,4 +1,4 @@
-/** Orden de secciones Swagger — solo flujo RCV Exélixi → Sis2000. */
+/** Orden de secciones Swagger — flujos Exélixi expuestos en nest-api. */
 export const SWAGGER_TAG_ORDER = [
   '1. Catálogo vehículo (inma)',
   '2. Catálogos y cotización (valrep)',
@@ -9,9 +9,9 @@ export const SWAGGER_TAG_ORDER = [
 ] as const;
 
 export const SWAGGER_API_DESCRIPTION = `
-**La Mundial de Seguros · RCV → Sis2000** (catálogo, cotización, emisión y cobranza).
+**La Mundial de Seguros** — catálogo, cotización, emisión, cobranza, personas y consulta de clientes.
 
-Integración técnica del flujo RCV. Todos los endpoints ejecutan SP o SQL directo contra Sis2000.
+Documentación de integración para canales Exélixi (formulario, emisión, pagos y módulos asociados).
 
 **URL pública (HTTPS):** \`https://cierrelmds.exelixitech.com/api-docs-nest-api/docs\`  
 **Prefijo Apache:** \`/api-docs-nest-api/\` → \`:3002\` (mismo patrón que \`/nexus-api/\`, \`/pagos-api/\`).
@@ -26,9 +26,9 @@ Integración técnica del flujo RCV. Todos los endpoints ejecutan SP o SQL direc
 | 4 | Emisión | Planes + cotización | \`POST /valrep/planes/v2\` → \`POST /valrep/cotizacion\` |
 | 5 | Pagos | Emitir + cobrar | \`POST /external/createEmissionAuto\` → \`POST /external/collection/activate\` |
 
-### Referencia técnica (Sis2000)
+### Referencia técnica
 
-| Paso | Endpoint | Sis2000 |
+| Paso | Endpoint | Recurso |
 |------|----------|---------|
 | 1 | \`GET /inma/anios\` → \`POST /inma/marcas\` → \`modelo\` → \`version\` → \`categorias-uso\` | \`VInma\` |
 | 2 | \`GET /valrep/states\` → \`cities\` → \`POST /valrep/getLists\` | \`maestados\`, \`maciudades\`, \`maparent\` |
