@@ -17,12 +17,14 @@ module.exports = {
       env: {
         PUBLIC_API_PREFIX: '/api-docs-nest-api',
         PUBLIC_API_ORIGIN: 'https://cierrelmds.exelixitech.com',
+        PARTNER_PACKAGES: '@exelixi/partner-api-starter',
       },
       env_production: {
         NODE_ENV:           'production',
         SWAGGER_PATH:       'docs',   // vacío ('') para deshabilitar Swagger en prod
         PUBLIC_API_PREFIX:  '/api-docs-nest-api',
         PUBLIC_API_ORIGIN:  'https://cierrelmds.exelixitech.com',
+        PARTNER_PACKAGES:   '@exelixi/partner-api-starter',
       },
 
       // ── Comportamiento ante caídas ───────────────────────────────────────

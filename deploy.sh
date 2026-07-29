@@ -25,9 +25,9 @@ mkdir -p "$LOG_DIR"
 echo "▶ npm install..."
 npm install --prefer-offline
 
-# 3. Compilar TypeScript → dist/
-echo "▶ npm run build..."
-npm run build
+# 3. Compilar SDK partner + TypeScript → dist/
+echo "▶ npm run build:all..."
+npm run build:all
 
 # 4. Iniciar o reiniciar con PM2
 echo "▶ pm2..."
