@@ -59,7 +59,7 @@ export function assertViajeroCotizacion(
   }
 }
 
-/** Cotización prorrata: exige fechas o ndias. */
+/** Cotización prorrata: exige fdesde+fhasta (o fdesde+ndias). */
 export function assertViajeroProrrataCotizacion(
   cramo: number | undefined,
   cplan: string,
@@ -69,10 +69,10 @@ export function assertViajeroProrrataCotizacion(
 ): void {
   if (!isViajeroProrrataPlan(cramo, cplan)) return;
   const hasDates = Boolean(fdesde?.trim() && fhasta?.trim());
-  const hasNdias = typeof ndias === 'number' && ndias > 0;
-  if (!hasDates && !hasNdias) {
+  const hasFdesdeNdias = Boolean(fdesde?.trim() && typeof ndias === 'number' && ndias > 0);
+  if (!hasDates && !hasFdesdeNdias) {
     throw new BadRequestException(
-      'Viajero prorrata: informe fdesde y fhasta, o ndias, en la cotización.',
+      'Viajero prorrata: informe fdesde y fhasta en la cotización.',
     );
   }
 }

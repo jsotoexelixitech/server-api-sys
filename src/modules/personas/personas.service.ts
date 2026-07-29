@@ -281,7 +281,28 @@ export class PersonasService {
     return /could not find stored procedure|invalid object name.*spCalculoViajeroProrrata/i.test(msg);
   }
 
-  /** Fallback cuando spCalculoViajeroProrrata aún no está desplegado en Sis2000. */
+  private isSpSignatureError(err: unknown): boolean {
+    const msg = err instanceof Error ? err.message : String(err);
+    return /too many arguments specified|too few arguments specified/i.test(msg);
+  }
+
+  /** fdesde/fhasta obligatorios en spCalculoViajeroProrrata (BDA). */
+  private resolveProrrataDates(body: CotizacionPerDto): { fdesde: string; fhasta: string } {
+    const fdesde = body.fdesde?.trim();
+    const fhasta = body.fhasta?.trim();
+    if (fdesde && fhasta) {
+      return { fdesde, fhasta };
+    }
+    if (fdesde && typeof body.ndias === 'number' && body.ndias > 0) {
+      const desde = new Date(`${fdesde}T00:00:00Z`);
+      const hasta = new Date(desde);
+      hasta.setUTCDate(hasta.getUTCDate() + body.ndias - 1);
+      return { fdesde, fhasta: hasta.toISOString().slice(0, 10) };
+    }
+    throw new BadRequestException('Viajero prorrata: fdesde y fhasta son obligatorios.');
+  }
+
+  /** Fallback cuando spCalculoViajeroProrrata no está desplegado o la firma difiere. */
   private async getCotizacionViajeroProrrataFallback(
     body: CotizacionPerDto,
     ramo: number,
@@ -351,23 +372,22 @@ export class PersonasService {
     ramo: number,
     asegurado: CotizacionPerDto['asegurados'][number],
   ): Promise<{ mprima: number; mprimaext: number }> {
+    const { fdesde, fhasta } = this.resolveProrrataDates(body);
     const T = this.db.types;
     const req = this.db.request();
     req.input('cramo', T.Int, ramo);
     req.input('cplan', T.VarChar(10), body.cplan);
+    req.input('fdesde', T.Date, fdesde);
+    req.input('fhasta', T.Date, fhasta);
     req.input('cparen', T.Int, asegurado.cparen);
     req.input('nedad_asegurado', T.Int, asegurado.nedad_asegurado);
     req.input('xrif_asegurado', T.VarChar(10), String(asegurado.xrif_asegurado).replace(/\D/g, ''));
-    req.input('fdesde', T.Date, body.fdesde ?? null);
-    req.input('fhasta', T.Date, body.fhasta ?? null);
-    req.input('ndias_in', T.Int, body.ndias ?? null);
     req.input('ptasamon', T.Float, body.ptasamon ?? null);
     req.output('ndias', T.Int);
-    req.output('tarifa_diaria', T.Numeric(18, 6));
     req.output('mprimaext', T.Numeric(18, 2));
     req.output('mprima', T.Numeric(18, 2));
     req.output('berror', T.Bit);
-    req.output('mensaje', T.NVarChar(200));
+    req.output('mensaje', T.NVarChar(120));
 
     try {
       const result = await req.execute(SP_CALCULO_VIAJERO_PRORRATA);
@@ -378,20 +398,17 @@ export class PersonasService {
         );
       }
 
-      const totals = (result.recordsets?.[1] ?? []) as Record<string, unknown>[];
-      if (totals.length > 0) {
-        return {
-          mprima: Number(totals[0]['mprima']) || 0,
-          mprimaext: Number(totals[0]['mprimaext']) || 0,
-        };
+      const mprimaext = Number(outputs['mprimaext']) || 0;
+      const mprima = Number(outputs['mprima']) || 0;
+      if (mprimaext <= 0) {
+        throw new BadRequestException(
+          String(outputs['mensaje'] ?? 'La cotización retornó prima cero.'),
+        );
       }
 
-      return {
-        mprima: Number(outputs['mprima']) || 0,
-        mprimaext: Number(outputs['mprimaext']) || 0,
-      };
+      return { mprima, mprimaext };
     } catch (err) {
-      if (this.isSpNotFoundError(err)) {
+      if (this.isSpNotFoundError(err) || this.isSpSignatureError(err)) {
         return this.getCotizacionViajeroProrrataFallback(body, ramo, asegurado);
       }
       throw err;
