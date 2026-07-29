@@ -16,7 +16,7 @@ Sin esto, `GITHUB_TOKEN` no puede publicar aunque el workflow declare `packages:
 1. GitHub → **Settings** (tu cuenta) → **Developer settings** → **Personal access tokens** → **Generate new token (classic)**.
 2. Marca: **`write:packages`**, **`read:packages`**, **`repo`** (repo privado).
 3. En **server-api-sys** → **Settings** → **Secrets and variables** → **Actions** → **New repository secret**:
-   - Name: `NPM_TOKEN`
+   - Name: `NPM_TOKEN` (o `NESTAPI` — el workflow acepta ambos)
    - Value: el PAT
 4. Vuelve a **Run workflow**. El workflow usa `NPM_TOKEN` si existe.
 
