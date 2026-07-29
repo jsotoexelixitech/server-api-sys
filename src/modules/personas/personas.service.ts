@@ -10,6 +10,7 @@ import { MssqlService } from '../../database/mssql.service';
 import { CotizacionPerDto } from './dto/cotizacion-per.dto';
 import { CreateEmissionPersonDto } from './dto/create-emission-person.dto';
 import { parseSPError } from '../../common/helpers/sp-error.helper';
+import { buildPolicyPdfUrl } from '../../common/helpers/policy-url.helper';
 import {
   SP_CALCULO_VIAJERO_PRORRATA,
   SP_PRE_EMISION_PERSONAS,
@@ -911,10 +912,9 @@ export class PersonasService {
         const fmespol = row['fmespol'] as number | undefined;
         const ncuota = (row['qcuotas'] ?? row['ncuota']) as number | undefined;
 
-        const pdfBase = (this.config.get<string>('POLICY_PDF_URL') ?? this.config.get<string>('URLPoliza') ?? '').trim().replace(/\/$/, '');
-        const urlpoliza = pdfBase && cnpoliza && fanopol != null && fmespol != null
-          ? `${pdfBase}/${cnpoliza}/${fanopol}/${fmespol}/`
-          : pdfBase && cnpoliza ? `${pdfBase}/${cnpoliza}/` : '';
+        const pdfBase =
+          this.config.get<string>('POLICY_PDF_URL') ?? this.config.get<string>('URLPoliza');
+        const urlpoliza = buildPolicyPdfUrl(pdfBase, cnpoliza, fanopol, fmespol);
 
         this.logger.log(`createEmissionPerson: emitida OK cnpoliza=${cnpoliza}`);
         return { message: 'Emisión registrada exitosamente.', cnpoliza, cnrecibo, urlpoliza, ncuota, fanopol, fmespol };
