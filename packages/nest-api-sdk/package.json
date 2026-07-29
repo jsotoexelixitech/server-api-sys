@@ -1,6 +1,6 @@
 {
   "name": "@jsotoexelixitech/nest-api-sdk",
-  "version": "0.1.1",
+  "version": "0.1.2",
   "description": "Contrato público para módulos partner de sysip-nest-api (sin acceso al core).",
   "main": "dist/index.js",
   "types": "dist/index.d.ts",
@@ -11,7 +11,7 @@
     "directory": "packages/nest-api-sdk"
   },
   "publishConfig": {
-    "registry": "https://npm.pkg.github.com"
+    "registry": "https://npm.pkg.github.com/"
   },
   "scripts": {
     "build": "tsc -p tsconfig.json",

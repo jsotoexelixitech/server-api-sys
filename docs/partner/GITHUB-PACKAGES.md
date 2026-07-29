@@ -2,9 +2,16 @@
 
 El scope **debe coincidir** con el dueño del repo en GitHub: `jsotoexelixitech/server-api-sys` → `@jsotoexelixitech/nest-api-sdk`.
 
----
+## Si falla con 403 `write_package` o `permission_denied`
 
-## Publicar (Exélixi)
+En el repo **server-api-sys** → **Settings** → **Actions** → **General** → sección **Workflow permissions**:
+
+- Selecciona **Read and write permissions** (no solo Read).
+- Guarda (**Save**).
+
+Sin esto, `GITHUB_TOKEN` no puede publicar aunque el workflow declare `packages: write`.
+
+---
 
 ### GitHub Actions
 
