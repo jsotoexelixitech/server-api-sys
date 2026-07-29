@@ -20,7 +20,7 @@ PRIMA_USD="$(echo "$NDAYS * $TARIFA_DIA" | bc -l | xargs printf "%.2f")"
 echo "=== VIAJE ramo 25 | ${NDAYS} días | prima ${PRIMA_USD} USD (${NDAYS}×${TARIFA_DIA}) | RIF ${RIF} ==="
 
 echo "--- cotización ---"
-COT=$(curl -s -X POST "${BASE}/api/v1/personas/cotizacion" \
+COT=$(curl -s --max-time 30 -X POST "${BASE}/api/v1/personas/cotizacion" \
   -H "Content-Type: application/json" \
   -d "{
     \"cramo\": 25,
@@ -33,12 +33,16 @@ COT=$(curl -s -X POST "${BASE}/api/v1/personas/cotizacion" \
       \"xrif_asegurado\": \"${RIF}\",
       \"nedad_asegurado\": 35
     }]
-  }")
-echo "$COT"
-PRIMA_COT=$(echo "$COT" | python3 -c "import sys,json; d=json.load(sys.stdin); print(d.get('data',{}).get('mprimaext',''))" 2>/dev/null || true)
-if [ -n "$PRIMA_COT" ] && [ "$PRIMA_COT" != "None" ]; then
-  PRIMA_USD="$PRIMA_COT"
-  echo "Prima desde cotización: $PRIMA_USD USD"
+  }" || true)
+if [ -z "$COT" ]; then
+  echo "WARN: cotización sin respuesta (timeout); usando prima manual ${PRIMA_USD} USD"
+else
+  echo "$COT"
+  PRIMA_COT=$(echo "$COT" | python3 -c "import sys,json; d=json.load(sys.stdin); print(d.get('data',{}).get('mprimaext',''))" 2>/dev/null || true)
+  if [ -n "$PRIMA_COT" ] && [ "$PRIMA_COT" != "None" ]; then
+    PRIMA_USD="$PRIMA_COT"
+    echo "Prima desde cotización: $PRIMA_USD USD"
+  fi
 fi
 
 echo "--- validación ---"

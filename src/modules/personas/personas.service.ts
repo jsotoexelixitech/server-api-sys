@@ -263,6 +263,89 @@ export class PersonasService {
 
   // ── Cotización de personas (spCalculoPer o spCalculoViajeroProrrata) ───────
 
+  private computeProrrataNdias(fdesde?: string, fhasta?: string, ndias?: number): number {
+    if (typeof ndias === 'number' && ndias > 0) return ndias;
+    if (fdesde?.trim() && fhasta?.trim()) {
+      const desde = new Date(`${fdesde.trim()}T00:00:00Z`);
+      const hasta = new Date(`${fhasta.trim()}T00:00:00Z`);
+      if (hasta < desde) {
+        throw new BadRequestException('fhasta no puede ser anterior a fdesde');
+      }
+      return Math.round((hasta.getTime() - desde.getTime()) / 86400000) + 1;
+    }
+    throw new BadRequestException('Viajero prorrata: informe fdesde y fhasta, o ndias.');
+  }
+
+  private isSpNotFoundError(err: unknown): boolean {
+    const msg = err instanceof Error ? err.message : String(err);
+    return /could not find stored procedure|invalid object name.*spCalculoViajeroProrrata/i.test(msg);
+  }
+
+  /** Fallback cuando spCalculoViajeroProrrata aún no está desplegado en Sis2000. */
+  private async getCotizacionViajeroProrrataFallback(
+    body: CotizacionPerDto,
+    ramo: number,
+    asegurado: CotizacionPerDto['asegurados'][number],
+  ): Promise<{ mprima: number; mprimaext: number }> {
+    const ndias = this.computeProrrataNdias(body.fdesde, body.fhasta, body.ndias);
+    const T = this.db.types;
+    const req = this.db.request();
+    req.input('cramo', T.Int, ramo);
+    req.input('cplan', T.VarChar(10), body.cplan.trim());
+    req.input('cparen', T.Int, asegurado.cparen);
+    req.input('nedad', T.Int, asegurado.nedad_asegurado);
+    req.input('ndias', T.Int, ndias);
+    req.input('ptasamon_in', T.Float, body.ptasamon ?? null);
+
+    const result = await req.query(`
+      DECLARE @tarifa NUMERIC(18,6), @ptasamon FLOAT, @cmoneda CHAR(4), @ctablatar CHAR(10);
+      DECLARE @mprimaext NUMERIC(18,2), @mprima NUMERIC(18,2);
+
+      SELECT @cmoneda = LTRIM(RTRIM(cmoneda))
+      FROM maplanes_per
+      WHERE cramo = @cramo AND LTRIM(RTRIM(cplan)) = LTRIM(RTRIM(@cplan));
+
+      IF @cmoneda IS NULL
+        SELECT @cmoneda = LTRIM(RTRIM(cmoneda))
+        FROM maplanes
+        WHERE cramo = @cramo AND LTRIM(RTRIM(cplan)) = LTRIM(RTRIM(@cplan));
+
+      SET @ptasamon = @ptasamon_in;
+      IF @ptasamon IS NULL AND @cmoneda IS NOT NULL
+        SELECT @ptasamon = ptasamon FROM mamonedas WHERE cmoneda = @cmoneda;
+      IF @ptasamon IS NULL OR @ptasamon <= 0 SET @ptasamon = 1;
+
+      SELECT TOP 1 @ctablatar = ctablatar
+      FROM mapltarifas_per
+      WHERE cramo = @cramo AND LTRIM(RTRIM(cplan)) = LTRIM(RTRIM(@cplan)) AND cparen = @cparen;
+
+      SELECT @tarifa = mprima
+      FROM mapltabedad_d
+      WHERE ctablaedad = @ctablatar
+        AND @nedad >= nedad_min AND @nedad <= nedad_max;
+
+      IF @tarifa IS NULL OR @tarifa <= 0
+        THROW 99002, 'Sin tarifa diaria en mapltabedad_d para plan/edad.', 1;
+
+      SET @mprimaext = ROUND(CAST(@ndias AS NUMERIC(18,6)) * @tarifa, 2);
+      SET @mprima = ROUND(@mprimaext * @ptasamon, 2);
+
+      SELECT @mprima AS mprima, @mprimaext AS mprimaext, @tarifa AS tarifa_diaria, @ndias AS ndias;
+    `);
+
+    const row = (result.recordset?.[0] ?? {}) as Record<string, unknown>;
+    const mprimaext = Number(row['mprimaext']) || 0;
+    const mprima = Number(row['mprima']) || 0;
+    if (mprimaext <= 0) {
+      throw new BadRequestException('Sin tarifa diaria en mapltabedad_d para plan/edad.');
+    }
+
+    this.logger.warn(
+      `getCotizacionViajeroProrrata: SP no desplegado; fallback SQL ndias=${ndias} mprimaext=${mprimaext}`,
+    );
+    return { mprima, mprimaext };
+  }
+
   private async getCotizacionViajeroProrrata(
     body: CotizacionPerDto,
     ramo: number,
@@ -286,26 +369,33 @@ export class PersonasService {
     req.output('berror', T.Bit);
     req.output('mensaje', T.NVarChar(200));
 
-    const result = await req.execute(SP_CALCULO_VIAJERO_PRORRATA);
-    const outputs = result.output as Record<string, unknown>;
-    if (outputs['berror']) {
-      throw new BadRequestException(
-        String(outputs['mensaje'] ?? 'Error en cotización prorrata viajero.'),
-      );
-    }
+    try {
+      const result = await req.execute(SP_CALCULO_VIAJERO_PRORRATA);
+      const outputs = result.output as Record<string, unknown>;
+      if (outputs['berror']) {
+        throw new BadRequestException(
+          String(outputs['mensaje'] ?? 'Error en cotización prorrata viajero.'),
+        );
+      }
 
-    const totals = (result.recordsets?.[1] ?? []) as Record<string, unknown>[];
-    if (totals.length > 0) {
+      const totals = (result.recordsets?.[1] ?? []) as Record<string, unknown>[];
+      if (totals.length > 0) {
+        return {
+          mprima: Number(totals[0]['mprima']) || 0,
+          mprimaext: Number(totals[0]['mprimaext']) || 0,
+        };
+      }
+
       return {
-        mprima: Number(totals[0]['mprima']) || 0,
-        mprimaext: Number(totals[0]['mprimaext']) || 0,
+        mprima: Number(outputs['mprima']) || 0,
+        mprimaext: Number(outputs['mprimaext']) || 0,
       };
+    } catch (err) {
+      if (this.isSpNotFoundError(err)) {
+        return this.getCotizacionViajeroProrrataFallback(body, ramo, asegurado);
+      }
+      throw err;
     }
-
-    return {
-      mprima: Number(outputs['mprima']) || 0,
-      mprimaext: Number(outputs['mprimaext']) || 0,
-    };
   }
 
   async getCotizacionPer(body: CotizacionPerDto): Promise<CotizacionPerResult> {
