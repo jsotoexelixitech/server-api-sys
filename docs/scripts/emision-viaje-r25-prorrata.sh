@@ -1,7 +1,9 @@
 #!/usr/bin/env bash
 # Emisión VIAJE ramo 25 (prorrata por días) — nest-api :3002
 # Uso: ./emision-viaje-r25-prorrata.sh [NDAYS] [RIF]
-# Ejemplo: ./emision-viaje-r25-prorrata.sh 5 28901456
+# Ejemplo: ./emision-viaje-r25-prorrata.sh 5 29234567
+#
+# Tras git pull en srv001: bash deploy.sh  (npm install + build:all + pm2)
 
 set -euo pipefail
 
@@ -46,7 +48,7 @@ else
 fi
 
 echo "--- validación ---"
-curl -s -X POST "${BASE}/api/v1/personas/validacion" \
+VAL=$(curl -s --max-time 30 -X POST "${BASE}/api/v1/personas/validacion" \
   -H "Content-Type: application/json" \
   -d "{
     \"cramo\": 25,
@@ -54,8 +56,16 @@ curl -s -X POST "${BASE}/api/v1/personas/validacion" \
     \"femision\": \"${FECHA}\",
     \"rif_titular\": ${RIF},
     \"fnac_titular\": \"${FNAC}\"
-  }"
-echo
+  }" || true)
+if [ -z "$VAL" ]; then
+  echo "ERROR: validación sin respuesta (¿API caída? revisar pm2 logs sysip-nest-api)"
+  exit 1
+fi
+echo "$VAL"
+if echo "$VAL" | grep -q '"status":false'; then
+  echo "ERROR: validación rechazada"
+  exit 1
+fi
 
 echo "--- emisión (prima USD=${PRIMA_USD}) ---"
 python3 <<PY
