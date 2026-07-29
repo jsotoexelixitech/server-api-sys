@@ -1,0 +1,40 @@
+name: Publish @exelixi/nest-api-sdk
+
+on:
+  workflow_dispatch:
+  push:
+    tags:
+      - 'nest-api-sdk-v*'
+
+permissions:
+  contents: read
+  packages: write
+
+jobs:
+  publish:
+    name: GitHub Packages
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: packages/nest-api-sdk
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          registry-url: https://npm.pkg.github.com
+          scope: '@exelixi'
+
+      - name: Install & build
+        run: |
+          npm ci
+          npm run build
+
+      - name: Publish to GitHub Packages
+        run: npm publish --access restricted
+        env:
+          NODE_AUTH_TOKEN: ${{ secrets.GITHUB_TOKEN }}

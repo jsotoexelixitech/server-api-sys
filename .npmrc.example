@@ -1,0 +1,5 @@
+# Consumir paquetes @exelixi desde GitHub Packages (srv001 o repo del integrador).
+# Copiar a ~/.npmrc — NO commitear tokens.
+
+@exelixi:registry=https://npm.pkg.github.com
+//npm.pkg.github.com/:_authToken=ghp_REEMPLAZAR

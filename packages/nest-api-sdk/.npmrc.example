@@ -1,0 +1,6 @@
+# Copiar a ~/.npmrc o al repo del integrador como .npmrc (no commitear tokens).
+# Reemplazar TOKEN por PAT de GitHub con scope read:packages (integrador)
+# o write:packages (quien publica).
+
+@exelixi:registry=https://npm.pkg.github.com
+//npm.pkg.github.com/:_authToken=TOKEN
