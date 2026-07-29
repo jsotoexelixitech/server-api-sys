@@ -3,6 +3,7 @@ import { Type } from 'class-transformer';
 import {
   ArrayMinSize,
   IsArray,
+  IsDateString,
   IsIn,
   IsInt,
   IsNotEmpty,
@@ -42,9 +43,29 @@ export class CotizacionPerDto {
   @IsNotEmpty()
   cplan: string;
 
-  @ApiProperty({ example: 'M', description: 'Frecuencia de pago.', enum: ['A', 'S', 'T', 'M'] })
-  @IsIn(['A', 'S', 'T', 'M'])
+  @ApiProperty({
+    example: 'M',
+    description: 'Frecuencia de pago. Viajero prorrata: usar E (única).',
+    enum: ['A', 'S', 'T', 'M', 'E', 'C'],
+  })
+  @IsIn(['A', 'S', 'T', 'M', 'E', 'C'])
   ifrecuencia: string;
+
+  @ApiPropertyOptional({ example: '2026-07-29', description: 'Inicio vigencia (viajero prorrata).' })
+  @IsOptional()
+  @IsDateString()
+  fdesde?: string;
+
+  @ApiPropertyOptional({ example: '2026-08-02', description: 'Fin vigencia inclusive (viajero prorrata).' })
+  @IsOptional()
+  @IsDateString()
+  fhasta?: string;
+
+  @ApiPropertyOptional({ example: 5, description: 'Días de vigencia (alternativa a fdesde/fhasta).' })
+  @IsOptional()
+  @IsInt()
+  @Min(1)
+  ndias?: number;
 
   @ApiProperty({ type: [AseguradoPerDto], description: 'Lista de asegurados a cotizar.' })
   @IsArray()

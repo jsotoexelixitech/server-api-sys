@@ -3,6 +3,28 @@ import { BadRequestException } from '@nestjs/common';
 /** Ramo accidentes personales / viajero internacional (producto 26). */
 export const VIAJERO_RAMO = 5;
 
+/** Ramo viajero local por días (plan VIAJE). */
+export const VIAJERO_LOCAL_RAMO = 25;
+
+/** Plan VIAJE local (prorrata por fechas). */
+export const VIAJE_LOCAL_PLAN = 'VIAJE';
+
+export function isViajeLocalPlan(
+  cramo: number | null | undefined,
+  plan: string | null | undefined,
+): boolean {
+  if (cramo !== VIAJERO_LOCAL_RAMO) return false;
+  return String(plan ?? '').trim().toUpperCase() === VIAJE_LOCAL_PLAN;
+}
+
+/** Planes con prima = ndias × tarifa diaria (VIAJE ramo 25, VIAJ* ramo 5). */
+export function isViajeroProrrataPlan(
+  cramo: number | null | undefined,
+  plan: string | null | undefined,
+): boolean {
+  return isViajeLocalPlan(cramo, plan) || isViajeroPlan(cramo, plan);
+}
+
 /** Planes cuyo código empieza por VIAJ (VIAJE4, VIAJ10, VIAJE1, …). */
 export function isViajeroPlan(
   cramo: number | null | undefined,
@@ -29,11 +51,82 @@ export function assertViajeroCotizacion(
   cplan: string,
   aseguradosCount: number,
 ): void {
-  if (!isViajeroPlan(cramo ?? VIAJERO_RAMO, cplan)) return;
+  if (!isViajeroProrrataPlan(cramo, cplan)) return;
   if (aseguradosCount !== 1) {
     throw new BadRequestException(
-      'Plan viajero (ramo 5): la cotización admite exactamente un asegurado (titular).',
+      'Plan viajero: la cotización admite exactamente un asegurado (titular).',
     );
+  }
+}
+
+/** Cotización prorrata: exige fechas o ndias. */
+export function assertViajeroProrrataCotizacion(
+  cramo: number | undefined,
+  cplan: string,
+  fdesde?: string,
+  fhasta?: string,
+  ndias?: number,
+): void {
+  if (!isViajeroProrrataPlan(cramo, cplan)) return;
+  const hasDates = Boolean(fdesde?.trim() && fhasta?.trim());
+  const hasNdias = typeof ndias === 'number' && ndias > 0;
+  if (!hasDates && !hasNdias) {
+    throw new BadRequestException(
+      'Viajero prorrata: informe fdesde y fhasta, o ndias, en la cotización.',
+    );
+  }
+}
+
+/**
+ * Emisión VIAJE ramo 25: tomador (cualquier persona), titular = asegurado;
+ * beneficiario opcional pero debe ser la misma persona que el asegurado.
+ */
+export function assertViajeLocalEmission(
+  body: Record<string, unknown>,
+  asegurados: Record<string, unknown>[],
+  beneficiarios: unknown[],
+): void {
+  const cramo = Number(body['cramo']);
+  const plan = String(body['plan'] ?? '');
+  if (!isViajeLocalPlan(cramo, plan)) return;
+
+  if (asegurados.length !== 1) {
+    throw new BadRequestException(
+      'Plan VIAJE (ramo 25): debe enviar exactamente un asegurado en asegurados[].',
+    );
+  }
+
+  const rifTitular = rifDigits(body['rif_titular']);
+  const rifAseg = rifDigits(
+    asegurados[0]['xrif_asegurado'] ?? asegurados[0]['identificacion'],
+  );
+  requireNonEmpty(rifTitular, 'rif_titular');
+  requireNonEmpty(body['rif_tomador'], 'rif_tomador');
+  requireNonEmpty(rifAseg, 'asegurados[0].xrif_asegurado');
+
+  if (rifTitular !== rifAseg) {
+    throw new BadRequestException(
+      'Plan VIAJE: rif_titular debe coincidir con asegurados[0].xrif_asegurado.',
+    );
+  }
+
+  for (const ben of beneficiarios) {
+    const b = ben as Record<string, unknown>;
+    const rifBen = rifDigits(b['xrif_beneficiario'] ?? b['identificacion']);
+    if (rifBen && rifBen !== rifAseg) {
+      throw new BadRequestException(
+        'Plan VIAJE: el beneficiario debe ser la misma persona que el asegurado.',
+      );
+    }
+  }
+
+  if (!String(body['fdesde'] ?? '').trim() || !String(body['fhasta'] ?? '').trim()) {
+    throw new BadRequestException('Plan VIAJE: fdesde y fhasta son obligatorios.');
+  }
+
+  const frec = String(body['frecuencia'] ?? 'M').charAt(0).toUpperCase();
+  if (frec !== 'E' && frec !== 'A') {
+    throw new BadRequestException('Plan VIAJE: frecuencia debe ser "E" o "A".');
   }
 }
 

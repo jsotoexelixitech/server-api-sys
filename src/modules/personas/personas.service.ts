@@ -10,11 +10,17 @@ import { MssqlService } from '../../database/mssql.service';
 import { CotizacionPerDto } from './dto/cotizacion-per.dto';
 import { CreateEmissionPersonDto } from './dto/create-emission-person.dto';
 import { parseSPError } from '../../common/helpers/sp-error.helper';
-import { SP_PRE_EMISION_PERSONAS } from '../../config/sis2000-sp.constants';
 import {
+  SP_CALCULO_VIAJERO_PRORRATA,
+  SP_PRE_EMISION_PERSONAS,
+} from '../../config/sis2000-sp.constants';
+import {
+  assertViajeLocalEmission,
   assertViajeroCotizacion,
   assertViajeroEmission,
+  assertViajeroProrrataCotizacion,
   isViajeroPlan,
+  isViajeroProrrataPlan,
 } from './viajero-emission.rules';
 
 class Mutex {
@@ -255,7 +261,52 @@ export class PersonasService {
     }
   }
 
-  // ── Cotización de personas (spCalculoPer por asegurado, sumando) ───────────
+  // ── Cotización de personas (spCalculoPer o spCalculoViajeroProrrata) ───────
+
+  private async getCotizacionViajeroProrrata(
+    body: CotizacionPerDto,
+    ramo: number,
+    asegurado: CotizacionPerDto['asegurados'][number],
+  ): Promise<{ mprima: number; mprimaext: number }> {
+    const T = this.db.types;
+    const req = this.db.request();
+    req.input('cramo', T.Int, ramo);
+    req.input('cplan', T.VarChar(10), body.cplan);
+    req.input('cparen', T.Int, asegurado.cparen);
+    req.input('nedad_asegurado', T.Int, asegurado.nedad_asegurado);
+    req.input('xrif_asegurado', T.VarChar(10), String(asegurado.xrif_asegurado).replace(/\D/g, ''));
+    req.input('fdesde', T.Date, body.fdesde ?? null);
+    req.input('fhasta', T.Date, body.fhasta ?? null);
+    req.input('ndias_in', T.Int, body.ndias ?? null);
+    req.input('ptasamon', T.Float, body.ptasamon ?? null);
+    req.output('ndias', T.Int);
+    req.output('tarifa_diaria', T.Numeric(18, 6));
+    req.output('mprimaext', T.Numeric(18, 2));
+    req.output('mprima', T.Numeric(18, 2));
+    req.output('berror', T.Bit);
+    req.output('mensaje', T.NVarChar(200));
+
+    const result = await req.execute(SP_CALCULO_VIAJERO_PRORRATA);
+    const outputs = result.output as Record<string, unknown>;
+    if (outputs['berror']) {
+      throw new BadRequestException(
+        String(outputs['mensaje'] ?? 'Error en cotización prorrata viajero.'),
+      );
+    }
+
+    const totals = (result.recordsets?.[1] ?? []) as Record<string, unknown>[];
+    if (totals.length > 0) {
+      return {
+        mprima: Number(totals[0]['mprima']) || 0,
+        mprimaext: Number(totals[0]['mprimaext']) || 0,
+      };
+    }
+
+    return {
+      mprima: Number(outputs['mprima']) || 0,
+      mprimaext: Number(outputs['mprimaext']) || 0,
+    };
+  }
 
   async getCotizacionPer(body: CotizacionPerDto): Promise<CotizacionPerResult> {
     try {
@@ -264,13 +315,25 @@ export class PersonasService {
 
       assertViajeroCotizacion(ramo, body.cplan, body.asegurados.length);
 
-      // Tasa: la enviada o NULL — spCalculoPer resuelve ptasamon desde mamonedas.
+      const useProrrata = isViajeroProrrataPlan(ramo, body.cplan);
+      if (useProrrata) {
+        assertViajeroProrrataCotizacion(ramo, body.cplan, body.fdesde, body.fhasta, body.ndias);
+      }
+
+      // Tasa: la enviada o NULL — spCalculoPer / prorrata resuelven ptasamon desde mamonedas.
       const ptasamon = body.ptasamon ?? null;
 
       let mprimatotal = 0;
       let mprimatotalext = 0;
 
       for (const asegurado of body.asegurados) {
+        if (useProrrata) {
+          const row = await this.getCotizacionViajeroProrrata(body, ramo, asegurado);
+          mprimatotal += row.mprima;
+          mprimatotalext += row.mprimaext;
+          continue;
+        }
+
         const req = this.db.request();
         req.input('ptasamon', T.Numeric(13, 6), ptasamon);
         req.input('cramo', T.Int, ramo);
@@ -406,11 +469,17 @@ export class PersonasService {
       const ptasamonResolved: number | null = null;
       const msumaasegResolved: number | null = null;
 
-      // 2. Fechas: si no vienen fdesde/fhasta se derivan de fecha_emision (1 año).
+      // 2. Fechas: prorrata exige fhasta; otros planes default +1 año.
+      const cramoEmision = this.intField(b['cramo']) ?? this.defaultRamo;
+      const planEmision = String(b['plan'] ?? '');
       const femision = String(b['fecha_emision'] ?? '').trim();
       const fdesde = String(b['fdesde'] ?? femision).trim();
       let fhasta = String(b['fhasta'] ?? '').trim();
-      if (!fhasta && femision) {
+      if (isViajeroProrrataPlan(cramoEmision, planEmision)) {
+        if (!fhasta) {
+          throw new BadRequestException('Viajero prorrata: fhasta es obligatorio.');
+        }
+      } else if (!fhasta && femision) {
         const d = new Date(`${femision}T00:00:00Z`);
         d.setUTCFullYear(d.getUTCFullYear() + 1);
         d.setUTCDate(d.getUTCDate() - 1);
@@ -453,6 +522,11 @@ export class PersonasService {
           : []);
 
       assertViajeroEmission(
+        b,
+        asegurados as Record<string, unknown>[],
+        beneficiarios,
+      );
+      assertViajeLocalEmission(
         b,
         asegurados as Record<string, unknown>[],
         beneficiarios,

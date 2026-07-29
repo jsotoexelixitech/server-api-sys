@@ -16,6 +16,9 @@ export const SP_PRE_EMISION_PERSONAS = 'sp_pre_emision_personas_general_nexus';
 /** Invocado al final del pre-SP personas (no desde nest-api directamente). */
 export const SP_EMISION_PERSONAS = 'sp_emision_personas_general_nexus';
 
+/** Prorrata viajero por días (fdesde/fhasta o ndias × tarifa diaria). */
+export const SP_CALCULO_VIAJERO_PRORRATA = 'spCalculoViajeroProrrata';
+
 // ── Auxiliares RCV (nest-api → Sis2000) ─────────────────────────────────────
 
 export const SP_GET_MACLIENT_API = 'spGetMaclientApi';
