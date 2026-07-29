@@ -36,7 +36,7 @@
     "pdfmake": "^0.3.11",
     "reflect-metadata": "^0.2.2",
     "rxjs": "^7.8.1",
-    "@exelixi/nest-api-sdk": "file:packages/nest-api-sdk",
+    "@jsotoexelixitech/nest-api-sdk": "file:packages/nest-api-sdk",
     "@exelixi/partner-api-starter": "file:packages/partner-api-starter"
   },
   "devDependencies": {

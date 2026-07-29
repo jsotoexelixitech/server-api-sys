@@ -1,6 +1,6 @@
 import { Global, Injectable, Logger, Module } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
-import { EXELIXI_PARTNER_HOST, ExelixiPartnerHost } from '@exelixi/nest-api-sdk';
+import { EXELIXI_PARTNER_HOST, ExelixiPartnerHost } from '@jsotoexelixitech/nest-api-sdk';
 
 /** Claves de entorno que un partner puede leer vía host (sin secretos de BD). */
 const PARTNER_CONFIG_WHITELIST = new Set([

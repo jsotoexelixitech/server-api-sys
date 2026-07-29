@@ -1,84 +1,43 @@
-# Publicar e instalar `@exelixi/nest-api-sdk` (GitHub Packages)
+# Publicar e instalar `@jsotoexelixitech/nest-api-sdk` (GitHub Packages)
 
-## Requisito de scope en GitHub
-
-El paquete se publica como **`@exelixi/nest-api-sdk`**. En GitHub Packages el scope `@exelixi` debe existir como **organización** en GitHub:
-
-1. Crear org [github.com/exelixi](https://github.com/organizations/plan) (si no existe).
-2. Dar acceso al repo `server-api-sys` a miembros que publican, **o** transferir el repo bajo la org `exelixi`.
-3. Alternativa temporal: publicar como `@jsotoexelixitech/nest-api-sdk` cambiando el `name` en `packages/nest-api-sdk/package.json` (mismo repo bajo usuario `jsotoexelixitech`).
+El scope **debe coincidir** con el dueño del repo en GitHub: `jsotoexelixitech/server-api-sys` → `@jsotoexelixitech/nest-api-sdk`.
 
 ---
 
 ## Publicar (Exélixi)
 
-### Opción A — GitHub Actions (recomendada)
+### GitHub Actions
 
-1. Subir tag (dispara el workflow):
+1. **Actions → Publish @jsotoexelixitech/nest-api-sdk → Run workflow** (branch `main`).
+
+O con tag:
 
 ```bash
-cd packages/nest-api-sdk
-npm version patch   # 0.1.0 → 0.1.1
-cd ../..
-git add packages/nest-api-sdk/package.json
-git commit -m "chore(sdk): bump nest-api-sdk version"
 git tag nest-api-sdk-v0.1.1
-git push origin main --tags
+git push origin nest-api-sdk-v0.1.1
 ```
 
-2. O en GitHub: **Actions → Publish @exelixi/nest-api-sdk → Run workflow**.
-
-3. Ver paquete: `https://github.com/orgs/exelixi/packages` (o packages del owner del repo).
-
-### Opción B — Manual desde tu PC
-
-```bash
-cd packages/nest-api-sdk
-npm run build
-npm publish --registry=https://npm.pkg.github.com
-```
-
-`.npmrc` local (no commitear):
-
-```
-@exelixi:registry=https://npm.pkg.github.com
-//npm.pkg.github.com/:_authToken=ghp_...
-```
-
-PAT con permiso `write:packages` y `read:packages`.
+Paquete visible en: `https://github.com/jsotoexelixitech?tab=packages`
 
 ---
 
 ## Instalar (integrador partner)
 
-`.npmrc` en su proyecto:
+`.npmrc`:
 
 ```
-@exelixi:registry=https://npm.pkg.github.com
-//npm.pkg.github.com/:_authToken=SU_PAT_READ_PACKAGES
+@jsotoexelixitech:registry=https://npm.pkg.github.com
+//npm.pkg.github.com/:_authToken=SU_PAT_read:packages
 ```
 
 ```bash
-npm install @exelixi/nest-api-sdk
+npm install @jsotoexelixitech/nest-api-sdk
 ```
-
-Invitar al integrador como colaborador del paquete o de la org `exelixi` con permiso **read packages**.
 
 ---
 
-## srv001 (consumir SDK publicado)
+## srv001
 
-Cuando un partner publique su paquete en GitHub Packages:
+Mismo `.npmrc` en `~/.npmrc` del usuario que ejecuta `npm install` para paquetes partner publicados.
 
-```bash
-# ~/.npmrc del usuario jsoto en srv001
-@exelixi:registry=https://npm.pkg.github.com
-//npm.pkg.github.com/:_authToken=TOKEN_CON_READ_PACKAGES
-
-cd ~/server-api-sys
-npm install @exelixi/partner-nombre-cliente@1.0.0
-# PARTNER_PACKAGES=@exelixi/partner-nombre-cliente
-bash deploy.sh
-```
-
-El monorepo sigue usando `file:packages/nest-api-sdk` para desarrollo interno; los integradores usan la versión publicada.
+El monorepo usa `file:packages/nest-api-sdk` en desarrollo; integradores usan la versión de GitHub Packages.

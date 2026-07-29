@@ -10,10 +10,10 @@
     "prepublishOnly": "npm run build"
   },
   "dependencies": {
-    "@exelixi/nest-api-sdk": "file:../nest-api-sdk"
+    "@jsotoexelixitech/nest-api-sdk": "file:../nest-api-sdk"
   },
   "peerDependencies": {
-    "@exelixi/nest-api-sdk": ">=0.1.0",
+    "@jsotoexelixitech/nest-api-sdk": ">=0.1.1",
     "@nestjs/common": "^10.0.0",
     "@nestjs/swagger": "^7.0.0"
   },

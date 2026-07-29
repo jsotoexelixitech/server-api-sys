@@ -1,5 +1,5 @@
 import { DynamicModule, Module } from '@nestjs/common';
-import { PartnerModuleRegisterOptions } from '@exelixi/nest-api-sdk';
+import { PartnerModuleRegisterOptions } from '@jsotoexelixitech/nest-api-sdk';
 import { PartnerStarterController } from './partner-starter.controller';
 
 @Module({})

@@ -1,6 +1,6 @@
 {
-  "name": "@exelixi/nest-api-sdk",
-  "version": "0.1.0",
+  "name": "@jsotoexelixitech/nest-api-sdk",
+  "version": "0.1.1",
   "description": "Contrato público para módulos partner de sysip-nest-api (sin acceso al core).",
   "main": "dist/index.js",
   "types": "dist/index.d.ts",

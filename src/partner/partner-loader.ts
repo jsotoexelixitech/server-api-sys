@@ -1,5 +1,5 @@
 import { DynamicModule, Logger } from '@nestjs/common';
-import type { PartnerModuleFactory, PartnerPackageExports } from '@exelixi/nest-api-sdk';
+import type { PartnerModuleFactory, PartnerPackageExports } from '@jsotoexelixitech/nest-api-sdk';
 
 const loaderLog = new Logger('PartnerLoader');
 

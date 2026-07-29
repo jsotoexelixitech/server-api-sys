@@ -1,6 +1,8 @@
-# @exelixi/nest-api-sdk
+# @jsotoexelixitech/nest-api-sdk
 
 Contrato público para desarrollar módulos partner de **sysip-nest-api** sin acceso al repositorio core.
+
+Publicado en GitHub Packages del repo `jsotoexelixitech/server-api-sys`.
 
 ## Instalación (integradores)
 
@@ -9,7 +11,7 @@ Contrato público para desarrollar módulos partner de **sysip-nest-api** sin ac
 3. Instalar:
 
 ```bash
-npm install @exelixi/nest-api-sdk
+npm install @jsotoexelixitech/nest-api-sdk
 ```
 
 ## Uso mínimo
@@ -19,12 +21,7 @@ import {
   EXELIXI_PARTNER_HOST,
   ExelixiPartnerHost,
   PARTNER_SWAGGER_TAG,
-  PartnerModuleRegisterOptions,
-} from '@exelixi/nest-api-sdk';
+} from '@jsotoexelixitech/nest-api-sdk';
 ```
 
 Exporte `register()` desde su paquete npm para que el host lo cargue vía `PARTNER_PACKAGES`.
-
-## Publicación (solo Exélixi)
-
-Ver `docs/partner/GITHUB-PACKAGES.md` en el repositorio `server-api-sys`.

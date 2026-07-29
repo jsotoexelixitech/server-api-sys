@@ -1,4 +1,4 @@
-name: Publish @exelixi/nest-api-sdk
+name: Publish @jsotoexelixitech/nest-api-sdk
 
 on:
   workflow_dispatch:
@@ -27,7 +27,7 @@ jobs:
         with:
           node-version: '20'
           registry-url: https://npm.pkg.github.com
-          scope: '@exelixi'
+          scope: '@jsotoexelixitech'
 
       - name: Install & build
         run: |
@@ -35,6 +35,6 @@ jobs:
           npm run build
 
       - name: Publish to GitHub Packages
-        run: npm publish --access restricted
+        run: npm publish
         env:
           NODE_AUTH_TOKEN: ${{ secrets.GITHUB_TOKEN }}

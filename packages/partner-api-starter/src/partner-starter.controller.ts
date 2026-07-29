@@ -4,7 +4,7 @@ import {
   EXELIXI_PARTNER_HOST,
   ExelixiPartnerHost,
   PARTNER_SWAGGER_TAG,
-} from '@exelixi/nest-api-sdk';
+} from '@jsotoexelixitech/nest-api-sdk';
 
 @ApiTags(PARTNER_SWAGGER_TAG)
 @Controller('v1/partner/starter')
