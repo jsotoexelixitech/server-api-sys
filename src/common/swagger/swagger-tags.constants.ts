@@ -7,6 +7,7 @@ export const SWAGGER_TAGS = {
   DOCUMENTS: '5. Documentos',
   PERSONAS: '6. Emisión personas',
   CLIENT: '7. Consulta de clientes',
+  PARTNER: '8. Integraciones partner',
 } as const;
 
 export const SWAGGER_TAG_ORDER: string[] = Object.values(SWAGGER_TAGS);
@@ -28,4 +29,6 @@ export const SWAGGER_TAG_DESCRIPTIONS: Record<string, string> = {
   [SWAGGER_TAGS.DOCUMENTS]: 'Generación de documentos PDF post-emisión.',
   [SWAGGER_TAGS.PERSONAS]: 'Productos, planes, cotización, validación y emisión de personas.',
   [SWAGGER_TAGS.CLIENT]: 'Consulta de cliente, pólizas del asegurado y coberturas.',
+  [SWAGGER_TAGS.PARTNER]:
+    'Endpoints de integradores externos (paquetes npm registrados en PARTNER_PACKAGES).',
 };

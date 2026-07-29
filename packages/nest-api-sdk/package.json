@@ -1,0 +1,22 @@
+{
+  "name": "@exelixi/nest-api-sdk",
+  "version": "0.1.0",
+  "description": "Contrato público para módulos partner de sysip-nest-api (sin acceso al core).",
+  "main": "dist/index.js",
+  "types": "dist/index.d.ts",
+  "files": ["dist"],
+  "scripts": {
+    "build": "tsc -p tsconfig.json",
+    "prepublishOnly": "npm run build"
+  },
+  "peerDependencies": {
+    "@nestjs/common": "^10.0.0",
+    "@nestjs/swagger": "^7.0.0"
+  },
+  "devDependencies": {
+    "@nestjs/common": "^10.4.4",
+    "@nestjs/swagger": "^7.4.2",
+    "typescript": "^5.6.2"
+  },
+  "license": "UNLICENSED"
+}

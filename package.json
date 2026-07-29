@@ -7,6 +7,10 @@
   "license": "UNLICENSED",
   "scripts": {
     "build": "nest build",
+    "build:sdk": "npm run build --prefix packages/nest-api-sdk",
+    "build:partner-starter": "npm run build --prefix packages/partner-api-starter",
+    "build:partners": "npm run build:sdk && npm run build:partner-starter",
+    "build:all": "npm run build:partners && npm run build",
     "format": "prettier --write \"src/**/*.ts\"",
     "start": "nest start",
     "start:dev": "nest start --watch",
@@ -30,7 +34,11 @@
     "pdf2json": "^4.0.3",
     "pdfmake": "^0.3.11",
     "reflect-metadata": "^0.2.2",
-    "rxjs": "^7.8.1"
+    "rxjs": "^7.8.1",
+    "@exelixi/nest-api-sdk": "file:packages/nest-api-sdk"
+  },
+  "optionalDependencies": {
+    "@exelixi/partner-api-starter": "file:packages/partner-api-starter"
   },
   "devDependencies": {
     "@nestjs/cli": "^10.4.5",

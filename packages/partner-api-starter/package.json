@@ -1,0 +1,25 @@
+{
+  "name": "@exelixi/partner-api-starter",
+  "version": "0.1.0",
+  "description": "Plantilla de módulo partner — copiar a repo privado del integrador.",
+  "main": "dist/index.js",
+  "types": "dist/index.d.ts",
+  "files": ["dist"],
+  "scripts": {
+    "build": "tsc -p tsconfig.json",
+    "prepublishOnly": "npm run build"
+  },
+  "dependencies": {
+    "@exelixi/nest-api-sdk": "file:../nest-api-sdk"
+  },
+  "peerDependencies": {
+    "@nestjs/common": "^10.0.0",
+    "@nestjs/swagger": "^7.0.0"
+  },
+  "devDependencies": {
+    "@nestjs/common": "^10.4.4",
+    "@nestjs/swagger": "^7.4.2",
+    "typescript": "^5.6.2"
+  },
+  "license": "UNLICENSED"
+}

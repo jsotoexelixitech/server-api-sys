@@ -34,4 +34,7 @@ export const envValidationSchema = Joi.object({
   EXTERNAL_API_URL_AUTO: Joi.string().optional(),
   EXTERNAL_API_KEY: Joi.string().optional(),
   EXTERNAL_BASIC_AUTH: Joi.string().optional(),
+
+  /** Paquetes npm partner (coma-separados). Ej: @exelixi/partner-api-starter */
+  PARTNER_PACKAGES: Joi.string().allow('').optional(),
 });

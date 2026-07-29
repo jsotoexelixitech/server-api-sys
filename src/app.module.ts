@@ -13,6 +13,8 @@ import { AppApiModule } from './modules/app/app.module';
 import { ExternalModule } from './modules/external/external.module';
 import { DocumentsModule } from './modules/documents/documents.module';
 import { CollectionModule } from './modules/collection/collection.module';
+import { PartnerHostModule } from './partner/partner-host.module';
+import { PartnerIntegrationModule } from './partner/partner-integration.module';
 
 @Module({
   imports: [
@@ -36,6 +38,8 @@ import { CollectionModule } from './modules/collection/collection.module';
     ExternalModule,
     DocumentsModule,
     CollectionModule,
+    PartnerHostModule,
+    PartnerIntegrationModule,
   ],
 })
 export class AppModule {}
