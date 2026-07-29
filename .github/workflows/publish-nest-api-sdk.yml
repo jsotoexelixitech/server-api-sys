@@ -28,6 +28,7 @@ jobs:
           node-version: '20'
           registry-url: 'https://npm.pkg.github.com'
           scope: '@jsotoexelixitech'
+          always-auth: true
 
       - name: Install & build SDK
         working-directory: packages/nest-api-sdk
@@ -35,9 +36,10 @@ jobs:
           npm install
           npm run build
           test -f dist/index.js
+          node -p "require('./package.json').name + '@' + require('./package.json').version"
 
       - name: Publish to GitHub Packages
         working-directory: packages/nest-api-sdk
-        run: npm publish
+        run: npm publish --loglevel verbose
         env:
-          NODE_AUTH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN != '' && secrets.NPM_TOKEN || secrets.GITHUB_TOKEN }}

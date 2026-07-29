@@ -11,6 +11,15 @@ En el repo **server-api-sys** → **Settings** → **Actions** → **General** �
 
 Sin esto, `GITHUB_TOKEN` no puede publicar aunque el workflow declare `packages: write`.
 
+### Plan B — secret `NPM_TOKEN` (si sigue 403)
+
+1. GitHub → **Settings** (tu cuenta) → **Developer settings** → **Personal access tokens** → **Generate new token (classic)**.
+2. Marca: **`write:packages`**, **`read:packages`**, **`repo`** (repo privado).
+3. En **server-api-sys** → **Settings** → **Secrets and variables** → **Actions** → **New repository secret**:
+   - Name: `NPM_TOKEN`
+   - Value: el PAT
+4. Vuelve a **Run workflow**. El workflow usa `NPM_TOKEN` si existe.
+
 ---
 
 ### GitHub Actions
