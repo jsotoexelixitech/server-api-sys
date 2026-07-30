@@ -12,9 +12,25 @@ export class ValidateEmissionPersonDto {
   @IsNotEmpty({ message: 'El plan es requerido.' })
   plan: string;
 
-  @ApiProperty({ example: '2025-06-30', description: 'Fecha de emisión (YYYY-MM-DD)' })
+  @ApiPropertyOptional({ example: '2025-06-30', description: 'Fecha de emisión (YYYY-MM-DD)' })
+  @IsOptional()
   @IsDateString({}, { message: 'La fecha de emisión debe ser una fecha válida (YYYY-MM-DD).' })
-  femision: string;
+  femision?: string;
+
+  @ApiPropertyOptional({ example: '2025-06-30', description: 'Alias de femision (YYYY-MM-DD)' })
+  @IsOptional()
+  @IsDateString({}, { message: 'La fecha de emisión debe ser una fecha válida (YYYY-MM-DD).' })
+  fecha_emision?: string;
+
+  @ApiPropertyOptional({ example: '2025-06-30', description: 'Inicio de vigencia (prorrata viajero)' })
+  @IsOptional()
+  @IsDateString()
+  fdesde?: string;
+
+  @ApiPropertyOptional({ example: '2025-08-03', description: 'Fin de vigencia (prorrata viajero)' })
+  @IsOptional()
+  @IsDateString()
+  fhasta?: string;
 
   @ApiProperty({ example: 25221952, description: 'RIF del titular' })
   @IsNumber({}, { message: 'El RIF del titular debe ser numérico.' })

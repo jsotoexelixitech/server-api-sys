@@ -20,6 +20,7 @@ import {
   assertViajeroCotizacion,
   assertViajeroEmission,
   assertViajeroProrrataCotizacion,
+  isViajeLocalPlan,
   isViajeroPlan,
   isViajeroProrrataPlan,
 } from './viajero-emission.rules';
@@ -147,6 +148,51 @@ export class PersonasService {
       nparentesco_beneficiario: getPar(b.nparentesco_beneficiario ?? b.parentesco),
     }));
     return JSON.stringify(mapped);
+  }
+
+  /**
+   * Plan VIAJE ramo 25 no lleva beneficiario, pero el trigger de emisión en Sis2000
+   * asigna cbeneficiario = titular cuando el JSON viene vacío. Limpia póliza/recibo/pebenefi.
+   */
+  private async clearViajeLocalBeneficiary(
+    cnpoliza: string,
+    fanopol?: number,
+    fmespol?: number,
+  ): Promise<void> {
+    const T = this.db.types;
+    const polReq = this.db.request();
+    polReq.input('cnpoliza', T.NVarChar(30), cnpoliza);
+    const polResult = await polReq.query(`
+      SELECT TOP 1 fanopol, fmespol, cpoliza
+      FROM adpoliza
+      WHERE cnpoliza = @cnpoliza
+      ORDER BY fingreso DESC
+    `);
+    const polRow = polResult.recordset?.[0] as Record<string, unknown> | undefined;
+    if (!polRow) {
+      this.logger.warn(`clearViajeLocalBeneficiary: póliza ${cnpoliza} no encontrada`);
+      return;
+    }
+
+    const fano = fanopol ?? Number(polRow['fanopol']);
+    const fmes = fmespol ?? Number(polRow['fmespol']);
+    const cpoliza = polRow['cpoliza'];
+
+    const upd = this.db.request();
+    upd.input('cnpoliza', T.NVarChar(30), cnpoliza);
+    upd.input('fanopol', T.SmallInt, fano);
+    upd.input('fmespol', T.TinyInt, fmes);
+    upd.input('cpoliza', T.Numeric(19, 0), cpoliza);
+    await upd.query(`
+      UPDATE adpoliza SET cbeneficiario = NULL
+      WHERE cnpoliza = @cnpoliza AND fanopol = @fanopol AND fmespol = @fmespol;
+      UPDATE adrecibos SET cbeneficiario = NULL
+      WHERE cnpoliza = @cnpoliza AND fanopol = @fanopol AND fmespol = @fmespol;
+      DELETE FROM pebenefi
+      WHERE cnpoliza = @cnpoliza AND fanopol = @fanopol AND fmespol = @fmespol AND iclaseaseg = 'B';
+    `);
+
+    this.logger.log(`clearViajeLocalBeneficiary OK cnpoliza=${cnpoliza}`);
   }
 
   private async lookupEmissionByTitular(rifTitular: number): Promise<Record<string, unknown>> {
@@ -523,11 +569,18 @@ export class PersonasService {
   async validateEmissionPerson(body: Record<string, unknown>) {
     const req = this.db.request();
     const T = this.db.types;
-    req.input('cramo',        T.Int,          body.cramo);
-    req.input('cplan',        T.VarChar(10),  body.plan);
-    req.input('femision',     T.Date,         body.femision);
-    req.input('xrif_titular', T.Numeric(9),   body.rif_titular);
-    req.input('fnac_titular', T.DateTime,     body.fnac_titular);
+    const femision =
+      String(body['femision'] ?? body['fecha_emision'] ?? '').trim() || null;
+    const fdesde = String(body['fdesde'] ?? femision ?? '').trim() || null;
+    const fhasta = String(body['fhasta'] ?? '').trim() || null;
+
+    req.input('cramo', T.Int, body['cramo']);
+    req.input('cplan', T.VarChar(10), body['plan']);
+    req.input('femision', T.Date, femision);
+    req.input('fdesde', T.Date, fdesde);
+    req.input('fhasta', T.Date, fhasta);
+    req.input('xrif_titular', T.Numeric(9), body['rif_titular']);
+    req.input('fnac_titular', T.DateTime, body['fnac_titular']);
     try {
       await req.execute('speeValidatePersonGeneral');
       return { status: true, message: 'Persona válida para emisión.' };
@@ -535,6 +588,29 @@ export class PersonasService {
       const msg = parseSPError(err);
       this.logger.warn(`validateEmissionPerson (SP validation error): ${msg}`);
       return { status: false, error: msg };
+    }
+  }
+
+  /** Bloquea emisión si speeValidatePersonGeneral falla (póliza vigente, edad, plan). */
+  private async assertEmissionPersonValidated(
+    body: Record<string, unknown>,
+    cramo: number,
+    plan: string,
+    femision: string,
+    fdesde: string,
+    fhasta: string,
+  ): Promise<void> {
+    const validation = await this.validateEmissionPerson({
+      cramo,
+      plan,
+      femision,
+      fdesde,
+      fhasta,
+      rif_titular: body['rif_titular'],
+      fnac_titular: body['fnac_titular'],
+    });
+    if (!validation.status) {
+      throw new BadRequestException(validation.error ?? 'Validación de emisión rechazada.');
     }
   }
 
@@ -639,10 +715,19 @@ export class PersonasService {
         asegurados as Record<string, unknown>[],
         beneficiarios,
       );
-      if (isViajeroPlan(this.intField(b['cramo']) ?? undefined, String(b['plan'] ?? ''))) {
+      if (isViajeroPlan(cramoEmision, planEmision) || isViajeLocalPlan(cramoEmision, planEmision)) {
         beneficiarios = [];
         b['beneficiarios'] = [];
       }
+
+      await this.assertEmissionPersonValidated(
+        b,
+        cramoEmision,
+        planEmision,
+        femision,
+        fdesde,
+        fhasta,
+      );
 
       // === LLAMADA A LA NUEVA API QAAPISYS2000 (PRIMER INTENTO) ===
       const ENABLE_QAAPISYS2000 = false; // Deshabilitado para forzar la emisión local directa
@@ -915,6 +1000,15 @@ export class PersonasService {
         const pdfBase =
           this.config.get<string>('POLICY_PDF_URL') ?? this.config.get<string>('URLPoliza');
         const urlpoliza = buildPolicyPdfUrl(pdfBase, cnpoliza, fanopol, fmespol);
+
+        if (isViajeLocalPlan(cramoEmision, planEmision)) {
+          try {
+            await this.clearViajeLocalBeneficiary(cnpoliza, fanopol, fmespol);
+          } catch (clearErr) {
+            const msg = clearErr instanceof Error ? clearErr.message : String(clearErr);
+            this.logger.error(`clearViajeLocalBeneficiary falló cnpoliza=${cnpoliza}: ${msg}`);
+          }
+        }
 
         this.logger.log(`createEmissionPerson: emitida OK cnpoliza=${cnpoliza}`);
         return { message: 'Emisión registrada exitosamente.', cnpoliza, cnrecibo, urlpoliza, ncuota, fanopol, fmespol };

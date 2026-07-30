@@ -54,6 +54,8 @@ VAL=$(curl -s --max-time 30 -X POST "${BASE}/api/v1/personas/validacion" \
     \"cramo\": 25,
     \"plan\": \"VIAJE\",
     \"femision\": \"${FECHA}\",
+    \"fdesde\": \"${FECHA}\",
+    \"fhasta\": \"${FHASTA}\",
     \"rif_titular\": ${RIF},
     \"fnac_titular\": \"${FNAC}\"
   }" || true)
