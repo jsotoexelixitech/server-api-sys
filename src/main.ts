@@ -65,9 +65,6 @@ async function bootstrap(): Promise<void> {
   } else {
     bootstrapLog.log('Partner modules: none');
   }
-  app.getHttpAdapter().getInstance().use('/assets', express.static(assetsDir, { index: false }));
-  app.getHttpAdapter().getInstance().use('/admin', express.static(join(assetsDir, 'admin'), { index: 'index.html' }));
-
   const config = app.get(ConfigService);
   const port = config.get<number>('PORT', 3001);
   const corsOrigin = config.get<string>('CORS_ORIGIN', '*');
@@ -76,6 +73,15 @@ async function bootstrap(): Promise<void> {
     publicApiPrefix: config.get<string>('PUBLIC_API_PREFIX'),
     publicApiOrigin: config.get<string>('PUBLIC_API_ORIGIN'),
   });
+
+  const staticAssets = express.static(assetsDir, { index: false });
+  app.getHttpAdapter().getInstance().use('/assets', staticAssets);
+  // Con PUBLIC_API_PREFIX en PM2, Swagger pide /api-docs-nest-api/assets/… (también acceso directo :3002).
+  if (publicPaths.prefix) {
+    app.getHttpAdapter().getInstance().use(`${publicPaths.prefix}/assets`, staticAssets);
+  }
+  app.getHttpAdapter().getInstance().use('/admin', express.static(join(assetsDir, 'admin'), { index: 'index.html' }));
+
   const brandLogoUrl = publicPaths.brandAssetUrl('brand/logo-lamundial-sidebar.png');
   const brandFaviconUrl = publicPaths.brandAssetUrl('brand/favicon-64.png');
 
@@ -171,8 +177,6 @@ async function bootstrap(): Promise<void> {
   function nexusBrandAsset(rel) {
     var path = window.location.pathname.replace(/\\/docs\\/?$/, '');
     if (path) return path + '/assets/' + rel;
-    if (rel === 'brand/logo-lamundial-sidebar.png') return NEXUS_BRAND_LOGO;
-    if (rel === 'brand/favicon-64.png') return NEXUS_BRAND_FAVICON;
     return '/assets/' + rel;
   }
   (function fixBrandAssets() {
