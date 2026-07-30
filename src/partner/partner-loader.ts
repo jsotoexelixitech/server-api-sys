@@ -3,6 +3,13 @@ import type { PartnerModuleFactory, PartnerPackageExports } from '@jsotoexelixit
 
 const loaderLog = new Logger('PartnerLoader');
 
+/** Paquetes cargados correctamente (visible en bootstrap vía getLoadedPartnerPackageNames). */
+const loadedPartnerPackages: string[] = [];
+
+export function getLoadedPartnerPackageNames(): readonly string[] {
+  return loadedPartnerPackages;
+}
+
 export function parsePartnerPackageNames(raw: string | undefined): string[] {
   if (!raw?.trim()) return [];
   return [...new Set(raw.split(',').map((s) => s.trim()).filter(Boolean))];
@@ -34,6 +41,7 @@ export function loadPartnerDynamicModules(packageNames: string[]): DynamicModule
       const register = resolveRegister(pkgName, pkg);
       if (!register) continue;
       modules.push(register());
+      loadedPartnerPackages.push(pkgName);
       loaderLog.log(`Módulo partner cargado: ${pkgName}`);
     } catch (err) {
       const msg = err instanceof Error ? err.message : String(err);

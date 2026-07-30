@@ -23,6 +23,11 @@ import {
   SWAGGER_BRAND_META,
 } from './common/swagger/la-mundial-brand.constants';
 import { resolvePublicApiPaths } from './common/config/public-path';
+import {
+  getLoadedPartnerPackageNames,
+  parsePartnerPackageNames,
+} from './partner/partner-loader';
+import { readPartnerPackagesConfig } from './partner/partner-env';
 
 function resolveBrandAssetsDir(): string {
   const candidates = [
@@ -47,6 +52,19 @@ async function bootstrap(): Promise<void> {
   const assetsDir = resolveBrandAssetsDir();
   const logoOk = existsSync(join(assetsDir, 'brand', 'logo-lamundial-sidebar.png'));
   bootstrapLog.log(`Brand assets dir=${assetsDir} logo=${logoOk ? 'OK' : 'MISSING'}`);
+
+  const partnerConfig = readPartnerPackagesConfig();
+  const loadedPartners = getLoadedPartnerPackageNames();
+  if (partnerConfig) {
+    bootstrapLog.log(`PARTNER_PACKAGES=${partnerConfig}`);
+  }
+  if (loadedPartners.length > 0) {
+    bootstrapLog.log(`Partner modules loaded: ${loadedPartners.join(', ')}`);
+  } else if (parsePartnerPackageNames(partnerConfig).length > 0) {
+    bootstrapLog.warn('PARTNER_PACKAGES configurado pero ningún módulo cargó — revisar npm install');
+  } else {
+    bootstrapLog.log('Partner modules: none');
+  }
   app.getHttpAdapter().getInstance().use('/assets', express.static(assetsDir, { index: false }));
   app.getHttpAdapter().getInstance().use('/admin', express.static(join(assetsDir, 'admin'), { index: 'index.html' }));
 
