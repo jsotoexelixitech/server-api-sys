@@ -122,6 +122,16 @@ async function bootstrap(): Promise<void> {
       .build();
 
     const document = SwaggerModule.createDocument(app, swaggerConfig);
+    document.security = [{ bearer: [] }, { apikey: [] }];
+    for (const pathKey of Object.keys(document.paths ?? {})) {
+      if (pathKey.includes('/auth/token') || pathKey.includes('/auth/refresh')) {
+        for (const method of Object.values(document.paths[pathKey] ?? {})) {
+          if (method && typeof method === 'object') {
+            (method as { security?: unknown[] }).security = [];
+          }
+        }
+      }
+    }
     SwaggerModule.setup(swaggerPath, app, document, {
       customSiteTitle: SWAGGER_BRAND_META.siteTitle,
       customfavIcon: brandFaviconUrl,

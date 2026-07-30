@@ -1,5 +1,5 @@
 import { Global, Module } from '@nestjs/common';
-import { APP_INTERCEPTOR } from '@nestjs/core';
+import { APP_GUARD, APP_INTERCEPTOR } from '@nestjs/core';
 import { JwtModule } from '@nestjs/jwt';
 import { ConfigModule, ConfigService } from '@nestjs/config';
 import { DatabaseModule } from '../../database/database.module';
@@ -35,6 +35,10 @@ import { NestTokenRefreshInterceptor } from './nest-token-refresh.interceptor';
     ApiKeyService,
     RefreshTokenStore,
     ApiChannelService,
+    {
+      provide: APP_GUARD,
+      useClass: NestAuthGuard,
+    },
     {
       provide: APP_INTERCEPTOR,
       useClass: NestTokenRefreshInterceptor,
