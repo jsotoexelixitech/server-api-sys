@@ -57,3 +57,10 @@ npm install @jsotoexelixitech/nest-api-sdk
 Mismo `.npmrc` en `~/.npmrc` del usuario que ejecuta `npm install` para paquetes partner publicados.
 
 El monorepo usa `file:packages/nest-api-sdk` en desarrollo; integradores usan la versión de GitHub Packages.
+
+### Instalar paquete partner externo
+
+1. `~/.npmrc` con scope del integrador + PAT `read:packages`.
+2. `npm install @ORG/partner-api-xxx@VERSION` en `server-api-sys`.
+3. `.env`: `PARTNER_PACKAGES=@ORG/partner-api-xxx` — **no** en `ecosystem.config.js` (PM2 pisa dotenv).
+4. `bash deploy.sh` → log: `Módulo partner cargado: ...`
