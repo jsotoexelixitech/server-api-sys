@@ -871,43 +871,67 @@ async function bootstrap(): Promise<void> {
 
         /* ── Respuestas ────────────────────────────────────────── */
         .swagger-ui .responses-wrapper { padding: 0 16px 16px; }
-        .swagger-ui .response-col_status { font-weight: 800 !important; font-size: 0.92rem !important; }
+        .swagger-ui .response-col_status { font-weight: 800 !important; font-size: 0.92rem !important; color: #374151 !important; }
         .swagger-ui .response .response-col_status code {
           padding: 2px 10px; border-radius: 20px; font-size: 0.78rem; font-weight: 700;
         }
         .swagger-ui .response:has(.response-col_status code:contains('2')) .response-col_status code {
           background: #d1fae5; color: #065f46;
         }
-        /* Highlight de código JSON en respuesta */
-        .swagger-ui .highlight-code pre {
-          background: #0F1A5A !important;
-          border-radius: 8px !important;
-          font-size: 0.8rem !important;
-          padding: 14px !important;
-          color: #e2e8f0 !important;
-        }
-        /* microlight global: texto oscuro en zonas claras */
-        .swagger-ui .microlight { color: #374151 !important; }
-        /* headers/body de respuesta: fondo oscuro → texto claro (evitar azul #162a7f ilegible) */
-        .swagger-ui .highlight-code .microlight,
-        .swagger-ui .highlight-code pre .microlight,
-        .swagger-ui .highlight-code pre code {
-          color: #e2e8f0 !important;
-          background: transparent !important;
-        }
+
+        /* ── Paneles oscuros (Request URL, Curl, JSON, headers) ──
+           Regla: fondo ${LA_MUNDIAL_BRAND.blue} → texto claro #e2e8f0 siempre.
+           Evita syntax-highlight azul oscuro ilegible sobre fondo oscuro. */
+        .swagger-ui .request-url,
+        .swagger-ui .curl-command,
+        .swagger-ui .highlight-code,
         .swagger-ui .responses-table .response-col_description pre,
         .swagger-ui .response-col_description__inner pre {
-          background: #0F1A5A !important;
-          color: #e2e8f0 !important;
+          background: ${LA_MUNDIAL_BRAND.blue} !important;
           border-radius: 8px !important;
+          border: 1px solid rgba(255,255,255,0.1) !important;
+          color: #e2e8f0 !important;
+        }
+        .swagger-ui .request-url pre,
+        .swagger-ui .request-url .microlight,
+        .swagger-ui .curl-command pre,
+        .swagger-ui .curl-command .curl,
+        .swagger-ui .curl-command .microlight,
+        .swagger-ui .highlight-code pre,
+        .swagger-ui .highlight-code .microlight,
+        .swagger-ui .responses-table .response-col_description pre,
+        .swagger-ui .response-col_description__inner pre {
+          background: transparent !important;
+          color: #e2e8f0 !important;
+          font-size: 0.82rem !important;
           padding: 12px 14px !important;
+          margin: 0 !important;
+          word-break: break-all !important;
+          line-height: 1.55 !important;
+        }
+        .swagger-ui .request-url .microlight *,
+        .swagger-ui .curl-command .microlight *,
+        .swagger-ui .highlight-code .microlight *,
+        .swagger-ui .request-url pre *,
+        .swagger-ui .curl-command pre *,
+        .swagger-ui .highlight-code pre *,
+        .swagger-ui .responses-table .response-col_description pre *,
+        .swagger-ui .response-col_description__inner pre * {
+          color: #e2e8f0 !important;
+          background: transparent !important;
+          text-shadow: none !important;
+        }
+        /* Zonas claras: microlight legible sobre blanco */
+        .swagger-ui .model-box .microlight,
+        .swagger-ui .model .microlight,
+        .swagger-ui .markdown .microlight,
+        .swagger-ui .info .microlight {
+          color: #374151 !important;
         }
 
-        /* ── Curl ──────────────────────────────────────────────── */
-        .swagger-ui .curl-command { background: #0F1A5A !important; border-radius: 8px !important; }
-        .swagger-ui .curl-command .curl { color: rgba(46,109,191,0.9) !important; font-size: 0.8rem !important; }
+        /* ── Curl (copy btn) ───────────────────────────────────── */
         .swagger-ui .copy-to-clipboard {
-          background: #E84F51 !important;
+          background: ${LA_MUNDIAL_BRAND.red} !important;
           border-radius: 4px !important;
           border: none !important;
         }
