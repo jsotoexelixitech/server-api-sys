@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
-  <title>nest-api · API Keys</title>
+  <title>nest-api · Tokens API</title>
   <link rel="icon" href="/assets/brand/favicon-64.png" type="image/png" />
   <link rel="preconnect" href="https://fonts.googleapis.com" />
   <link href="https://fonts.googleapis.com/css2?family=Poppins:wght@400;500;600;700&display=swap" rel="stylesheet" />
@@ -148,7 +148,7 @@
       <div class="brand">
         <img src="/assets/brand/logo-lamundial-sidebar.png" alt="La Mundial" onerror="this.style.display='none'" />
         <div class="brand-text">
-          <h1>nest-api · API Keys</h1>
+          <h1>nest-api · Tokens de acceso</h1>
           <p>Gestión de tokens de acceso a la API · PostgreSQL nest_auth · srv001 QA</p>
         </div>
       </div>
@@ -183,7 +183,7 @@
 
     <nav class="tabs" role="tablist">
       <button type="button" class="tab active" data-tab="keys">📋 Keys registradas</button>
-      <button type="button" class="tab" data-tab="create">➕ Crear key (asistente)</button>
+      <button type="button" class="tab" data-tab="create">➕ Crear token API</button>
       <button type="button" class="tab" data-tab="guide">📖 Guía scopes &amp; auth</button>
     </nav>
 
@@ -207,26 +207,28 @@
     <section class="panel" id="panel-create">
       <div class="card locked" id="wizardCard">
         <div class="card-head">
-          <div><h2>Asistente — nueva API key</h2><span class="sub">3 pasos: identidad → permisos → confirmar</span></div>
+          <div><h2>Nueva API key</h2><span class="sub">Token de acceso a nest-api · paso 1 de 3</span></div>
         </div>
 
         <div class="wizard-steps">
-          <div class="wizard-step active" data-step="1"><div class="wizard-step-num">1</div><span class="wizard-step-label">Identidad</span></div>
+          <div class="wizard-step active" data-step="1"><div class="wizard-step-num">1</div><span class="wizard-step-label">Datos</span></div>
           <div class="wizard-step" data-step="2"><div class="wizard-step-num">2</div><span class="wizard-step-label">Permisos</span></div>
           <div class="wizard-step" data-step="3"><div class="wizard-step-num">3</div><span class="wizard-step-label">Confirmar</span></div>
         </div>
 
         <!-- Paso 1 -->
         <div class="wizard-pane active" id="step1">
-          <p style="font-size:.82rem;color:var(--muted);margin:0 0 .75rem">Token de acceso a <strong>nest-api</strong> para un cliente, integrador o servicio. Elija un perfil de uso; el nombre y los permisos se preconfiguran.</p>
-          <div class="preset-grid" id="presetGrid"></div>
+          <div class="catalog-note">
+            Cree un <strong>token de uso</strong> para quien consuma nest-api (integrador, partner, servicio interno).
+            El nombre identifica al cliente; los <strong>permisos opcionales</strong> se eligen en el paso 2.
+          </div>
           <div class="row" style="margin-top:1rem">
             <div>
-              <label class="field-label" for="keyName">Nombre de la key (cliente / uso)</label>
-              <input id="keyName" type="text" placeholder="ej. acme-integrador QA, app-interna-prod" />
+              <label class="field-label" for="keyName">Nombre del token / cliente</label>
+              <input id="keyName" type="text" placeholder="ej. esanchez-partner QA, mi-app-prod" />
             </div>
             <div>
-              <label class="field-label" for="cproductor">cproductor</label>
+              <label class="field-label" for="cproductor">cproductor (La Mundial)</label>
               <input id="cproductor" type="number" value="80080" />
             </div>
           </div>
@@ -300,17 +302,10 @@
 
   <script>
     const API = '/api/v1/admin';
-    const PRESETS = [
-      { id: 'catalog', title: 'Solo catálogos', desc: 'Consulta INMA, valrep, estados, ciudades y datos de referencia.', name: 'cliente-catalogos QA', scopes: [] },
-      { id: 'emission', title: 'Emisión y cobranza', desc: 'Emite pólizas (auto/persona) y registra cobros.', name: 'cliente-emision QA', scopes: ['emissions:auto', 'emissions:person', 'collection:write'] },
-      { id: 'partner', title: 'Integrador partner', desc: 'Token para consumidores externos (Swagger partner, health, APIs propias).', name: 'partner-integrador QA', scopes: [] },
-      { id: 'custom', title: 'Personalizado', desc: 'Nombre y permisos manuales en el paso 2.', name: '', scopes: [] },
-    ];
     let scopesCatalog = [];
     let keysCache = [];
     let connected = false;
     let wizardStep = 1;
-    let selectedPreset = PRESETS[0];
 
     function token() { return localStorage.getItem('nest_admin_token') || ''; }
 
@@ -407,29 +402,6 @@
       });
     }
 
-    function renderPresets() {
-      document.getElementById('presetGrid').innerHTML = PRESETS.map((p) => `
-        <div class="preset-card ${p.id === selectedPreset.id ? 'selected' : ''}" data-preset="${p.id}">
-          <h3>${escapeHtml(p.title)}</h3>
-          <p>${escapeHtml(p.desc)}</p>
-          <div class="preset-scopes">${p.scopes.length ? formatScopes(p.scopes) : '<span class="chip muted">Sin scopes</span>'}</div>
-        </div>`).join('');
-      document.querySelectorAll('.preset-card').forEach((el) => {
-        el.addEventListener('click', () => {
-          selectedPreset = PRESETS.find((p) => p.id === el.dataset.preset) || PRESETS[0];
-          renderPresets();
-          if (selectedPreset.name) document.getElementById('keyName').value = selectedPreset.name;
-          applyPresetScopes();
-        });
-      });
-    }
-
-    function applyPresetScopes() {
-      document.querySelectorAll('input[name=scope]').forEach((cb) => {
-        cb.checked = selectedPreset.scopes.includes(cb.value);
-      });
-    }
-
     function renderScopeDetails() {
       const box = document.getElementById('scopeDetailList');
       const filtered = scopesCatalog.filter((s) => s.id !== 'admin:keys');
@@ -445,7 +417,6 @@
           </label>
           <ul class="scope-routes">${(s.routes || []).map((r) => `<li>${escapeHtml(r)}</li>`).join('')}</ul>
         </div>`).join('');
-      applyPresetScopes();
     }
 
     function renderGuideScopes() {
@@ -578,8 +549,6 @@
       catch { showToast('Copie manualmente.'); }
     }
 
-    renderPresets();
-    document.getElementById('keyName').value = selectedPreset.name;
     setConnected(false);
     setWizardStep(1);
 

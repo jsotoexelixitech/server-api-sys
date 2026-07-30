@@ -80,7 +80,15 @@ async function bootstrap(): Promise<void> {
   if (publicPaths.prefix) {
     app.getHttpAdapter().getInstance().use(`${publicPaths.prefix}/assets`, staticAssets);
   }
-  app.getHttpAdapter().getInstance().use('/admin', express.static(join(assetsDir, 'admin'), { index: 'index.html' }));
+  app.getHttpAdapter().getInstance().use(
+    '/admin',
+    express.static(join(assetsDir, 'admin'), {
+      index: 'index.html',
+      setHeaders: (res) => {
+        res.setHeader('Cache-Control', 'no-cache, no-store, must-revalidate');
+      },
+    }),
+  );
 
   const brandLogoUrl = publicPaths.brandAssetUrl('brand/logo-lamundial-sidebar.png');
   const brandFaviconUrl = publicPaths.brandAssetUrl('brand/favicon-64.png');
