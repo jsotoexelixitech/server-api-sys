@@ -11,6 +11,7 @@ export interface ApiKeyRecord {
   id: string;
   name: string;
   keyPrefix: string;
+  docsSlug: string | null;
   scopes: string[];
   active: boolean;
   cproductor: number | null;
@@ -56,27 +57,65 @@ export class ApiKeyService {
     return `nest_${randomBytes(24).toString('hex')}`;
   }
 
+  generateDocsSlug(): string {
+    return `doc_${randomBytes(18).toString('hex')}`;
+  }
+
   listKeys(): Promise<ApiKeyRecord[]> {
     if (!this.isEnabled()) return Promise.resolve([]);
-    return this.prisma.apiKey.findMany({
-      orderBy: { createdAt: 'desc' },
-      select: {
-        id: true,
-        name: true,
-        keyPrefix: true,
-        scopes: true,
-        active: true,
-        cproductor: true,
-        ccanalalt: true,
-        cscanalalt: true,
-        ctipocanal: true,
-        xcanalVenta: true,
-        createdAt: true,
-        expiresAt: true,
-        lastUsedAt: true,
-        revokedAt: true,
-      },
-    });
+    return this.prisma.apiKey
+      .findMany({
+        orderBy: { createdAt: 'desc' },
+        select: {
+          id: true,
+          name: true,
+          keyPrefix: true,
+          docsSlug: true,
+          scopes: true,
+          active: true,
+          cproductor: true,
+          ccanalalt: true,
+          cscanalalt: true,
+          ctipocanal: true,
+          xcanalVenta: true,
+          createdAt: true,
+          expiresAt: true,
+          lastUsedAt: true,
+          revokedAt: true,
+        },
+      })
+      .then(async (rows) => {
+        const enriched: ApiKeyRecord[] = [];
+        for (const row of rows) {
+          if (!row.docsSlug && row.active) {
+            const updated = await this.prisma.apiKey.update({
+              where: { id: row.id },
+              data: { docsSlug: this.generateDocsSlug() },
+              select: {
+                id: true,
+                name: true,
+                keyPrefix: true,
+                docsSlug: true,
+                scopes: true,
+                active: true,
+                cproductor: true,
+                ccanalalt: true,
+                cscanalalt: true,
+                ctipocanal: true,
+                xcanalVenta: true,
+                createdAt: true,
+                expiresAt: true,
+                lastUsedAt: true,
+                revokedAt: true,
+              },
+            });
+            enriched.push(updated);
+          } else {
+            enriched.push(row);
+          }
+        }
+        return enriched;
+      });
   }
 
   getScopeCatalog() {
@@ -97,12 +136,14 @@ export class ApiKeyService {
     const plainKey = this.generatePlainKey();
     const keyHash = this.hashKey(plainKey);
     const keyPrefix = plainKey.slice(0, 12);
+    const docsSlug = this.generateDocsSlug();
 
     const row = await this.prisma.apiKey.create({
       data: {
         name,
         keyPrefix,
         keyHash,
+        docsSlug,
         scopes,
         cproductor: input.cproductor ?? null,
         ccanalalt: input.ccanalalt ?? null,
@@ -169,6 +210,19 @@ export class ApiKeyService {
       data: { lastUsedAt: new Date() },
     });
 
+    return row;
+  }
+
+  async findByDocsSlug(docsSlug: string): Promise<ApiKeyRecord | null> {
+    if (!this.isEnabled()) return null;
+    const slug = String(docsSlug ?? '').trim();
+    if (!slug) return null;
+
+    const row = await this.prisma.apiKey.findUnique({
+      where: { docsSlug: slug },
+    });
+    if (!row || !row.active || row.revokedAt) return null;
+    if (row.expiresAt && row.expiresAt.getTime() < Date.now()) return null;
     return row;
   }
 

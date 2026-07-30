@@ -28,6 +28,8 @@ import {
   parsePartnerPackageNames,
 } from './partner/partner-loader';
 import { readPartnerPackagesConfig } from './partner/partner-env';
+import { OpenApiDocumentStore } from './modules/docs/open-api-document.store';
+import { joinPublicPath } from './common/config/public-path';
 
 function resolveBrandAssetsDir(): string {
   const candidates = [
@@ -153,6 +155,7 @@ async function bootstrap(): Promise<void> {
       .addTag(SWAGGER_TAGS.DOCUMENTS, SWAGGER_TAG_DESCRIPTIONS[SWAGGER_TAGS.DOCUMENTS])
       .addTag(SWAGGER_TAGS.PERSONAS, SWAGGER_TAG_DESCRIPTIONS[SWAGGER_TAGS.PERSONAS])
       .addTag(SWAGGER_TAGS.CLIENT, SWAGGER_TAG_DESCRIPTIONS[SWAGGER_TAGS.CLIENT])
+      .addTag(SWAGGER_TAGS.PARTNER, SWAGGER_TAG_DESCRIPTIONS[SWAGGER_TAGS.PARTNER])
       .build();
 
     const document = SwaggerModule.createDocument(app, swaggerConfig);
@@ -166,12 +169,12 @@ async function bootstrap(): Promise<void> {
         }
       }
     }
+    app.get(OpenApiDocumentStore).setDocument(document);
+
     SwaggerModule.setup(swaggerPath, app, document, {
       customSiteTitle: SWAGGER_BRAND_META.siteTitle,
       customfavIcon: brandFaviconUrl,
       customCssUrl: LA_MUNDIAL_BRAND.fontsCss,
-      jsonDocumentUrl: `${swaggerPath}-json`,
-      yamlDocumentUrl: `${swaggerPath}-yaml`,
       customJsStr: `
 (function() {
   /* ─────────────────────────────────────────────────────────
@@ -1134,6 +1137,34 @@ async function bootstrap(): Promise<void> {
         tagsSorter: createBrowserTagsSorter(),
       },
     });
+
+    const httpServer = app.getHttpAdapter().getInstance();
+    const denyPublicSpec = (_req: express.Request, res: express.Response) => {
+      res.status(404).json({
+        statusCode: 404,
+        message:
+          'OpenAPI completo restringido. Use el enlace Swagger personalizado de su token en /admin/.',
+      });
+    };
+    for (const suffix of ['-json', '-yaml']) {
+      httpServer.get(`/${swaggerPath}${suffix}`, denyPublicSpec);
+      if (publicPaths.prefix) {
+        httpServer.get(`${publicPaths.prefix}/${swaggerPath}${suffix}`, denyPublicSpec);
+      }
+    }
+
+    const clientDocsHtml = join(assetsDir, 'docs-client', 'index.html');
+    const serveClientDocs = (_req: express.Request, res: express.Response) => {
+      res.setHeader('Cache-Control', 'no-cache, no-store, must-revalidate');
+      res.sendFile(clientDocsHtml);
+    };
+    httpServer.get(`/${swaggerPath}/client/:docsSlug`, serveClientDocs);
+    if (publicPaths.prefix) {
+      httpServer.get(
+        joinPublicPath(publicPaths.prefix, swaggerPath, 'client/:docsSlug'),
+        serveClientDocs,
+      );
+    }
   }
 
   await app.listen(port);
@@ -1143,6 +1174,7 @@ async function bootstrap(): Promise<void> {
   if (swaggerPath) {
     logger.log(`Swagger docs:  http://localhost:${port}/${swaggerPath}`);
     logger.log(`Admin keys UI: http://localhost:${port}/admin/`);
+    logger.log(`Swagger por token: http://localhost:${port}/${swaggerPath}/client/{docsSlug}`);
     if (publicPaths.prefix) {
       logger.log(
         `Swagger HTTPS: ${publicPaths.publicBaseUrl}/${swaggerPath.replace(/^\/+/, '')}`,

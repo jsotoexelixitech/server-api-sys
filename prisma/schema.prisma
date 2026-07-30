@@ -17,6 +17,7 @@ model ApiKey {
   name        String    @db.VarChar(120)
   keyPrefix   String    @map("key_prefix") @db.VarChar(16)
   keyHash     String    @unique @map("key_hash") @db.VarChar(64)
+  docsSlug    String?   @unique @map("docs_slug") @db.VarChar(48)
   scopes      String[]  @default([])
   active      Boolean   @default(true)
   cproductor  Int?      @map("cproductor")

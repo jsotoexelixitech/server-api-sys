@@ -17,6 +17,7 @@ import { PartnerHostModule } from './partner/partner-host.module';
 import { PartnerIntegrationModule } from './partner/partner-integration.module';
 import { AuthModule } from './modules/auth/auth.module';
 import { AdminModule } from './modules/admin/admin.module';
+import { DocsModule } from './modules/docs/docs.module';
 import { PrismaModule } from './database/prisma/prisma.module';
 
 @Module({
@@ -44,6 +45,7 @@ import { PrismaModule } from './database/prisma/prisma.module';
     DocumentsModule,
     CollectionModule,
     AdminModule,
+    DocsModule,
     PartnerHostModule,
     PartnerIntegrationModule,
   ],

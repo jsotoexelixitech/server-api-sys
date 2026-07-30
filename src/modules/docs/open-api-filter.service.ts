@@ -1,0 +1,131 @@
+import { Injectable, NotFoundException } from '@nestjs/common';
+import { OpenAPIObject } from '@nestjs/swagger/dist/interfaces';
+import { scopeMatches } from '../auth/scopes/nest-auth-scopes.constants';
+import { buildScopeCatalog } from '../auth/scopes/scope-catalog.registry';
+import { OpenApiDocumentStore } from './open-api-document.store';
+
+const HTTP_METHODS = new Set([
+  'get',
+  'post',
+  'put',
+  'patch',
+  'delete',
+  'head',
+  'options',
+]);
+
+const ALWAYS_VISIBLE_PREFIXES = [
+  '/api/v1/auth/token',
+  '/api/v1/auth/refresh',
+];
+
+const ALWAYS_HIDDEN_PREFIXES = ['/api/v1/admin'];
+
+@Injectable()
+export class OpenApiFilterService {
+  constructor(private readonly store: OpenApiDocumentStore) {}
+
+  filterByScopes(grantedScopes: string[], keyName?: string): OpenAPIObject {
+    const source = this.store.getDocument();
+    const scopeIndex = this.buildRouteScopeIndex();
+    const filteredPaths: NonNullable<OpenAPIObject['paths']> = {};
+    const visibleTags = new Set<string>();
+
+    for (const [pathKey, pathItem] of Object.entries(source.paths ?? {})) {
+      if (!pathItem || typeof pathItem !== 'object') continue;
+      if (this.isAlwaysHidden(pathKey)) continue;
+
+      const nextPathItem: Record<string, unknown> = {};
+
+      for (const [method, operation] of Object.entries(pathItem)) {
+        if (!HTTP_METHODS.has(method)) {
+          nextPathItem[method] = operation;
+          continue;
+        }
+        if (!operation || typeof operation !== 'object') continue;
+
+        if (
+          this.isAlwaysVisible(pathKey) ||
+          this.canViewOperation(grantedScopes, method, pathKey, scopeIndex)
+        ) {
+          nextPathItem[method] = operation;
+          const tags = (operation as { tags?: string[] }).tags;
+          tags?.forEach((tag) => visibleTags.add(tag));
+        }
+      }
+
+      if (Object.keys(nextPathItem).length > 0) {
+        filteredPaths[pathKey] = nextPathItem as typeof pathItem;
+      }
+    }
+
+    const titleSuffix = keyName ? ` — ${keyName}` : '';
+    return {
+      ...source,
+      info: {
+        ...source.info,
+        title: `${source.info?.title ?? 'nest-api'}${titleSuffix}`,
+        description:
+          'Documentación filtrada según los scopes de su token. Solo aparecen los endpoints autorizados.',
+      },
+      paths: filteredPaths,
+      tags: (source.tags ?? []).filter((tag) => visibleTags.has(tag.name)),
+    };
+  }
+
+  private buildRouteScopeIndex(): Map<string, string> {
+    const index = new Map<string, string>();
+    for (const entry of buildScopeCatalog()) {
+      for (const route of entry.routes) {
+        const space = route.indexOf(' ');
+        if (space <= 0) continue;
+        const method = route.slice(0, space).toUpperCase();
+        const path = this.normalizePath(route.slice(space + 1));
+        index.set(`${method} ${path}`, String(entry.id));
+      }
+    }
+    return index;
+  }
+
+  private canViewOperation(
+    grantedScopes: string[],
+    method: string,
+    pathKey: string,
+    scopeIndex: Map<string, string>,
+  ): boolean {
+    const normalizedPath = this.normalizePath(pathKey);
+    const lookupKey = `${method.toUpperCase()} ${normalizedPath}`;
+    const requiredScope =
+      scopeIndex.get(lookupKey) ?? this.inferPartnerScope(normalizedPath);
+
+    if (!requiredScope) return true;
+    return scopeMatches(grantedScopes, requiredScope);
+  }
+
+  private inferPartnerScope(path: string): string | undefined {
+    const match = path.match(/\/api\/v1\/partner\/([^/]+)/i);
+    if (!match) return undefined;
+    return `partner:${match[1]}`;
+  }
+
+  private isAlwaysVisible(path: string): boolean {
+    const normalized = this.normalizePath(path);
+    return ALWAYS_VISIBLE_PREFIXES.some((prefix) => normalized.startsWith(prefix));
+  }
+
+  private isAlwaysHidden(path: string): boolean {
+    const normalized = this.normalizePath(path);
+    return ALWAYS_HIDDEN_PREFIXES.some((prefix) => normalized.startsWith(prefix));
+  }
+
+  private normalizePath(path: string): string {
+    const withLeading = path.startsWith('/') ? path : `/${path}`;
+    return withLeading.replace(/\/{2,}/g, '/');
+  }
+}
+
+export class DocsViewNotFoundError extends NotFoundException {
+  constructor() {
+    super('Enlace de documentación inválido o token revocado.');
+  }
+}

@@ -1,0 +1,201 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>nest-api — Documentación</title>
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/swagger-ui-dist@5/swagger-ui.css" />
+  <style>
+    :root {
+      --blue: #0F1A5A;
+      --red: #E84F51;
+      --bg: #f4f6fb;
+    }
+    * { box-sizing: border-box; }
+    body {
+      margin: 0;
+      font-family: "Segoe UI", system-ui, sans-serif;
+      background: var(--bg);
+      color: #1f2937;
+    }
+    .topbar {
+      background: linear-gradient(135deg, var(--blue), #1a3278);
+      color: #fff;
+      padding: 1rem 1.25rem;
+      display: flex;
+      flex-wrap: wrap;
+      gap: 1rem;
+      align-items: center;
+      justify-content: space-between;
+      box-shadow: 0 2px 12px rgba(15, 26, 90, 0.18);
+    }
+    .topbar h1 {
+      margin: 0;
+      font-size: 1.05rem;
+      font-weight: 700;
+    }
+    .topbar p {
+      margin: .25rem 0 0;
+      font-size: .78rem;
+      opacity: .85;
+    }
+    .auth-box {
+      display: flex;
+      flex-wrap: wrap;
+      gap: .5rem;
+      align-items: center;
+    }
+    .auth-box input {
+      min-width: 220px;
+      padding: .55rem .75rem;
+      border: 1px solid rgba(255,255,255,.25);
+      border-radius: 8px;
+      background: rgba(255,255,255,.12);
+      color: #fff;
+    }
+    .auth-box input::placeholder { color: rgba(255,255,255,.65); }
+    .auth-box button {
+      border: none;
+      border-radius: 8px;
+      padding: .55rem .9rem;
+      background: var(--red);
+      color: #fff;
+      font-weight: 600;
+      cursor: pointer;
+    }
+    .auth-box button.secondary {
+      background: rgba(255,255,255,.15);
+    }
+    #status {
+      font-size: .75rem;
+      opacity: .9;
+    }
+    #swagger-ui { max-width: 1400px; margin: 0 auto; padding: 0 12px 48px; }
+    .error-box {
+      margin: 2rem auto;
+      max-width: 640px;
+      background: #fff;
+      border: 1px solid #fecaca;
+      border-radius: 12px;
+      padding: 1.25rem;
+      color: #991b1b;
+    }
+  </style>
+</head>
+<body>
+  <header class="topbar">
+    <div>
+      <h1>La Mundial · nest-api</h1>
+      <p>Swagger filtrado según los scopes de su token</p>
+    </div>
+    <div class="auth-box">
+      <input id="apiKeyInput" type="password" placeholder="NEST_API_KEY (para Try it out)" autocomplete="off" />
+      <button type="button" id="btnConnect">Conectar</button>
+      <button type="button" id="btnClear" class="secondary">Olvidar key</button>
+      <span id="status"></span>
+    </div>
+  </header>
+  <div id="errorBox" class="error-box hidden" style="display:none"></div>
+  <div id="swagger-ui"></div>
+
+  <script src="https://cdn.jsdelivr.net/npm/swagger-ui-dist@5/swagger-ui-bundle.js"></script>
+  <script>
+    const STORAGE_KEY = 'nest_api_key_for_docs';
+
+    function getDocsSlug() {
+      const parts = window.location.pathname.split('/').filter(Boolean);
+      return parts[parts.length - 1] || '';
+    }
+
+    function detectApiV1Base() {
+      const path = window.location.pathname;
+      const marker = '/docs/client/';
+      const idx = path.indexOf(marker);
+      const prefix = idx >= 0 ? path.slice(0, idx) : '';
+      return window.location.origin + prefix + '/api/v1';
+    }
+
+    function setStatus(msg) {
+      document.getElementById('status').textContent = msg || '';
+    }
+
+    function showError(msg) {
+      const box = document.getElementById('errorBox');
+      box.style.display = 'block';
+      box.textContent = msg;
+    }
+
+    async function loadSpec() {
+      const slug = getDocsSlug();
+      if (!slug || !slug.startsWith('doc_')) {
+        showError('Enlace inválido. Solicite la URL Swagger en el panel /admin/.');
+        return;
+      }
+
+      const res = await fetch(`${detectApiV1Base()}/docs/view/${encodeURIComponent(slug)}`);
+      const body = await res.json().catch(() => ({}));
+      if (!res.ok) {
+        showError(body.message || 'No se pudo cargar la documentación.');
+        return;
+      }
+
+      const ui = SwaggerUIBundle({
+        spec: body,
+        dom_id: '#swagger-ui',
+        deepLinking: true,
+        persistAuthorization: true,
+        filter: true,
+        tryItOutEnabled: true,
+        presets: [SwaggerUIBundle.presets.apis, SwaggerUIBundle.SwaggerUIStandalonePreset],
+        layout: 'BaseLayout',
+      });
+
+      window.swaggerUi = ui;
+      const savedKey = sessionStorage.getItem(STORAGE_KEY);
+      if (savedKey) {
+        document.getElementById('apiKeyInput').value = savedKey;
+        authorizeSwagger(savedKey, ui);
+      }
+    }
+
+    function authorizeSwagger(apiKey, ui) {
+      ui.preauthorizeApiKey('apikey', apiKey);
+      setStatus('Key cargada para Try it out');
+    }
+
+    async function connectKey() {
+      const apiKey = document.getElementById('apiKeyInput').value.trim();
+      if (!apiKey) return setStatus('Ingrese NEST_API_KEY');
+
+      try {
+        const res = await fetch(`${detectApiV1Base()}/auth/token`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ grant_type: 'api_key', apikey: apiKey }),
+        });
+        const body = await res.json().catch(() => ({}));
+        const data = body.data || body;
+        if (!res.ok) throw new Error(data.message || 'Key inválida');
+
+        sessionStorage.setItem(STORAGE_KEY, apiKey);
+        if (window.swaggerUi) {
+          authorizeSwagger(apiKey, window.swaggerUi);
+          window.swaggerUi.preauthorizeBearer('bearer', data.access_token);
+        }
+        setStatus('Conectado · token activo');
+      } catch (err) {
+        setStatus(err.message || 'Error de conexión');
+      }
+    }
+
+    document.getElementById('btnConnect').addEventListener('click', connectKey);
+    document.getElementById('btnClear').addEventListener('click', () => {
+      sessionStorage.removeItem(STORAGE_KEY);
+      document.getElementById('apiKeyInput').value = '';
+      setStatus('');
+    });
+
+    loadSpec().catch((err) => showError(err.message || 'Error al iniciar Swagger'));
+  </script>
+</body>
+</html>

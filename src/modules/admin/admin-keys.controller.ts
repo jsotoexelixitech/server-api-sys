@@ -11,6 +11,7 @@ import { ApiExcludeController, ApiOperation, ApiTags } from '@nestjs/swagger';
 import { SkipEnvelope } from '../../common/decorators/skip-envelope.decorator';
 import { Public } from '../auth/decorators/public.decorator';
 import { ApiKeyService } from '../auth/api-key.service';
+import { DocsUrlService } from '../docs/docs-url.service';
 import { AdminTokenGuard } from './admin-token.guard';
 import { CreateAdminKeyDto, UpdateAdminKeyDto } from './dto/admin-key.dto';
 
@@ -21,7 +22,19 @@ import { CreateAdminKeyDto, UpdateAdminKeyDto } from './dto/admin-key.dto';
 @SkipEnvelope()
 @UseGuards(AdminTokenGuard)
 export class AdminKeysController {
-  constructor(private readonly apiKeys: ApiKeyService) {}
+  constructor(
+    private readonly apiKeys: ApiKeyService,
+    private readonly docsUrls: DocsUrlService,
+  ) {}
+
+  private withDocsUrl<T extends { docsSlug?: string | null }>(key: T) {
+    return {
+      ...key,
+      docsUrl: key.docsSlug
+        ? this.docsUrls.buildClientDocsUrl(key.docsSlug)
+        : null,
+    };
+  }
 
   @Get('scopes')
   @ApiOperation({ summary: 'Catálogo de scopes disponibles' })
@@ -33,7 +46,7 @@ export class AdminKeysController {
   @ApiOperation({ summary: 'Listar API keys (sin secreto)' })
   async listKeys() {
     const keys = await this.apiKeys.listKeys();
-    return { keys };
+    return { keys: keys.map((key) => this.withDocsUrl(key)) };
   }
 
   @Post('keys')
@@ -52,7 +65,10 @@ export class AdminKeysController {
     return {
       message: 'Guarde plainKey — no se volverá a mostrar.',
       plainKey: result.plainKey,
-      key: result.key,
+      key: this.withDocsUrl(result.key),
+      docsUrl: result.key.docsSlug
+        ? this.docsUrls.buildClientDocsUrl(result.key.docsSlug)
+        : null,
     };
   }
 

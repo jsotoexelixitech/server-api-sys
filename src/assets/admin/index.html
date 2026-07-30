@@ -196,8 +196,8 @@
         </div>
         <div class="table-wrap">
           <table>
-            <thead><tr><th>Cliente</th><th>Canal / productor</th><th>Prefijo</th><th>Scopes</th><th>Estado</th><th>Último uso</th><th></th></tr></thead>
-            <tbody id="keysBody"><tr class="empty-row"><td colspan="7">Conecte para ver las keys</td></tr></tbody>
+            <thead><tr><th>Cliente</th><th>Canal / productor</th><th>Prefijo</th><th>Scopes</th><th>Swagger</th><th>Estado</th><th>Último uso</th><th></th></tr></thead>
+            <tbody id="keysBody"><tr class="empty-row"><td colspan="8">Conecte para ver las keys</td></tr></tbody>
           </table>
         </div>
       </div>
@@ -268,7 +268,7 @@
         <!-- Paso 3 -->
         <div class="wizard-pane" id="step3">
           <div class="summary-box" id="summaryBox"></div>
-          <p style="font-size:.78rem;color:var(--muted)">Al crear, recibirá el <strong>plainKey</strong> (una sola vez) y el bloque .env para pegar en el servidor.</p>
+          <p style="font-size:.78rem;color:var(--muted)">Al crear, recibirá el <strong>plainKey</strong> (una sola vez), el enlace Swagger filtrado y el bloque .env.</p>
         </div>
 
         <div class="wizard-nav">
@@ -283,6 +283,9 @@
           <div class="field-label" style="color:rgba(255,255,255,.7)">NEST_API_KEY</div>
           <div class="code-block" id="plainKeyText"></div>
           <div class="copy-row"><button type="button" id="btnCopyKey">Copiar key</button></div>
+          <div class="field-label" style="color:rgba(255,255,255,.7);margin-top:1rem">Swagger (solo endpoints de este token)</div>
+          <div class="code-block" id="docsUrlText"></div>
+          <div class="copy-row"><button type="button" id="btnCopyDocs">Copiar enlace Swagger</button></div>
           <div class="field-label" style="color:rgba(255,255,255,.7);margin-top:1rem">Variables en el .env del consumidor de la API</div>
           <div class="code-block" id="envSnippet"></div>
           <div class="copy-row">
@@ -408,15 +411,20 @@
       return Number.isFinite(n) ? n : undefined;
     }
 
+    function formatDocsLink(url) {
+      if (!url) return '<span style="color:#9ca3af">—</span>';
+      return `<a href="${escapeHtml(url)}" target="_blank" rel="noopener" style="font-size:.72rem;color:var(--blue)">Abrir Swagger</a>`;
+    }
+
     function renderKeys(keys) {
       updateStats(keys);
       const tbody = document.getElementById('keysBody');
       if (!connected || !token()) {
-        tbody.innerHTML = '<tr class="empty-row"><td colspan="7">🔐 Conecte con el token de administración</td></tr>';
+        tbody.innerHTML = '<tr class="empty-row"><td colspan="8">🔐 Conecte con el token de administración</td></tr>';
         return;
       }
       if (!keys.length) {
-        tbody.innerHTML = '<tr class="empty-row"><td colspan="7">📭 No hay keys — use «Crear token API»</td></tr>';
+        tbody.innerHTML = '<tr class="empty-row"><td colspan="8">📭 No hay keys — use «Crear token API»</td></tr>';
         return;
       }
       tbody.innerHTML = keys.map((k) => `
@@ -425,6 +433,7 @@
           <td style="font-size:.75rem">${formatCanal(k)}</td>
           <td><span class="key-prefix">${escapeHtml(k.keyPrefix)}…</span></td>
           <td>${formatScopes(k.scopes)}</td>
+          <td>${formatDocsLink(k.docsUrl)}</td>
           <td><span class="badge ${k.active ? 'ok' : 'off'}">${k.active ? 'Activa' : 'Revocada'}</span></td>
           <td style="font-size:.78rem">${formatDate(k.lastUsedAt)}</td>
           <td>${k.active ? `<button type="button" class="btn btn-danger" data-revoke="${escapeHtml(k.id)}">Revocar</button>` : ''}</td>
@@ -560,8 +569,10 @@
       try {
         const data = await api('/keys', { method: 'POST', body: JSON.stringify(body) });
         const plain = data.plainKey;
+        const docsUrl = data.docsUrl || data.key?.docsUrl || '';
         const env = `NEST_API_URL=http://127.0.0.1:3002\nNEST_API_KEY=${plain}\nNEST_AUTH_USE_TOKEN=true`;
         document.getElementById('plainKeyText').textContent = plain;
+        document.getElementById('docsUrlText').textContent = docsUrl || '—';
         document.getElementById('envSnippet').textContent = env;
         document.getElementById('successPanel').classList.remove('hidden');
         showToast('Key creada. Copie el secreto.', 'ok');
@@ -597,6 +608,7 @@
     });
     document.getElementById('btnSubmit').addEventListener('click', createKey);
     document.getElementById('btnCopyKey').addEventListener('click', () => copyText(document.getElementById('plainKeyText').textContent, 'Key copiada.'));
+    document.getElementById('btnCopyDocs').addEventListener('click', () => copyText(document.getElementById('docsUrlText').textContent, 'Enlace Swagger copiado.'));
     document.getElementById('btnCopyEnv').addEventListener('click', () => copyText(document.getElementById('envSnippet').textContent, '.env copiado.'));
 
     async function copyText(text, okMsg) {
