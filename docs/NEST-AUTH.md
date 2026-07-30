@@ -28,8 +28,33 @@ Los **scopes** solo restringen emisión/cobranza/documentos; el resto solo exige
 
 | Recurso | URL |
 |---------|-----|
-| UI | `http://127.0.0.1:3002/admin/` |
+| UI | `http://192.168.8.120:3002/admin/` (srv001) |
 | API | `/api/v1/admin/keys` · header `X-Admin-Token` |
+
+### Uso del panel visual
+
+1. Abrir `/admin/` en el navegador.
+2. Copiar `NEST_ADMIN_TOKEN` del `.env` de nest-api en srv001:
+   ```bash
+   grep NEST_ADMIN_TOKEN ~/server-api-sys/.env
+   ```
+3. Pegarlo en **X-Admin-Token** → **Conectar** (se guarda en el navegador).
+4. Aparecen los **scopes** y la tabla **Keys registradas** (prefijo, estado, último uso).
+5. **Crear key:** nombre, `cproductor` (ej. `80080`), scopes según módulo → **Crear key**.
+6. **Copiar `plainKey`** (caja azul) — **solo se muestra una vez** → pegar en el `.env` del módulo como `NEST_API_KEY`.
+7. `pm2 restart <modulo>-api --update-env`
+
+> **Catálogos solamente (formulario):** puede crear la key **sin marcar scopes**.  
+> **Emisión:** marcar `emissions:auto`, `emissions:person`, `collection:write` según use el módulo.
+
+### Keys sugeridas en srv001
+
+| Nombre | Módulo | Scopes |
+|--------|--------|--------|
+| `modulo-emision QA` | emision-api | auto, person, collection |
+| `modulo-formulario QA` | form-api | ninguno (solo catálogos) |
+
+La tabla del panel **no muestra el secreto completo** (solo prefijo `nest_78cd568c…`). Si perdió la key, revoque y cree una nueva.
 
 ## Variables nest-api (.env)
 

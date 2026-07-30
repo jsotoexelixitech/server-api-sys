@@ -124,8 +124,11 @@
           </div>
         </div>
         <div style="margin-top:1rem">
-          <label>Scopes</label>
+          <label>Scopes <span style="font-weight:400;color:var(--muted)">(opcional para solo catálogos INMA/valrep)</span></label>
           <div id="scopeList" class="scopes"></div>
+          <p id="scopeHint" style="font-size:0.75rem;color:var(--muted);margin:0.5rem 0 0">
+            Conecte con X-Admin-Token para cargar scopes.
+          </p>
         </div>
         <div style="margin-top:1rem">
           <button type="submit">Crear key</button>
@@ -180,12 +183,34 @@
         },
       });
       const data = await res.json().catch(() => ({}));
-      if (!res.ok) throw new Error(data.message || data.error || res.statusText);
-      return data;
+      if (!res.ok) {
+        const msg =
+          data.message ||
+          data.error ||
+          (Array.isArray(data.message) ? data.message.join(', ') : null) ||
+          res.statusText;
+        throw new Error(msg);
+      }
+      return unwrap(data);
+    }
+
+    /** Compat: respuesta plana o envoltorio { status, data }. */
+    function unwrap(body) {
+      if (body && typeof body === 'object' && body.data && typeof body.data === 'object' && 'status' in body) {
+        return body.data;
+      }
+      return body;
     }
 
     function renderScopes() {
       const box = document.getElementById('scopeList');
+      const hint = document.getElementById('scopeHint');
+      if (!scopesCatalog.length) {
+        box.innerHTML = '';
+        if (hint) hint.hidden = false;
+        return;
+      }
+      if (hint) hint.hidden = true;
       box.innerHTML = scopesCatalog
         .filter((s) => s.id !== 'admin:keys')
         .map(
@@ -265,12 +290,19 @@
       }
     });
 
-    document.getElementById('btnRefresh').addEventListener('click', () => loadKeys().catch((e) => showAlert(e.message)));
+    document.getElementById('btnRefresh').addEventListener('click', async () => {
+      if (!token()) return showAlert('Conecte primero con X-Admin-Token.');
+      try {
+        await loadKeys();
+      } catch (e) {
+        showAlert(e.message);
+      }
+    });
 
     document.getElementById('createForm').addEventListener('submit', async (e) => {
       e.preventDefault();
+      if (!token()) return showAlert('Conecte primero con X-Admin-Token.');
       const scopes = [...document.querySelectorAll('input[name=scope]:checked')].map((el) => el.value);
-      if (!scopes.length) return showAlert('Seleccione al menos un scope.');
       const body = {
         name: document.getElementById('keyName').value.trim(),
         scopes,

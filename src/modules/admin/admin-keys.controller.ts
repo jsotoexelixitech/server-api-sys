@@ -8,6 +8,7 @@ import {
   UseGuards,
 } from '@nestjs/common';
 import { ApiExcludeController, ApiOperation, ApiTags } from '@nestjs/swagger';
+import { SkipEnvelope } from '../../common/decorators/skip-envelope.decorator';
 import { Public } from '../auth/decorators/public.decorator';
 import { ApiKeyService } from '../auth/api-key.service';
 import { AdminTokenGuard } from './admin-token.guard';
@@ -17,6 +18,7 @@ import { CreateAdminKeyDto, UpdateAdminKeyDto } from './dto/admin-key.dto';
 @ApiExcludeController()
 @Controller('v1/admin')
 @Public()
+@SkipEnvelope()
 @UseGuards(AdminTokenGuard)
 export class AdminKeysController {
   constructor(private readonly apiKeys: ApiKeyService) {}
