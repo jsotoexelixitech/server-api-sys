@@ -14,6 +14,7 @@ import { ValidateEmissionPersonDto } from '../emissions/dto/validate-emission-pe
 import { Api401, Api500, ApiCommonErrors } from '../../common/swagger/api-error-responses';
 import { APIKEY_HEADER } from '../../common/swagger/api-docs.constants';
 import { NestProtected } from '../auth/decorators/nest-protected.decorator';
+import { NEST_AUTH_SCOPES } from '../auth/scopes/nest-auth-scopes.constants';
 import { NestApiKey } from '../auth/decorators/nest-api-key.decorator';
 
 @ApiTags('6. Emisión personas')
@@ -78,7 +79,7 @@ export class ExternalController {
 
   @Post('createEmissionPerson')
   @HttpCode(HttpStatus.OK)
-  @NestProtected()
+  @NestProtected(NEST_AUTH_SCOPES.EMISSIONS_PERSON)
   @ApiOperation({
     summary: 'Funerario paso 6 · Emitir póliza de personas',
     description: 'Emite la póliza de personas. Requiere clave de API en entornos públicos.',

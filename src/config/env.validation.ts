@@ -49,4 +49,9 @@ export const envValidationSchema = Joi.object({
   NEST_REFRESH_TTL_SEC: Joi.number().integer().min(3600).default(604800),
   /** Renovar access en respuesta si expira en menos de N segundos. */
   NEST_TOKEN_SLIDE_SEC: Joi.number().integer().min(30).default(300),
+
+  /** PostgreSQL auth: keys, sesiones, refresh (esquema nest_auth). */
+  NEST_PG_DATABASE_URL: Joi.string().optional(),
+  /** Token para panel /api/v1/admin y UI /admin/ */
+  NEST_ADMIN_TOKEN: Joi.string().min(16).optional(),
 });

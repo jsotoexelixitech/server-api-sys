@@ -1,13 +1,16 @@
 import {
   CanActivate,
   ExecutionContext,
+  ForbiddenException,
   Injectable,
   UnauthorizedException,
 } from '@nestjs/common';
 import { Reflector } from '@nestjs/core';
 import { Request } from 'express';
 import { IS_PUBLIC_KEY } from './decorators/public.decorator';
+import { NEST_SCOPE_KEY } from './decorators/nest-scope.decorator';
 import { NestAuthService } from './nest-auth.service';
+import { scopeMatches } from './scopes/nest-auth-scopes.constants';
 
 function extractBearer(req: Request): string | null {
   const auth = req.headers.authorization;
@@ -23,30 +26,37 @@ export class NestAuthGuard implements CanActivate {
     private readonly auth: NestAuthService,
   ) {}
 
-  canActivate(context: ExecutionContext): boolean {
+  async canActivate(context: ExecutionContext): Promise<boolean> {
     const isPublic = this.reflector.getAllAndOverride<boolean>(IS_PUBLIC_KEY, [
       context.getHandler(),
       context.getClass(),
     ]);
     if (isPublic) return true;
 
+    const requiredScope = this.reflector.getAllAndOverride<string>(
+      NEST_SCOPE_KEY,
+      [context.getHandler(), context.getClass()],
+    );
+
     const req = context.switchToHttp().getRequest<Request>();
 
     if (!this.auth.isEnabled()) {
       const apikey = String(req.headers['apikey'] ?? '').trim();
-      req.nestAuth = { apikey, via: apikey ? 'apikey' : 'none' };
+      req.nestAuth = { apikey, scopes: ['*'], via: apikey ? 'apikey' : 'none' };
       return true;
     }
 
     const bearer = extractBearer(req);
     if (bearer) {
       const payload = this.auth.verifyAccessToken(bearer);
-      const session = this.auth.getSession(payload.sub);
+      const session = await this.auth.getSession(payload.sub);
       if (!session) {
         throw new UnauthorizedException('Sesión nest-api inválida o expirada.');
       }
       req.nestAuth = {
         apikey: session.apikey,
+        apiKeyId: session.apiKeyId,
+        scopes: session.scopes,
         sessionId: session.id,
         via: 'bearer',
       };
@@ -55,17 +65,34 @@ export class NestAuthGuard implements CanActivate {
         req.nestAuth.refreshedAccessToken =
           this.auth.issueAccessTokenForSession(session);
       }
+      this.assertScope(req.nestAuth.scopes, requiredScope);
       return true;
     }
 
     const apikey = String(req.headers['apikey'] ?? '').trim();
     if (apikey) {
-      req.nestAuth = { apikey, via: 'apikey' };
+      const resolved = await this.auth.resolveApiKeyForRequest(apikey);
+      req.nestAuth = {
+        apikey,
+        apiKeyId: resolved.apiKeyId,
+        scopes: resolved.scopes,
+        via: 'apikey',
+      };
+      this.assertScope(resolved.scopes, requiredScope);
       return true;
     }
 
     throw new UnauthorizedException(
       'Autenticación requerida: Authorization Bearer o header apikey.',
     );
+  }
+
+  private assertScope(granted: string[], required?: string): void {
+    if (!required) return;
+    if (!scopeMatches(granted, required)) {
+      throw new ForbiddenException(
+        `Scope requerido: ${required}. Key no autorizada para este endpoint.`,
+      );
+    }
   }
 }

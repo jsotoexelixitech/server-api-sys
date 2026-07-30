@@ -23,6 +23,7 @@ import {
   RCV_CREATE_EMISSION_AUTO_BODY_WITH_PRIMA,
 } from '../../common/swagger/api-docs.constants';
 import { NestProtected } from '../auth/decorators/nest-protected.decorator';
+import { NEST_AUTH_SCOPES } from '../auth/scopes/nest-auth-scopes.constants';
 import { NestApiKey } from '../auth/decorators/nest-api-key.decorator';
 
 @ApiTags('3. Emisión automóvil')
@@ -162,7 +163,7 @@ export class EmissionsController {
 
   @Post('external/createEmissionAuto')
   @HttpCode(HttpStatus.OK)
-  @NestProtected()
+  @NestProtected(NEST_AUTH_SCOPES.EMISSIONS_AUTO)
   @ApiOperation({
     summary: 'Emitir póliza de automóvil',
     description:

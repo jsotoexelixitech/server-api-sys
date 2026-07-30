@@ -24,6 +24,7 @@ import {
   RCV_COLLECTION_ACTIVATE_RESPONSE,
 } from '../../common/swagger/api-docs.constants';
 import { NestProtected } from '../auth/decorators/nest-protected.decorator';
+import { NEST_AUTH_SCOPES } from '../auth/scopes/nest-auth-scopes.constants';
 import { NestApiKey } from '../auth/decorators/nest-api-key.decorator';
 
 @ApiTags('4. Cobranza')
@@ -60,7 +61,7 @@ export class CollectionController {
   @Post('notific')
   @ApiExcludeEndpoint()
   @HttpCode(HttpStatus.OK)
-  @NestProtected()
+  @NestProtected(NEST_AUTH_SCOPES.COLLECTION_WRITE)
   @ApiOperation({
     summary: '[Legacy] Notificar pago (spNotificaPago)',
     description:
@@ -93,7 +94,7 @@ export class CollectionController {
   @Post('collect')
   @ApiExcludeEndpoint()
   @HttpCode(HttpStatus.OK)
-  @NestProtected()
+  @NestProtected(NEST_AUTH_SCOPES.COLLECTION_WRITE)
   @ApiOperation({
     summary: 'Cobrar recibo (spCobroSis_Ad + soporte)',
     description:
@@ -132,7 +133,7 @@ export class CollectionController {
 
   @Post('activate')
   @HttpCode(HttpStatus.OK)
-  @NestProtected()
+  @NestProtected(NEST_AUTH_SCOPES.COLLECTION_WRITE)
   @ApiOperation({
     summary: 'Activar cobro del recibo',
     description:

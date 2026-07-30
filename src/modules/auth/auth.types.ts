@@ -1,12 +1,18 @@
+export const NEST_LEGACY_API_KEY_ID = 'legacy-maclient';
+
 export interface NestAuthSession {
   id: string;
+  apiKeyId: string;
   apikey: string;
+  scopes: string[];
   createdAt: number;
   lastUsedAt: number;
 }
 
 export interface NestAuthContext {
   apikey: string;
+  apiKeyId?: string;
+  scopes: string[];
   sessionId?: string;
   via: 'bearer' | 'apikey' | 'none';
   refreshedAccessToken?: string;

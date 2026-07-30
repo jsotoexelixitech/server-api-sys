@@ -47,6 +47,7 @@ async function bootstrap(): Promise<void> {
   const logoOk = existsSync(join(assetsDir, 'brand', 'logo-lamundial-sidebar.png'));
   bootstrapLog.log(`Brand assets dir=${assetsDir} logo=${logoOk ? 'OK' : 'MISSING'}`);
   app.getHttpAdapter().getInstance().use('/assets', express.static(assetsDir, { index: false }));
+  app.getHttpAdapter().getInstance().use('/admin', express.static(join(assetsDir, 'admin'), { index: 'index.html' }));
 
   const config = app.get(ConfigService);
   const port = config.get<number>('PORT', 3001);
@@ -1044,6 +1045,7 @@ async function bootstrap(): Promise<void> {
   logger.log(`API listening on http://localhost:${port}/api`);
   if (swaggerPath) {
     logger.log(`Swagger docs:  http://localhost:${port}/${swaggerPath}`);
+    logger.log(`Admin keys UI: http://localhost:${port}/admin/`);
     if (publicPaths.prefix) {
       logger.log(
         `Swagger HTTPS: ${publicPaths.publicBaseUrl}/${swaggerPath.replace(/^\/+/, '')}`,

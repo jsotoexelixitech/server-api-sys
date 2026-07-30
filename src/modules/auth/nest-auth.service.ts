@@ -6,14 +6,17 @@ import {
 import { ConfigService } from '@nestjs/config';
 import { JwtService } from '@nestjs/jwt';
 import { Request } from 'express';
+import { ApiKeyService } from './api-key.service';
 import { ApiChannelService } from './api-channel.service';
 import { RefreshTokenStore } from './refresh-token.store';
-import { NestAuthSession, TokenPairResponse } from './auth.types';
+import { NestAuthSession, NEST_LEGACY_API_KEY_ID, TokenPairResponse } from './auth.types';
 
 interface AccessPayload {
   sub: string;
   typ: 'nest_access';
 }
+
+const LEGACY_KEY_ID = NEST_LEGACY_API_KEY_ID;
 
 @Injectable()
 export class NestAuthService {
@@ -22,6 +25,7 @@ export class NestAuthService {
     private readonly config: ConfigService,
     private readonly store: RefreshTokenStore,
     private readonly channels: ApiChannelService,
+    private readonly apiKeys: ApiKeyService,
   ) {}
 
   isEnabled(): boolean {
@@ -67,18 +71,19 @@ export class NestAuthService {
       throw new UnauthorizedException('apikey requerida para obtener token.');
     }
 
-    if (this.config.get<string>('NEST_AUTH_STRICT_APIKEY') === 'true') {
-      await this.channels.assertApiKeyRegistered(key);
-    } else {
-      await this.channels.resolveChannel(key);
-    }
-
-    const session = this.store.createSession(key);
+    const resolved = await this.resolveApiKey(key);
+    const session = await this.store.createSession(
+      resolved.apiKeyId,
+      key,
+      resolved.scopes,
+    );
     return this.buildTokenPair(session);
   }
 
-  refreshTokenPair(refreshToken: string): TokenPairResponse {
-    const session = this.store.consumeRefreshToken(String(refreshToken ?? '').trim());
+  async refreshTokenPair(refreshToken: string): Promise<TokenPairResponse> {
+    const session = await this.store.consumeRefreshToken(
+      String(refreshToken ?? '').trim(),
+    );
     if (!session) {
       throw new UnauthorizedException('refresh_token inválido o expirado.');
     }
@@ -97,8 +102,14 @@ export class NestAuthService {
     }
   }
 
-  getSession(sessionId: string): NestAuthSession | undefined {
+  getSession(sessionId: string): Promise<NestAuthSession | undefined> {
     return this.store.getSession(sessionId);
+  }
+
+  async resolveApiKeyForRequest(
+    plainKey: string,
+  ): Promise<{ apiKeyId: string; scopes: string[] }> {
+    return this.resolveApiKey(plainKey);
   }
 
   issueAccessTokenForSession(session: NestAuthSession): string {
@@ -117,9 +128,32 @@ export class NestAuthService {
     return decoded?.exp;
   }
 
-  private buildTokenPair(session: NestAuthSession): TokenPairResponse {
+  private async resolveApiKey(
+    key: string,
+  ): Promise<{ apiKeyId: string; scopes: string[] }> {
+    if (key.startsWith('nest_')) {
+      const row = await this.apiKeys.findByPlainKey(key);
+      if (!row) {
+        throw new UnauthorizedException('API key nest-api no válida o revocada.');
+      }
+      return { apiKeyId: row.id, scopes: row.scopes };
+    }
+
+    if (this.config.get<string>('NEST_AUTH_STRICT_APIKEY') === 'true') {
+      await this.channels.assertApiKeyRegistered(key);
+    } else {
+      await this.channels.resolveChannel(key);
+    }
+
+    return { apiKeyId: LEGACY_KEY_ID, scopes: ['*'] };
+  }
+
+  private async buildTokenPair(session: NestAuthSession): Promise<TokenPairResponse> {
     const access_token = this.issueAccessTokenForSession(session);
-    const refresh_token = this.store.issueRefreshToken(session.id, this.refreshTtlMs());
+    const refresh_token = await this.store.issueRefreshToken(
+      session.id,
+      this.refreshTtlMs(),
+    );
     return {
       access_token,
       refresh_token,

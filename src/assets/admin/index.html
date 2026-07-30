@@ -1,0 +1,302 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>nest-api · API Keys</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link href="https://fonts.googleapis.com/css2?family=Poppins:wght@400;500;600;700&display=swap" rel="stylesheet" />
+  <style>
+    :root {
+      --blue: #0F1A5A;
+      --red: #E84F51;
+      --bg: #f0f2f5;
+      --card: #fff;
+      --muted: #6b7280;
+    }
+    * { box-sizing: border-box; }
+    body {
+      margin: 0;
+      font-family: Poppins, system-ui, sans-serif;
+      background: var(--bg);
+      color: #111;
+    }
+    header {
+      background: linear-gradient(135deg, #091133, var(--blue));
+      color: #fff;
+      padding: 1.25rem 1.5rem;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      flex-wrap: wrap;
+      gap: 1rem;
+    }
+    header h1 { margin: 0; font-size: 1.15rem; font-weight: 700; }
+    header p { margin: 0.25rem 0 0; font-size: 0.75rem; opacity: 0.75; }
+    main { max-width: 1100px; margin: 0 auto; padding: 1.5rem; }
+    .card {
+      background: var(--card);
+      border-radius: 12px;
+      padding: 1.25rem;
+      margin-bottom: 1rem;
+      box-shadow: 0 2px 8px rgba(15,26,90,0.08);
+    }
+    .card h2 { margin: 0 0 1rem; font-size: 1rem; color: var(--blue); }
+    label { display: block; font-size: 0.78rem; font-weight: 600; color: var(--muted); margin-bottom: 0.35rem; }
+    input, select, textarea {
+      width: 100%;
+      padding: 0.55rem 0.75rem;
+      border: 1px solid #d1d5db;
+      border-radius: 8px;
+      font-family: inherit;
+      font-size: 0.875rem;
+    }
+    input:focus { outline: none; border-color: var(--red); box-shadow: 0 0 0 3px rgba(232,79,81,0.15); }
+    .row { display: grid; grid-template-columns: 1fr 1fr; gap: 1rem; }
+    @media (max-width: 640px) { .row { grid-template-columns: 1fr; } }
+    .scopes { display: grid; gap: 0.5rem; margin-top: 0.5rem; }
+    .scope-item {
+      display: flex; gap: 0.75rem; align-items: flex-start;
+      padding: 0.65rem 0.75rem; border: 1px solid #e5e7eb; border-radius: 8px;
+      cursor: pointer; transition: border 0.15s, background 0.15s;
+    }
+    .scope-item:has(input:checked) { border-color: var(--red); background: #fff9f5; }
+    .scope-item strong { font-size: 0.82rem; color: var(--blue); }
+    .scope-item span { font-size: 0.72rem; color: var(--muted); display: block; }
+    button {
+      background: var(--red); color: #fff; border: none; border-radius: 8px;
+      padding: 0.6rem 1.1rem; font-weight: 600; font-family: inherit; cursor: pointer;
+    }
+    button:hover { background: var(--blue); }
+    button.secondary { background: #e5e7eb; color: #374151; }
+    button.danger { background: #b91c1c; }
+    button.sm { padding: 0.35rem 0.65rem; font-size: 0.75rem; }
+    table { width: 100%; border-collapse: collapse; font-size: 0.82rem; }
+    th, td { text-align: left; padding: 0.65rem 0.5rem; border-bottom: 1px solid #f0f0f0; vertical-align: top; }
+    th { color: var(--muted); font-size: 0.7rem; text-transform: uppercase; letter-spacing: 0.05em; }
+    .badge {
+      display: inline-block; padding: 0.15rem 0.5rem; border-radius: 999px;
+      font-size: 0.68rem; font-weight: 600;
+    }
+    .badge.ok { background: #d1fae5; color: #065f46; }
+    .badge.off { background: #fee2e2; color: #991b1b; }
+    .chip { display: inline-block; background: #eef2ff; color: var(--blue); padding: 0.1rem 0.45rem; border-radius: 4px; font-size: 0.68rem; margin: 0.1rem; }
+    .plain-key {
+      background: #0F1A5A; color: #a5f3fc; padding: 1rem; border-radius: 8px;
+      font-family: monospace; word-break: break-all; margin-top: 0.75rem;
+    }
+    .alert { padding: 0.75rem 1rem; border-radius: 8px; margin-bottom: 1rem; font-size: 0.85rem; }
+    .alert.error { background: #fee2e2; color: #991b1b; }
+    .alert.ok { background: #d1fae5; color: #065f46; }
+    .toolbar { display: flex; gap: 0.5rem; flex-wrap: wrap; align-items: end; }
+    .toolbar > div { flex: 1; min-width: 200px; }
+  </style>
+</head>
+<body>
+  <header>
+    <div>
+      <h1>nest-api · Gestión de API Keys</h1>
+      <p>Scopes por endpoint · tokens en PostgreSQL (nest_auth)</p>
+    </div>
+    <div class="toolbar">
+      <div>
+        <label for="adminToken">X-Admin-Token</label>
+        <input id="adminToken" type="password" placeholder="NEST_ADMIN_TOKEN del servidor" />
+      </div>
+      <button type="button" id="btnConnect" class="secondary">Conectar</button>
+    </div>
+  </header>
+
+  <main>
+    <div id="alert"></div>
+
+    <section class="card">
+      <h2>Nueva API key</h2>
+      <form id="createForm">
+        <div class="row">
+          <div>
+            <label for="keyName">Nombre / cliente</label>
+            <input id="keyName" required placeholder="Ej: modulo-emision QA" />
+          </div>
+          <div>
+            <label for="cproductor">cproductor (opcional)</label>
+            <input id="cproductor" type="number" placeholder="80080" />
+          </div>
+        </div>
+        <div style="margin-top:1rem">
+          <label>Scopes</label>
+          <div id="scopeList" class="scopes"></div>
+        </div>
+        <div style="margin-top:1rem">
+          <button type="submit">Crear key</button>
+        </div>
+      </form>
+      <div id="plainKeyBox" hidden></div>
+    </section>
+
+    <section class="card">
+      <h2>Keys registradas</h2>
+      <button type="button" id="btnRefresh" class="secondary sm" style="margin-bottom:0.75rem">Actualizar</button>
+      <div style="overflow-x:auto">
+        <table>
+          <thead>
+            <tr>
+              <th>Nombre</th>
+              <th>Prefijo</th>
+              <th>Scopes</th>
+              <th>Estado</th>
+              <th>Último uso</th>
+              <th></th>
+            </tr>
+          </thead>
+          <tbody id="keysBody"></tbody>
+        </table>
+      </div>
+    </section>
+  </main>
+
+  <script>
+    const API = '/api/v1/admin';
+    let scopesCatalog = [];
+
+    function token() {
+      return localStorage.getItem('nest_admin_token') || '';
+    }
+
+    function showAlert(msg, type) {
+      const el = document.getElementById('alert');
+      el.className = 'alert ' + (type || 'error');
+      el.textContent = msg;
+      el.hidden = !msg;
+    }
+
+    async function api(path, opts) {
+      const res = await fetch(API + path, {
+        ...opts,
+        headers: {
+          'Content-Type': 'application/json',
+          'X-Admin-Token': token(),
+          ...(opts && opts.headers),
+        },
+      });
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) throw new Error(data.message || data.error || res.statusText);
+      return data;
+    }
+
+    function renderScopes() {
+      const box = document.getElementById('scopeList');
+      box.innerHTML = scopesCatalog
+        .filter((s) => s.id !== 'admin:keys')
+        .map(
+          (s) => `
+        <label class="scope-item">
+          <input type="checkbox" name="scope" value="${s.id}" />
+          <div>
+            <strong>${s.label}</strong>
+            <span>${s.id} — ${s.description}</span>
+          </div>
+        </label>`,
+        )
+        .join('');
+    }
+
+    function renderKeys(keys) {
+      const tbody = document.getElementById('keysBody');
+      if (!keys.length) {
+        tbody.innerHTML = '<tr><td colspan="6">Sin keys. Configure NEST_PG_DATABASE_URL y cree una.</td></tr>';
+        return;
+      }
+      tbody.innerHTML = keys
+        .map(
+          (k) => `
+        <tr>
+          <td>${escapeHtml(k.name)}</td>
+          <td><code>${escapeHtml(k.keyPrefix)}…</code></td>
+          <td>${(k.scopes || []).map((s) => `<span class="chip">${escapeHtml(s)}</span>`).join('')}</td>
+          <td><span class="badge ${k.active ? 'ok' : 'off'}">${k.active ? 'Activa' : 'Revocada'}</span></td>
+          <td>${k.lastUsedAt ? new Date(k.lastUsedAt).toLocaleString() : '—'}</td>
+          <td>${k.active ? `<button class="sm danger" data-revoke="${k.id}">Revocar</button>` : ''}</td>
+        </tr>`,
+        )
+        .join('');
+      tbody.querySelectorAll('[data-revoke]').forEach((btn) => {
+        btn.addEventListener('click', async () => {
+          if (!confirm('¿Revocar esta key?')) return;
+          try {
+            await api('/keys/' + btn.dataset.revoke + '/revoke', { method: 'POST' });
+            showAlert('Key revocada.', 'ok');
+            loadKeys();
+          } catch (e) {
+            showAlert(e.message);
+          }
+        });
+      });
+    }
+
+    function escapeHtml(s) {
+      return String(s)
+        .replace(/&/g, '&amp;')
+        .replace(/</g, '&lt;')
+        .replace(/>/g, '&gt;');
+    }
+
+    async function loadScopes() {
+      const data = await api('/scopes');
+      scopesCatalog = data.scopes || [];
+      renderScopes();
+    }
+
+    async function loadKeys() {
+      const data = await api('/keys');
+      renderKeys(data.keys || []);
+    }
+
+    document.getElementById('btnConnect').addEventListener('click', async () => {
+      const t = document.getElementById('adminToken').value.trim();
+      if (!t) return showAlert('Ingrese NEST_ADMIN_TOKEN');
+      localStorage.setItem('nest_admin_token', t);
+      try {
+        await loadScopes();
+        await loadKeys();
+        showAlert('Conectado.', 'ok');
+      } catch (e) {
+        showAlert(e.message);
+      }
+    });
+
+    document.getElementById('btnRefresh').addEventListener('click', () => loadKeys().catch((e) => showAlert(e.message)));
+
+    document.getElementById('createForm').addEventListener('submit', async (e) => {
+      e.preventDefault();
+      const scopes = [...document.querySelectorAll('input[name=scope]:checked')].map((el) => el.value);
+      if (!scopes.length) return showAlert('Seleccione al menos un scope.');
+      const body = {
+        name: document.getElementById('keyName').value.trim(),
+        scopes,
+      };
+      const cp = document.getElementById('cproductor').value;
+      if (cp) body.cproductor = parseInt(cp, 10);
+      try {
+        const data = await api('/keys', { method: 'POST', body: JSON.stringify(body) });
+        const box = document.getElementById('plainKeyBox');
+        box.hidden = false;
+        box.innerHTML =
+          '<p><strong>Copie la key ahora:</strong></p><div class="plain-key">' +
+          escapeHtml(data.plainKey) +
+          '</div>';
+        showAlert(data.message, 'ok');
+        document.getElementById('createForm').reset();
+        loadKeys();
+      } catch (err) {
+        showAlert(err.message);
+      }
+    });
+
+    if (token()) {
+      document.getElementById('adminToken').value = token();
+      loadScopes().then(loadKeys).catch(() => {});
+    }
+  </script>
+</body>
+</html>

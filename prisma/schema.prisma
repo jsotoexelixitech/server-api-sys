@@ -1,0 +1,61 @@
+// nest-api — PostgreSQL auth (API keys, sesiones, refresh tokens)
+// Esquema dedicado: nest_auth · BD: nest_api (srv001 192.168.8.120)
+
+generator client {
+  provider        = "prisma-client-js"
+  previewFeatures = ["multiSchema"]
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("NEST_PG_DATABASE_URL")
+  schemas  = ["nest_auth"]
+}
+
+model ApiKey {
+  id          String    @id @default(cuid())
+  name        String    @db.VarChar(120)
+  keyPrefix   String    @map("key_prefix") @db.VarChar(16)
+  keyHash     String    @unique @map("key_hash") @db.VarChar(64)
+  scopes      String[]  @default([])
+  active      Boolean   @default(true)
+  cproductor  Int?      @map("cproductor")
+  xcanalVenta String?   @map("xcanal_venta") @db.VarChar(80)
+  createdAt   DateTime  @default(now()) @map("created_at") @db.Timestamptz(6)
+  expiresAt   DateTime? @map("expires_at") @db.Timestamptz(6)
+  lastUsedAt  DateTime? @map("last_used_at") @db.Timestamptz(6)
+  revokedAt   DateTime? @map("revoked_at") @db.Timestamptz(6)
+  sessions    AuthSession[]
+
+  @@index([active])
+  @@map("api_key")
+  @@schema("nest_auth")
+}
+
+model AuthSession {
+  id             String         @id @db.VarChar(32)
+  apiKeyId       String         @map("api_key_id")
+  apiKey         ApiKey         @relation(fields: [apiKeyId], references: [id], onDelete: Cascade)
+  createdAt      DateTime       @default(now()) @map("created_at") @db.Timestamptz(6)
+  lastUsedAt     DateTime       @default(now()) @map("last_used_at") @db.Timestamptz(6)
+  revokedAt      DateTime?      @map("revoked_at") @db.Timestamptz(6)
+  refreshTokens  RefreshToken[]
+
+  @@index([apiKeyId])
+  @@map("auth_session")
+  @@schema("nest_auth")
+}
+
+model RefreshToken {
+  id         String      @id @default(cuid())
+  tokenHash  String      @unique @map("token_hash") @db.VarChar(64)
+  sessionId  String      @map("session_id")
+  session    AuthSession @relation(fields: [sessionId], references: [id], onDelete: Cascade)
+  expiresAt  DateTime    @map("expires_at") @db.Timestamptz(6)
+  createdAt  DateTime    @default(now()) @map("created_at") @db.Timestamptz(6)
+
+  @@index([sessionId])
+  @@index([expiresAt])
+  @@map("refresh_token")
+  @@schema("nest_auth")
+}

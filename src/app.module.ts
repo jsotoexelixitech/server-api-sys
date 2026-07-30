@@ -16,6 +16,8 @@ import { CollectionModule } from './modules/collection/collection.module';
 import { PartnerHostModule } from './partner/partner-host.module';
 import { PartnerIntegrationModule } from './partner/partner-integration.module';
 import { AuthModule } from './modules/auth/auth.module';
+import { AdminModule } from './modules/admin/admin.module';
+import { PrismaModule } from './database/prisma/prisma.module';
 
 @Module({
   imports: [
@@ -29,6 +31,7 @@ import { AuthModule } from './modules/auth/auth.module';
       },
     }),
     DatabaseModule,
+    PrismaModule,
     AuthModule,
     ValrepModule,
     InmaModule,
@@ -40,6 +43,7 @@ import { AuthModule } from './modules/auth/auth.module';
     ExternalModule,
     DocumentsModule,
     CollectionModule,
+    AdminModule,
     PartnerHostModule,
     PartnerIntegrationModule,
   ],

@@ -7,6 +7,7 @@ import { AuthController } from './auth.controller';
 import { NestAuthService } from './nest-auth.service';
 import { NestAuthGuard } from './nest-auth.guard';
 import { RefreshTokenStore } from './refresh-token.store';
+import { ApiKeyService } from './api-key.service';
 import { ApiChannelService } from './api-channel.service';
 import { NestTokenRefreshInterceptor } from './nest-token-refresh.interceptor';
 
@@ -31,6 +32,7 @@ import { NestTokenRefreshInterceptor } from './nest-token-refresh.interceptor';
   providers: [
     NestAuthService,
     NestAuthGuard,
+    ApiKeyService,
     RefreshTokenStore,
     ApiChannelService,
     {
@@ -38,6 +40,6 @@ import { NestTokenRefreshInterceptor } from './nest-token-refresh.interceptor';
       useClass: NestTokenRefreshInterceptor,
     },
   ],
-  exports: [NestAuthService, NestAuthGuard, ApiChannelService],
+  exports: [NestAuthService, NestAuthGuard, ApiChannelService, ApiKeyService],
 })
 export class AuthModule {}

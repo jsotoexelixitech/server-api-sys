@@ -25,6 +25,9 @@ mkdir -p "$LOG_DIR"
 echo "▶ npm install..."
 npm install --prefer-offline
 
+echo "▶ prisma generate..."
+npm run prisma:generate
+
 # 3. Compilar SDK partner + TypeScript → dist/
 echo "▶ npm run build:all..."
 npm run build:all
