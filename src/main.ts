@@ -886,7 +886,22 @@ async function bootstrap(): Promise<void> {
           padding: 14px !important;
           color: #e2e8f0 !important;
         }
-        .swagger-ui .microlight { color: #162a7f !important; }
+        /* microlight global: texto oscuro en zonas claras */
+        .swagger-ui .microlight { color: #374151 !important; }
+        /* headers/body de respuesta: fondo oscuro → texto claro (evitar azul #162a7f ilegible) */
+        .swagger-ui .highlight-code .microlight,
+        .swagger-ui .highlight-code pre .microlight,
+        .swagger-ui .highlight-code pre code {
+          color: #e2e8f0 !important;
+          background: transparent !important;
+        }
+        .swagger-ui .responses-table .response-col_description pre,
+        .swagger-ui .response-col_description__inner pre {
+          background: #0F1A5A !important;
+          color: #e2e8f0 !important;
+          border-radius: 8px !important;
+          padding: 12px 14px !important;
+        }
 
         /* ── Curl ──────────────────────────────────────────────── */
         .swagger-ui .curl-command { background: #0F1A5A !important; border-radius: 8px !important; }

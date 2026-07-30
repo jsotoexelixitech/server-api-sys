@@ -10,6 +10,8 @@ Publicación en **https://cierrelmds.exelixitech.com** con el mismo patrón que 
 | API (Try it out) | https://cierrelmds.exelixitech.com/api-docs-nest-api/api/v1/... |
 | Red interna srv001 | http://192.168.8.120:3002/docs |
 
+**Nota:** la raíz `/api-docs-nest-api/` sin `/docs` no es una página; usar siempre `.../docs`.
+
 ## Variables (.env / PM2)
 
 ```env
@@ -23,7 +25,10 @@ PUBLIC_API_ORIGIN=https://cierrelmds.exelixitech.com
 pm2 restart sysip-nest-api --update-env
 ```
 
-## Apache (VirtualHost cierrelmds SSL)
+## Apache (VirtualHost cierrelmds SSL) — **infra / sysadmin**
+
+Si `https://cierrelmds.exelixitech.com/api-docs-nest-api/docs` devuelve **404 Apache** (no JSON), falta el proxy.  
+Nest en srv001 responde en `http://127.0.0.1:3002/docs`; Apache debe reenviar el prefijo.
 
 Strip del prefijo hacia PM2 `:3002` (igual que nexus-api):
 
