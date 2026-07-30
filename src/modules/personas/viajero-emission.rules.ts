@@ -78,8 +78,8 @@ export function assertViajeroProrrataCotizacion(
 }
 
 /**
- * Emisión VIAJE ramo 25: tomador (cualquier persona), titular = asegurado;
- * beneficiario opcional pero debe ser la misma persona que el asegurado.
+ * Emisión VIAJE ramo 25: solo tomador + asegurado (titular).
+ * No admite beneficiarios.
  */
 export function assertViajeLocalEmission(
   body: Record<string, unknown>,
@@ -89,6 +89,12 @@ export function assertViajeLocalEmission(
   const cramo = Number(body['cramo']);
   const plan = String(body['plan'] ?? '');
   if (!isViajeLocalPlan(cramo, plan)) return;
+
+  if (beneficiarios.length > 0) {
+    throw new BadRequestException(
+      'Plan VIAJE (ramo 25): no se admiten beneficiarios; solo tomador y asegurado.',
+    );
+  }
 
   if (asegurados.length !== 1) {
     throw new BadRequestException(
@@ -108,16 +114,6 @@ export function assertViajeLocalEmission(
     throw new BadRequestException(
       'Plan VIAJE: rif_titular debe coincidir con asegurados[0].xrif_asegurado.',
     );
-  }
-
-  for (const ben of beneficiarios) {
-    const b = ben as Record<string, unknown>;
-    const rifBen = rifDigits(b['xrif_beneficiario'] ?? b['identificacion']);
-    if (rifBen && rifBen !== rifAseg) {
-      throw new BadRequestException(
-        'Plan VIAJE: el beneficiario debe ser la misma persona que el asegurado.',
-      );
-    }
   }
 
   if (!String(body['fdesde'] ?? '').trim() || !String(body['fhasta'] ?? '').trim()) {

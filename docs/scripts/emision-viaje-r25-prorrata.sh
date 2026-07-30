@@ -114,13 +114,7 @@ payload = {
     "fnac_asegurado": "$FNAC",
     "nparentesco_asegurado": 1
   }],
-  "beneficiarios": [{
-    "icedula_beneficiario": "V",
-    "xrif_beneficiario": "$RIF",
-    "xnombre_beneficiario": "$NOMBRE",
-    "xapellido_beneficiario": "$APELLIDO",
-    "nparentesco_beneficiario": 1
-  }]
+  "beneficiarios": []
 }
 req = urllib.request.Request(
   "$BASE/api/v1/personas/emision",
