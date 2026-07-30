@@ -9,468 +9,144 @@
   <link href="https://fonts.googleapis.com/css2?family=Poppins:wght@400;500;600;700&display=swap" rel="stylesheet" />
   <style>
     :root {
-      --blue: #0F1A5A;
-      --blue-dark: #091133;
-      --blue-accent: #2E6DBF;
-      --red: #E84F51;
-      --red-dark: #b23f44;
-      --bg: #eef1f6;
-      --card: #fff;
-      --muted: #6b7280;
-      --border: #e5e7eb;
-      --shadow: 0 4px 24px rgba(15, 26, 90, 0.08);
-      --radius: 14px;
+      --blue: #0F1A5A; --blue-dark: #091133; --blue-accent: #2E6DBF;
+      --red: #E84F51; --red-dark: #b23f44;
+      --bg: #eef1f6; --card: #fff; --muted: #6b7280;
+      --border: #e5e7eb; --shadow: 0 4px 24px rgba(15,26,90,0.08); --radius: 14px;
     }
     * { box-sizing: border-box; }
-    body {
-      margin: 0;
-      min-height: 100vh;
-      font-family: Poppins, system-ui, sans-serif;
-      background: var(--bg);
-      color: #1f2937;
-    }
-
-    /* ── Header ── */
-    .topbar {
-      background: linear-gradient(135deg, var(--blue-dark) 0%, var(--blue) 55%, var(--blue-accent) 100%);
-      color: #fff;
-      padding: 0;
-      box-shadow: 0 4px 20px rgba(9, 17, 51, 0.35);
-    }
-    .topbar-inner {
-      max-width: 1200px;
-      margin: 0 auto;
-      padding: 1rem 1.5rem;
-      display: flex;
-      align-items: center;
-      justify-content: space-between;
-      gap: 1.25rem;
-      flex-wrap: wrap;
-    }
-    .brand {
-      display: flex;
-      align-items: center;
-      gap: 1rem;
-    }
-    .brand img {
-      height: 44px;
-      width: auto;
-      object-fit: contain;
-      filter: drop-shadow(0 2px 6px rgba(0,0,0,0.2));
-    }
-    .brand-text h1 {
-      margin: 0;
-      font-size: 1.05rem;
-      font-weight: 700;
-      letter-spacing: -0.02em;
-    }
-    .brand-text p {
-      margin: 0.15rem 0 0;
-      font-size: 0.72rem;
-      opacity: 0.82;
-    }
-    .auth-box {
-      display: flex;
-      align-items: flex-end;
-      gap: 0.5rem;
-      flex-wrap: wrap;
-    }
+    body { margin: 0; min-height: 100vh; font-family: Poppins, system-ui, sans-serif; background: var(--bg); color: #1f2937; }
+    .topbar { background: linear-gradient(135deg, var(--blue-dark), var(--blue) 55%, var(--blue-accent)); color: #fff; box-shadow: 0 4px 20px rgba(9,17,51,.35); }
+    .topbar-inner { max-width: 1180px; margin: 0 auto; padding: 1rem 1.5rem; display: flex; align-items: center; justify-content: space-between; gap: 1rem; flex-wrap: wrap; }
+    .brand { display: flex; align-items: center; gap: 1rem; }
+    .brand img { height: 44px; filter: drop-shadow(0 2px 6px rgba(0,0,0,.2)); }
+    .brand-text h1 { margin: 0; font-size: 1.05rem; font-weight: 700; }
+    .brand-text p { margin: .15rem 0 0; font-size: .72rem; opacity: .82; }
+    .auth-box { display: flex; align-items: flex-end; gap: .5rem; flex-wrap: wrap; }
     .auth-field { min-width: 220px; flex: 1; }
-    .auth-field label {
-      display: block;
-      font-size: 0.68rem;
-      font-weight: 600;
-      text-transform: uppercase;
-      letter-spacing: 0.06em;
-      opacity: 0.85;
-      margin-bottom: 0.3rem;
-    }
-    .input-wrap {
-      display: flex;
-      align-items: stretch;
-      background: rgba(255,255,255,0.12);
-      border: 1px solid rgba(255,255,255,0.22);
-      border-radius: 10px;
-      overflow: hidden;
-    }
-    .input-wrap input {
-      flex: 1;
-      border: none;
-      background: transparent;
-      color: #fff;
-      padding: 0.55rem 0.75rem;
-      font-family: inherit;
-      font-size: 0.85rem;
-      min-width: 0;
-    }
-    .input-wrap input::placeholder { color: rgba(255,255,255,0.45); }
+    .auth-field label { display: block; font-size: .68rem; font-weight: 600; text-transform: uppercase; letter-spacing: .06em; opacity: .85; margin-bottom: .3rem; }
+    .input-wrap { display: flex; background: rgba(255,255,255,.12); border: 1px solid rgba(255,255,255,.22); border-radius: 10px; overflow: hidden; }
+    .input-wrap input { flex: 1; border: none; background: transparent; color: #fff; padding: .55rem .75rem; font-family: inherit; font-size: .85rem; min-width: 0; }
+    .input-wrap input::placeholder { color: rgba(255,255,255,.45); }
     .input-wrap input:focus { outline: none; }
-    .input-wrap button.icon-btn {
-      background: transparent;
-      border: none;
-      border-left: 1px solid rgba(255,255,255,0.15);
-      color: rgba(255,255,255,0.8);
-      padding: 0 0.75rem;
-      cursor: pointer;
-      font-size: 0.9rem;
-    }
-    .input-wrap button.icon-btn:hover { background: rgba(255,255,255,0.08); }
-
-    /* ── Layout ── */
-    main {
-      max-width: 1200px;
-      margin: 0 auto;
-      padding: 1.5rem;
-    }
-    .status-bar {
-      display: flex;
-      align-items: center;
-      justify-content: space-between;
-      flex-wrap: wrap;
-      gap: 0.75rem;
-      margin-bottom: 1.25rem;
-    }
-    .conn-pill {
-      display: inline-flex;
-      align-items: center;
-      gap: 0.45rem;
-      padding: 0.35rem 0.85rem;
-      border-radius: 999px;
-      font-size: 0.75rem;
-      font-weight: 600;
-      background: #fff;
-      border: 1px solid var(--border);
-      color: var(--muted);
-    }
-    .conn-pill .dot {
-      width: 8px;
-      height: 8px;
-      border-radius: 50%;
-      background: #9ca3af;
-    }
+    .input-wrap button.icon-btn { background: transparent; border: none; border-left: 1px solid rgba(255,255,255,.15); color: rgba(255,255,255,.8); padding: 0 .75rem; cursor: pointer; }
+    main { max-width: 1180px; margin: 0 auto; padding: 1.5rem; }
+    .status-bar { display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: .75rem; margin-bottom: 1rem; }
+    .conn-pill { display: inline-flex; align-items: center; gap: .45rem; padding: .35rem .85rem; border-radius: 999px; font-size: .75rem; font-weight: 600; background: #fff; border: 1px solid var(--border); color: var(--muted); }
+    .conn-pill .dot { width: 8px; height: 8px; border-radius: 50%; background: #9ca3af; }
     .conn-pill.online { border-color: #a7f3d0; color: #065f46; background: #ecfdf5; }
-    .conn-pill.online .dot { background: #10b981; box-shadow: 0 0 0 3px rgba(16,185,129,0.25); }
-    .conn-pill.offline .dot { background: #ef4444; }
-    .quick-links { font-size: 0.78rem; }
-    .quick-links a {
-      color: var(--blue);
-      text-decoration: none;
-      font-weight: 500;
-      margin-left: 0.75rem;
-    }
-    .quick-links a:hover { color: var(--red); text-decoration: underline; }
-
-    .stats {
-      display: grid;
-      grid-template-columns: repeat(3, 1fr);
-      gap: 1rem;
-      margin-bottom: 1.25rem;
-    }
-    @media (max-width: 640px) { .stats { grid-template-columns: 1fr; } }
-    .stat {
-      background: var(--card);
-      border-radius: var(--radius);
-      padding: 1rem 1.15rem;
-      box-shadow: var(--shadow);
-      border-left: 4px solid var(--blue-accent);
-    }
-    .stat:nth-child(2) { border-left-color: var(--red); }
-    .stat:nth-child(3) { border-left-color: #10b981; }
-    .stat-label { font-size: 0.7rem; text-transform: uppercase; letter-spacing: 0.06em; color: var(--muted); font-weight: 600; }
-    .stat-value { font-size: 1.75rem; font-weight: 700; color: var(--blue); line-height: 1.2; margin-top: 0.2rem; }
-
-    .grid-2 {
-      display: grid;
-      grid-template-columns: 1fr 1.2fr;
-      gap: 1.25rem;
-      align-items: start;
-    }
-    @media (max-width: 900px) { .grid-2 { grid-template-columns: 1fr; } }
-
-    .card {
-      background: var(--card);
-      border-radius: var(--radius);
-      padding: 1.35rem;
-      box-shadow: var(--shadow);
-      border: 1px solid rgba(15, 26, 90, 0.04);
-    }
-    .card-head {
-      display: flex;
-      align-items: center;
-      justify-content: space-between;
-      gap: 0.75rem;
-      margin-bottom: 1.15rem;
-      padding-bottom: 0.85rem;
-      border-bottom: 1px solid var(--border);
-    }
-    .card-head h2 {
-      margin: 0;
-      font-size: 0.95rem;
-      font-weight: 700;
-      color: var(--blue);
-    }
-    .card-head .sub {
-      font-size: 0.72rem;
-      color: var(--muted);
-      font-weight: 400;
-      display: block;
-      margin-top: 0.15rem;
-    }
-
-    label.field-label {
-      display: block;
-      font-size: 0.75rem;
-      font-weight: 600;
-      color: var(--muted);
-      margin-bottom: 0.35rem;
-    }
-    input[type="text"], input[type="number"], input[type="password"] {
-      width: 100%;
-      padding: 0.6rem 0.85rem;
-      border: 1px solid var(--border);
-      border-radius: 10px;
-      font-family: inherit;
-      font-size: 0.875rem;
-      transition: border 0.15s, box-shadow 0.15s;
-    }
-    input:focus {
-      outline: none;
-      border-color: var(--red);
-      box-shadow: 0 0 0 3px rgba(232, 79, 81, 0.12);
-    }
+    .conn-pill.online .dot { background: #10b981; box-shadow: 0 0 0 3px rgba(16,185,129,.25); }
+    .quick-links a { color: var(--blue); text-decoration: none; font-weight: 500; font-size: .78rem; margin-left: .75rem; }
+    .quick-links a:hover { color: var(--red); }
+    .stats { display: grid; grid-template-columns: repeat(3,1fr); gap: 1rem; margin-bottom: 1rem; }
+    @media (max-width:640px){ .stats { grid-template-columns: 1fr; } }
+    .stat { background: var(--card); border-radius: var(--radius); padding: 1rem; box-shadow: var(--shadow); border-left: 4px solid var(--blue-accent); }
+    .stat:nth-child(2){ border-left-color: var(--red); }
+    .stat:nth-child(3){ border-left-color: #10b981; }
+    .stat-label { font-size: .7rem; text-transform: uppercase; letter-spacing: .06em; color: var(--muted); font-weight: 600; }
+    .stat-value { font-size: 1.75rem; font-weight: 700; color: var(--blue); }
+    .tabs { display: flex; gap: .35rem; margin-bottom: 1rem; flex-wrap: wrap; }
+    .tab { padding: .55rem 1.1rem; border-radius: 10px; border: 1px solid var(--border); background: #fff; font-family: inherit; font-size: .82rem; font-weight: 600; color: var(--muted); cursor: pointer; transition: all .15s; }
+    .tab:hover { border-color: #cbd5e1; color: var(--blue); }
+    .tab.active { background: var(--blue); color: #fff; border-color: var(--blue); box-shadow: 0 4px 12px rgba(15,26,90,.2); }
+    .panel { display: none; }
+    .panel.active { display: block; }
+    .card { background: var(--card); border-radius: var(--radius); padding: 1.35rem; box-shadow: var(--shadow); border: 1px solid rgba(15,26,90,.04); margin-bottom: 1rem; }
+    .card-head { display: flex; align-items: flex-start; justify-content: space-between; gap: .75rem; margin-bottom: 1rem; padding-bottom: .85rem; border-bottom: 1px solid var(--border); }
+    .card-head h2 { margin: 0; font-size: .95rem; font-weight: 700; color: var(--blue); }
+    .card-head .sub { font-size: .72rem; color: var(--muted); display: block; margin-top: .15rem; }
+    .wizard-steps { display: flex; gap: 0; margin-bottom: 1.25rem; }
+    .wizard-step { flex: 1; text-align: center; position: relative; }
+    .wizard-step::after { content: ''; position: absolute; top: 14px; left: 50%; width: 100%; height: 2px; background: var(--border); z-index: 0; }
+    .wizard-step:last-child::after { display: none; }
+    .wizard-step-num { width: 28px; height: 28px; border-radius: 50%; background: var(--border); color: var(--muted); font-size: .75rem; font-weight: 700; display: inline-flex; align-items: center; justify-content: center; position: relative; z-index: 1; margin-bottom: .35rem; }
+    .wizard-step.active .wizard-step-num { background: var(--red); color: #fff; box-shadow: 0 2px 8px rgba(232,79,81,.4); }
+    .wizard-step.done .wizard-step-num { background: #10b981; color: #fff; }
+    .wizard-step-label { font-size: .68rem; color: var(--muted); font-weight: 600; display: block; }
+    .wizard-step.active .wizard-step-label { color: var(--blue); }
+    .wizard-pane { display: none; animation: fade .25s ease; }
+    .wizard-pane.active { display: block; }
+    @keyframes fade { from { opacity: 0; transform: translateY(4px); } to { opacity: 1; transform: none; } }
+    .preset-grid { display: grid; grid-template-columns: repeat(2,1fr); gap: .75rem; }
+    @media (max-width:540px){ .preset-grid { grid-template-columns: 1fr; } }
+    .preset-card { border: 2px solid var(--border); border-radius: 12px; padding: 1rem; cursor: pointer; transition: all .15s; background: #fafbff; }
+    .preset-card:hover { border-color: var(--blue-accent); transform: translateY(-1px); }
+    .preset-card.selected { border-color: var(--red); background: linear-gradient(135deg,#fff9f5,#fff); box-shadow: 0 4px 16px rgba(232,79,81,.15); }
+    .preset-card h3 { margin: 0 0 .25rem; font-size: .88rem; color: var(--blue); }
+    .preset-card p { margin: 0; font-size: .72rem; color: var(--muted); line-height: 1.4; }
+    .preset-card .preset-scopes { margin-top: .5rem; font-size: .65rem; }
+    .scope-detail-list { display: flex; flex-direction: column; gap: .65rem; margin-top: .75rem; }
+    .scope-detail { border: 1px solid var(--border); border-radius: 12px; overflow: hidden; }
+    .scope-detail-head { display: flex; align-items: flex-start; gap: .75rem; padding: .85rem 1rem; cursor: pointer; background: #fafbff; }
+    .scope-detail-head:has(input:checked) { background: #fff9f5; border-bottom: 1px solid #fecaca; }
+    .scope-detail-head input { margin-top: .25rem; accent-color: var(--red); flex-shrink: 0; }
+    .scope-detail-head strong { font-size: .85rem; color: var(--blue); display: block; }
+    .scope-detail-head code { font-size: .68rem; color: var(--red-dark); background: #fef2f2; padding: .1rem .4rem; border-radius: 4px; }
+    .scope-detail-head span.desc { font-size: .72rem; color: var(--muted); display: block; margin-top: .2rem; }
+    .scope-routes { padding: .65rem 1rem .85rem 2.5rem; background: #fff; font-size: .7rem; color: #475569; }
+    .scope-routes li { margin: .25rem 0; font-family: Consolas, monospace; }
+    .catalog-note { background: #eff6ff; border: 1px solid #bfdbfe; border-radius: 10px; padding: .85rem 1rem; font-size: .78rem; color: #1e40af; margin-bottom: .75rem; }
+    .summary-box { background: #f8fafc; border: 1px solid var(--border); border-radius: 12px; padding: 1rem; margin: 1rem 0; }
+    .summary-row { display: flex; justify-content: space-between; padding: .35rem 0; font-size: .82rem; border-bottom: 1px dashed #e5e7eb; }
+    .summary-row:last-child { border-bottom: none; }
+    .summary-row span:first-child { color: var(--muted); font-weight: 500; }
+    .summary-row span:last-child { font-weight: 600; color: var(--blue); text-align: right; max-width: 60%; }
+    .wizard-nav { display: flex; gap: .5rem; justify-content: space-between; margin-top: 1.25rem; }
+    label.field-label { display: block; font-size: .75rem; font-weight: 600; color: var(--muted); margin-bottom: .35rem; }
+    input[type=text], input[type=number] { width: 100%; padding: .6rem .85rem; border: 1px solid var(--border); border-radius: 10px; font-family: inherit; font-size: .875rem; }
+    input:focus { outline: none; border-color: var(--red); box-shadow: 0 0 0 3px rgba(232,79,81,.12); }
     .row { display: grid; grid-template-columns: 1fr 1fr; gap: 1rem; }
-    @media (max-width: 540px) { .row { grid-template-columns: 1fr; } }
-
-    .scopes-grid {
-      display: grid;
-      grid-template-columns: 1fr 1fr;
-      gap: 0.5rem;
-      margin-top: 0.5rem;
-    }
-    @media (max-width: 540px) { .scopes-grid { grid-template-columns: 1fr; } }
-    .scope-item {
-      display: flex;
-      gap: 0.65rem;
-      align-items: flex-start;
-      padding: 0.7rem 0.8rem;
-      border: 1px solid var(--border);
-      border-radius: 10px;
-      cursor: pointer;
-      transition: border 0.15s, background 0.15s, transform 0.1s;
-    }
-    .scope-item:hover { border-color: #c7d2fe; background: #f8fafc; }
-    .scope-item:has(input:checked) {
-      border-color: var(--red);
-      background: linear-gradient(135deg, #fff9f5, #fff);
-      box-shadow: 0 2px 8px rgba(232, 79, 81, 0.12);
-    }
-    .scope-item input { margin-top: 0.2rem; accent-color: var(--red); flex-shrink: 0; }
-    .scope-item strong { font-size: 0.8rem; color: var(--blue); display: block; }
-    .scope-item code { font-size: 0.65rem; color: var(--red-dark); background: #fef2f2; padding: 0.1rem 0.35rem; border-radius: 4px; }
-    .scope-item span.desc { font-size: 0.68rem; color: var(--muted); display: block; margin-top: 0.2rem; line-height: 1.35; }
-
-    .hint {
-      font-size: 0.75rem;
-      color: var(--muted);
-      margin: 0.5rem 0 0;
-      padding: 0.65rem 0.85rem;
-      background: #f8fafc;
-      border-radius: 8px;
-      border-left: 3px solid var(--blue-accent);
-    }
-    .hint.warn { border-left-color: #f59e0b; background: #fffbeb; }
-
-    button.btn {
-      display: inline-flex;
-      align-items: center;
-      justify-content: center;
-      gap: 0.4rem;
-      border: none;
-      border-radius: 10px;
-      padding: 0.6rem 1.15rem;
-      font-family: inherit;
-      font-size: 0.85rem;
-      font-weight: 600;
-      cursor: pointer;
-      transition: transform 0.1s, box-shadow 0.15s, background 0.15s;
-    }
-    button.btn:active { transform: scale(0.98); }
-    button.btn-primary {
-      background: linear-gradient(135deg, var(--red), var(--red-dark));
-      color: #fff;
-      box-shadow: 0 4px 14px rgba(232, 79, 81, 0.35);
-    }
-    button.btn-primary:hover { box-shadow: 0 6px 18px rgba(232, 79, 81, 0.45); }
-    button.btn-primary:disabled { opacity: 0.5; cursor: not-allowed; transform: none; }
-    button.btn-secondary {
-      background: #fff;
-      color: var(--blue);
-      border: 1px solid var(--border);
-    }
-    button.btn-secondary:hover { background: #f9fafb; border-color: #cbd5e1; }
-    button.btn-connect {
-      background: #fff;
-      color: var(--blue);
-      font-weight: 700;
-      white-space: nowrap;
-    }
-    button.btn-connect:hover { background: #f0f4ff; }
-    button.btn-ghost {
-      background: transparent;
-      color: var(--muted);
-      padding: 0.4rem 0.65rem;
-      font-size: 0.78rem;
-    }
-    button.btn-ghost:hover { color: var(--blue); background: #f3f4f6; }
-    button.btn-danger {
-      background: #fef2f2;
-      color: #b91c1c;
-      border: 1px solid #fecaca;
-      padding: 0.35rem 0.7rem;
-      font-size: 0.72rem;
-    }
-    button.btn-danger:hover { background: #fee2e2; }
-
-    .table-wrap {
-      overflow-x: auto;
-      border: 1px solid var(--border);
-      border-radius: 12px;
-    }
-    table { width: 100%; border-collapse: collapse; font-size: 0.82rem; }
-    thead { background: linear-gradient(180deg, #f8fafc, #f1f5f9); }
-    th {
-      text-align: left;
-      padding: 0.75rem 1rem;
-      font-size: 0.68rem;
-      text-transform: uppercase;
-      letter-spacing: 0.06em;
-      color: var(--muted);
-      font-weight: 700;
-      border-bottom: 1px solid var(--border);
-    }
-    td {
-      padding: 0.85rem 1rem;
-      border-bottom: 1px solid #f3f4f6;
-      vertical-align: middle;
-    }
+    @media (max-width:540px){ .row { grid-template-columns: 1fr; } }
+    .btn { display: inline-flex; align-items: center; justify-content: center; gap: .4rem; border: none; border-radius: 10px; padding: .6rem 1.15rem; font-family: inherit; font-size: .85rem; font-weight: 600; cursor: pointer; transition: transform .1s, box-shadow .15s; }
+    .btn:active { transform: scale(.98); }
+    .btn-primary { background: linear-gradient(135deg,var(--red),var(--red-dark)); color: #fff; box-shadow: 0 4px 14px rgba(232,79,81,.35); }
+    .btn-primary:disabled { opacity: .45; cursor: not-allowed; transform: none; }
+    .btn-secondary { background: #fff; color: var(--blue); border: 1px solid var(--border); }
+    .btn-connect { background: #fff; color: var(--blue); font-weight: 700; }
+    .btn-ghost { background: transparent; color: var(--muted); padding: .4rem .65rem; font-size: .78rem; }
+    .btn-danger { background: #fef2f2; color: #b91c1c; border: 1px solid #fecaca; padding: .35rem .7rem; font-size: .72rem; }
+    .table-wrap { overflow-x: auto; border: 1px solid var(--border); border-radius: 12px; }
+    table { width: 100%; border-collapse: collapse; font-size: .82rem; }
+    thead { background: linear-gradient(180deg,#f8fafc,#f1f5f9); }
+    th { text-align: left; padding: .75rem 1rem; font-size: .68rem; text-transform: uppercase; letter-spacing: .06em; color: var(--muted); font-weight: 700; border-bottom: 1px solid var(--border); }
+    td { padding: .85rem 1rem; border-bottom: 1px solid #f3f4f6; vertical-align: middle; }
     tbody tr:hover { background: #fafbff; }
-    tbody tr:last-child td { border-bottom: none; }
     .key-name { font-weight: 600; color: var(--blue); }
-    .key-prefix {
-      font-family: 'Consolas', 'Monaco', monospace;
-      font-size: 0.78rem;
-      background: #f1f5f9;
-      padding: 0.2rem 0.5rem;
-      border-radius: 6px;
-      color: #334155;
-    }
-    .badge {
-      display: inline-flex;
-      align-items: center;
-      padding: 0.2rem 0.55rem;
-      border-radius: 999px;
-      font-size: 0.68rem;
-      font-weight: 600;
-    }
+    .key-prefix { font-family: Consolas,monospace; font-size: .78rem; background: #f1f5f9; padding: .2rem .5rem; border-radius: 6px; }
+    .badge { display: inline-flex; padding: .2rem .55rem; border-radius: 999px; font-size: .68rem; font-weight: 600; }
     .badge.ok { background: #d1fae5; color: #065f46; }
     .badge.off { background: #fee2e2; color: #991b1b; }
-    .chip {
-      display: inline-block;
-      background: #eef2ff;
-      color: var(--blue);
-      padding: 0.15rem 0.5rem;
-      border-radius: 6px;
-      font-size: 0.65rem;
-      font-weight: 500;
-      margin: 0.1rem 0.15rem 0.1rem 0;
-    }
+    .chip { display: inline-block; background: #eef2ff; color: var(--blue); padding: .15rem .5rem; border-radius: 6px; font-size: .65rem; font-weight: 500; margin: .1rem .15rem 0 0; }
     .chip.muted { background: #f3f4f6; color: #6b7280; font-style: italic; }
-    .empty-row td {
-      text-align: center;
-      padding: 2.5rem 1rem;
-      color: var(--muted);
-    }
-    .empty-row .empty-icon { font-size: 2rem; opacity: 0.35; margin-bottom: 0.5rem; }
-
-    .toast {
-      padding: 0.85rem 1.1rem;
-      border-radius: 12px;
-      margin-bottom: 1rem;
-      font-size: 0.85rem;
-      display: flex;
-      align-items: center;
-      gap: 0.65rem;
-      animation: slideIn 0.25s ease;
-    }
-    @keyframes slideIn {
-      from { opacity: 0; transform: translateY(-6px); }
-      to { opacity: 1; transform: translateY(0); }
-    }
+    .empty-row td { text-align: center; padding: 2.5rem 1rem; color: var(--muted); }
+    .toast { padding: .85rem 1.1rem; border-radius: 12px; margin-bottom: 1rem; font-size: .85rem; animation: fade .25s ease; }
     .toast.error { background: #fef2f2; color: #991b1b; border: 1px solid #fecaca; }
     .toast.ok { background: #ecfdf5; color: #065f46; border: 1px solid #a7f3d0; }
     .toast.hidden { display: none; }
-
-    .plain-key-panel {
-      margin-top: 1.25rem;
-      padding: 1.15rem;
-      border-radius: 12px;
-      background: linear-gradient(135deg, var(--blue-dark), var(--blue));
-      color: #fff;
-      border: 1px solid rgba(255,255,255,0.1);
-    }
-    .plain-key-panel.hidden { display: none; }
-    .plain-key-panel h3 { margin: 0 0 0.35rem; font-size: 0.9rem; }
-    .plain-key-panel p { margin: 0 0 0.75rem; font-size: 0.75rem; opacity: 0.85; }
-    .plain-key-row {
-      display: flex;
-      gap: 0.5rem;
-      align-items: stretch;
-    }
-    .plain-key-row code {
-      flex: 1;
-      background: rgba(0,0,0,0.25);
-      padding: 0.75rem 1rem;
-      border-radius: 8px;
-      font-size: 0.8rem;
-      word-break: break-all;
-      color: #7dd3fc;
-    }
-    .plain-key-row button {
-      background: var(--red);
-      color: #fff;
-      border: none;
-      border-radius: 8px;
-      padding: 0 1rem;
-      font-weight: 600;
-      cursor: pointer;
-      white-space: nowrap;
-    }
-    .plain-key-row button:hover { background: var(--red-dark); }
-
-    .locked-overlay {
-      position: relative;
-    }
-    .locked-overlay.not-connected::after {
-      content: '';
-      position: absolute;
-      inset: 0;
-      background: rgba(255,255,255,0.55);
-      border-radius: var(--radius);
-      pointer-events: none;
-    }
-    footer {
-      text-align: center;
-      padding: 2rem 1rem;
-      font-size: 0.72rem;
-      color: var(--muted);
-    }
+    .success-panel { margin-top: 1rem; padding: 1.25rem; border-radius: 12px; background: linear-gradient(135deg,var(--blue-dark),var(--blue)); color: #fff; }
+    .success-panel.hidden { display: none; }
+    .success-panel h3 { margin: 0 0 .5rem; font-size: .95rem; }
+    .success-panel p { margin: 0 0 .75rem; font-size: .75rem; opacity: .88; }
+    .code-block { background: rgba(0,0,0,.28); border-radius: 8px; padding: .85rem 1rem; font-family: Consolas,monospace; font-size: .75rem; color: #7dd3fc; white-space: pre-wrap; word-break: break-all; margin: .5rem 0; }
+    .copy-row { display: flex; gap: .5rem; flex-wrap: wrap; margin-top: .5rem; }
+    .copy-row button { background: var(--red); color: #fff; border: none; border-radius: 8px; padding: .45rem .85rem; font-size: .75rem; font-weight: 600; cursor: pointer; }
+    .flow-diagram { display: flex; align-items: center; justify-content: center; flex-wrap: wrap; gap: .5rem; padding: 1.25rem; background: #f8fafc; border-radius: 12px; margin: 1rem 0; font-size: .78rem; font-weight: 600; }
+    .flow-box { background: #fff; border: 2px solid var(--blue-accent); border-radius: 10px; padding: .65rem .9rem; color: var(--blue); text-align: center; min-width: 100px; }
+    .flow-box.highlight { border-color: var(--red); background: #fff9f5; }
+    .flow-arrow { color: var(--muted); font-size: 1.1rem; }
+    .guide-scope-card { border: 1px solid var(--border); border-radius: 12px; padding: 1rem; margin-bottom: .75rem; }
+    .guide-scope-card h4 { margin: 0 0 .35rem; font-size: .88rem; color: var(--blue); }
+    .guide-scope-card code { font-size: .72rem; color: var(--red-dark); }
+    .guide-scope-card ul { margin: .5rem 0 0; padding-left: 1.25rem; font-size: .72rem; color: #475569; font-family: Consolas,monospace; }
+    .locked.not-connected { opacity: .55; pointer-events: none; user-select: none; }
+    footer { text-align: center; padding: 2rem 1rem; font-size: .72rem; color: var(--muted); }
   </style>
 </head>
 <body>
   <header class="topbar">
     <div class="topbar-inner">
       <div class="brand">
-        <img src="/assets/brand/logo-lamundial-sidebar.png" alt="La Mundial de Seguros" onerror="this.style.display='none'" />
+        <img src="/assets/brand/logo-lamundial-sidebar.png" alt="La Mundial" onerror="this.style.display='none'" />
         <div class="brand-text">
           <h1>nest-api · API Keys</h1>
           <p>Gestión de acceso · PostgreSQL nest_auth · srv001 QA</p>
@@ -494,166 +170,202 @@
       <span id="connPill" class="conn-pill offline"><span class="dot"></span> Sin conexión</span>
       <div class="quick-links">
         <a href="/docs" target="_blank">Swagger API</a>
-        <a href="/api/v1/admin/keys" target="_blank" rel="noopener">JSON keys</a>
+        <a href="/api/v1/admin/keys" target="_blank">JSON keys</a>
       </div>
     </div>
-
     <div id="toast" class="toast hidden"></div>
 
     <div class="stats">
-      <div class="stat">
-        <div class="stat-label">Keys totales</div>
-        <div class="stat-value" id="statTotal">—</div>
-      </div>
-      <div class="stat">
-        <div class="stat-label">Activas</div>
-        <div class="stat-value" id="statActive">—</div>
-      </div>
-      <div class="stat">
-        <div class="stat-label">Con scopes</div>
-        <div class="stat-value" id="statScoped">—</div>
-      </div>
+      <div class="stat"><div class="stat-label">Keys totales</div><div class="stat-value" id="statTotal">—</div></div>
+      <div class="stat"><div class="stat-label">Activas</div><div class="stat-value" id="statActive">—</div></div>
+      <div class="stat"><div class="stat-label">Con scopes</div><div class="stat-value" id="statScoped">—</div></div>
     </div>
 
-    <div class="grid-2">
-      <section class="card locked-overlay" id="createCard">
-        <div class="card-head">
-          <div>
-            <h2>Nueva API key</h2>
-            <span class="sub">Para módulos Exélixi (emision, formulario…)</span>
-          </div>
-        </div>
-        <form id="createForm">
-          <div class="row">
-            <div>
-              <label class="field-label" for="keyName">Nombre / cliente</label>
-              <input id="keyName" type="text" required placeholder="modulo-formulario QA" />
-            </div>
-            <div>
-              <label class="field-label" for="cproductor">cproductor</label>
-              <input id="cproductor" type="number" placeholder="80080" value="80080" />
-            </div>
-          </div>
-          <div style="margin-top:1rem">
-            <label class="field-label">Permisos (scopes)</label>
-            <p class="hint">Opcional si el módulo solo consulta catálogos INMA / valrep.</p>
-            <div id="scopeList" class="scopes-grid"></div>
-            <p id="scopeHint" class="hint warn">Conecte con el token de administración para cargar scopes.</p>
-          </div>
-          <div style="margin-top:1.25rem">
-            <button type="submit" class="btn btn-primary" id="btnCreate" disabled>Crear key</button>
-          </div>
-        </form>
-        <div id="plainKeyBox" class="plain-key-panel hidden">
-          <h3>Key creada — cópiela ahora</h3>
-          <p>No se volverá a mostrar. Pegue en el .env del módulo como <strong>NEST_API_KEY</strong>.</p>
-          <div class="plain-key-row">
-            <code id="plainKeyText"></code>
-            <button type="button" id="btnCopyKey">Copiar</button>
-          </div>
-        </div>
-      </section>
+    <nav class="tabs" role="tablist">
+      <button type="button" class="tab active" data-tab="keys">📋 Keys registradas</button>
+      <button type="button" class="tab" data-tab="create">➕ Crear key (asistente)</button>
+      <button type="button" class="tab" data-tab="guide">📖 Guía scopes &amp; auth</button>
+    </nav>
 
-      <section class="card">
+    <!-- TAB: Keys -->
+    <section class="panel active" id="panel-keys">
+      <div class="card">
         <div class="card-head">
-          <div>
-            <h2>Keys registradas</h2>
-            <span class="sub">Prefijo visible · secreto solo al crear</span>
-          </div>
+          <div><h2>Keys en PostgreSQL</h2><span class="sub">Prefijo visible · secreto completo solo al crear</span></div>
           <button type="button" id="btnRefresh" class="btn btn-ghost">↻ Actualizar</button>
         </div>
         <div class="table-wrap">
           <table>
-            <thead>
-              <tr>
-                <th>Módulo</th>
-                <th>Prefijo</th>
-                <th>Scopes</th>
-                <th>Estado</th>
-                <th>Último uso</th>
-                <th></th>
-              </tr>
-            </thead>
-            <tbody id="keysBody">
-              <tr class="empty-row"><td colspan="6">
-                <div class="empty-icon">🔑</div>
-                Conecte para ver las keys registradas
-              </td></tr>
-            </tbody>
+            <thead><tr><th>Módulo</th><th>Prefijo</th><th>Scopes</th><th>Estado</th><th>Último uso</th><th></th></tr></thead>
+            <tbody id="keysBody"><tr class="empty-row"><td colspan="6">Conecte para ver las keys</td></tr></tbody>
           </table>
         </div>
-      </section>
-    </div>
-  </main>
+      </div>
+    </section>
 
+    <!-- TAB: Wizard -->
+    <section class="panel" id="panel-create">
+      <div class="card locked" id="wizardCard">
+        <div class="card-head">
+          <div><h2>Asistente — nueva API key</h2><span class="sub">3 pasos: módulo → scopes → confirmar</span></div>
+        </div>
+
+        <div class="wizard-steps">
+          <div class="wizard-step active" data-step="1"><div class="wizard-step-num">1</div><span class="wizard-step-label">Módulo</span></div>
+          <div class="wizard-step" data-step="2"><div class="wizard-step-num">2</div><span class="wizard-step-label">Scopes</span></div>
+          <div class="wizard-step" data-step="3"><div class="wizard-step-num">3</div><span class="wizard-step-label">Confirmar</span></div>
+        </div>
+
+        <!-- Paso 1 -->
+        <div class="wizard-pane active" id="step1">
+          <p style="font-size:.82rem;color:var(--muted);margin:0 0 .75rem">Seleccione el módulo Exélixi. Se preconfiguran nombre y scopes recomendados.</p>
+          <div class="preset-grid" id="presetGrid"></div>
+          <div class="row" style="margin-top:1rem">
+            <div>
+              <label class="field-label" for="keyName">Nombre de la key</label>
+              <input id="keyName" type="text" placeholder="modulo-formulario QA" />
+            </div>
+            <div>
+              <label class="field-label" for="cproductor">cproductor</label>
+              <input id="cproductor" type="number" value="80080" />
+            </div>
+          </div>
+        </div>
+
+        <!-- Paso 2 -->
+        <div class="wizard-pane" id="step2">
+          <div class="catalog-note">
+            <strong>Catálogos INMA / valrep</strong> (marcas, estados, planes…) solo requieren token válido — <em>no necesitan scope</em>.
+            Marque scopes solo si el módulo <strong>emite pólizas, cobra o genera documentos</strong>.
+          </div>
+          <div id="scopeDetailList" class="scope-detail-list"></div>
+        </div>
+
+        <!-- Paso 3 -->
+        <div class="wizard-pane" id="step3">
+          <div class="summary-box" id="summaryBox"></div>
+          <p style="font-size:.78rem;color:var(--muted)">Al crear, recibirá el <strong>plainKey</strong> (una sola vez) y el bloque .env para pegar en el servidor.</p>
+        </div>
+
+        <div class="wizard-nav">
+          <button type="button" class="btn btn-secondary" id="btnPrev" disabled>← Anterior</button>
+          <button type="button" class="btn btn-primary" id="btnNext">Siguiente →</button>
+          <button type="button" class="btn btn-primary hidden" id="btnSubmit" style="display:none">Crear key</button>
+        </div>
+
+        <div id="successPanel" class="success-panel hidden">
+          <h3>✓ Key creada correctamente</h3>
+          <p>Copie el secreto y el .env antes de cerrar esta pestaña.</p>
+          <div class="field-label" style="color:rgba(255,255,255,.7)">NEST_API_KEY</div>
+          <div class="code-block" id="plainKeyText"></div>
+          <div class="copy-row"><button type="button" id="btnCopyKey">Copiar key</button></div>
+          <div class="field-label" style="color:rgba(255,255,255,.7);margin-top:1rem">Pegar en ~/exelixi/&lt;modulo&gt;/server/.env</div>
+          <div class="code-block" id="envSnippet"></div>
+          <div class="copy-row">
+            <button type="button" id="btnCopyEnv">Copiar .env</button>
+            <button type="button" id="btnCopyPm2">Copiar pm2 restart</button>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- TAB: Guide -->
+    <section class="panel" id="panel-guide">
+      <div class="card">
+        <div class="card-head"><div><h2>Flujo de autenticación</h2><span class="sub">Cómo un módulo obtiene y usa el token</span></div></div>
+        <div class="flow-diagram">
+          <div class="flow-box">Módulo<br><small>NEST_API_KEY</small></div>
+          <span class="flow-arrow">→</span>
+          <div class="flow-box highlight">POST /auth/token<br><small>apikey</small></div>
+          <span class="flow-arrow">→</span>
+          <div class="flow-box">access_token<br><small>JWT ~15 min</small></div>
+          <span class="flow-arrow">→</span>
+          <div class="flow-box highlight">Bearer en cada<br>llamada nest-api</div>
+        </div>
+        <p style="font-size:.8rem;color:var(--muted);line-height:1.5">
+          <code>nestTokenService.js</code> renueva automáticamente con <code>/auth/refresh</code>.
+          Sin token → nest-api responde <strong>401</strong> en todos los endpoints (excepto auth y admin).
+        </p>
+      </div>
+      <div class="card">
+        <div class="card-head"><div><h2>Catálogo de scopes</h2><span class="sub">Qué endpoint desbloquea cada permiso</span></div></div>
+        <div id="guideScopes"></div>
+        <div class="catalog-note" style="margin-top:.75rem">
+          Keys <strong>sin scopes</strong> pueden consultar catálogos (INMA, valrep, personas/planes). Ideal para <em>formulario</em>.
+        </div>
+      </div>
+    </section>
+  </main>
   <footer>Exélixi Tech · nest-api · La Mundial de Seguros QA</footer>
 
   <script>
     const API = '/api/v1/admin';
+    const PRESETS = [
+      { id: 'formulario', title: 'Formulario', desc: 'Catálogos INMA, valrep, estados y ciudades.', name: 'modulo-formulario QA', scopes: [], pm2: 'form-api' },
+      { id: 'emision', title: 'Emisión completa', desc: 'Auto, personas/viajero, cobranza + catálogos.', name: 'modulo-emision QA', scopes: ['emissions:auto', 'emissions:person', 'collection:write'], pm2: 'emision-api' },
+      { id: 'emision_auto', title: 'Solo emisión auto', desc: 'RCV / createEmissionAuto + catálogos.', name: 'modulo-emision-auto QA', scopes: ['emissions:auto'], pm2: 'emision-api' },
+      { id: 'custom', title: 'Personalizado', desc: 'Elija scopes manualmente en el paso 2.', name: '', scopes: [], pm2: 'su-modulo-api' },
+    ];
     let scopesCatalog = [];
     let keysCache = [];
     let connected = false;
+    let wizardStep = 1;
+    let selectedPreset = PRESETS[0];
 
-    function token() {
-      return localStorage.getItem('nest_admin_token') || '';
-    }
+    function token() { return localStorage.getItem('nest_admin_token') || ''; }
 
     function setConnected(on) {
       connected = on;
       const pill = document.getElementById('connPill');
-      const createCard = document.getElementById('createCard');
-      const btnCreate = document.getElementById('btnCreate');
+      const wizardCard = document.getElementById('wizardCard');
       if (on) {
         pill.className = 'conn-pill online';
         pill.innerHTML = '<span class="dot"></span> Conectado';
-        createCard.classList.remove('not-connected');
-        btnCreate.disabled = false;
+        wizardCard.classList.remove('not-connected');
       } else {
         pill.className = 'conn-pill offline';
         pill.innerHTML = '<span class="dot"></span> Sin conexión';
-        createCard.classList.add('not-connected');
-        btnCreate.disabled = true;
+        wizardCard.classList.add('not-connected');
       }
+      renderKeys(keysCache);
     }
 
     function showToast(msg, type) {
       const el = document.getElementById('toast');
-      if (!msg) {
-        el.className = 'toast hidden';
-        return;
-      }
+      if (!msg) { el.className = 'toast hidden'; return; }
       el.className = 'toast ' + (type || 'error');
       el.textContent = msg;
-      el.classList.remove('hidden');
-      if (type === 'ok') setTimeout(() => showToast(''), 4000);
+      if (type === 'ok') setTimeout(() => showToast(''), 4500);
     }
 
     async function api(path, opts) {
       const res = await fetch(API + path, {
         ...opts,
-        headers: {
-          'Content-Type': 'application/json',
-          'X-Admin-Token': token(),
-          ...(opts && opts.headers),
-        },
+        headers: { 'Content-Type': 'application/json', 'X-Admin-Token': token(), ...(opts?.headers || {}) },
       });
       const data = await res.json().catch(() => ({}));
-      if (!res.ok) {
-        const msg =
-          data.message ||
-          data.error ||
-          (Array.isArray(data.message) ? data.message.join(', ') : null) ||
-          res.statusText;
-        throw new Error(msg);
-      }
+      if (!res.ok) throw new Error(data.message || data.error || res.statusText);
       return unwrap(data);
     }
 
     function unwrap(body) {
-      if (body && typeof body === 'object' && body.data && typeof body.data === 'object' && 'status' in body) {
-        return body.data;
-      }
+      if (body?.data && typeof body.data === 'object' && 'status' in body) return body.data;
       return body;
+    }
+
+    function escapeHtml(s) {
+      return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+    }
+
+    function formatScopes(scopes) {
+      if (!scopes?.length) return '<span class="chip muted">Solo catálogos</span>';
+      return scopes.map((s) => `<span class="chip">${escapeHtml(s)}</span>`).join('');
+    }
+
+    function formatDate(iso) {
+      if (!iso) return '<span style="color:#9ca3af">—</span>';
+      try { return new Date(iso).toLocaleString('es-VE', { dateStyle: 'short', timeStyle: 'short' }); }
+      catch { return '—'; }
     }
 
     function updateStats(keys) {
@@ -663,100 +375,132 @@
       document.getElementById('statScoped').textContent = keys.filter((k) => (k.scopes || []).length > 0).length;
     }
 
-    function renderScopes() {
-      const box = document.getElementById('scopeList');
-      const hint = document.getElementById('scopeHint');
-      if (!scopesCatalog.length) {
-        box.innerHTML = '';
-        if (hint) hint.hidden = false;
-        return;
-      }
-      if (hint) hint.hidden = true;
-      box.innerHTML = scopesCatalog
-        .filter((s) => s.id !== 'admin:keys')
-        .map(
-          (s) => `
-        <label class="scope-item">
-          <input type="checkbox" name="scope" value="${escapeHtml(s.id)}" />
-          <div>
-            <strong>${escapeHtml(s.label)}</strong>
-            <code>${escapeHtml(s.id)}</code>
-            <span class="desc">${escapeHtml(s.description)}</span>
-          </div>
-        </label>`,
-        )
-        .join('');
-    }
-
-    function formatScopes(scopes) {
-      if (!scopes || !scopes.length) {
-        return '<span class="chip muted">Solo catálogos</span>';
-      }
-      return scopes.map((s) => `<span class="chip">${escapeHtml(s)}</span>`).join('');
-    }
-
-    function formatDate(iso) {
-      if (!iso) return '<span style="color:#9ca3af">—</span>';
-      try {
-        return new Date(iso).toLocaleString('es-VE', {
-          dateStyle: 'short',
-          timeStyle: 'short',
-        });
-      } catch {
-        return '—';
-      }
-    }
-
     function renderKeys(keys) {
       updateStats(keys);
       const tbody = document.getElementById('keysBody');
-      if (!connected) {
-        tbody.innerHTML = `<tr class="empty-row"><td colspan="6"><div class="empty-icon">🔐</div>Conecte con el token de administración</td></tr>`;
+      if (!connected || !token()) {
+        tbody.innerHTML = '<tr class="empty-row"><td colspan="6">🔐 Conecte con el token de administración</td></tr>';
         return;
       }
       if (!keys.length) {
-        tbody.innerHTML = `<tr class="empty-row"><td colspan="6"><div class="empty-icon">📭</div>No hay keys. Cree la primera arriba.</td></tr>`;
+        tbody.innerHTML = '<tr class="empty-row"><td colspan="6">📭 No hay keys — use el asistente «Crear key»</td></tr>';
         return;
       }
-      tbody.innerHTML = keys
-        .map(
-          (k) => `
+      tbody.innerHTML = keys.map((k) => `
         <tr>
-          <td><span class="key-name">${escapeHtml(k.name)}</span>${k.cproductor ? `<br><span style="font-size:0.68rem;color:#9ca3af">cproductor ${k.cproductor}</span>` : ''}</td>
+          <td><span class="key-name">${escapeHtml(k.name)}</span>${k.cproductor ? `<br><span style="font-size:.68rem;color:#9ca3af">cproductor ${k.cproductor}</span>` : ''}</td>
           <td><span class="key-prefix">${escapeHtml(k.keyPrefix)}…</span></td>
           <td>${formatScopes(k.scopes)}</td>
           <td><span class="badge ${k.active ? 'ok' : 'off'}">${k.active ? 'Activa' : 'Revocada'}</span></td>
-          <td style="font-size:0.78rem">${formatDate(k.lastUsedAt)}</td>
+          <td style="font-size:.78rem">${formatDate(k.lastUsedAt)}</td>
           <td>${k.active ? `<button type="button" class="btn btn-danger" data-revoke="${escapeHtml(k.id)}">Revocar</button>` : ''}</td>
-        </tr>`,
-        )
-        .join('');
+        </tr>`).join('');
       tbody.querySelectorAll('[data-revoke]').forEach((btn) => {
         btn.addEventListener('click', async () => {
-          if (!confirm('¿Revocar esta key? Los módulos que la usen dejarán de funcionar.')) return;
+          if (!confirm('¿Revocar esta key?')) return;
           try {
             await api('/keys/' + btn.dataset.revoke + '/revoke', { method: 'POST' });
-            showToast('Key revocada correctamente.', 'ok');
+            showToast('Key revocada.', 'ok');
             loadKeys();
-          } catch (e) {
-            showToast(e.message);
-          }
+          } catch (e) { showToast(e.message); }
         });
       });
     }
 
-    function escapeHtml(s) {
-      return String(s)
-        .replace(/&/g, '&amp;')
-        .replace(/</g, '&lt;')
-        .replace(/>/g, '&gt;')
-        .replace(/"/g, '&quot;');
+    function renderPresets() {
+      document.getElementById('presetGrid').innerHTML = PRESETS.map((p) => `
+        <div class="preset-card ${p.id === selectedPreset.id ? 'selected' : ''}" data-preset="${p.id}">
+          <h3>${escapeHtml(p.title)}</h3>
+          <p>${escapeHtml(p.desc)}</p>
+          <div class="preset-scopes">${p.scopes.length ? formatScopes(p.scopes) : '<span class="chip muted">Sin scopes</span>'}</div>
+        </div>`).join('');
+      document.querySelectorAll('.preset-card').forEach((el) => {
+        el.addEventListener('click', () => {
+          selectedPreset = PRESETS.find((p) => p.id === el.dataset.preset) || PRESETS[0];
+          renderPresets();
+          if (selectedPreset.name) document.getElementById('keyName').value = selectedPreset.name;
+          applyPresetScopes();
+        });
+      });
+    }
+
+    function applyPresetScopes() {
+      document.querySelectorAll('input[name=scope]').forEach((cb) => {
+        cb.checked = selectedPreset.scopes.includes(cb.value);
+      });
+    }
+
+    function renderScopeDetails() {
+      const box = document.getElementById('scopeDetailList');
+      const filtered = scopesCatalog.filter((s) => s.id !== 'admin:keys');
+      box.innerHTML = filtered.map((s) => `
+        <div class="scope-detail">
+          <label class="scope-detail-head">
+            <input type="checkbox" name="scope" value="${escapeHtml(s.id)}" />
+            <div>
+              <strong>${escapeHtml(s.label)}</strong>
+              <code>${escapeHtml(s.id)}</code>
+              <span class="desc">${escapeHtml(s.description)}</span>
+            </div>
+          </label>
+          <ul class="scope-routes">${(s.routes || []).map((r) => `<li>${escapeHtml(r)}</li>`).join('')}</ul>
+        </div>`).join('');
+      applyPresetScopes();
+    }
+
+    function renderGuideScopes() {
+      document.getElementById('guideScopes').innerHTML = scopesCatalog
+        .filter((s) => s.id !== 'admin:keys')
+        .map((s) => `
+          <div class="guide-scope-card">
+            <h4>${escapeHtml(s.label)} <code>${escapeHtml(s.id)}</code></h4>
+            <p style="font-size:.78rem;color:var(--muted);margin:0">${escapeHtml(s.description)}</p>
+            <ul>${(s.routes || []).map((r) => `<li>${escapeHtml(r)}</li>`).join('')}</ul>
+          </div>`).join('');
+    }
+
+    function getSelectedScopes() {
+      return [...document.querySelectorAll('input[name=scope]:checked')].map((el) => el.value);
+    }
+
+    function renderSummary() {
+      const name = document.getElementById('keyName').value.trim();
+      const cp = document.getElementById('cproductor').value;
+      const scopes = getSelectedScopes();
+      document.getElementById('summaryBox').innerHTML = `
+        <div class="summary-row"><span>Módulo / nombre</span><span>${escapeHtml(name || '—')}</span></div>
+        <div class="summary-row"><span>cproductor</span><span>${escapeHtml(cp || '80080')}</span></div>
+        <div class="summary-row"><span>Scopes</span><span>${scopes.length ? scopes.join(', ') : 'Ninguno (solo catálogos)'}</span></div>
+        <div class="summary-row"><span>PM2 restart</span><span>pm2 restart ${escapeHtml(selectedPreset.pm2)} --update-env</span></div>`;
+    }
+
+    function setWizardStep(n) {
+      wizardStep = n;
+      document.querySelectorAll('.wizard-step').forEach((el) => {
+        const s = parseInt(el.dataset.step, 10);
+        el.classList.toggle('active', s === n);
+        el.classList.toggle('done', s < n);
+      });
+      document.querySelectorAll('.wizard-pane').forEach((el) => el.classList.remove('active'));
+      document.getElementById('step' + n).classList.add('active');
+      document.getElementById('btnPrev').disabled = n === 1;
+      const btnNext = document.getElementById('btnNext');
+      const btnSubmit = document.getElementById('btnSubmit');
+      if (n === 3) {
+        renderSummary();
+        btnNext.style.display = 'none';
+        btnSubmit.style.display = 'inline-flex';
+      } else {
+        btnNext.style.display = 'inline-flex';
+        btnSubmit.style.display = 'none';
+      }
     }
 
     async function loadScopes() {
       const data = await api('/scopes');
       scopesCatalog = data.scopes || [];
-      renderScopes();
+      renderScopeDetails();
+      renderGuideScopes();
     }
 
     async function loadKeys() {
@@ -766,13 +510,13 @@
 
     async function connect() {
       const t = document.getElementById('adminToken').value.trim();
-      if (!t) return showToast('Ingrese NEST_ADMIN_TOKEN del servidor.');
+      if (!t) return showToast('Ingrese NEST_ADMIN_TOKEN.');
       localStorage.setItem('nest_admin_token', t);
       try {
+        setConnected(true);
         await loadScopes();
         await loadKeys();
-        setConnected(true);
-        showToast('Conectado al panel de administración.', 'ok');
+        showToast('Conectado.', 'ok');
       } catch (e) {
         setConnected(false);
         localStorage.removeItem('nest_admin_token');
@@ -780,58 +524,70 @@
       }
     }
 
-    document.getElementById('btnConnect').addEventListener('click', connect);
+    async function createKey() {
+      const name = document.getElementById('keyName').value.trim();
+      if (!name) return showToast('Ingrese un nombre para la key.');
+      const scopes = getSelectedScopes();
+      const cp = document.getElementById('cproductor').value;
+      const body = { name, scopes };
+      if (cp) body.cproductor = parseInt(cp, 10);
+      try {
+        const data = await api('/keys', { method: 'POST', body: JSON.stringify(body) });
+        const plain = data.plainKey;
+        const env = `NEST_API_URL=http://127.0.0.1:3002\nNEST_API_KEY=${plain}\nNEST_AUTH_USE_TOKEN=true`;
+        document.getElementById('plainKeyText').textContent = plain;
+        document.getElementById('envSnippet').textContent = env;
+        document.getElementById('successPanel').classList.remove('hidden');
+        document.getElementById('successPanel').dataset.pm2 = selectedPreset.pm2;
+        showToast('Key creada. Copie el secreto.', 'ok');
+        loadKeys();
+        switchTab('create');
+      } catch (e) { showToast(e.message); }
+    }
 
+    function switchTab(id) {
+      document.querySelectorAll('.tab').forEach((t) => t.classList.toggle('active', t.dataset.tab === id));
+      document.querySelectorAll('.panel').forEach((p) => p.classList.toggle('active', p.id === 'panel-' + id));
+    }
+
+    document.querySelectorAll('.tab').forEach((tab) => {
+      tab.addEventListener('click', () => switchTab(tab.dataset.tab));
+    });
+
+    document.getElementById('btnConnect').addEventListener('click', connect);
     document.getElementById('btnToggleToken').addEventListener('click', () => {
       const inp = document.getElementById('adminToken');
       inp.type = inp.type === 'password' ? 'text' : 'password';
     });
-
     document.getElementById('btnRefresh').addEventListener('click', async () => {
       if (!token()) return showToast('Conecte primero.');
-      try {
-        await loadKeys();
-        showToast('Lista actualizada.', 'ok');
-      } catch (e) {
-        showToast(e.message);
+      try { await loadKeys(); showToast('Actualizado.', 'ok'); } catch (e) { showToast(e.message); }
+    });
+    document.getElementById('btnPrev').addEventListener('click', () => setWizardStep(Math.max(1, wizardStep - 1)));
+    document.getElementById('btnNext').addEventListener('click', () => {
+      if (wizardStep === 1 && !document.getElementById('keyName').value.trim()) {
+        return showToast('Ingrese el nombre de la key.');
       }
+      setWizardStep(Math.min(3, wizardStep + 1));
+    });
+    document.getElementById('btnSubmit').addEventListener('click', createKey);
+    document.getElementById('btnCopyKey').addEventListener('click', () => copyText(document.getElementById('plainKeyText').textContent, 'Key copiada.'));
+    document.getElementById('btnCopyEnv').addEventListener('click', () => copyText(document.getElementById('envSnippet').textContent, '.env copiado.'));
+    document.getElementById('btnCopyPm2').addEventListener('click', () => {
+      const pm2 = document.getElementById('successPanel').dataset.pm2 || 'form-api';
+      copyText(`pm2 restart ${pm2} --update-env`, 'Comando copiado.');
     });
 
-    document.getElementById('createForm').addEventListener('submit', async (e) => {
-      e.preventDefault();
-      if (!token()) return showToast('Conecte primero.');
-      const scopes = [...document.querySelectorAll('input[name=scope]:checked')].map((el) => el.value);
-      const body = {
-        name: document.getElementById('keyName').value.trim(),
-        scopes,
-      };
-      const cp = document.getElementById('cproductor').value;
-      if (cp) body.cproductor = parseInt(cp, 10);
-      try {
-        const data = await api('/keys', { method: 'POST', body: JSON.stringify(body) });
-        const box = document.getElementById('plainKeyBox');
-        document.getElementById('plainKeyText').textContent = data.plainKey;
-        box.classList.remove('hidden');
-        showToast('Key creada. Copie el secreto antes de cerrar.', 'ok');
-        document.getElementById('createForm').reset();
-        document.getElementById('cproductor').value = '80080';
-        loadKeys();
-      } catch (err) {
-        showToast(err.message);
-      }
-    });
+    async function copyText(text, okMsg) {
+      try { await navigator.clipboard.writeText(text); showToast(okMsg, 'ok'); }
+      catch { showToast('Copie manualmente.'); }
+    }
 
-    document.getElementById('btnCopyKey').addEventListener('click', async () => {
-      const text = document.getElementById('plainKeyText').textContent;
-      try {
-        await navigator.clipboard.writeText(text);
-        showToast('Key copiada al portapapeles.', 'ok');
-      } catch {
-        showToast('No se pudo copiar. Seleccione el texto manualmente.');
-      }
-    });
-
+    renderPresets();
+    document.getElementById('keyName').value = selectedPreset.name;
     setConnected(false);
+    setWizardStep(1);
+
     if (token()) {
       document.getElementById('adminToken').value = token();
       connect().catch(() => {});
