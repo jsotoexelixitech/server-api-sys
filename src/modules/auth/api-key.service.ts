@@ -5,6 +5,18 @@ import {
   NotFoundException,
 } from '@nestjs/common';
 import { PrismaService } from '../../database/prisma/prisma.service';
+import {
+  createApiKeyLegacy,
+  findApiKeyByDocsSlugLegacy,
+  findApiKeyByHashLegacy,
+  findApiKeyByIdLegacy,
+  listApiKeysLegacy,
+  revokeApiKeyLegacy,
+  supportsDocsSlugColumn,
+  touchApiKeyLastUsedLegacy,
+  updateApiKeyDocsSlugLegacy,
+  updateApiKeyLegacy,
+} from './api-key-db.support';
 import { buildScopeCatalog } from './scopes/scope-catalog.registry';
 
 export interface ApiKeyRecord {
@@ -61,61 +73,54 @@ export class ApiKeyService {
     return `doc_${randomBytes(18).toString('hex')}`;
   }
 
-  listKeys(): Promise<ApiKeyRecord[]> {
-    if (!this.isEnabled()) return Promise.resolve([]);
-    return this.prisma.apiKey
-      .findMany({
-        orderBy: { createdAt: 'desc' },
-        select: {
-          id: true,
-          name: true,
-          keyPrefix: true,
-          docsSlug: true,
-          scopes: true,
-          active: true,
-          cproductor: true,
-          ccanalalt: true,
-          cscanalalt: true,
-          ctipocanal: true,
-          xcanalVenta: true,
-          createdAt: true,
-          expiresAt: true,
-          lastUsedAt: true,
-          revokedAt: true,
-        },
-      })
-      .then(async (rows) => {
-        const enriched: ApiKeyRecord[] = [];
-        for (const row of rows) {
-          if (!row.docsSlug && row.active) {
-            const updated = await this.prisma.apiKey.update({
-              where: { id: row.id },
-              data: { docsSlug: this.generateDocsSlug() },
-              select: {
-                id: true,
-                name: true,
-                keyPrefix: true,
-                docsSlug: true,
-                scopes: true,
-                active: true,
-                cproductor: true,
-                ccanalalt: true,
-                cscanalalt: true,
-                ctipocanal: true,
-                xcanalVenta: true,
-                createdAt: true,
-                expiresAt: true,
-                lastUsedAt: true,
-                revokedAt: true,
-              },
-            });
-            enriched.push(updated);
-          } else {
-            enriched.push(row);
-          }
-        }
-        return enriched;
-      });
+  private newApiKeyId(): string {
+    return `cl${randomBytes(12).toString('hex')}`;
+  }
+
+  private async hasDocsSlugColumn(): Promise<boolean> {
+    return supportsDocsSlugColumn(this.prisma);
+  }
+
+  async listKeys(): Promise<ApiKeyRecord[]> {
+    if (!this.isEnabled()) return [];
+
+    const withDocsSlug = await this.hasDocsSlugColumn();
+    if (!withDocsSlug) {
+      return listApiKeysLegacy(this.prisma, false);
+    }
+
+    const rows = await this.prisma.apiKey.findMany({
+      orderBy: { createdAt: 'desc' },
+      select: {
+        id: true,
+        name: true,
+        keyPrefix: true,
+        docsSlug: true,
+        scopes: true,
+        active: true,
+        cproductor: true,
+        ccanalalt: true,
+        cscanalalt: true,
+        ctipocanal: true,
+        xcanalVenta: true,
+        createdAt: true,
+        expiresAt: true,
+        lastUsedAt: true,
+        revokedAt: true,
+      },
+    });
+
+    const enriched: ApiKeyRecord[] = [];
+    for (const row of rows) {
+      if (!row.docsSlug && row.active) {
+        const docsSlug = this.generateDocsSlug();
+        await updateApiKeyDocsSlugLegacy(this.prisma, row.id, docsSlug);
+        enriched.push({ ...row, docsSlug });
+      } else {
+        enriched.push(row);
+      }
+    }
+    return enriched;
   }
 
   getScopeCatalog() {
@@ -136,14 +141,36 @@ export class ApiKeyService {
     const plainKey = this.generatePlainKey();
     const keyHash = this.hashKey(plainKey);
     const keyPrefix = plainKey.slice(0, 12);
-    const docsSlug = this.generateDocsSlug();
+    const withDocsSlug = await this.hasDocsSlugColumn();
+    const docsSlug = withDocsSlug ? this.generateDocsSlug() : null;
+
+    if (!withDocsSlug) {
+      const row = await createApiKeyLegacy(
+        this.prisma,
+        {
+          id: this.newApiKeyId(),
+          name,
+          keyPrefix,
+          keyHash,
+          scopes,
+          cproductor: input.cproductor ?? null,
+          ccanalalt: input.ccanalalt ?? null,
+          cscanalalt: input.cscanalalt ?? null,
+          ctipocanal: input.ctipocanal?.trim()?.slice(0, 1) || null,
+          xcanalVenta: input.xcanalVenta?.trim() || null,
+          expiresAt: input.expiresAt ?? null,
+        },
+        false,
+      );
+      return { key: row, plainKey };
+    }
 
     const row = await this.prisma.apiKey.create({
       data: {
         name,
         keyPrefix,
         keyHash,
-        docsSlug,
+        docsSlug: docsSlug!,
         scopes,
         cproductor: input.cproductor ?? null,
         ccanalalt: input.ccanalalt ?? null,
@@ -162,8 +189,17 @@ export class ApiKeyService {
       throw new BadRequestException('PostgreSQL auth deshabilitado.');
     }
 
-    const existing = await this.prisma.apiKey.findUnique({ where: { id } });
+    const withDocsSlug = await this.hasDocsSlugColumn();
+    const existing = withDocsSlug
+      ? await this.prisma.apiKey.findUnique({ where: { id } })
+      : await findApiKeyByIdLegacy(this.prisma, id, false);
     if (!existing) throw new NotFoundException('API key no encontrada.');
+
+    if (!withDocsSlug) {
+      const row = await revokeApiKeyLegacy(this.prisma, id, false);
+      if (!row) throw new NotFoundException('API key no encontrada.');
+      return row;
+    }
 
     return this.prisma.apiKey.update({
       where: { id },
@@ -182,16 +218,40 @@ export class ApiKeyService {
       throw new BadRequestException('PostgreSQL auth deshabilitado.');
     }
 
-    const existing = await this.prisma.apiKey.findUnique({ where: { id } });
+    const withDocsSlug = await this.hasDocsSlugColumn();
+    const existing = withDocsSlug
+      ? await this.prisma.apiKey.findUnique({ where: { id } })
+      : await findApiKeyByIdLegacy(this.prisma, id, false);
     if (!existing) throw new NotFoundException('API key no encontrada.');
+
+    const normalizedPatch = {
+      ...patch,
+      scopes: patch.scopes ? this.normalizeScopes(patch.scopes) : undefined,
+    };
+
+    if (!withDocsSlug) {
+      const row = await updateApiKeyLegacy(
+        this.prisma,
+        id,
+        normalizedPatch,
+        false,
+      );
+      if (!row) throw new NotFoundException('API key no encontrada.');
+      return row;
+    }
 
     return this.prisma.apiKey.update({
       where: { id },
       data: {
-        name: patch.name?.trim() || undefined,
-        scopes: patch.scopes ? this.normalizeScopes(patch.scopes) : undefined,
-        active: patch.active,
-        revokedAt: patch.active === false ? new Date() : patch.active === true ? null : undefined,
+        name: normalizedPatch.name?.trim() || undefined,
+        scopes: normalizedPatch.scopes,
+        active: normalizedPatch.active,
+        revokedAt:
+          normalizedPatch.active === false
+            ? new Date()
+            : normalizedPatch.active === true
+              ? null
+              : undefined,
       },
     });
   }
@@ -199,16 +259,23 @@ export class ApiKeyService {
   async findByPlainKey(plain: string): Promise<ApiKeyRecord | null> {
     if (!this.isEnabled()) return null;
     const keyHash = this.hashKey(String(plain ?? '').trim());
-    const row = await this.prisma.apiKey.findUnique({
-      where: { keyHash },
-    });
+    const withDocsSlug = await this.hasDocsSlugColumn();
+
+    const row = withDocsSlug
+      ? await this.prisma.apiKey.findUnique({ where: { keyHash } })
+      : await findApiKeyByHashLegacy(this.prisma, keyHash, false);
+
     if (!row || !row.active || row.revokedAt) return null;
     if (row.expiresAt && row.expiresAt.getTime() < Date.now()) return null;
 
-    await this.prisma.apiKey.update({
-      where: { id: row.id },
-      data: { lastUsedAt: new Date() },
-    });
+    if (withDocsSlug) {
+      await this.prisma.apiKey.update({
+        where: { id: row.id },
+        data: { lastUsedAt: new Date() },
+      });
+    } else {
+      await touchApiKeyLastUsedLegacy(this.prisma, row.id);
+    }
 
     return row;
   }
@@ -218,9 +285,10 @@ export class ApiKeyService {
     const slug = String(docsSlug ?? '').trim();
     if (!slug) return null;
 
-    const row = await this.prisma.apiKey.findUnique({
-      where: { docsSlug: slug },
-    });
+    const withDocsSlug = await this.hasDocsSlugColumn();
+    if (!withDocsSlug) return null;
+
+    const row = await findApiKeyByDocsSlugLegacy(this.prisma, slug);
     if (!row || !row.active || row.revokedAt) return null;
     if (row.expiresAt && row.expiresAt.getTime() < Date.now()) return null;
     return row;
@@ -228,6 +296,10 @@ export class ApiKeyService {
 
   async findById(id: string): Promise<ApiKeyRecord | null> {
     if (!this.isEnabled()) return null;
+    const withDocsSlug = await this.hasDocsSlugColumn();
+    if (!withDocsSlug) {
+      return findApiKeyByIdLegacy(this.prisma, id, false);
+    }
     return this.prisma.apiKey.findUnique({ where: { id } });
   }
 
