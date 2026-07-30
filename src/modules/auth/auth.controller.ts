@@ -1,6 +1,7 @@
 import { Body, Controller, HttpCode, HttpStatus, Post, Req } from '@nestjs/common';
 import { ApiOperation, ApiResponse, ApiTags } from '@nestjs/swagger';
 import { Request } from 'express';
+import { SkipEnvelope } from '../../common/decorators/skip-envelope.decorator';
 import { Public } from './decorators/public.decorator';
 import { RefreshRequestDto, TokenRequestDto } from './dto/auth.dto';
 import { NestAuthService } from './nest-auth.service';
@@ -8,6 +9,7 @@ import { NestAuthService } from './nest-auth.service';
 @ApiTags('0. Autenticación nest-api')
 @Controller('v1/auth')
 @Public()
+@SkipEnvelope()
 export class AuthController {
   constructor(private readonly auth: NestAuthService) {}
 

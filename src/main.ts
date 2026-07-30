@@ -1,5 +1,6 @@
 import { NestFactory } from '@nestjs/core';
 import { Logger, ValidationPipe } from '@nestjs/common';
+import { Reflector } from '@nestjs/core';
 import { NestExpressApplication } from '@nestjs/platform-express';
 import { existsSync } from 'fs';
 import { join } from 'path';
@@ -80,7 +81,7 @@ async function bootstrap(): Promise<void> {
   );
 
   app.useGlobalFilters(new AllExceptionsFilter());
-  app.useGlobalInterceptors(new ResponseInterceptor());
+  app.useGlobalInterceptors(new ResponseInterceptor(app.get(Reflector)));
 
   const showInternalSwaggerServers =
     config.get<string>('SWAGGER_SHOW_INTERNAL_SERVERS') === 'true' || !publicPaths.prefix;
