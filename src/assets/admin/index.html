@@ -4,173 +4,628 @@
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
   <title>nest-api · API Keys</title>
+  <link rel="icon" href="/assets/brand/favicon-64.png" type="image/png" />
   <link rel="preconnect" href="https://fonts.googleapis.com" />
   <link href="https://fonts.googleapis.com/css2?family=Poppins:wght@400;500;600;700&display=swap" rel="stylesheet" />
   <style>
     :root {
       --blue: #0F1A5A;
+      --blue-dark: #091133;
+      --blue-accent: #2E6DBF;
       --red: #E84F51;
-      --bg: #f0f2f5;
+      --red-dark: #b23f44;
+      --bg: #eef1f6;
       --card: #fff;
       --muted: #6b7280;
+      --border: #e5e7eb;
+      --shadow: 0 4px 24px rgba(15, 26, 90, 0.08);
+      --radius: 14px;
     }
     * { box-sizing: border-box; }
     body {
       margin: 0;
+      min-height: 100vh;
       font-family: Poppins, system-ui, sans-serif;
       background: var(--bg);
-      color: #111;
+      color: #1f2937;
     }
-    header {
-      background: linear-gradient(135deg, #091133, var(--blue));
+
+    /* ── Header ── */
+    .topbar {
+      background: linear-gradient(135deg, var(--blue-dark) 0%, var(--blue) 55%, var(--blue-accent) 100%);
       color: #fff;
-      padding: 1.25rem 1.5rem;
+      padding: 0;
+      box-shadow: 0 4px 20px rgba(9, 17, 51, 0.35);
+    }
+    .topbar-inner {
+      max-width: 1200px;
+      margin: 0 auto;
+      padding: 1rem 1.5rem;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 1.25rem;
+      flex-wrap: wrap;
+    }
+    .brand {
+      display: flex;
+      align-items: center;
+      gap: 1rem;
+    }
+    .brand img {
+      height: 44px;
+      width: auto;
+      object-fit: contain;
+      filter: drop-shadow(0 2px 6px rgba(0,0,0,0.2));
+    }
+    .brand-text h1 {
+      margin: 0;
+      font-size: 1.05rem;
+      font-weight: 700;
+      letter-spacing: -0.02em;
+    }
+    .brand-text p {
+      margin: 0.15rem 0 0;
+      font-size: 0.72rem;
+      opacity: 0.82;
+    }
+    .auth-box {
+      display: flex;
+      align-items: flex-end;
+      gap: 0.5rem;
+      flex-wrap: wrap;
+    }
+    .auth-field { min-width: 220px; flex: 1; }
+    .auth-field label {
+      display: block;
+      font-size: 0.68rem;
+      font-weight: 600;
+      text-transform: uppercase;
+      letter-spacing: 0.06em;
+      opacity: 0.85;
+      margin-bottom: 0.3rem;
+    }
+    .input-wrap {
+      display: flex;
+      align-items: stretch;
+      background: rgba(255,255,255,0.12);
+      border: 1px solid rgba(255,255,255,0.22);
+      border-radius: 10px;
+      overflow: hidden;
+    }
+    .input-wrap input {
+      flex: 1;
+      border: none;
+      background: transparent;
+      color: #fff;
+      padding: 0.55rem 0.75rem;
+      font-family: inherit;
+      font-size: 0.85rem;
+      min-width: 0;
+    }
+    .input-wrap input::placeholder { color: rgba(255,255,255,0.45); }
+    .input-wrap input:focus { outline: none; }
+    .input-wrap button.icon-btn {
+      background: transparent;
+      border: none;
+      border-left: 1px solid rgba(255,255,255,0.15);
+      color: rgba(255,255,255,0.8);
+      padding: 0 0.75rem;
+      cursor: pointer;
+      font-size: 0.9rem;
+    }
+    .input-wrap button.icon-btn:hover { background: rgba(255,255,255,0.08); }
+
+    /* ── Layout ── */
+    main {
+      max-width: 1200px;
+      margin: 0 auto;
+      padding: 1.5rem;
+    }
+    .status-bar {
       display: flex;
       align-items: center;
       justify-content: space-between;
       flex-wrap: wrap;
-      gap: 1rem;
+      gap: 0.75rem;
+      margin-bottom: 1.25rem;
     }
-    header h1 { margin: 0; font-size: 1.15rem; font-weight: 700; }
-    header p { margin: 0.25rem 0 0; font-size: 0.75rem; opacity: 0.75; }
-    main { max-width: 1100px; margin: 0 auto; padding: 1.5rem; }
+    .conn-pill {
+      display: inline-flex;
+      align-items: center;
+      gap: 0.45rem;
+      padding: 0.35rem 0.85rem;
+      border-radius: 999px;
+      font-size: 0.75rem;
+      font-weight: 600;
+      background: #fff;
+      border: 1px solid var(--border);
+      color: var(--muted);
+    }
+    .conn-pill .dot {
+      width: 8px;
+      height: 8px;
+      border-radius: 50%;
+      background: #9ca3af;
+    }
+    .conn-pill.online { border-color: #a7f3d0; color: #065f46; background: #ecfdf5; }
+    .conn-pill.online .dot { background: #10b981; box-shadow: 0 0 0 3px rgba(16,185,129,0.25); }
+    .conn-pill.offline .dot { background: #ef4444; }
+    .quick-links { font-size: 0.78rem; }
+    .quick-links a {
+      color: var(--blue);
+      text-decoration: none;
+      font-weight: 500;
+      margin-left: 0.75rem;
+    }
+    .quick-links a:hover { color: var(--red); text-decoration: underline; }
+
+    .stats {
+      display: grid;
+      grid-template-columns: repeat(3, 1fr);
+      gap: 1rem;
+      margin-bottom: 1.25rem;
+    }
+    @media (max-width: 640px) { .stats { grid-template-columns: 1fr; } }
+    .stat {
+      background: var(--card);
+      border-radius: var(--radius);
+      padding: 1rem 1.15rem;
+      box-shadow: var(--shadow);
+      border-left: 4px solid var(--blue-accent);
+    }
+    .stat:nth-child(2) { border-left-color: var(--red); }
+    .stat:nth-child(3) { border-left-color: #10b981; }
+    .stat-label { font-size: 0.7rem; text-transform: uppercase; letter-spacing: 0.06em; color: var(--muted); font-weight: 600; }
+    .stat-value { font-size: 1.75rem; font-weight: 700; color: var(--blue); line-height: 1.2; margin-top: 0.2rem; }
+
+    .grid-2 {
+      display: grid;
+      grid-template-columns: 1fr 1.2fr;
+      gap: 1.25rem;
+      align-items: start;
+    }
+    @media (max-width: 900px) { .grid-2 { grid-template-columns: 1fr; } }
+
     .card {
       background: var(--card);
-      border-radius: 12px;
-      padding: 1.25rem;
-      margin-bottom: 1rem;
-      box-shadow: 0 2px 8px rgba(15,26,90,0.08);
+      border-radius: var(--radius);
+      padding: 1.35rem;
+      box-shadow: var(--shadow);
+      border: 1px solid rgba(15, 26, 90, 0.04);
     }
-    .card h2 { margin: 0 0 1rem; font-size: 1rem; color: var(--blue); }
-    label { display: block; font-size: 0.78rem; font-weight: 600; color: var(--muted); margin-bottom: 0.35rem; }
-    input, select, textarea {
+    .card-head {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 0.75rem;
+      margin-bottom: 1.15rem;
+      padding-bottom: 0.85rem;
+      border-bottom: 1px solid var(--border);
+    }
+    .card-head h2 {
+      margin: 0;
+      font-size: 0.95rem;
+      font-weight: 700;
+      color: var(--blue);
+    }
+    .card-head .sub {
+      font-size: 0.72rem;
+      color: var(--muted);
+      font-weight: 400;
+      display: block;
+      margin-top: 0.15rem;
+    }
+
+    label.field-label {
+      display: block;
+      font-size: 0.75rem;
+      font-weight: 600;
+      color: var(--muted);
+      margin-bottom: 0.35rem;
+    }
+    input[type="text"], input[type="number"], input[type="password"] {
       width: 100%;
-      padding: 0.55rem 0.75rem;
-      border: 1px solid #d1d5db;
-      border-radius: 8px;
+      padding: 0.6rem 0.85rem;
+      border: 1px solid var(--border);
+      border-radius: 10px;
       font-family: inherit;
       font-size: 0.875rem;
+      transition: border 0.15s, box-shadow 0.15s;
     }
-    input:focus { outline: none; border-color: var(--red); box-shadow: 0 0 0 3px rgba(232,79,81,0.15); }
+    input:focus {
+      outline: none;
+      border-color: var(--red);
+      box-shadow: 0 0 0 3px rgba(232, 79, 81, 0.12);
+    }
     .row { display: grid; grid-template-columns: 1fr 1fr; gap: 1rem; }
-    @media (max-width: 640px) { .row { grid-template-columns: 1fr; } }
-    .scopes { display: grid; gap: 0.5rem; margin-top: 0.5rem; }
+    @media (max-width: 540px) { .row { grid-template-columns: 1fr; } }
+
+    .scopes-grid {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 0.5rem;
+      margin-top: 0.5rem;
+    }
+    @media (max-width: 540px) { .scopes-grid { grid-template-columns: 1fr; } }
     .scope-item {
-      display: flex; gap: 0.75rem; align-items: flex-start;
-      padding: 0.65rem 0.75rem; border: 1px solid #e5e7eb; border-radius: 8px;
-      cursor: pointer; transition: border 0.15s, background 0.15s;
+      display: flex;
+      gap: 0.65rem;
+      align-items: flex-start;
+      padding: 0.7rem 0.8rem;
+      border: 1px solid var(--border);
+      border-radius: 10px;
+      cursor: pointer;
+      transition: border 0.15s, background 0.15s, transform 0.1s;
     }
-    .scope-item:has(input:checked) { border-color: var(--red); background: #fff9f5; }
-    .scope-item strong { font-size: 0.82rem; color: var(--blue); }
-    .scope-item span { font-size: 0.72rem; color: var(--muted); display: block; }
-    button {
-      background: var(--red); color: #fff; border: none; border-radius: 8px;
-      padding: 0.6rem 1.1rem; font-weight: 600; font-family: inherit; cursor: pointer;
+    .scope-item:hover { border-color: #c7d2fe; background: #f8fafc; }
+    .scope-item:has(input:checked) {
+      border-color: var(--red);
+      background: linear-gradient(135deg, #fff9f5, #fff);
+      box-shadow: 0 2px 8px rgba(232, 79, 81, 0.12);
     }
-    button:hover { background: var(--blue); }
-    button.secondary { background: #e5e7eb; color: #374151; }
-    button.danger { background: #b91c1c; }
-    button.sm { padding: 0.35rem 0.65rem; font-size: 0.75rem; }
+    .scope-item input { margin-top: 0.2rem; accent-color: var(--red); flex-shrink: 0; }
+    .scope-item strong { font-size: 0.8rem; color: var(--blue); display: block; }
+    .scope-item code { font-size: 0.65rem; color: var(--red-dark); background: #fef2f2; padding: 0.1rem 0.35rem; border-radius: 4px; }
+    .scope-item span.desc { font-size: 0.68rem; color: var(--muted); display: block; margin-top: 0.2rem; line-height: 1.35; }
+
+    .hint {
+      font-size: 0.75rem;
+      color: var(--muted);
+      margin: 0.5rem 0 0;
+      padding: 0.65rem 0.85rem;
+      background: #f8fafc;
+      border-radius: 8px;
+      border-left: 3px solid var(--blue-accent);
+    }
+    .hint.warn { border-left-color: #f59e0b; background: #fffbeb; }
+
+    button.btn {
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      gap: 0.4rem;
+      border: none;
+      border-radius: 10px;
+      padding: 0.6rem 1.15rem;
+      font-family: inherit;
+      font-size: 0.85rem;
+      font-weight: 600;
+      cursor: pointer;
+      transition: transform 0.1s, box-shadow 0.15s, background 0.15s;
+    }
+    button.btn:active { transform: scale(0.98); }
+    button.btn-primary {
+      background: linear-gradient(135deg, var(--red), var(--red-dark));
+      color: #fff;
+      box-shadow: 0 4px 14px rgba(232, 79, 81, 0.35);
+    }
+    button.btn-primary:hover { box-shadow: 0 6px 18px rgba(232, 79, 81, 0.45); }
+    button.btn-primary:disabled { opacity: 0.5; cursor: not-allowed; transform: none; }
+    button.btn-secondary {
+      background: #fff;
+      color: var(--blue);
+      border: 1px solid var(--border);
+    }
+    button.btn-secondary:hover { background: #f9fafb; border-color: #cbd5e1; }
+    button.btn-connect {
+      background: #fff;
+      color: var(--blue);
+      font-weight: 700;
+      white-space: nowrap;
+    }
+    button.btn-connect:hover { background: #f0f4ff; }
+    button.btn-ghost {
+      background: transparent;
+      color: var(--muted);
+      padding: 0.4rem 0.65rem;
+      font-size: 0.78rem;
+    }
+    button.btn-ghost:hover { color: var(--blue); background: #f3f4f6; }
+    button.btn-danger {
+      background: #fef2f2;
+      color: #b91c1c;
+      border: 1px solid #fecaca;
+      padding: 0.35rem 0.7rem;
+      font-size: 0.72rem;
+    }
+    button.btn-danger:hover { background: #fee2e2; }
+
+    .table-wrap {
+      overflow-x: auto;
+      border: 1px solid var(--border);
+      border-radius: 12px;
+    }
     table { width: 100%; border-collapse: collapse; font-size: 0.82rem; }
-    th, td { text-align: left; padding: 0.65rem 0.5rem; border-bottom: 1px solid #f0f0f0; vertical-align: top; }
-    th { color: var(--muted); font-size: 0.7rem; text-transform: uppercase; letter-spacing: 0.05em; }
+    thead { background: linear-gradient(180deg, #f8fafc, #f1f5f9); }
+    th {
+      text-align: left;
+      padding: 0.75rem 1rem;
+      font-size: 0.68rem;
+      text-transform: uppercase;
+      letter-spacing: 0.06em;
+      color: var(--muted);
+      font-weight: 700;
+      border-bottom: 1px solid var(--border);
+    }
+    td {
+      padding: 0.85rem 1rem;
+      border-bottom: 1px solid #f3f4f6;
+      vertical-align: middle;
+    }
+    tbody tr:hover { background: #fafbff; }
+    tbody tr:last-child td { border-bottom: none; }
+    .key-name { font-weight: 600; color: var(--blue); }
+    .key-prefix {
+      font-family: 'Consolas', 'Monaco', monospace;
+      font-size: 0.78rem;
+      background: #f1f5f9;
+      padding: 0.2rem 0.5rem;
+      border-radius: 6px;
+      color: #334155;
+    }
     .badge {
-      display: inline-block; padding: 0.15rem 0.5rem; border-radius: 999px;
-      font-size: 0.68rem; font-weight: 600;
+      display: inline-flex;
+      align-items: center;
+      padding: 0.2rem 0.55rem;
+      border-radius: 999px;
+      font-size: 0.68rem;
+      font-weight: 600;
     }
     .badge.ok { background: #d1fae5; color: #065f46; }
     .badge.off { background: #fee2e2; color: #991b1b; }
-    .chip { display: inline-block; background: #eef2ff; color: var(--blue); padding: 0.1rem 0.45rem; border-radius: 4px; font-size: 0.68rem; margin: 0.1rem; }
-    .plain-key {
-      background: #0F1A5A; color: #a5f3fc; padding: 1rem; border-radius: 8px;
-      font-family: monospace; word-break: break-all; margin-top: 0.75rem;
+    .chip {
+      display: inline-block;
+      background: #eef2ff;
+      color: var(--blue);
+      padding: 0.15rem 0.5rem;
+      border-radius: 6px;
+      font-size: 0.65rem;
+      font-weight: 500;
+      margin: 0.1rem 0.15rem 0.1rem 0;
     }
-    .alert { padding: 0.75rem 1rem; border-radius: 8px; margin-bottom: 1rem; font-size: 0.85rem; }
-    .alert.error { background: #fee2e2; color: #991b1b; }
-    .alert.ok { background: #d1fae5; color: #065f46; }
-    .toolbar { display: flex; gap: 0.5rem; flex-wrap: wrap; align-items: end; }
-    .toolbar > div { flex: 1; min-width: 200px; }
+    .chip.muted { background: #f3f4f6; color: #6b7280; font-style: italic; }
+    .empty-row td {
+      text-align: center;
+      padding: 2.5rem 1rem;
+      color: var(--muted);
+    }
+    .empty-row .empty-icon { font-size: 2rem; opacity: 0.35; margin-bottom: 0.5rem; }
+
+    .toast {
+      padding: 0.85rem 1.1rem;
+      border-radius: 12px;
+      margin-bottom: 1rem;
+      font-size: 0.85rem;
+      display: flex;
+      align-items: center;
+      gap: 0.65rem;
+      animation: slideIn 0.25s ease;
+    }
+    @keyframes slideIn {
+      from { opacity: 0; transform: translateY(-6px); }
+      to { opacity: 1; transform: translateY(0); }
+    }
+    .toast.error { background: #fef2f2; color: #991b1b; border: 1px solid #fecaca; }
+    .toast.ok { background: #ecfdf5; color: #065f46; border: 1px solid #a7f3d0; }
+    .toast.hidden { display: none; }
+
+    .plain-key-panel {
+      margin-top: 1.25rem;
+      padding: 1.15rem;
+      border-radius: 12px;
+      background: linear-gradient(135deg, var(--blue-dark), var(--blue));
+      color: #fff;
+      border: 1px solid rgba(255,255,255,0.1);
+    }
+    .plain-key-panel.hidden { display: none; }
+    .plain-key-panel h3 { margin: 0 0 0.35rem; font-size: 0.9rem; }
+    .plain-key-panel p { margin: 0 0 0.75rem; font-size: 0.75rem; opacity: 0.85; }
+    .plain-key-row {
+      display: flex;
+      gap: 0.5rem;
+      align-items: stretch;
+    }
+    .plain-key-row code {
+      flex: 1;
+      background: rgba(0,0,0,0.25);
+      padding: 0.75rem 1rem;
+      border-radius: 8px;
+      font-size: 0.8rem;
+      word-break: break-all;
+      color: #7dd3fc;
+    }
+    .plain-key-row button {
+      background: var(--red);
+      color: #fff;
+      border: none;
+      border-radius: 8px;
+      padding: 0 1rem;
+      font-weight: 600;
+      cursor: pointer;
+      white-space: nowrap;
+    }
+    .plain-key-row button:hover { background: var(--red-dark); }
+
+    .locked-overlay {
+      position: relative;
+    }
+    .locked-overlay.not-connected::after {
+      content: '';
+      position: absolute;
+      inset: 0;
+      background: rgba(255,255,255,0.55);
+      border-radius: var(--radius);
+      pointer-events: none;
+    }
+    footer {
+      text-align: center;
+      padding: 2rem 1rem;
+      font-size: 0.72rem;
+      color: var(--muted);
+    }
   </style>
 </head>
 <body>
-  <header>
-    <div>
-      <h1>nest-api · Gestión de API Keys</h1>
-      <p>Scopes por endpoint · tokens en PostgreSQL (nest_auth)</p>
-    </div>
-    <div class="toolbar">
-      <div>
-        <label for="adminToken">X-Admin-Token</label>
-        <input id="adminToken" type="password" placeholder="NEST_ADMIN_TOKEN del servidor" />
+  <header class="topbar">
+    <div class="topbar-inner">
+      <div class="brand">
+        <img src="/assets/brand/logo-lamundial-sidebar.png" alt="La Mundial de Seguros" onerror="this.style.display='none'" />
+        <div class="brand-text">
+          <h1>nest-api · API Keys</h1>
+          <p>Gestión de acceso · PostgreSQL nest_auth · srv001 QA</p>
+        </div>
       </div>
-      <button type="button" id="btnConnect" class="secondary">Conectar</button>
+      <div class="auth-box">
+        <div class="auth-field">
+          <label for="adminToken">Token de administración</label>
+          <div class="input-wrap">
+            <input id="adminToken" type="password" placeholder="NEST_ADMIN_TOKEN" autocomplete="off" />
+            <button type="button" class="icon-btn" id="btnToggleToken" title="Mostrar/ocultar">👁</button>
+          </div>
+        </div>
+        <button type="button" id="btnConnect" class="btn btn-connect">Conectar</button>
+      </div>
     </div>
   </header>
 
   <main>
-    <div id="alert"></div>
-
-    <section class="card">
-      <h2>Nueva API key</h2>
-      <form id="createForm">
-        <div class="row">
-          <div>
-            <label for="keyName">Nombre / cliente</label>
-            <input id="keyName" required placeholder="Ej: modulo-emision QA" />
-          </div>
-          <div>
-            <label for="cproductor">cproductor (opcional)</label>
-            <input id="cproductor" type="number" placeholder="80080" />
-          </div>
-        </div>
-        <div style="margin-top:1rem">
-          <label>Scopes <span style="font-weight:400;color:var(--muted)">(opcional para solo catálogos INMA/valrep)</span></label>
-          <div id="scopeList" class="scopes"></div>
-          <p id="scopeHint" style="font-size:0.75rem;color:var(--muted);margin:0.5rem 0 0">
-            Conecte con X-Admin-Token para cargar scopes.
-          </p>
-        </div>
-        <div style="margin-top:1rem">
-          <button type="submit">Crear key</button>
-        </div>
-      </form>
-      <div id="plainKeyBox" hidden></div>
-    </section>
-
-    <section class="card">
-      <h2>Keys registradas</h2>
-      <button type="button" id="btnRefresh" class="secondary sm" style="margin-bottom:0.75rem">Actualizar</button>
-      <div style="overflow-x:auto">
-        <table>
-          <thead>
-            <tr>
-              <th>Nombre</th>
-              <th>Prefijo</th>
-              <th>Scopes</th>
-              <th>Estado</th>
-              <th>Último uso</th>
-              <th></th>
-            </tr>
-          </thead>
-          <tbody id="keysBody"></tbody>
-        </table>
+    <div class="status-bar">
+      <span id="connPill" class="conn-pill offline"><span class="dot"></span> Sin conexión</span>
+      <div class="quick-links">
+        <a href="/docs" target="_blank">Swagger API</a>
+        <a href="/api/v1/admin/keys" target="_blank" rel="noopener">JSON keys</a>
       </div>
-    </section>
+    </div>
+
+    <div id="toast" class="toast hidden"></div>
+
+    <div class="stats">
+      <div class="stat">
+        <div class="stat-label">Keys totales</div>
+        <div class="stat-value" id="statTotal">—</div>
+      </div>
+      <div class="stat">
+        <div class="stat-label">Activas</div>
+        <div class="stat-value" id="statActive">—</div>
+      </div>
+      <div class="stat">
+        <div class="stat-label">Con scopes</div>
+        <div class="stat-value" id="statScoped">—</div>
+      </div>
+    </div>
+
+    <div class="grid-2">
+      <section class="card locked-overlay" id="createCard">
+        <div class="card-head">
+          <div>
+            <h2>Nueva API key</h2>
+            <span class="sub">Para módulos Exélixi (emision, formulario…)</span>
+          </div>
+        </div>
+        <form id="createForm">
+          <div class="row">
+            <div>
+              <label class="field-label" for="keyName">Nombre / cliente</label>
+              <input id="keyName" type="text" required placeholder="modulo-formulario QA" />
+            </div>
+            <div>
+              <label class="field-label" for="cproductor">cproductor</label>
+              <input id="cproductor" type="number" placeholder="80080" value="80080" />
+            </div>
+          </div>
+          <div style="margin-top:1rem">
+            <label class="field-label">Permisos (scopes)</label>
+            <p class="hint">Opcional si el módulo solo consulta catálogos INMA / valrep.</p>
+            <div id="scopeList" class="scopes-grid"></div>
+            <p id="scopeHint" class="hint warn">Conecte con el token de administración para cargar scopes.</p>
+          </div>
+          <div style="margin-top:1.25rem">
+            <button type="submit" class="btn btn-primary" id="btnCreate" disabled>Crear key</button>
+          </div>
+        </form>
+        <div id="plainKeyBox" class="plain-key-panel hidden">
+          <h3>Key creada — cópiela ahora</h3>
+          <p>No se volverá a mostrar. Pegue en el .env del módulo como <strong>NEST_API_KEY</strong>.</p>
+          <div class="plain-key-row">
+            <code id="plainKeyText"></code>
+            <button type="button" id="btnCopyKey">Copiar</button>
+          </div>
+        </div>
+      </section>
+
+      <section class="card">
+        <div class="card-head">
+          <div>
+            <h2>Keys registradas</h2>
+            <span class="sub">Prefijo visible · secreto solo al crear</span>
+          </div>
+          <button type="button" id="btnRefresh" class="btn btn-ghost">↻ Actualizar</button>
+        </div>
+        <div class="table-wrap">
+          <table>
+            <thead>
+              <tr>
+                <th>Módulo</th>
+                <th>Prefijo</th>
+                <th>Scopes</th>
+                <th>Estado</th>
+                <th>Último uso</th>
+                <th></th>
+              </tr>
+            </thead>
+            <tbody id="keysBody">
+              <tr class="empty-row"><td colspan="6">
+                <div class="empty-icon">🔑</div>
+                Conecte para ver las keys registradas
+              </td></tr>
+            </tbody>
+          </table>
+        </div>
+      </section>
+    </div>
   </main>
+
+  <footer>Exélixi Tech · nest-api · La Mundial de Seguros QA</footer>
 
   <script>
     const API = '/api/v1/admin';
     let scopesCatalog = [];
+    let keysCache = [];
+    let connected = false;
 
     function token() {
       return localStorage.getItem('nest_admin_token') || '';
     }
 
-    function showAlert(msg, type) {
-      const el = document.getElementById('alert');
-      el.className = 'alert ' + (type || 'error');
+    function setConnected(on) {
+      connected = on;
+      const pill = document.getElementById('connPill');
+      const createCard = document.getElementById('createCard');
+      const btnCreate = document.getElementById('btnCreate');
+      if (on) {
+        pill.className = 'conn-pill online';
+        pill.innerHTML = '<span class="dot"></span> Conectado';
+        createCard.classList.remove('not-connected');
+        btnCreate.disabled = false;
+      } else {
+        pill.className = 'conn-pill offline';
+        pill.innerHTML = '<span class="dot"></span> Sin conexión';
+        createCard.classList.add('not-connected');
+        btnCreate.disabled = true;
+      }
+    }
+
+    function showToast(msg, type) {
+      const el = document.getElementById('toast');
+      if (!msg) {
+        el.className = 'toast hidden';
+        return;
+      }
+      el.className = 'toast ' + (type || 'error');
       el.textContent = msg;
-      el.hidden = !msg;
+      el.classList.remove('hidden');
+      if (type === 'ok') setTimeout(() => showToast(''), 4000);
     }
 
     async function api(path, opts) {
@@ -194,12 +649,18 @@
       return unwrap(data);
     }
 
-    /** Compat: respuesta plana o envoltorio { status, data }. */
     function unwrap(body) {
       if (body && typeof body === 'object' && body.data && typeof body.data === 'object' && 'status' in body) {
         return body.data;
       }
       return body;
+    }
+
+    function updateStats(keys) {
+      keysCache = keys;
+      document.getElementById('statTotal').textContent = keys.length;
+      document.getElementById('statActive').textContent = keys.filter((k) => k.active).length;
+      document.getElementById('statScoped').textContent = keys.filter((k) => (k.scopes || []).length > 0).length;
     }
 
     function renderScopes() {
@@ -216,44 +677,69 @@
         .map(
           (s) => `
         <label class="scope-item">
-          <input type="checkbox" name="scope" value="${s.id}" />
+          <input type="checkbox" name="scope" value="${escapeHtml(s.id)}" />
           <div>
-            <strong>${s.label}</strong>
-            <span>${s.id} — ${s.description}</span>
+            <strong>${escapeHtml(s.label)}</strong>
+            <code>${escapeHtml(s.id)}</code>
+            <span class="desc">${escapeHtml(s.description)}</span>
           </div>
         </label>`,
         )
         .join('');
     }
 
+    function formatScopes(scopes) {
+      if (!scopes || !scopes.length) {
+        return '<span class="chip muted">Solo catálogos</span>';
+      }
+      return scopes.map((s) => `<span class="chip">${escapeHtml(s)}</span>`).join('');
+    }
+
+    function formatDate(iso) {
+      if (!iso) return '<span style="color:#9ca3af">—</span>';
+      try {
+        return new Date(iso).toLocaleString('es-VE', {
+          dateStyle: 'short',
+          timeStyle: 'short',
+        });
+      } catch {
+        return '—';
+      }
+    }
+
     function renderKeys(keys) {
+      updateStats(keys);
       const tbody = document.getElementById('keysBody');
+      if (!connected) {
+        tbody.innerHTML = `<tr class="empty-row"><td colspan="6"><div class="empty-icon">🔐</div>Conecte con el token de administración</td></tr>`;
+        return;
+      }
       if (!keys.length) {
-        tbody.innerHTML = '<tr><td colspan="6">Sin keys. Configure NEST_PG_DATABASE_URL y cree una.</td></tr>';
+        tbody.innerHTML = `<tr class="empty-row"><td colspan="6"><div class="empty-icon">📭</div>No hay keys. Cree la primera arriba.</td></tr>`;
         return;
       }
       tbody.innerHTML = keys
         .map(
           (k) => `
         <tr>
-          <td>${escapeHtml(k.name)}</td>
-          <td><code>${escapeHtml(k.keyPrefix)}…</code></td>
-          <td>${(k.scopes || []).map((s) => `<span class="chip">${escapeHtml(s)}</span>`).join('')}</td>
+          <td><span class="key-name">${escapeHtml(k.name)}</span>${k.cproductor ? `<br><span style="font-size:0.68rem;color:#9ca3af">cproductor ${k.cproductor}</span>` : ''}</td>
+          <td><span class="key-prefix">${escapeHtml(k.keyPrefix)}…</span></td>
+          <td>${formatScopes(k.scopes)}</td>
           <td><span class="badge ${k.active ? 'ok' : 'off'}">${k.active ? 'Activa' : 'Revocada'}</span></td>
-          <td>${k.lastUsedAt ? new Date(k.lastUsedAt).toLocaleString() : '—'}</td>
-          <td>${k.active ? `<button class="sm danger" data-revoke="${k.id}">Revocar</button>` : ''}</td>
+          <td style="font-size:0.78rem">${formatDate(k.lastUsedAt)}</td>
+          <td>${k.active ? `<button type="button" class="btn btn-danger" data-revoke="${escapeHtml(k.id)}">Revocar</button>` : ''}</td>
         </tr>`,
         )
         .join('');
       tbody.querySelectorAll('[data-revoke]').forEach((btn) => {
         btn.addEventListener('click', async () => {
-          if (!confirm('¿Revocar esta key?')) return;
+          if (!confirm('¿Revocar esta key? Los módulos que la usen dejarán de funcionar.')) return;
           try {
             await api('/keys/' + btn.dataset.revoke + '/revoke', { method: 'POST' });
-            showAlert('Key revocada.', 'ok');
+            showToast('Key revocada correctamente.', 'ok');
             loadKeys();
           } catch (e) {
-            showAlert(e.message);
+            showToast(e.message);
           }
         });
       });
@@ -263,7 +749,8 @@
       return String(s)
         .replace(/&/g, '&amp;')
         .replace(/</g, '&lt;')
-        .replace(/>/g, '&gt;');
+        .replace(/>/g, '&gt;')
+        .replace(/"/g, '&quot;');
     }
 
     async function loadScopes() {
@@ -277,31 +764,42 @@
       renderKeys(data.keys || []);
     }
 
-    document.getElementById('btnConnect').addEventListener('click', async () => {
+    async function connect() {
       const t = document.getElementById('adminToken').value.trim();
-      if (!t) return showAlert('Ingrese NEST_ADMIN_TOKEN');
+      if (!t) return showToast('Ingrese NEST_ADMIN_TOKEN del servidor.');
       localStorage.setItem('nest_admin_token', t);
       try {
         await loadScopes();
         await loadKeys();
-        showAlert('Conectado.', 'ok');
+        setConnected(true);
+        showToast('Conectado al panel de administración.', 'ok');
       } catch (e) {
-        showAlert(e.message);
+        setConnected(false);
+        localStorage.removeItem('nest_admin_token');
+        showToast(e.message);
       }
+    }
+
+    document.getElementById('btnConnect').addEventListener('click', connect);
+
+    document.getElementById('btnToggleToken').addEventListener('click', () => {
+      const inp = document.getElementById('adminToken');
+      inp.type = inp.type === 'password' ? 'text' : 'password';
     });
 
     document.getElementById('btnRefresh').addEventListener('click', async () => {
-      if (!token()) return showAlert('Conecte primero con X-Admin-Token.');
+      if (!token()) return showToast('Conecte primero.');
       try {
         await loadKeys();
+        showToast('Lista actualizada.', 'ok');
       } catch (e) {
-        showAlert(e.message);
+        showToast(e.message);
       }
     });
 
     document.getElementById('createForm').addEventListener('submit', async (e) => {
       e.preventDefault();
-      if (!token()) return showAlert('Conecte primero con X-Admin-Token.');
+      if (!token()) return showToast('Conecte primero.');
       const scopes = [...document.querySelectorAll('input[name=scope]:checked')].map((el) => el.value);
       const body = {
         name: document.getElementById('keyName').value.trim(),
@@ -312,22 +810,31 @@
       try {
         const data = await api('/keys', { method: 'POST', body: JSON.stringify(body) });
         const box = document.getElementById('plainKeyBox');
-        box.hidden = false;
-        box.innerHTML =
-          '<p><strong>Copie la key ahora:</strong></p><div class="plain-key">' +
-          escapeHtml(data.plainKey) +
-          '</div>';
-        showAlert(data.message, 'ok');
+        document.getElementById('plainKeyText').textContent = data.plainKey;
+        box.classList.remove('hidden');
+        showToast('Key creada. Copie el secreto antes de cerrar.', 'ok');
         document.getElementById('createForm').reset();
+        document.getElementById('cproductor').value = '80080';
         loadKeys();
       } catch (err) {
-        showAlert(err.message);
+        showToast(err.message);
       }
     });
 
+    document.getElementById('btnCopyKey').addEventListener('click', async () => {
+      const text = document.getElementById('plainKeyText').textContent;
+      try {
+        await navigator.clipboard.writeText(text);
+        showToast('Key copiada al portapapeles.', 'ok');
+      } catch {
+        showToast('No se pudo copiar. Seleccione el texto manualmente.');
+      }
+    });
+
+    setConnected(false);
     if (token()) {
       document.getElementById('adminToken').value = token();
-      loadScopes().then(loadKeys).catch(() => {});
+      connect().catch(() => {});
     }
   </script>
 </body>
