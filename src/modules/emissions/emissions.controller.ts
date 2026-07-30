@@ -1,4 +1,4 @@
-import { Body, Controller, Headers, HttpCode, HttpStatus, Post } from '@nestjs/common';
+import { Body, Controller, HttpCode, HttpStatus, Post } from '@nestjs/common';
 import {
   ApiBody,
   ApiExcludeEndpoint,
@@ -22,6 +22,8 @@ import {
   RCV_CREATE_EMISSION_AUTO_BODY,
   RCV_CREATE_EMISSION_AUTO_BODY_WITH_PRIMA,
 } from '../../common/swagger/api-docs.constants';
+import { NestProtected } from '../auth/decorators/nest-protected.decorator';
+import { NestApiKey } from '../auth/decorators/nest-api-key.decorator';
 
 @ApiTags('3. Emisión automóvil')
 @Controller('v1')
@@ -160,7 +162,7 @@ export class EmissionsController {
 
   @Post('external/createEmissionAuto')
   @HttpCode(HttpStatus.OK)
-  @ApiSecurity('apikey')
+  @NestProtected()
   @ApiOperation({
     summary: 'Emitir póliza de automóvil',
     description:
@@ -210,7 +212,7 @@ export class EmissionsController {
   @Api401()
   @ApiCommonErrors()
   async createEmissionAuto(
-    @Headers('apikey') apikey: string,
+    @NestApiKey() apikey: string,
     @Body() body: Record<string, unknown>,
   ) {
     const result = await this.emissionsService.createEmissionAuto(apikey ?? '', body);

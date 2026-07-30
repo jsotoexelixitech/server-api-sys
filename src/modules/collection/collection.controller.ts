@@ -1,7 +1,6 @@
 import {
   Body,
   Controller,
-  Headers,
   HttpCode,
   HttpStatus,
   Post,
@@ -24,6 +23,8 @@ import {
   RCV_COLLECTION_ACTIVATE_BODY,
   RCV_COLLECTION_ACTIVATE_RESPONSE,
 } from '../../common/swagger/api-docs.constants';
+import { NestProtected } from '../auth/decorators/nest-protected.decorator';
+import { NestApiKey } from '../auth/decorators/nest-api-key.decorator';
 
 @ApiTags('4. Cobranza')
 @Controller('v1/external/collection')
@@ -59,7 +60,7 @@ export class CollectionController {
   @Post('notific')
   @ApiExcludeEndpoint()
   @HttpCode(HttpStatus.OK)
-  @ApiSecurity('apikey')
+  @NestProtected()
   @ApiOperation({
     summary: '[Legacy] Notificar pago (spNotificaPago)',
     description:
@@ -81,7 +82,7 @@ export class CollectionController {
   @Api401()
   @ApiCommonErrors()
   async notific(
-    @Headers('apikey') apikey: string,
+    @NestApiKey() apikey: string,
     @Body() dto: CollectionPaymentDto,
   ) {
     const payload = await this.collectionService.buildCollectionPayload(apikey ?? '', dto);
@@ -92,7 +93,7 @@ export class CollectionController {
   @Post('collect')
   @ApiExcludeEndpoint()
   @HttpCode(HttpStatus.OK)
-  @ApiSecurity('apikey')
+  @NestProtected()
   @ApiOperation({
     summary: 'Cobrar recibo (spCobroSis_Ad + soporte)',
     description:
@@ -121,7 +122,7 @@ export class CollectionController {
   @Api401()
   @ApiCommonErrors()
   async collect(
-    @Headers('apikey') apikey: string,
+    @NestApiKey() apikey: string,
     @Body() dto: CollectionPaymentDto,
   ) {
     const payload = await this.collectionService.buildCollectionPayload(apikey ?? '', dto);
@@ -131,7 +132,7 @@ export class CollectionController {
 
   @Post('activate')
   @HttpCode(HttpStatus.OK)
-  @ApiSecurity('apikey')
+  @NestProtected()
   @ApiOperation({
     summary: 'Activar cobro del recibo',
     description:
@@ -158,7 +159,7 @@ export class CollectionController {
   @Api401()
   @ApiCommonErrors()
   async activate(
-    @Headers('apikey') apikey: string,
+    @NestApiKey() apikey: string,
     @Body() dto: CollectionPaymentDto,
   ) {
     const result = await this.collectionService.activateReceipt(apikey ?? '', dto);

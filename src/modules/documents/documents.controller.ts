@@ -3,6 +3,7 @@ import { ApiExcludeEndpoint, ApiTags, ApiOperation, ApiResponse, ApiBody, ApiSec
 import { Response, Request } from 'express';
 import { DocumentsService } from './documents.service';
 import { GenerateConductorPdfDto } from './dto/generate-conductor.dto';
+import { NestProtected } from '../auth/decorators/nest-protected.decorator';
 import * as path from 'path';
 import * as fs from 'fs';
 
@@ -14,7 +15,7 @@ export class DocumentsController {
   constructor(private readonly documentsService: DocumentsService) {}
 
   @Post('conductor-habitual')
-  @ApiSecurity('apikey')
+  @NestProtected()
   @ApiHeader({
     name: 'apikey',
     description: 'Clave de acceso a la API (requerida en emisión, cobranza y documentos en producción).',

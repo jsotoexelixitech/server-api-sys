@@ -1,4 +1,4 @@
-import { Body, Controller, Headers, HttpCode, HttpStatus, Post } from '@nestjs/common';
+import { Body, Controller, HttpCode, HttpStatus, Post } from '@nestjs/common';
 import {
   ApiBody,
   ApiHeader,
@@ -13,6 +13,8 @@ import { CotizacionPerDto } from '../personas/dto/cotizacion-per.dto';
 import { ValidateEmissionPersonDto } from '../emissions/dto/validate-emission-person.dto';
 import { Api401, Api500, ApiCommonErrors } from '../../common/swagger/api-error-responses';
 import { APIKEY_HEADER } from '../../common/swagger/api-docs.constants';
+import { NestProtected } from '../auth/decorators/nest-protected.decorator';
+import { NestApiKey } from '../auth/decorators/nest-api-key.decorator';
 
 @ApiTags('6. Emisión personas')
 @Controller('v1/external')
@@ -46,10 +48,7 @@ export class ExternalController {
   @ApiResponse({ status: 400, description: 'Parámetros inválidos o prima cero.' })
   @Api401()
   @ApiCommonErrors()
-  async getCotizacionPer(
-    @Headers('apikey') _apikey: string,
-    @Body() dto: CotizacionPerDto,
-  ) {
+  async getCotizacionPer(@Body() dto: CotizacionPerDto) {
     const result = await this.personasService.buildCotizacionPerLegacyResult(dto);
     return { status: true, result };
   }
@@ -79,7 +78,7 @@ export class ExternalController {
 
   @Post('createEmissionPerson')
   @HttpCode(HttpStatus.OK)
-  @ApiSecurity('apikey')
+  @NestProtected()
   @ApiOperation({
     summary: 'Funerario paso 6 · Emitir póliza de personas',
     description: 'Emite la póliza de personas. Requiere clave de API en entornos públicos.',
@@ -93,7 +92,7 @@ export class ExternalController {
   })
   @Api401()
   @ApiCommonErrors()
-  async createEmissionPerson(@Headers('apikey') apikey: string, @Body() dto: CreateEmissionPersonDto) {
+  async createEmissionPerson(@NestApiKey() apikey: string, @Body() dto: CreateEmissionPersonDto) {
     const result = await this.personasService.createEmissionPerson(apikey ?? '', dto);
     return { status: true, result };
   }

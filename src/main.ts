@@ -66,6 +66,7 @@ async function bootstrap(): Promise<void> {
     origin: corsOrigin === '*' ? true : corsOrigin.split(','),
     methods: 'GET,HEAD,PUT,PATCH,POST,DELETE,OPTIONS',
     credentials: true,
+    exposedHeaders: ['X-Nest-Access-Refreshed'],
   });
 
   app.useGlobalPipes(

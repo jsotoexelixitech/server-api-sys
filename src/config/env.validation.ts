@@ -37,4 +37,16 @@ export const envValidationSchema = Joi.object({
 
   /** Paquetes npm partner (coma-separados). Ej: @exelixi/partner-api-starter */
   PARTNER_PACKAGES: Joi.string().allow('').optional(),
+
+  /** Auth nest-api: true exige Bearer o apikey en rutas protegidas. */
+  NEST_AUTH_ENABLED: Joi.boolean().default(false),
+  /** En producción externa: canje/refresh solo por HTTPS (localhost exento). */
+  NEST_AUTH_REQUIRE_HTTPS: Joi.boolean().default(false),
+  /** Rechazar apikey no registrada en maclient_api al canjear token. */
+  NEST_AUTH_STRICT_APIKEY: Joi.boolean().default(false),
+  NEST_JWT_SECRET: Joi.string().min(32).optional(),
+  NEST_ACCESS_TTL_SEC: Joi.number().integer().min(60).default(900),
+  NEST_REFRESH_TTL_SEC: Joi.number().integer().min(3600).default(604800),
+  /** Renovar access en respuesta si expira en menos de N segundos. */
+  NEST_TOKEN_SLIDE_SEC: Joi.number().integer().min(30).default(300),
 });

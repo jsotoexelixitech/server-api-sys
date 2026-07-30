@@ -1,4 +1,4 @@
-import { Body, Controller, Headers, HttpCode, HttpStatus, Post } from '@nestjs/common';
+import { Body, Controller, HttpCode, HttpStatus, Post } from '@nestjs/common';
 import { ApiBody, ApiHeader, ApiOperation, ApiResponse, ApiSecurity, ApiTags } from '@nestjs/swagger';
 import { PersonasService } from './personas.service';
 import { GetPlanesPerDto } from './dto/get-planes-per.dto';
@@ -7,6 +7,8 @@ import { CreateEmissionPersonDto } from './dto/create-emission-person.dto';
 import { ValidateEmissionPersonDto } from '../emissions/dto/validate-emission-person.dto';
 import { Api401, Api500, ApiCommonErrors } from '../../common/swagger/api-error-responses';
 import { APIKEY_HEADER } from '../../common/swagger/api-docs.constants';
+import { NestProtected } from '../auth/decorators/nest-protected.decorator';
+import { NestApiKey } from '../auth/decorators/nest-api-key.decorator';
 
 @ApiTags('6. Emisión personas')
 @Controller('v1/personas')
@@ -91,7 +93,7 @@ export class PersonasController {
 
   @Post('emision')
   @HttpCode(HttpStatus.OK)
-  @ApiSecurity('apikey')
+  @NestProtected()
   @ApiOperation({
     summary: 'Funerario paso 6 · Emitir póliza de personas',
     description: 'Emite la póliza de personas y devuelve número de póliza y recibo.',
@@ -105,7 +107,7 @@ export class PersonasController {
   })
   @Api401()
   @ApiCommonErrors()
-  async emitir(@Headers('apikey') apikey: string, @Body() dto: CreateEmissionPersonDto) {
+  async emitir(@NestApiKey() apikey: string, @Body() dto: CreateEmissionPersonDto) {
     const result = await this.personasService.createEmissionPerson(apikey ?? '', dto);
     return { status: true, result };
   }

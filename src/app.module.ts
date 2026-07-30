@@ -15,6 +15,7 @@ import { DocumentsModule } from './modules/documents/documents.module';
 import { CollectionModule } from './modules/collection/collection.module';
 import { PartnerHostModule } from './partner/partner-host.module';
 import { PartnerIntegrationModule } from './partner/partner-integration.module';
+import { AuthModule } from './modules/auth/auth.module';
 
 @Module({
   imports: [
@@ -28,6 +29,7 @@ import { PartnerIntegrationModule } from './partner/partner-integration.module';
       },
     }),
     DatabaseModule,
+    AuthModule,
     ValrepModule,
     InmaModule,
     ClientModule,
