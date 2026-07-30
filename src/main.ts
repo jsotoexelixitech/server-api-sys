@@ -76,7 +76,7 @@ async function bootstrap(): Promise<void> {
 
   const staticAssets = express.static(assetsDir, { index: false });
   app.getHttpAdapter().getInstance().use('/assets', staticAssets);
-  // Con PUBLIC_API_PREFIX en PM2, Swagger pide /api-docs-nest-api/assets/… (también acceso directo :3002).
+  // Con PUBLIC_API_PREFIX en PM2, Swagger pide /nest-api-docs/assets/… (también acceso directo :3002).
   if (publicPaths.prefix) {
     app.getHttpAdapter().getInstance().use(`${publicPaths.prefix}/assets`, staticAssets);
   }

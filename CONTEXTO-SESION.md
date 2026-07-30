@@ -17,7 +17,7 @@
 | **Servidor QA** | srv001 · `192.168.8.120:3002` · PM2 `sysip-nest-api` |
 | **Deploy** | `cd ~/server-api-sys && git pull && npm run build && pm2 restart sysip-nest-api` |
 | **Swagger (red interna)** | `http://192.168.8.120:3002/docs` |
-| **Swagger (HTTPS cierrelmds)** | `https://cierrelmds.exelixitech.com/api-docs-nest-api/docs` |
+| **Swagger (HTTPS cierrelmds)** | `https://cierrelmds.exelixitech.com/nest-api-docs/docs` |
 | **BD** | SQL Server Sis2000 — `sis2000_qa` en `172.30.149.67` |
 
 **Express legacy** (`backend-api-sys/src/`) existe pero el desarrollo activo de La Mundial API es **nest-api**.
@@ -50,6 +50,7 @@ Tras refactors grandes: `.\update-tags.ps1` en la raíz de `all-projects`.
 
 | Archivo | Rol |
 |---------|-----|
+| `HISTORIAL-CHATS.md` (raíz all-projects) | Resumen **todos** los chats Cursor |
 | `SETUP-ANTIGRAVITY.md` (raíz all-projects) | Guía instalación paridad Cursor |
 | `AGENTS.md` + `GEMINI.md` (raíz all-projects) | Reglas workspace |
 | `.agents/rules/` | Reglas modulares (ctags, deploy, nest-api…) |

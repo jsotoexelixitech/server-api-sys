@@ -6,7 +6,7 @@ export const envValidationSchema = Joi.object({
     .default('development'),
   PORT: Joi.number().default(3001),
   SWAGGER_PATH: Joi.string().default('docs'),
-  /** Prefijo HTTPS cierrelmds (ej. /api-docs-nest-api). Vacío = rutas en raíz (/docs, /api). */
+  /** Prefijo HTTPS cierrelmds (ej. /nest-api-docs). Vacío = rutas en raíz (/docs, /api). */
   PUBLIC_API_PREFIX: Joi.string().allow('').default(''),
   /** Origen público para Swagger servers (sin barra final). */
   PUBLIC_API_ORIGIN: Joi.string().uri().default('https://cierrelmds.exelixitech.com'),

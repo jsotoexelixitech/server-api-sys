@@ -16,14 +16,14 @@ module.exports = {
       // PUBLIC_* también en `env` base: pm2 restart sin --env production las conserva.
       // PARTNER_PACKAGES: leer solo de .env (no hardcodear aquí — PM2 pisa dotenv)
       env: {
-        PUBLIC_API_PREFIX: '/api-docs-nest-api',
+        PUBLIC_API_PREFIX: '/nest-api-docs',
         PUBLIC_API_ORIGIN: 'https://cierrelmds.exelixitech.com',
         SWAGGER_SHOW_INTERNAL_SERVERS: 'true',
       },
       env_production: {
         NODE_ENV:           'production',
         SWAGGER_PATH:       'docs',   // vacío ('') para deshabilitar Swagger en prod
-        PUBLIC_API_PREFIX:  '/api-docs-nest-api',
+        PUBLIC_API_PREFIX:  '/nest-api-docs',
         PUBLIC_API_ORIGIN:  'https://cierrelmds.exelixitech.com',
         SWAGGER_SHOW_INTERNAL_SERVERS: 'true',
       },

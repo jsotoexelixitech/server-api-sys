@@ -1,4 +1,4 @@
-/** Prefijo público HTTPS (cierrelmds): `/api-docs-nest-api`, `/pagos-api`, etc. Vacío en local. */
+/** Prefijo público HTTPS (cierrelmds): `/nest-api-docs`, `/pagos-api`, etc. Vacío en local. */
 export function normalizePublicPrefix(raw: string | undefined): string {
   const trimmed = String(raw ?? '').trim();
   if (!trimmed || trimmed === '/') return '';
@@ -19,7 +19,7 @@ export interface PublicApiPaths {
   prefix: string;
   origin: string;
   publicBaseUrl: string;
-  /** Ruta absoluta (/api-docs-nest-api/assets/…); inmune al <base href="/"> de Swagger UI. */
+  /** Ruta absoluta (/nest-api-docs/assets/…); inmune al <base href="/"> de Swagger UI. */
   brandAssetUrl: (relativePath: string) => string;
 }
 
