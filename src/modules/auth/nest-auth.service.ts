@@ -29,7 +29,14 @@ export class NestAuthService {
   ) {}
 
   isEnabled(): boolean {
-    return this.config.get<string>('NEST_AUTH_ENABLED') === 'true';
+    return this.envBool('NEST_AUTH_ENABLED', true);
+  }
+
+  private envBool(key: string, defaultValue = false): boolean {
+    const v = this.config.get<boolean | string | undefined>(key);
+    if (v === undefined || v === null || v === '') return defaultValue;
+    if (typeof v === 'boolean') return v;
+    return String(v).trim().toLowerCase() === 'true';
   }
 
   accessTtlSec(): number {
@@ -45,7 +52,7 @@ export class NestAuthService {
   }
 
   assertHttpsIfRequired(req: Request): void {
-    if (this.config.get<string>('NEST_AUTH_REQUIRE_HTTPS') !== 'true') return;
+    if (!this.envBool('NEST_AUTH_REQUIRE_HTTPS')) return;
 
     const remote =
       req.ip ||
@@ -139,7 +146,7 @@ export class NestAuthService {
       return { apiKeyId: row.id, scopes: row.scopes };
     }
 
-    if (this.config.get<string>('NEST_AUTH_STRICT_APIKEY') === 'true') {
+    if (this.envBool('NEST_AUTH_STRICT_APIKEY')) {
       await this.channels.assertApiKeyRegistered(key);
     } else {
       await this.channels.resolveChannel(key);
