@@ -232,7 +232,16 @@ export async function revokeApiKeyLegacy(
 export async function updateApiKeyLegacy(
   prisma: PrismaService,
   id: string,
-  patch: { name?: string; scopes?: string[]; active?: boolean },
+  patch: {
+    name?: string;
+    scopes?: string[];
+    active?: boolean;
+    cproductor?: number;
+    ccanalalt?: number;
+    cscanalalt?: number;
+    ctipocanal?: string;
+    xcanalVenta?: string;
+  },
   withDocsSlug: boolean,
 ): Promise<ApiKeyRecord | null> {
   const sets: string[] = [];
@@ -252,6 +261,26 @@ export async function updateApiKeyLegacy(
     values.push(patch.active);
     sets.push(`revoked_at = $${idx++}`);
     values.push(patch.active ? null : new Date());
+  }
+  if (patch.cproductor !== undefined) {
+    sets.push(`cproductor = $${idx++}`);
+    values.push(patch.cproductor);
+  }
+  if (patch.ccanalalt !== undefined) {
+    sets.push(`ccanalalt = $${idx++}`);
+    values.push(patch.ccanalalt);
+  }
+  if (patch.cscanalalt !== undefined) {
+    sets.push(`cscanalalt = $${idx++}`);
+    values.push(patch.cscanalalt);
+  }
+  if (patch.ctipocanal !== undefined) {
+    sets.push(`ctipocanal = $${idx++}`);
+    values.push(patch.ctipocanal?.trim()?.slice(0, 1) || null);
+  }
+  if (patch.xcanalVenta !== undefined) {
+    sets.push(`xcanal_venta = $${idx++}`);
+    values.push(patch.xcanalVenta?.trim() || null);
   }
 
   if (sets.length === 0) {

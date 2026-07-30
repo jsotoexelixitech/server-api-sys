@@ -2,6 +2,7 @@ import {
   Body,
   Controller,
   Get,
+  NotFoundException,
   Param,
   Patch,
   Post,
@@ -34,6 +35,21 @@ export class AdminKeysController {
         ? this.docsUrls.buildClientDocsUrl(key.docsSlug)
         : null,
     };
+  }
+
+  private buildScopeDetails(scopes: string[]) {
+    const catalog = this.apiKeys.getScopeCatalog();
+    return (scopes ?? []).map((scopeId) => {
+      const meta = catalog.find((entry) => entry.id === scopeId);
+      return (
+        meta ?? {
+          id: scopeId,
+          label: scopeId,
+          description: '',
+          routes: [],
+        }
+      );
+    });
   }
 
   @Get('scopes')
@@ -72,19 +88,50 @@ export class AdminKeysController {
     };
   }
 
+  @Get('keys/:id')
+  @ApiOperation({ summary: 'Detalle de API key con scopes enriquecidos' })
+  async getKey(@Param('id') id: string) {
+    const key = await this.apiKeys.findById(id);
+    if (!key) throw new NotFoundException('API key no encontrada.');
+
+    const scopeDetails = this.buildScopeDetails(key.scopes);
+    return {
+      key: this.withDocsUrl(key),
+      scopeDetails,
+      accessSummary: {
+        catalogOnly: !(key.scopes?.length),
+        scopeCount: key.scopes?.length ?? 0,
+        routeCount: scopeDetails.reduce(
+          (total, scope) => total + (scope.routes?.length ?? 0),
+          0,
+        ),
+      },
+    };
+  }
+
   @Patch('keys/:id')
+  @ApiOperation({ summary: 'Editar nombre, scopes, canal o reactivar key' })
   async updateKey(@Param('id') id: string, @Body() dto: UpdateAdminKeyDto) {
     const key = await this.apiKeys.updateKey(id, {
       name: dto.name,
       scopes: dto.scopes,
       active: dto.active,
+      cproductor: dto.cproductor,
+      ccanalalt: dto.ccanalalt,
+      cscanalalt: dto.cscanalalt,
+      ctipocanal: dto.ctipocanal,
+      xcanalVenta: dto.xcanal_venta,
     });
-    return { key };
+    const enriched = this.withDocsUrl(key);
+    return {
+      key: enriched,
+      scopeDetails: this.buildScopeDetails(key.scopes),
+    };
   }
 
   @Post('keys/:id/revoke')
   async revokeKey(@Param('id') id: string) {
     const key = await this.apiKeys.revokeKey(id);
-    return { key };
+    return { key: this.withDocsUrl(key) };
   }
 }

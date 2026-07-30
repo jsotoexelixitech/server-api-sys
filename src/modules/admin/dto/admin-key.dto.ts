@@ -48,4 +48,24 @@ export class UpdateAdminKeyDto {
   @IsOptional()
   @IsBoolean()
   active?: boolean;
+
+  @IsOptional()
+  @IsInt()
+  cproductor?: number;
+
+  @IsOptional()
+  @IsInt()
+  ccanalalt?: number;
+
+  @IsOptional()
+  @IsInt()
+  cscanalalt?: number;
+
+  @IsOptional()
+  @IsString()
+  ctipocanal?: string;
+
+  @IsOptional()
+  @IsString()
+  xcanal_venta?: string;
 }

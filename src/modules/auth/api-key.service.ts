@@ -212,7 +212,16 @@ export class ApiKeyService {
 
   async updateKey(
     id: string,
-    patch: { name?: string; scopes?: string[]; active?: boolean },
+    patch: {
+      name?: string;
+      scopes?: string[];
+      active?: boolean;
+      cproductor?: number;
+      ccanalalt?: number;
+      cscanalalt?: number;
+      ctipocanal?: string;
+      xcanalVenta?: string;
+    },
   ): Promise<ApiKeyRecord> {
     if (!this.isEnabled()) {
       throw new BadRequestException('PostgreSQL auth deshabilitado.');
@@ -233,7 +242,14 @@ export class ApiKeyService {
       const row = await updateApiKeyLegacy(
         this.prisma,
         id,
-        normalizedPatch,
+        {
+          ...normalizedPatch,
+          cproductor: patch.cproductor,
+          ccanalalt: patch.ccanalalt,
+          cscanalalt: patch.cscanalalt,
+          ctipocanal: patch.ctipocanal,
+          xcanalVenta: patch.xcanalVenta,
+        },
         false,
       );
       if (!row) throw new NotFoundException('API key no encontrada.');
@@ -246,6 +262,11 @@ export class ApiKeyService {
         name: normalizedPatch.name?.trim() || undefined,
         scopes: normalizedPatch.scopes,
         active: normalizedPatch.active,
+        cproductor: patch.cproductor,
+        ccanalalt: patch.ccanalalt,
+        cscanalalt: patch.cscanalalt,
+        ctipocanal: patch.ctipocanal?.trim()?.slice(0, 1) || undefined,
+        xcanalVenta: patch.xcanalVenta?.trim() || undefined,
         revokedAt:
           normalizedPatch.active === false
             ? new Date()

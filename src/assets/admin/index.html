@@ -140,6 +140,36 @@
     .guide-scope-card ul { margin: .5rem 0 0; padding-left: 1.25rem; font-size: .72rem; color: #475569; font-family: Consolas,monospace; }
     .locked.not-connected { opacity: .55; pointer-events: none; user-select: none; }
     footer { text-align: center; padding: 2rem 1rem; font-size: .72rem; color: var(--muted); }
+    .chip.scope-chip { cursor: help; border: 1px solid #c7d2fe; }
+    .chip.scope-chip .scope-id { display: block; font-size: .58rem; opacity: .75; font-family: Consolas, monospace; }
+    .actions-cell { display: flex; gap: .35rem; flex-wrap: wrap; justify-content: flex-end; }
+    .btn-sm { padding: .35rem .65rem; font-size: .72rem; }
+    .modal-backdrop { position: fixed; inset: 0; background: rgba(9,17,51,.45); z-index: 1000; display: none; align-items: center; justify-content: center; padding: 1rem; }
+    .modal-backdrop.open { display: flex; }
+    .modal { background: #fff; border-radius: var(--radius); width: min(720px, 100%); max-height: 90vh; overflow: hidden; display: flex; flex-direction: column; box-shadow: 0 24px 48px rgba(15,26,90,.25); }
+    .modal-head { padding: 1rem 1.25rem; border-bottom: 1px solid var(--border); display: flex; align-items: flex-start; justify-content: space-between; gap: 1rem; background: linear-gradient(180deg,#fafbff,#fff); }
+    .modal-head h2 { margin: 0; font-size: 1rem; color: var(--blue); }
+    .modal-head p { margin: .25rem 0 0; font-size: .72rem; color: var(--muted); }
+    .modal-close { background: transparent; border: none; font-size: 1.25rem; cursor: pointer; color: var(--muted); line-height: 1; }
+    .modal-body { padding: 1.25rem; overflow-y: auto; flex: 1; }
+    .modal-foot { padding: .85rem 1.25rem; border-top: 1px solid var(--border); display: flex; gap: .5rem; justify-content: flex-end; flex-wrap: wrap; background: #f8fafc; }
+    .detail-grid { display: grid; grid-template-columns: 1fr 1fr; gap: .75rem 1rem; margin-bottom: 1rem; }
+    @media (max-width:540px){ .detail-grid { grid-template-columns: 1fr; } }
+    .detail-item label { display: block; font-size: .65rem; text-transform: uppercase; letter-spacing: .05em; color: var(--muted); font-weight: 600; margin-bottom: .2rem; }
+    .detail-item span { font-size: .85rem; font-weight: 500; color: var(--blue); word-break: break-word; }
+    .access-banner { border-radius: 10px; padding: .75rem 1rem; font-size: .78rem; margin-bottom: 1rem; }
+    .access-banner.catalog { background: #eff6ff; border: 1px solid #bfdbfe; color: #1e40af; }
+    .access-banner.scoped { background: #ecfdf5; border: 1px solid #a7f3d0; color: #065f46; }
+    .scope-card { border: 1px solid var(--border); border-radius: 12px; margin-bottom: .65rem; overflow: hidden; }
+    .scope-card-head { padding: .75rem 1rem; background: #fafbff; border-bottom: 1px solid var(--border); }
+    .scope-card-head strong { font-size: .88rem; color: var(--blue); }
+    .scope-card-head code { font-size: .68rem; color: var(--red-dark); margin-left: .35rem; }
+    .scope-card-head p { margin: .25rem 0 0; font-size: .72rem; color: var(--muted); }
+    .scope-card-routes { padding: .65rem 1rem .85rem; font-size: .7rem; color: #475569; }
+    .scope-card-routes ul { margin: 0; padding-left: 1.1rem; font-family: Consolas, monospace; }
+    .edit-section { margin-top: 1rem; padding-top: 1rem; border-top: 1px dashed var(--border); }
+    .edit-section h3 { margin: 0 0 .75rem; font-size: .85rem; color: var(--blue); }
+    .hidden { display: none !important; }
   </style>
 </head>
 <body>
@@ -325,12 +355,54 @@
   </main>
   <footer>Exélixi Tech · nest-api · La Mundial de Seguros QA</footer>
 
+  <div id="keyModalBackdrop" class="modal-backdrop" aria-hidden="true">
+    <div class="modal" role="dialog" aria-labelledby="keyModalTitle">
+      <div class="modal-head">
+        <div>
+          <h2 id="keyModalTitle">Detalle del token</h2>
+          <p id="keyModalSubtitle">—</p>
+        </div>
+        <button type="button" class="modal-close" id="btnCloseModal" title="Cerrar">×</button>
+      </div>
+      <div class="modal-body" id="keyModalBody">
+        <p style="color:var(--muted);font-size:.85rem">Cargando…</p>
+      </div>
+      <div class="modal-foot" id="keyModalFoot">
+        <button type="button" class="btn btn-secondary btn-sm" id="btnModalCancel">Cerrar</button>
+        <button type="button" class="btn btn-secondary btn-sm hidden" id="btnModalEdit">Editar</button>
+        <button type="button" class="btn btn-primary btn-sm hidden" id="btnModalSave">Guardar cambios</button>
+        <button type="button" class="btn btn-danger btn-sm hidden" id="btnModalRevoke">Revocar</button>
+        <button type="button" class="btn btn-secondary btn-sm hidden" id="btnModalReactivate">Reactivar</button>
+      </div>
+    </div>
+  </div>
+
   <script>
     const API = '/api/v1/admin';
     let scopesCatalog = [];
     let keysCache = [];
     let connected = false;
     let wizardStep = 1;
+    let modalKeyId = null;
+    let modalMode = 'view';
+    let modalDetail = null;
+
+    function scopeMeta(scopeId) {
+      return scopesCatalog.find((s) => s.id === scopeId) || { id: scopeId, label: scopeId, description: '', routes: [] };
+    }
+
+    function formatScopesRich(scopes) {
+      if (!scopes?.length) {
+        return '<span class="chip muted" title="Solo catálogos INMA/valrep y auth">Solo catálogos</span>';
+      }
+      return scopes.map((id) => {
+        const meta = scopeMeta(id);
+        const routes = (meta.routes || []).slice(0, 4).join('\n');
+        const more = (meta.routes || []).length > 4 ? `\n… +${meta.routes.length - 4} rutas` : '';
+        const tip = routes + more || id;
+        return `<span class="chip scope-chip" title="${escapeHtml(tip)}">${escapeHtml(meta.label)}<span class="scope-id">${escapeHtml(id)}</span></span>`;
+      }).join('');
+    }
 
     function token() { return localStorage.getItem('nest_admin_token') || ''; }
 
@@ -378,8 +450,7 @@
     }
 
     function formatScopes(scopes) {
-      if (!scopes?.length) return '<span class="chip muted">Solo catálogos</span>';
-      return scopes.map((s) => `<span class="chip">${escapeHtml(s)}</span>`).join('');
+      return formatScopesRich(scopes);
     }
 
     function formatDate(iso) {
@@ -436,8 +507,14 @@
           <td>${formatDocsLink(k.docsUrl)}</td>
           <td><span class="badge ${k.active ? 'ok' : 'off'}">${k.active ? 'Activa' : 'Revocada'}</span></td>
           <td style="font-size:.78rem">${formatDate(k.lastUsedAt)}</td>
-          <td>${k.active ? `<button type="button" class="btn btn-danger" data-revoke="${escapeHtml(k.id)}">Revocar</button>` : ''}</td>
+          <td class="actions-cell">
+            <button type="button" class="btn btn-secondary btn-sm" data-detail="${escapeHtml(k.id)}">Ver / Editar</button>
+            ${k.active ? `<button type="button" class="btn btn-danger btn-sm" data-revoke="${escapeHtml(k.id)}">Revocar</button>` : ''}
+          </td>
         </tr>`).join('');
+      tbody.querySelectorAll('[data-detail]').forEach((btn) => {
+        btn.addEventListener('click', () => openKeyModal(btn.dataset.detail));
+      });
       tbody.querySelectorAll('[data-revoke]').forEach((btn) => {
         btn.addEventListener('click', async () => {
           if (!confirm('¿Revocar esta key?')) return;
@@ -450,13 +527,13 @@
       });
     }
 
-    function renderScopeDetails() {
-      const box = document.getElementById('scopeDetailList');
+    function renderScopeCheckboxes(containerId, selectedIds, inputName) {
+      const selected = new Set(selectedIds || []);
       const filtered = scopesCatalog.filter((s) => s.id !== 'admin:keys');
-      box.innerHTML = filtered.map((s) => `
+      document.getElementById(containerId).innerHTML = filtered.map((s) => `
         <div class="scope-detail">
           <label class="scope-detail-head">
-            <input type="checkbox" name="scope" value="${escapeHtml(s.id)}" />
+            <input type="checkbox" name="${inputName}" value="${escapeHtml(s.id)}" ${selected.has(s.id) ? 'checked' : ''} />
             <div>
               <strong>${escapeHtml(s.label)}</strong>
               <code>${escapeHtml(s.id)}</code>
@@ -465,6 +542,10 @@
           </label>
           <ul class="scope-routes">${(s.routes || []).map((r) => `<li>${escapeHtml(r)}</li>`).join('')}</ul>
         </div>`).join('');
+    }
+
+    function renderScopeDetails() {
+      renderScopeCheckboxes('scopeDetailList', [], 'scope');
     }
 
     function renderGuideScopes() {
@@ -521,6 +602,152 @@
         btnNext.style.display = 'inline-flex';
         btnSubmit.style.display = 'none';
       }
+    }
+
+    function setModalButtons(mode, key) {
+      modalMode = mode;
+      document.getElementById('btnModalEdit').classList.toggle('hidden', mode !== 'view');
+      document.getElementById('btnModalSave').classList.toggle('hidden', mode !== 'edit');
+      document.getElementById('btnModalRevoke').classList.toggle('hidden', mode !== 'view' || !key?.active);
+      document.getElementById('btnModalReactivate').classList.toggle('hidden', mode !== 'view' || key?.active);
+      document.getElementById('btnModalCancel').textContent = mode === 'edit' ? 'Cancelar edición' : 'Cerrar';
+    }
+
+    function renderKeyView(detail) {
+      const k = detail.key;
+      const summary = detail.accessSummary || {};
+      const scopeCards = (detail.scopeDetails || []).length
+        ? detail.scopeDetails.map((s) => `
+            <div class="scope-card">
+              <div class="scope-card-head">
+                <strong>${escapeHtml(s.label)}</strong><code>${escapeHtml(s.id)}</code>
+                <p>${escapeHtml(s.description || 'Sin descripción')}</p>
+              </div>
+              ${(s.routes || []).length ? `<div class="scope-card-routes"><ul>${s.routes.map((r) => `<li>${escapeHtml(r)}</li>`).join('')}</ul></div>` : ''}
+            </div>`).join('')
+        : '<p style="font-size:.82rem;color:var(--muted)">Sin scopes asignados — acceso a catálogos INMA/valrep y endpoints de auth.</p>';
+
+      document.getElementById('keyModalTitle').textContent = k.name;
+      document.getElementById('keyModalSubtitle').textContent = `${k.keyPrefix}… · ${k.active ? 'Activa' : 'Revocada'}`;
+
+      document.getElementById('keyModalBody').innerHTML = `
+        <div class="access-banner ${summary.catalogOnly ? 'catalog' : 'scoped'}">
+          ${summary.catalogOnly
+            ? '<strong>Acceso base:</strong> solo catálogos y auth (sin scopes de negocio).'
+            : `<strong>${summary.scopeCount} scope(s)</strong> · ~${summary.routeCount} rutas protegidas desbloqueadas.`}
+        </div>
+        <div class="detail-grid">
+          <div class="detail-item"><label>Prefijo</label><span><code>${escapeHtml(k.keyPrefix)}…</code></span></div>
+          <div class="detail-item"><label>Estado</label><span>${k.active ? 'Activa' : 'Revocada'}</span></div>
+          <div class="detail-item"><label>cproductor</label><span>${k.cproductor ?? '—'}</span></div>
+          <div class="detail-item"><label>Canal (ccanalalt)</label><span>${k.ccanalalt ?? '—'}</span></div>
+          <div class="detail-item"><label>Subcanal (cscanalalt)</label><span>${k.cscanalalt ?? '—'}</span></div>
+          <div class="detail-item"><label>Tipo canal</label><span>${escapeHtml(k.ctipocanal || '—')}</span></div>
+          <div class="detail-item" style="grid-column:1/-1"><label>xcanal_venta</label><span>${escapeHtml(k.xcanalVenta || '—')}</span></div>
+          <div class="detail-item"><label>Creada</label><span>${formatDate(k.createdAt).replace(/<[^>]+>/g, '') || '—'}</span></div>
+          <div class="detail-item"><label>Último uso</label><span>${formatDate(k.lastUsedAt).replace(/<[^>]+>/g, '') || '—'}</span></div>
+          <div class="detail-item" style="grid-column:1/-1"><label>Swagger filtrado</label><span>${k.docsUrl ? `<a href="${escapeHtml(k.docsUrl)}" target="_blank" rel="noopener">${escapeHtml(k.docsUrl)}</a>` : '—'}</span></div>
+        </div>
+        <h3 style="margin:0 0 .65rem;font-size:.88rem;color:var(--blue)">Permisos (scopes)</h3>
+        ${scopeCards}`;
+      setModalButtons('view', k);
+    }
+
+    function renderKeyEdit(detail) {
+      const k = detail.key;
+      document.getElementById('keyModalTitle').textContent = 'Editar: ' + k.name;
+      document.getElementById('keyModalSubtitle').textContent = 'Modifique nombre, canal o permisos y guarde.';
+      document.getElementById('keyModalBody').innerHTML = `
+        <div class="row">
+          <div><label class="field-label" for="editName">Nombre</label><input id="editName" type="text" value="${escapeHtml(k.name)}" /></div>
+          <div><label class="field-label" for="editCproductor">cproductor</label><input id="editCproductor" type="number" value="${k.cproductor ?? ''}" /></div>
+        </div>
+        <div class="row" style="margin-top:1rem">
+          <div><label class="field-label" for="editCcanal">Canal (ccanalalt)</label><input id="editCcanal" type="number" value="${k.ccanalalt ?? ''}" /></div>
+          <div><label class="field-label" for="editCscanal">Subcanal (cscanalalt)</label><input id="editCscanal" type="number" value="${k.cscanalalt ?? ''}" /></div>
+        </div>
+        <div class="row" style="margin-top:1rem">
+          <div><label class="field-label" for="editXcanal">xcanal_venta</label><input id="editXcanal" type="text" value="${escapeHtml(k.xcanalVenta || '')}" /></div>
+          <div><label class="field-label" for="editTipo">ctipocanal</label><input id="editTipo" type="text" maxlength="1" value="${escapeHtml(k.ctipocanal || '')}" /></div>
+        </div>
+        <div class="edit-section">
+          <h3>Permisos (scopes)</h3>
+          <div class="catalog-note">Desmarque todos para dejar solo acceso a catálogos. Las rutas listadas son las que desbloquea cada scope.</div>
+          <div id="editScopeList" class="scope-detail-list"></div>
+        </div>`;
+      renderScopeCheckboxes('editScopeList', k.scopes || [], 'editScope');
+      setModalButtons('edit', k);
+    }
+
+    function closeKeyModal() {
+      modalKeyId = null;
+      modalDetail = null;
+      document.getElementById('keyModalBackdrop').classList.remove('open');
+      document.getElementById('keyModalBackdrop').setAttribute('aria-hidden', 'true');
+    }
+
+    async function openKeyModal(id) {
+      modalKeyId = id;
+      document.getElementById('keyModalBackdrop').classList.add('open');
+      document.getElementById('keyModalBackdrop').setAttribute('aria-hidden', 'false');
+      document.getElementById('keyModalBody').innerHTML = '<p style="color:var(--muted)">Cargando detalle…</p>';
+      setModalButtons('view', { active: true });
+      try {
+        modalDetail = await api('/keys/' + id);
+        renderKeyView(modalDetail);
+      } catch (e) {
+        closeKeyModal();
+        showToast(e.message);
+      }
+    }
+
+    function parseEditOptionalInt(val) {
+      const raw = String(val ?? '').trim();
+      if (!raw) return null;
+      const n = parseInt(raw, 10);
+      return Number.isFinite(n) ? n : null;
+    }
+
+    async function saveKeyEdit() {
+      if (!modalKeyId) return;
+      const name = document.getElementById('editName').value.trim();
+      if (!name) return showToast('El nombre es obligatorio.');
+      const scopes = [...document.querySelectorAll('input[name=editScope]:checked')].map((el) => el.value);
+      const body = {
+        name,
+        scopes,
+        cproductor: parseEditOptionalInt(document.getElementById('editCproductor').value),
+        ccanalalt: parseEditOptionalInt(document.getElementById('editCcanal').value),
+        cscanalalt: parseEditOptionalInt(document.getElementById('editCscanal').value),
+        xcanal_venta: document.getElementById('editXcanal').value.trim() || null,
+        ctipocanal: document.getElementById('editTipo').value.trim().slice(0, 1) || null,
+      };
+      try {
+        modalDetail = await api('/keys/' + modalKeyId, { method: 'PATCH', body: JSON.stringify(body) });
+        renderKeyView(modalDetail);
+        showToast('Token actualizado.', 'ok');
+        loadKeys();
+      } catch (e) { showToast(e.message); }
+    }
+
+    async function revokeFromModal() {
+      if (!modalKeyId || !confirm('¿Revocar esta key?')) return;
+      try {
+        await api('/keys/' + modalKeyId + '/revoke', { method: 'POST' });
+        showToast('Key revocada.', 'ok');
+        closeKeyModal();
+        loadKeys();
+      } catch (e) { showToast(e.message); }
+    }
+
+    async function reactivateFromModal() {
+      if (!modalKeyId || !confirm('¿Reactivar esta key?')) return;
+      try {
+        modalDetail = await api('/keys/' + modalKeyId, { method: 'PATCH', body: JSON.stringify({ active: true }) });
+        renderKeyView(modalDetail);
+        showToast('Key reactivada.', 'ok');
+        loadKeys();
+      } catch (e) { showToast(e.message); }
     }
 
     async function loadScopes() {
@@ -610,6 +837,21 @@
     document.getElementById('btnCopyKey').addEventListener('click', () => copyText(document.getElementById('plainKeyText').textContent, 'Key copiada.'));
     document.getElementById('btnCopyDocs').addEventListener('click', () => copyText(document.getElementById('docsUrlText').textContent, 'Enlace Swagger copiado.'));
     document.getElementById('btnCopyEnv').addEventListener('click', () => copyText(document.getElementById('envSnippet').textContent, '.env copiado.'));
+
+    document.getElementById('btnCloseModal').addEventListener('click', closeKeyModal);
+    document.getElementById('btnModalCancel').addEventListener('click', () => {
+      if (modalMode === 'edit' && modalDetail) renderKeyView(modalDetail);
+      else closeKeyModal();
+    });
+    document.getElementById('btnModalEdit').addEventListener('click', () => {
+      if (modalDetail) renderKeyEdit(modalDetail);
+    });
+    document.getElementById('btnModalSave').addEventListener('click', saveKeyEdit);
+    document.getElementById('btnModalRevoke').addEventListener('click', revokeFromModal);
+    document.getElementById('btnModalReactivate').addEventListener('click', reactivateFromModal);
+    document.getElementById('keyModalBackdrop').addEventListener('click', (e) => {
+      if (e.target.id === 'keyModalBackdrop') closeKeyModal();
+    });
 
     async function copyText(text, okMsg) {
       try { await navigator.clipboard.writeText(text); showToast(okMsg, 'ok'); }
