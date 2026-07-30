@@ -1,5 +1,14 @@
 import { DynamicModule, Logger } from '@nestjs/common';
-import type { PartnerModuleFactory, PartnerPackageExports } from '@jsotoexelixitech/nest-api-sdk';
+import type {
+  PartnerModuleFactory,
+  PartnerPackageExports,
+  PartnerScopeMeta,
+} from '@jsotoexelixitech/nest-api-sdk';
+import {
+  registerDiscoveredRoutes,
+  registerPartnerScopeCatalog,
+} from '../modules/auth/scopes/scope-catalog.registry';
+import { discoverRoutesFromController } from '../modules/auth/scopes/scope-route-discovery';
 
 const loaderLog = new Logger('PartnerLoader');
 
@@ -30,6 +39,19 @@ function resolveRegister(
   return register;
 }
 
+function resolvePartnerScopes(
+  pkgName: string,
+  pkg: unknown,
+): PartnerScopeMeta[] | null {
+  const mod = pkg as PartnerPackageExports & {
+    default?: PartnerPackageExports;
+    partnerScopes?: PartnerScopeMeta[];
+  };
+  const scopes = mod.partnerScopes ?? mod.default?.partnerScopes;
+  if (!scopes?.length) return null;
+  return scopes;
+}
+
 /** Carga síncrona de paquetes npm listados en PARTNER_PACKAGES. */
 export function loadPartnerDynamicModules(packageNames: string[]): DynamicModule[] {
   const modules: DynamicModule[] = [];
@@ -40,7 +62,28 @@ export function loadPartnerDynamicModules(packageNames: string[]): DynamicModule
       const pkg = require(pkgName) as unknown;
       const register = resolveRegister(pkgName, pkg);
       if (!register) continue;
-      modules.push(register());
+
+      const partnerScopes = resolvePartnerScopes(pkgName, pkg);
+      if (partnerScopes) {
+        registerPartnerScopeCatalog(partnerScopes, pkgName);
+        loaderLog.log(
+          `Scopes partner registrados (${partnerScopes.length}) desde ${pkgName}`,
+        );
+      }
+
+      const dynamicModule = register();
+      for (const controller of dynamicModule.controllers ?? []) {
+        if (typeof controller !== 'function') continue;
+        const routes = discoverRoutesFromController(controller);
+        if (routes.length > 0) {
+          registerDiscoveredRoutes(routes);
+          loaderLog.log(
+            `Rutas partner indexadas (${routes.length}) desde ${pkgName}`,
+          );
+        }
+      }
+
+      modules.push(dynamicModule);
       loadedPartnerPackages.push(pkgName);
       loaderLog.log(`Módulo partner cargado: ${pkgName}`);
     } catch (err) {

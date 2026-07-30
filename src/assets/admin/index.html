@@ -258,8 +258,9 @@
         <div class="wizard-pane" id="step2">
           <div class="catalog-note">
             <strong>Catálogos INMA / valrep</strong> (marcas, estados, planes…) solo requieren token válido — <em>no necesitan scope</em>.
-            Marque permisos solo si el cliente <strong>emite pólizas, cobra o genera documentos</strong>.
-            Integradores partner y consultas de catálogo suelen operar <em>sin scopes</em> (solo token válido).
+            Marque permisos solo si el cliente <strong>emite pólizas, cobra, genera documentos o consume APIs partner</strong>.
+            El catálogo se actualiza solo al arrancar: rutas del <strong>core</strong> con <code>@NestProtected</code> y rutas <strong>partner</strong> en <code>PARTNER_PACKAGES</code>.
+            Catálogos INMA/valrep siguen sin requerir scope (solo token válido).
           </div>
           <div id="scopeDetailList" class="scope-detail-list"></div>
         </div>
@@ -313,7 +314,8 @@
         <div class="card-head"><div><h2>Catálogo de scopes</h2><span class="sub">Qué endpoint desbloquea cada permiso</span></div></div>
         <div id="guideScopes"></div>
         <div class="catalog-note" style="margin-top:.75rem">
-          Keys <strong>sin scopes</strong> pueden consultar catálogos (INMA, valrep, personas/planes) y rutas partner. Ideal para integradores y apps de solo lectura.
+          Keys <strong>sin scopes</strong> pueden consultar catálogos (INMA, valrep, personas/planes).
+          Rutas sensibles del core y partner aparecen aquí automáticamente; asigne el scope correspondiente al crear el token.
         </div>
       </div>
     </section>
@@ -486,7 +488,7 @@
         <div class="summary-row"><span>Subcanal (cscanalalt)</span><span>${escapeHtml(subcanal || '—')}</span></div>
         <div class="summary-row"><span>xcanal_venta</span><span>${escapeHtml(xcanal || '—')}</span></div>
         <div class="summary-row"><span>ctipocanal</span><span>${escapeHtml(tipo || '—')}</span></div>
-        <div class="summary-row"><span>Permisos (scopes)</span><span>${scopes.length ? scopes.join(', ') : 'Ninguno (catálogos + partner)'}</span></div>
+        <div class="summary-row"><span>Permisos (scopes)</span><span>${scopes.length ? scopes.join(', ') : 'Ninguno (catálogos; partner sin restricción)'}</span></div>
         <div class="summary-row"><span>Uso</span><span>Token Bearer vía POST /auth/token</span></div>`;
     }
 

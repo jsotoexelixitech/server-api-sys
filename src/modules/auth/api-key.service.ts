@@ -5,7 +5,7 @@ import {
   NotFoundException,
 } from '@nestjs/common';
 import { PrismaService } from '../../database/prisma/prisma.service';
-import { NEST_AUTH_SCOPE_CATALOG } from './scopes/nest-auth-scopes.constants';
+import { buildScopeCatalog } from './scopes/scope-catalog.registry';
 
 export interface ApiKeyRecord {
   id: string;
@@ -80,7 +80,7 @@ export class ApiKeyService {
   }
 
   getScopeCatalog() {
-    return NEST_AUTH_SCOPE_CATALOG;
+    return buildScopeCatalog();
   }
 
   async createKey(input: CreateApiKeyInput): Promise<CreateApiKeyResult> {
@@ -179,10 +179,10 @@ export class ApiKeyService {
 
   private normalizeScopes(scopes: string[]): string[] {
     const allowed = new Set(
-      NEST_AUTH_SCOPE_CATALOG.map((s) => s.id).concat('*'),
+      this.getScopeCatalog().map((s) => s.id).concat('*', 'partner:*'),
     );
     const normalized = [...new Set(scopes.map((s) => String(s).trim()).filter(Boolean))];
-    const invalid = normalized.filter((s) => s !== '*' && !allowed.has(s));
+    const invalid = normalized.filter((s) => !allowed.has(s));
     if (invalid.length) {
       throw new BadRequestException(`Scopes inválidos: ${invalid.join(', ')}`);
     }

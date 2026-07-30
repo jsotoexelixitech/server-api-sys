@@ -22,38 +22,31 @@ export const NEST_AUTH_SCOPE_CATALOG: NestAuthScopeMeta[] = [
     id: NEST_AUTH_SCOPES.EMISSIONS_AUTO,
     label: 'Emisión automóvil',
     description: 'Emitir pólizas RCV / auto',
-    routes: ['POST /api/v1/external/createEmissionAuto'],
+    routes: [],
   },
   {
     id: NEST_AUTH_SCOPES.EMISSIONS_PERSON,
     label: 'Emisión personas / viajero',
     description: 'Emitir pólizas de personas',
-    routes: [
-      'POST /api/v1/personas/emision',
-      'POST /api/v1/external/createEmissionPerson',
-    ],
+    routes: [],
   },
   {
     id: NEST_AUTH_SCOPES.COLLECTION_WRITE,
     label: 'Cobranza',
     description: 'Notificar, cobrar y activar recibos',
-    routes: [
-      'POST /api/v1/external/collection/notific',
-      'POST /api/v1/external/collection/collect',
-      'POST /api/v1/external/collection/activate',
-    ],
+    routes: [],
   },
   {
     id: NEST_AUTH_SCOPES.DOCUMENTS_WRITE,
     label: 'Documentos',
     description: 'Generar conductor habitual',
-    routes: ['POST /api/v1/documents/conductor-habitual'],
+    routes: [],
   },
   {
     id: NEST_AUTH_SCOPES.ADMIN_KEYS,
     label: 'Administrar keys',
     description: 'Panel y API de gestión de API keys',
-    routes: ['GET/POST/PATCH /api/v1/admin/keys'],
+    routes: [],
   },
 ];
 
