@@ -127,13 +127,14 @@ async function bootstrap(): Promise<void> {
       )
       .addBearerAuth();
 
+    if (showInternalSwaggerServers) {
+      // Sin prefijo: en :3002 Nest expone /api/… directo (el prefijo lo aplica Apache en HTTPS).
+      swaggerConfigBuilder
+        .addServer(`http://192.168.8.120:${port}`, 'srv001 — QA interno')
+        .addServer(`http://localhost:${port}`, 'Desarrollo local');
+    }
     if (publicPaths.prefix) {
       swaggerConfigBuilder.addServer(publicPaths.publicBaseUrl, 'La Mundial — QA (HTTPS)');
-    }
-    if (showInternalSwaggerServers) {
-      swaggerConfigBuilder
-        .addServer(`http://192.168.8.120:${port}${publicPaths.prefix}`, 'srv001 — QA interno')
-        .addServer(`http://localhost:${port}${publicPaths.prefix}`, 'Desarrollo local');
     }
 
     const swaggerConfig = swaggerConfigBuilder
@@ -345,6 +346,21 @@ async function bootstrap(): Promise<void> {
   }
 
   /* ── QA / servidor Swagger ─────────────────────────────── */
+  function autoSelectSwaggerServer() {
+    var select = document.querySelector('.swagger-ui .servers select');
+    if (!select || select.dataset.lmAuto) return;
+    var origin = window.location.origin;
+    var pathPrefix = window.location.pathname.replace(/\\/docs\\/?$/, '');
+    var target = (pathPrefix ? origin + pathPrefix : origin).replace(/\\/+$/, '');
+    Array.from(select.options).forEach(function(opt, idx) {
+      if (opt.value.replace(/\\/+$/, '') === target) {
+        select.selectedIndex = idx;
+        select.dataset.lmAuto = '1';
+        select.dispatchEvent(new Event('change', { bubbles: true }));
+      }
+    });
+  }
+
   function wireEnvBadges(nav) {
     if (!nav || nav.dataset.envWired) return;
     nav.dataset.envWired = '1';
@@ -386,6 +402,7 @@ async function bootstrap(): Promise<void> {
     buildSidebar();
     cleanTitles();
     highlightAuthorize();
+    autoSelectSwaggerServer();
   }
 
   function highlightAuthorize() {
