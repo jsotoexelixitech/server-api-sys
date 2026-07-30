@@ -149,7 +149,7 @@
         <img src="/assets/brand/logo-lamundial-sidebar.png" alt="La Mundial" onerror="this.style.display='none'" />
         <div class="brand-text">
           <h1>nest-api · API Keys</h1>
-          <p>Gestión de acceso · PostgreSQL nest_auth · srv001 QA</p>
+          <p>Gestión de tokens de acceso a la API · PostgreSQL nest_auth · srv001 QA</p>
         </div>
       </div>
       <div class="auth-box">
@@ -196,7 +196,7 @@
         </div>
         <div class="table-wrap">
           <table>
-            <thead><tr><th>Módulo</th><th>Prefijo</th><th>Scopes</th><th>Estado</th><th>Último uso</th><th></th></tr></thead>
+            <thead><tr><th>Nombre / cliente</th><th>Prefijo</th><th>Scopes</th><th>Estado</th><th>Último uso</th><th></th></tr></thead>
             <tbody id="keysBody"><tr class="empty-row"><td colspan="6">Conecte para ver las keys</td></tr></tbody>
           </table>
         </div>
@@ -207,23 +207,23 @@
     <section class="panel" id="panel-create">
       <div class="card locked" id="wizardCard">
         <div class="card-head">
-          <div><h2>Asistente — nueva API key</h2><span class="sub">3 pasos: módulo → scopes → confirmar</span></div>
+          <div><h2>Asistente — nueva API key</h2><span class="sub">3 pasos: identidad → permisos → confirmar</span></div>
         </div>
 
         <div class="wizard-steps">
-          <div class="wizard-step active" data-step="1"><div class="wizard-step-num">1</div><span class="wizard-step-label">Módulo</span></div>
-          <div class="wizard-step" data-step="2"><div class="wizard-step-num">2</div><span class="wizard-step-label">Scopes</span></div>
+          <div class="wizard-step active" data-step="1"><div class="wizard-step-num">1</div><span class="wizard-step-label">Identidad</span></div>
+          <div class="wizard-step" data-step="2"><div class="wizard-step-num">2</div><span class="wizard-step-label">Permisos</span></div>
           <div class="wizard-step" data-step="3"><div class="wizard-step-num">3</div><span class="wizard-step-label">Confirmar</span></div>
         </div>
 
         <!-- Paso 1 -->
         <div class="wizard-pane active" id="step1">
-          <p style="font-size:.82rem;color:var(--muted);margin:0 0 .75rem">Seleccione el módulo Exélixi. Se preconfiguran nombre y scopes recomendados.</p>
+          <p style="font-size:.82rem;color:var(--muted);margin:0 0 .75rem">Token de acceso a <strong>nest-api</strong> para un cliente, integrador o servicio. Elija un perfil de uso; el nombre y los permisos se preconfiguran.</p>
           <div class="preset-grid" id="presetGrid"></div>
           <div class="row" style="margin-top:1rem">
             <div>
-              <label class="field-label" for="keyName">Nombre de la key</label>
-              <input id="keyName" type="text" placeholder="modulo-formulario QA" />
+              <label class="field-label" for="keyName">Nombre de la key (cliente / uso)</label>
+              <input id="keyName" type="text" placeholder="ej. acme-integrador QA, app-interna-prod" />
             </div>
             <div>
               <label class="field-label" for="cproductor">cproductor</label>
@@ -236,7 +236,8 @@
         <div class="wizard-pane" id="step2">
           <div class="catalog-note">
             <strong>Catálogos INMA / valrep</strong> (marcas, estados, planes…) solo requieren token válido — <em>no necesitan scope</em>.
-            Marque scopes solo si el módulo <strong>emite pólizas, cobra o genera documentos</strong>.
+            Marque permisos solo si el cliente <strong>emite pólizas, cobra o genera documentos</strong>.
+            Integradores partner y consultas de catálogo suelen operar <em>sin scopes</em> (solo token válido).
           </div>
           <div id="scopeDetailList" class="scope-detail-list"></div>
         </div>
@@ -259,11 +260,10 @@
           <div class="field-label" style="color:rgba(255,255,255,.7)">NEST_API_KEY</div>
           <div class="code-block" id="plainKeyText"></div>
           <div class="copy-row"><button type="button" id="btnCopyKey">Copiar key</button></div>
-          <div class="field-label" style="color:rgba(255,255,255,.7);margin-top:1rem">Pegar en ~/exelixi/&lt;modulo&gt;/server/.env</div>
+          <div class="field-label" style="color:rgba(255,255,255,.7);margin-top:1rem">Variables en el .env del consumidor de la API</div>
           <div class="code-block" id="envSnippet"></div>
           <div class="copy-row">
             <button type="button" id="btnCopyEnv">Copiar .env</button>
-            <button type="button" id="btnCopyPm2">Copiar pm2 restart</button>
           </div>
         </div>
       </div>
@@ -272,9 +272,9 @@
     <!-- TAB: Guide -->
     <section class="panel" id="panel-guide">
       <div class="card">
-        <div class="card-head"><div><h2>Flujo de autenticación</h2><span class="sub">Cómo un módulo obtiene y usa el token</span></div></div>
+        <div class="card-head"><div><h2>Flujo de autenticación</h2><span class="sub">Cómo un cliente de nest-api obtiene y usa el token</span></div></div>
         <div class="flow-diagram">
-          <div class="flow-box">Módulo<br><small>NEST_API_KEY</small></div>
+          <div class="flow-box">Cliente API<br><small>NEST_API_KEY</small></div>
           <span class="flow-arrow">→</span>
           <div class="flow-box highlight">POST /auth/token<br><small>apikey</small></div>
           <span class="flow-arrow">→</span>
@@ -291,7 +291,7 @@
         <div class="card-head"><div><h2>Catálogo de scopes</h2><span class="sub">Qué endpoint desbloquea cada permiso</span></div></div>
         <div id="guideScopes"></div>
         <div class="catalog-note" style="margin-top:.75rem">
-          Keys <strong>sin scopes</strong> pueden consultar catálogos (INMA, valrep, personas/planes). Ideal para <em>formulario</em>.
+          Keys <strong>sin scopes</strong> pueden consultar catálogos (INMA, valrep, personas/planes) y rutas partner. Ideal para integradores y apps de solo lectura.
         </div>
       </div>
     </section>
@@ -301,10 +301,10 @@
   <script>
     const API = '/api/v1/admin';
     const PRESETS = [
-      { id: 'formulario', title: 'Formulario', desc: 'Catálogos INMA, valrep, estados y ciudades.', name: 'modulo-formulario QA', scopes: [], pm2: 'form-api' },
-      { id: 'emision', title: 'Emisión completa', desc: 'Auto, personas/viajero, cobranza + catálogos.', name: 'modulo-emision QA', scopes: ['emissions:auto', 'emissions:person', 'collection:write'], pm2: 'emision-api' },
-      { id: 'emision_auto', title: 'Solo emisión auto', desc: 'RCV / createEmissionAuto + catálogos.', name: 'modulo-emision-auto QA', scopes: ['emissions:auto'], pm2: 'emision-api' },
-      { id: 'custom', title: 'Personalizado', desc: 'Elija scopes manualmente en el paso 2.', name: '', scopes: [], pm2: 'su-modulo-api' },
+      { id: 'catalog', title: 'Solo catálogos', desc: 'Consulta INMA, valrep, estados, ciudades y datos de referencia.', name: 'cliente-catalogos QA', scopes: [] },
+      { id: 'emission', title: 'Emisión y cobranza', desc: 'Emite pólizas (auto/persona) y registra cobros.', name: 'cliente-emision QA', scopes: ['emissions:auto', 'emissions:person', 'collection:write'] },
+      { id: 'partner', title: 'Integrador partner', desc: 'Token para consumidores externos (Swagger partner, health, APIs propias).', name: 'partner-integrador QA', scopes: [] },
+      { id: 'custom', title: 'Personalizado', desc: 'Nombre y permisos manuales en el paso 2.', name: '', scopes: [] },
     ];
     let scopesCatalog = [];
     let keysCache = [];
@@ -468,10 +468,10 @@
       const cp = document.getElementById('cproductor').value;
       const scopes = getSelectedScopes();
       document.getElementById('summaryBox').innerHTML = `
-        <div class="summary-row"><span>Módulo / nombre</span><span>${escapeHtml(name || '—')}</span></div>
+        <div class="summary-row"><span>Cliente / nombre</span><span>${escapeHtml(name || '—')}</span></div>
         <div class="summary-row"><span>cproductor</span><span>${escapeHtml(cp || '80080')}</span></div>
-        <div class="summary-row"><span>Scopes</span><span>${scopes.length ? scopes.join(', ') : 'Ninguno (solo catálogos)'}</span></div>
-        <div class="summary-row"><span>PM2 restart</span><span>pm2 restart ${escapeHtml(selectedPreset.pm2)} --update-env</span></div>`;
+        <div class="summary-row"><span>Permisos (scopes)</span><span>${scopes.length ? scopes.join(', ') : 'Ninguno (catálogos + partner)'}</span></div>
+        <div class="summary-row"><span>Uso</span><span>Token Bearer vía POST /auth/token</span></div>`;
     }
 
     function setWizardStep(n) {
@@ -538,7 +538,6 @@
         document.getElementById('plainKeyText').textContent = plain;
         document.getElementById('envSnippet').textContent = env;
         document.getElementById('successPanel').classList.remove('hidden');
-        document.getElementById('successPanel').dataset.pm2 = selectedPreset.pm2;
         showToast('Key creada. Copie el secreto.', 'ok');
         loadKeys();
         switchTab('create');
@@ -573,10 +572,6 @@
     document.getElementById('btnSubmit').addEventListener('click', createKey);
     document.getElementById('btnCopyKey').addEventListener('click', () => copyText(document.getElementById('plainKeyText').textContent, 'Key copiada.'));
     document.getElementById('btnCopyEnv').addEventListener('click', () => copyText(document.getElementById('envSnippet').textContent, '.env copiado.'));
-    document.getElementById('btnCopyPm2').addEventListener('click', () => {
-      const pm2 = document.getElementById('successPanel').dataset.pm2 || 'form-api';
-      copyText(`pm2 restart ${pm2} --update-env`, 'Comando copiado.');
-    });
 
     async function copyText(text, okMsg) {
       try { await navigator.clipboard.writeText(text); showToast(okMsg, 'ok'); }
