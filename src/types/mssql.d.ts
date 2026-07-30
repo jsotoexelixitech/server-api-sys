@@ -69,4 +69,5 @@ declare module 'mssql' {
   export const Image: any;
   export const Binary: any;
   export const VarBinary: (length?: number) => any;
+  export const MAX: any;
 }
