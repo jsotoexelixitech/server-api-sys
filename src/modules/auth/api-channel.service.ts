@@ -32,9 +32,9 @@ export class ApiChannelService {
           ifuente_api: 'API',
           ifuente: 'API',
           cprog: 'eePoliza_PerGe',
-          ctipocanal: null,
-          ccanalalt: null,
-          cscanalalt: null,
+          ctipocanal: row.ctipocanal ?? null,
+          ccanalalt: row.ccanalalt ?? null,
+          cscanalalt: row.cscanalalt ?? null,
         };
       }
     }

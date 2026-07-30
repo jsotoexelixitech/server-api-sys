@@ -14,6 +14,9 @@ export interface ApiKeyRecord {
   scopes: string[];
   active: boolean;
   cproductor: number | null;
+  ccanalalt: number | null;
+  cscanalalt: number | null;
+  ctipocanal: string | null;
   xcanalVenta: string | null;
   createdAt: Date;
   expiresAt: Date | null;
@@ -25,6 +28,9 @@ export interface CreateApiKeyInput {
   name: string;
   scopes: string[];
   cproductor?: number;
+  ccanalalt?: number;
+  cscanalalt?: number;
+  ctipocanal?: string;
   xcanalVenta?: string;
   expiresAt?: Date;
 }
@@ -61,6 +67,9 @@ export class ApiKeyService {
         scopes: true,
         active: true,
         cproductor: true,
+        ccanalalt: true,
+        cscanalalt: true,
+        ctipocanal: true,
         xcanalVenta: true,
         createdAt: true,
         expiresAt: true,
@@ -96,6 +105,9 @@ export class ApiKeyService {
         keyHash,
         scopes,
         cproductor: input.cproductor ?? null,
+        ccanalalt: input.ccanalalt ?? null,
+        cscanalalt: input.cscanalalt ?? null,
+        ctipocanal: input.ctipocanal?.trim()?.slice(0, 1) || null,
         xcanalVenta: input.xcanalVenta?.trim() || null,
         expiresAt: input.expiresAt ?? null,
       },

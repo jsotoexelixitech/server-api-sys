@@ -43,6 +43,9 @@ export class AdminKeysController {
       name: dto.name,
       scopes: dto.scopes,
       cproductor: dto.cproductor,
+      ccanalalt: dto.ccanalalt,
+      cscanalalt: dto.cscanalalt,
+      ctipocanal: dto.ctipocanal,
       xcanalVenta: dto.xcanal_venta,
       expiresAt: dto.expires_at ? new Date(dto.expires_at) : undefined,
     });

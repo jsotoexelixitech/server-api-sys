@@ -14,6 +14,18 @@ export class CreateAdminKeyDto {
   cproductor?: number;
 
   @IsOptional()
+  @IsInt()
+  ccanalalt?: number;
+
+  @IsOptional()
+  @IsInt()
+  cscanalalt?: number;
+
+  @IsOptional()
+  @IsString()
+  ctipocanal?: string;
+
+  @IsOptional()
   @IsString()
   xcanal_venta?: string;
 

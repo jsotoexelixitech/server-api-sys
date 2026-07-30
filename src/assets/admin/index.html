@@ -196,8 +196,8 @@
         </div>
         <div class="table-wrap">
           <table>
-            <thead><tr><th>Nombre / cliente</th><th>Prefijo</th><th>Scopes</th><th>Estado</th><th>Último uso</th><th></th></tr></thead>
-            <tbody id="keysBody"><tr class="empty-row"><td colspan="6">Conecte para ver las keys</td></tr></tbody>
+            <thead><tr><th>Cliente</th><th>Canal / productor</th><th>Prefijo</th><th>Scopes</th><th>Estado</th><th>Último uso</th><th></th></tr></thead>
+            <tbody id="keysBody"><tr class="empty-row"><td colspan="7">Conecte para ver las keys</td></tr></tbody>
           </table>
         </div>
       </div>
@@ -220,7 +220,7 @@
         <div class="wizard-pane active" id="step1">
           <div class="catalog-note">
             Cree un <strong>token de uso</strong> para quien consuma nest-api (integrador, partner, servicio interno).
-            El nombre identifica al cliente; los <strong>permisos opcionales</strong> se eligen en el paso 2.
+            <strong>Canal y subcanal</strong> se guardan en la key y se usan en emisión/cobranza (Sis2000) al igual que en metadata SSO.
           </div>
           <div class="row" style="margin-top:1rem">
             <div>
@@ -230,6 +230,26 @@
             <div>
               <label class="field-label" for="cproductor">cproductor (La Mundial)</label>
               <input id="cproductor" type="number" value="80080" />
+            </div>
+          </div>
+          <div class="row" style="margin-top:1rem">
+            <div>
+              <label class="field-label" for="ccanalalt">Canal (ccanalalt)</label>
+              <input id="ccanalalt" type="number" placeholder="Opcional — macanalalt" />
+            </div>
+            <div>
+              <label class="field-label" for="cscanalalt">Subcanal (cscanalalt)</label>
+              <input id="cscanalalt" type="number" placeholder="Opcional — subcanal Sis2000" />
+            </div>
+          </div>
+          <div class="row" style="margin-top:1rem">
+            <div>
+              <label class="field-label" for="xcanalVenta">Nombre canal (xcanal_venta)</label>
+              <input id="xcanalVenta" type="text" placeholder="ej. ExelixiTech-Partner" />
+            </div>
+            <div>
+              <label class="field-label" for="ctipocanal">Tipo canal (ctipocanal)</label>
+              <input id="ctipocanal" type="text" maxlength="1" placeholder="T, A o D (opcional)" />
             </div>
           </div>
         </div>
@@ -370,20 +390,37 @@
       document.getElementById('statScoped').textContent = keys.filter((k) => (k.scopes || []).length > 0).length;
     }
 
+    function formatCanal(k) {
+      const parts = [];
+      if (k.ccanalalt != null) parts.push('canal ' + k.ccanalalt);
+      if (k.cscanalalt != null) parts.push('sub ' + k.cscanalalt);
+      if (k.cproductor != null) parts.push('prod ' + k.cproductor);
+      if (k.xcanalVenta) parts.push(k.xcanalVenta);
+      return parts.length ? parts.join(' · ') : '<span style="color:#9ca3af">—</span>';
+    }
+
+    function parseOptionalInt(id) {
+      const raw = document.getElementById(id).value.trim();
+      if (!raw) return undefined;
+      const n = parseInt(raw, 10);
+      return Number.isFinite(n) ? n : undefined;
+    }
+
     function renderKeys(keys) {
       updateStats(keys);
       const tbody = document.getElementById('keysBody');
       if (!connected || !token()) {
-        tbody.innerHTML = '<tr class="empty-row"><td colspan="6">🔐 Conecte con el token de administración</td></tr>';
+        tbody.innerHTML = '<tr class="empty-row"><td colspan="7">🔐 Conecte con el token de administración</td></tr>';
         return;
       }
       if (!keys.length) {
-        tbody.innerHTML = '<tr class="empty-row"><td colspan="6">📭 No hay keys — use el asistente «Crear key»</td></tr>';
+        tbody.innerHTML = '<tr class="empty-row"><td colspan="7">📭 No hay keys — use «Crear token API»</td></tr>';
         return;
       }
       tbody.innerHTML = keys.map((k) => `
         <tr>
-          <td><span class="key-name">${escapeHtml(k.name)}</span>${k.cproductor ? `<br><span style="font-size:.68rem;color:#9ca3af">cproductor ${k.cproductor}</span>` : ''}</td>
+          <td><span class="key-name">${escapeHtml(k.name)}</span></td>
+          <td style="font-size:.75rem">${formatCanal(k)}</td>
           <td><span class="key-prefix">${escapeHtml(k.keyPrefix)}…</span></td>
           <td>${formatScopes(k.scopes)}</td>
           <td><span class="badge ${k.active ? 'ok' : 'off'}">${k.active ? 'Activa' : 'Revocada'}</span></td>
@@ -437,10 +474,18 @@
     function renderSummary() {
       const name = document.getElementById('keyName').value.trim();
       const cp = document.getElementById('cproductor').value;
+      const canal = document.getElementById('ccanalalt').value;
+      const subcanal = document.getElementById('cscanalalt').value;
+      const xcanal = document.getElementById('xcanalVenta').value.trim();
+      const tipo = document.getElementById('ctipocanal').value.trim();
       const scopes = getSelectedScopes();
       document.getElementById('summaryBox').innerHTML = `
         <div class="summary-row"><span>Cliente / nombre</span><span>${escapeHtml(name || '—')}</span></div>
         <div class="summary-row"><span>cproductor</span><span>${escapeHtml(cp || '80080')}</span></div>
+        <div class="summary-row"><span>Canal (ccanalalt)</span><span>${escapeHtml(canal || '—')}</span></div>
+        <div class="summary-row"><span>Subcanal (cscanalalt)</span><span>${escapeHtml(subcanal || '—')}</span></div>
+        <div class="summary-row"><span>xcanal_venta</span><span>${escapeHtml(xcanal || '—')}</span></div>
+        <div class="summary-row"><span>ctipocanal</span><span>${escapeHtml(tipo || '—')}</span></div>
         <div class="summary-row"><span>Permisos (scopes)</span><span>${scopes.length ? scopes.join(', ') : 'Ninguno (catálogos + partner)'}</span></div>
         <div class="summary-row"><span>Uso</span><span>Token Bearer vía POST /auth/token</span></div>`;
     }
@@ -502,6 +547,14 @@
       const cp = document.getElementById('cproductor').value;
       const body = { name, scopes };
       if (cp) body.cproductor = parseInt(cp, 10);
+      const ccanal = parseOptionalInt('ccanalalt');
+      const cscanal = parseOptionalInt('cscanalalt');
+      if (ccanal != null) body.ccanalalt = ccanal;
+      if (cscanal != null) body.cscanalalt = cscanal;
+      const xcanal = document.getElementById('xcanalVenta').value.trim();
+      const tipo = document.getElementById('ctipocanal').value.trim();
+      if (xcanal) body.xcanal_venta = xcanal;
+      if (tipo) body.ctipocanal = tipo.slice(0, 1);
       try {
         const data = await api('/keys', { method: 'POST', body: JSON.stringify(body) });
         const plain = data.plainKey;
