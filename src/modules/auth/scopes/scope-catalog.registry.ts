@@ -10,6 +10,13 @@ export interface DiscoveredRoute {
   scopeId?: string;
 }
 
+export interface RouteCatalogEntry {
+  routeId: string;
+  scopeId: string;
+  scopeLabel: string;
+  description: string;
+}
+
 const partnerDeclaredScopes = new Map<string, NestAuthScopeMeta>();
 const discoveredRoutesByScope = new Map<string, Set<string>>();
 
@@ -131,4 +138,43 @@ export function buildScopeCatalog(): NestAuthScopeMeta[] {
       if (aPartner !== bPartner) return aPartner ? 1 : -1;
       return String(a.id).localeCompare(String(b.id));
     });
+}
+
+/** Catálogo plano: una fila por endpoint protegido (sin agrupar por scope en UI). */
+export function buildRouteCatalog(): RouteCatalogEntry[] {
+  const entries: RouteCatalogEntry[] = [];
+  for (const scope of buildScopeCatalog()) {
+    if (scope.id === 'admin:keys') continue;
+    for (const routeId of scope.routes) {
+      entries.push({
+        routeId,
+        scopeId: String(scope.id),
+        scopeLabel: scope.label,
+        description: scope.description,
+      });
+    }
+  }
+  return entries.sort((a, b) => a.routeId.localeCompare(b.routeId));
+}
+
+/** Expande scopes legacy (`emissions:person`) a rutas; conserva grants por ruta. */
+export function expandGrantsToRoutes(grants: string[]): string[] {
+  const scopeById = new Map(buildScopeCatalog().map((entry) => [String(entry.id), entry]));
+  const knownRoutes = new Set(buildRouteCatalog().map((entry) => entry.routeId));
+  const expanded = new Set<string>();
+
+  for (const raw of grants ?? []) {
+    const grant = String(raw ?? '').trim();
+    if (!grant) continue;
+    if (knownRoutes.has(grant)) {
+      expanded.add(grant);
+      continue;
+    }
+    const scope = scopeById.get(grant);
+    if (scope) {
+      for (const routeId of scope.routes) expanded.add(routeId);
+    }
+  }
+
+  return [...expanded].sort();
 }

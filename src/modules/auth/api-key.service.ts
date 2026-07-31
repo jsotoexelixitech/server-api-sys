@@ -17,7 +17,10 @@ import {
   updateApiKeyDocsSlugLegacy,
   updateApiKeyLegacy,
 } from './api-key-db.support';
-import { buildScopeCatalog } from './scopes/scope-catalog.registry';
+import {
+  buildRouteCatalog,
+  buildScopeCatalog,
+} from './scopes/scope-catalog.registry';
 
 export interface ApiKeyRecord {
   id: string;
@@ -326,7 +329,9 @@ export class ApiKeyService {
 
   private normalizeScopes(scopes: string[]): string[] {
     const allowed = new Set(
-      this.getScopeCatalog().map((s) => s.id).concat('*', 'partner:*'),
+      this.getScopeCatalog()
+        .map((s) => s.id)
+        .concat('*', 'partner:*', ...buildRouteCatalog().map((r) => r.routeId)),
     );
     const normalized = [...new Set(scopes.map((s) => String(s).trim()).filter(Boolean))];
     const invalid = normalized.filter((s) => !allowed.has(s));

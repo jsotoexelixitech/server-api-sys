@@ -10,7 +10,7 @@ import { Request } from 'express';
 import { IS_PUBLIC_KEY } from './decorators/public.decorator';
 import { NEST_SCOPE_KEY } from './decorators/nest-scope.decorator';
 import { NestAuthService } from './nest-auth.service';
-import { scopeMatches } from './scopes/nest-auth-scopes.constants';
+import { grantMatchesRoute } from './scopes/nest-auth-scopes.constants';
 
 function extractBearer(req: Request): string | null {
   const auth = req.headers.authorization;
@@ -65,7 +65,7 @@ export class NestAuthGuard implements CanActivate {
         req.nestAuth.refreshedAccessToken =
           this.auth.issueAccessTokenForSession(session);
       }
-      this.assertScope(req.nestAuth.scopes, requiredScope);
+      this.assertScope(req, req.nestAuth.scopes, requiredScope);
       return true;
     }
 
@@ -78,7 +78,7 @@ export class NestAuthGuard implements CanActivate {
         scopes: resolved.scopes,
         via: 'apikey',
       };
-      this.assertScope(resolved.scopes, requiredScope);
+      this.assertScope(req, resolved.scopes, requiredScope);
       return true;
     }
 
@@ -87,12 +87,12 @@ export class NestAuthGuard implements CanActivate {
     );
   }
 
-  private assertScope(granted: string[], required?: string): void {
+  private assertScope(req: Request, granted: string[], required?: string): void {
     if (!required) return;
-    if (!scopeMatches(granted, required)) {
-      throw new ForbiddenException(
-        `Scope requerido: ${required}. Key no autorizada para este endpoint.`,
-      );
-    }
+    const path = req.originalUrl?.split('?')[0] ?? req.path;
+    if (grantMatchesRoute(granted, req.method, path, required)) return;
+    throw new ForbiddenException(
+      `Permiso requerido: ${required}. Key no autorizada para este endpoint.`,
+    );
   }
 }

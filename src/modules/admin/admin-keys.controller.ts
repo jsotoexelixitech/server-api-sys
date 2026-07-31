@@ -12,6 +12,10 @@ import { ApiExcludeController, ApiOperation, ApiTags } from '@nestjs/swagger';
 import { SkipEnvelope } from '../../common/decorators/skip-envelope.decorator';
 import { Public } from '../auth/decorators/public.decorator';
 import { ApiKeyService } from '../auth/api-key.service';
+import {
+  buildRouteCatalog,
+  expandGrantsToRoutes,
+} from '../auth/scopes/scope-catalog.registry';
 import { DocsUrlService } from '../docs/docs-url.service';
 import { AdminTokenGuard } from './admin-token.guard';
 import { CreateAdminKeyDto, UpdateAdminKeyDto } from './dto/admin-key.dto';
@@ -37,25 +41,38 @@ export class AdminKeysController {
     };
   }
 
-  private buildScopeDetails(scopes: string[]) {
-    const catalog = this.apiKeys.getScopeCatalog();
-    return (scopes ?? []).map((scopeId) => {
-      const meta = catalog.find((entry) => entry.id === scopeId);
+  private buildRouteDetails(scopes: string[]) {
+    const expanded = expandGrantsToRoutes(scopes);
+    const catalog = buildRouteCatalog();
+    return expanded.map((routeId) => {
+      const meta = catalog.find((entry) => entry.routeId === routeId);
       return (
         meta ?? {
-          id: scopeId,
-          label: scopeId,
+          routeId,
+          scopeId: routeId,
+          scopeLabel: 'Ruta',
           description: '',
-          routes: [],
         }
       );
     });
   }
 
+  private buildAccessSummary(scopes: string[]) {
+    const routeDetails = this.buildRouteDetails(scopes);
+    return {
+      catalogOnly: !(scopes?.length),
+      grantCount: scopes?.length ?? 0,
+      routeCount: routeDetails.length,
+    };
+  }
+
   @Get('scopes')
-  @ApiOperation({ summary: 'Catálogo de scopes disponibles' })
+  @ApiOperation({ summary: 'Catálogo de endpoints protegidos (uno a uno)' })
   listScopes() {
-    return { scopes: this.apiKeys.getScopeCatalog() };
+    return {
+      scopes: this.apiKeys.getScopeCatalog(),
+      routes: buildRouteCatalog(),
+    };
   }
 
   @Get('keys')
@@ -94,23 +111,17 @@ export class AdminKeysController {
     const key = await this.apiKeys.findById(id);
     if (!key) throw new NotFoundException('API key no encontrada.');
 
-    const scopeDetails = this.buildScopeDetails(key.scopes);
+    const routeDetails = this.buildRouteDetails(key.scopes);
     return {
       key: this.withDocsUrl(key),
-      scopeDetails,
-      accessSummary: {
-        catalogOnly: !(key.scopes?.length),
-        scopeCount: key.scopes?.length ?? 0,
-        routeCount: scopeDetails.reduce(
-          (total, scope) => total + (scope.routes?.length ?? 0),
-          0,
-        ),
-      },
+      routeDetails,
+      scopeDetails: routeDetails,
+      accessSummary: this.buildAccessSummary(key.scopes),
     };
   }
 
   @Patch('keys/:id')
-  @ApiOperation({ summary: 'Editar nombre, scopes, canal o reactivar key' })
+  @ApiOperation({ summary: 'Editar nombre, rutas permitidas, canal o reactivar key' })
   async updateKey(@Param('id') id: string, @Body() dto: UpdateAdminKeyDto) {
     const key = await this.apiKeys.updateKey(id, {
       name: dto.name,
@@ -123,9 +134,11 @@ export class AdminKeysController {
       xcanalVenta: dto.xcanal_venta,
     });
     const enriched = this.withDocsUrl(key);
+    const routeDetails = this.buildRouteDetails(key.scopes);
     return {
       key: enriched,
-      scopeDetails: this.buildScopeDetails(key.scopes),
+      routeDetails,
+      scopeDetails: routeDetails,
     };
   }
 

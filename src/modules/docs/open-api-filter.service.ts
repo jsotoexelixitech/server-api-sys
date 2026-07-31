@@ -1,6 +1,6 @@
 import { Injectable, NotFoundException } from '@nestjs/common';
 import { OpenAPIObject } from '@nestjs/swagger/dist/interfaces';
-import { scopeMatches } from '../auth/scopes/nest-auth-scopes.constants';
+import { grantMatchesRoute } from '../auth/scopes/nest-auth-scopes.constants';
 import { buildScopeCatalog } from '../auth/scopes/scope-catalog.registry';
 import { OpenApiDocumentStore } from './open-api-document.store';
 
@@ -99,7 +99,12 @@ export class OpenApiFilterService {
       scopeIndex.get(lookupKey) ?? this.inferPartnerScope(normalizedPath);
 
     if (!requiredScope) return true;
-    return scopeMatches(grantedScopes, requiredScope);
+    return grantMatchesRoute(
+      grantedScopes,
+      method,
+      normalizedPath,
+      requiredScope,
+    );
   }
 
   private inferPartnerScope(path: string): string | undefined {

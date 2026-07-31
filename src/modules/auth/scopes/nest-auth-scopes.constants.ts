@@ -67,3 +67,41 @@ export function scopeMatches(
   }
   return false;
 }
+
+export function normalizeHttpPath(path: string): string {
+  const cleaned = String(path ?? '')
+    .split('?')[0]
+    .replace(/\/{2,}/g, '/');
+  if (!cleaned) return '/';
+  return cleaned.length > 1 && cleaned.endsWith('/')
+    ? cleaned.slice(0, -1)
+    : cleaned;
+}
+
+/** Línea canónica: `POST /api/v1/...` */
+export function toRouteGrantLine(method: string, path: string): string {
+  return `${String(method).toUpperCase()} ${normalizeHttpPath(path)}`;
+}
+
+/** Scope completo (legacy) o grant por ruta individual en `granted`. */
+export function grantMatchesRoute(
+  granted: string[],
+  method: string,
+  path: string,
+  requiredScope?: string,
+): boolean {
+  if (!requiredScope) return true;
+  if (!granted?.length) return false;
+  if (scopeMatches(granted, requiredScope)) return true;
+
+  const routeLine = toRouteGrantLine(method, path);
+  for (const grant of granted) {
+    const normalized = String(grant ?? '').trim();
+    if (!normalized.includes(' ')) continue;
+    const space = normalized.indexOf(' ');
+    const grantMethod = normalized.slice(0, space).toUpperCase();
+    const grantPath = normalizeHttpPath(normalized.slice(space + 1));
+    if (`${grantMethod} ${grantPath}` === routeLine) return true;
+  }
+  return false;
+}

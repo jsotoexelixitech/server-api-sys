@@ -170,6 +170,16 @@
     .edit-section { margin-top: 1rem; padding-top: 1rem; border-top: 1px dashed var(--border); }
     .edit-section h3 { margin: 0 0 .75rem; font-size: .85rem; color: var(--blue); }
     .hidden { display: none !important; }
+    .route-list { border: 1px solid var(--border); border-radius: 12px; overflow: hidden; max-height: 420px; overflow-y: auto; }
+    .route-row { display: flex; align-items: flex-start; gap: .75rem; padding: .7rem 1rem; border-bottom: 1px solid #f3f4f6; background: #fff; cursor: pointer; }
+    .route-row:last-child { border-bottom: none; }
+    .route-row:hover { background: #fafbff; }
+    .route-row:has(input:checked) { background: #fff9f5; }
+    .route-row input { margin-top: .2rem; accent-color: var(--red); flex-shrink: 0; }
+    .route-row-main { flex: 1; min-width: 0; }
+    .route-row-main code { display: block; font-family: Consolas, monospace; font-size: .76rem; color: var(--blue); word-break: break-all; }
+    .route-row-hint { font-size: .65rem; color: var(--muted); margin-top: .2rem; }
+    .route-toolbar { display: flex; gap: .5rem; flex-wrap: wrap; margin-bottom: .65rem; }
   </style>
 </head>
 <body>
@@ -287,12 +297,15 @@
         <!-- Paso 2 -->
         <div class="wizard-pane" id="step2">
           <div class="catalog-note">
-            <strong>Catálogos INMA / valrep</strong> (marcas, estados, planes…) solo requieren token válido — <em>no necesitan scope</em>.
-            Marque permisos solo si el cliente <strong>emite pólizas, cobra, genera documentos o consume APIs partner</strong>.
-            El catálogo se actualiza solo al arrancar: rutas del <strong>core</strong> con <code>@NestProtected</code> y rutas <strong>partner</strong> en <code>PARTNER_PACKAGES</code>.
-            Catálogos INMA/valrep siguen sin requerir scope (solo token válido).
+            <strong>Catálogos INMA / valrep</strong> solo requieren token válido — <em>no marque endpoints</em>.
+            Elija <strong>cada endpoint</strong> que el cliente pueda usar (emisión, cobro, documentos, partner…).
+            Puede marcar solo algunos de un mismo módulo (ej. cobrar sin notificar).
           </div>
-          <div id="scopeDetailList" class="scope-detail-list"></div>
+          <div class="route-toolbar">
+            <button type="button" class="btn btn-ghost btn-sm" id="btnSelectAllRoutes">Marcar todos</button>
+            <button type="button" class="btn btn-ghost btn-sm" id="btnClearRoutes">Quitar todos</button>
+          </div>
+          <div id="scopeDetailList" class="route-list"></div>
         </div>
 
         <!-- Paso 3 -->
@@ -380,6 +393,7 @@
   <script>
     const API = '/api/v1/admin';
     let scopesCatalog = [];
+    let routesCatalog = [];
     let keysCache = [];
     let connected = false;
     let wizardStep = 1;
@@ -387,21 +401,38 @@
     let modalMode = 'view';
     let modalDetail = null;
 
-    function scopeMeta(scopeId) {
-      return scopesCatalog.find((s) => s.id === scopeId) || { id: scopeId, label: scopeId, description: '', routes: [] };
+    function grantsToSelectedRoutes(grants) {
+      const selected = new Set();
+      const scopeIds = new Set(scopesCatalog.map((s) => s.id));
+      for (const grant of grants ?? []) {
+        if (routesCatalog.some((r) => r.routeId === grant)) {
+          selected.add(grant);
+          continue;
+        }
+        if (scopeIds.has(grant)) {
+          routesCatalog
+            .filter((r) => r.scopeId === grant)
+            .forEach((r) => selected.add(r.routeId));
+        }
+      }
+      return selected;
     }
 
     function formatScopesRich(scopes) {
       if (!scopes?.length) {
         return '<span class="chip muted" title="Solo catálogos INMA/valrep y auth">Solo catálogos</span>';
       }
-      return scopes.map((id) => {
-        const meta = scopeMeta(id);
-        const routes = (meta.routes || []).slice(0, 4).join('\n');
-        const more = (meta.routes || []).length > 4 ? `\n… +${meta.routes.length - 4} rutas` : '';
-        const tip = routes + more || id;
-        return `<span class="chip scope-chip" title="${escapeHtml(tip)}">${escapeHtml(meta.label)}<span class="scope-id">${escapeHtml(id)}</span></span>`;
-      }).join('');
+      const routes = [...grantsToSelectedRoutes(scopes)];
+      if (!routes.length) {
+        return scopes.map((id) => `<span class="chip scope-chip">${escapeHtml(id)}</span>`).join('');
+      }
+      if (routes.length <= 2) {
+        return routes.map((routeId) => {
+          const short = routeId.replace(/^([A-Z]+)\s/, '$1 ');
+          return `<span class="chip scope-chip" title="${escapeHtml(routeId)}">${escapeHtml(short)}</span>`;
+        }).join('');
+      }
+      return `<span class="chip scope-chip" title="${escapeHtml(routes.join('\n'))}">${routes.length} endpoints</span>`;
     }
 
     function token() { return localStorage.getItem('nest_admin_token') || ''; }
@@ -527,40 +558,41 @@
       });
     }
 
-    function renderScopeCheckboxes(containerId, selectedIds, inputName) {
-      const selected = new Set(selectedIds || []);
-      const filtered = scopesCatalog.filter((s) => s.id !== 'admin:keys');
-      document.getElementById(containerId).innerHTML = filtered.map((s) => `
-        <div class="scope-detail">
-          <label class="scope-detail-head">
-            <input type="checkbox" name="${inputName}" value="${escapeHtml(s.id)}" ${selected.has(s.id) ? 'checked' : ''} />
-            <div>
-              <strong>${escapeHtml(s.label)}</strong>
-              <code>${escapeHtml(s.id)}</code>
-              <span class="desc">${escapeHtml(s.description)}</span>
-            </div>
-          </label>
-          <ul class="scope-routes">${(s.routes || []).map((r) => `<li>${escapeHtml(r)}</li>`).join('')}</ul>
-        </div>`).join('');
+    function renderRouteCheckboxes(containerId, selectedGrants, inputName) {
+      const selected = grantsToSelectedRoutes(selectedGrants);
+      document.getElementById(containerId).innerHTML = routesCatalog.map((route) => `
+        <label class="route-row">
+          <input type="checkbox" name="${inputName}" value="${escapeHtml(route.routeId)}" ${selected.has(route.routeId) ? 'checked' : ''} />
+          <div class="route-row-main">
+            <code>${escapeHtml(route.routeId)}</code>
+            <div class="route-row-hint">${escapeHtml(route.scopeLabel)} · ${escapeHtml(route.scopeId)}</div>
+          </div>
+        </label>`).join('');
+    }
+
+    function getSelectedRouteGrants(inputName) {
+      return [...document.querySelectorAll(`input[name=${inputName}]:checked`)].map((el) => el.value);
     }
 
     function renderScopeDetails() {
-      renderScopeCheckboxes('scopeDetailList', [], 'scope');
+      renderRouteCheckboxes('scopeDetailList', [], 'scope');
     }
 
     function renderGuideScopes() {
-      document.getElementById('guideScopes').innerHTML = scopesCatalog
-        .filter((s) => s.id !== 'admin:keys')
-        .map((s) => `
+      document.getElementById('guideScopes').innerHTML = routesCatalog.length
+        ? routesCatalog.map((route) => `
           <div class="guide-scope-card">
-            <h4>${escapeHtml(s.label)} <code>${escapeHtml(s.id)}</code></h4>
-            <p style="font-size:.78rem;color:var(--muted);margin:0">${escapeHtml(s.description)}</p>
-            <ul>${(s.routes || []).map((r) => `<li>${escapeHtml(r)}</li>`).join('')}</ul>
-          </div>`).join('');
+            <h4><code>${escapeHtml(route.routeId)}</code></h4>
+            <p style="font-size:.78rem;color:var(--muted);margin:0">${escapeHtml(route.scopeLabel)} · ${escapeHtml(route.description)}</p>
+          </div>`).join('')
+        : scopesCatalog
+            .filter((s) => s.id !== 'admin:keys')
+            .flatMap((s) => (s.routes || []).map((r) => `
+              <div class="guide-scope-card"><h4><code>${escapeHtml(r)}</code></h4></div>`)).join('');
     }
 
     function getSelectedScopes() {
-      return [...document.querySelectorAll('input[name=scope]:checked')].map((el) => el.value);
+      return getSelectedRouteGrants('scope');
     }
 
     function renderSummary() {
@@ -578,7 +610,7 @@
         <div class="summary-row"><span>Subcanal (cscanalalt)</span><span>${escapeHtml(subcanal || '—')}</span></div>
         <div class="summary-row"><span>xcanal_venta</span><span>${escapeHtml(xcanal || '—')}</span></div>
         <div class="summary-row"><span>ctipocanal</span><span>${escapeHtml(tipo || '—')}</span></div>
-        <div class="summary-row"><span>Permisos (scopes)</span><span>${scopes.length ? scopes.join(', ') : 'Ninguno (catálogos; partner sin restricción)'}</span></div>
+        <div class="summary-row"><span>Endpoints permitidos</span><span>${scopes.length ? scopes.length + ' ruta(s)' : 'Ninguno (solo catálogos + auth)'}</span></div>
         <div class="summary-row"><span>Uso</span><span>Token Bearer vía POST /auth/token</span></div>`;
     }
 
@@ -616,16 +648,16 @@
     function renderKeyView(detail) {
       const k = detail.key;
       const summary = detail.accessSummary || {};
-      const scopeCards = (detail.scopeDetails || []).length
-        ? detail.scopeDetails.map((s) => `
+      const routeDetails = detail.routeDetails || detail.scopeDetails || [];
+      const routeCards = routeDetails.length
+        ? routeDetails.map((r) => `
             <div class="scope-card">
               <div class="scope-card-head">
-                <strong>${escapeHtml(s.label)}</strong><code>${escapeHtml(s.id)}</code>
-                <p>${escapeHtml(s.description || 'Sin descripción')}</p>
+                <strong><code>${escapeHtml(r.routeId || r.id || '')}</code></strong>
+                <p>${escapeHtml(r.scopeLabel || r.label || '')}${r.scopeId ? ` · ${escapeHtml(r.scopeId)}` : ''}</p>
               </div>
-              ${(s.routes || []).length ? `<div class="scope-card-routes"><ul>${s.routes.map((r) => `<li>${escapeHtml(r)}</li>`).join('')}</ul></div>` : ''}
             </div>`).join('')
-        : '<p style="font-size:.82rem;color:var(--muted)">Sin scopes asignados — acceso a catálogos INMA/valrep y endpoints de auth.</p>';
+        : '<p style="font-size:.82rem;color:var(--muted)">Sin endpoints asignados — acceso a catálogos INMA/valrep y auth.</p>';
 
       document.getElementById('keyModalTitle').textContent = k.name;
       document.getElementById('keyModalSubtitle').textContent = `${k.keyPrefix}… · ${k.active ? 'Activa' : 'Revocada'}`;
@@ -634,7 +666,7 @@
         <div class="access-banner ${summary.catalogOnly ? 'catalog' : 'scoped'}">
           ${summary.catalogOnly
             ? '<strong>Acceso base:</strong> solo catálogos y auth (sin scopes de negocio).'
-            : `<strong>${summary.scopeCount} scope(s)</strong> · ~${summary.routeCount} rutas protegidas desbloqueadas.`}
+            : `<strong>${summary.routeCount ?? routeDetails.length} endpoint(s)</strong> permitidos.`}
         </div>
         <div class="detail-grid">
           <div class="detail-item"><label>Prefijo</label><span><code>${escapeHtml(k.keyPrefix)}…</code></span></div>
@@ -648,8 +680,8 @@
           <div class="detail-item"><label>Último uso</label><span>${formatDate(k.lastUsedAt).replace(/<[^>]+>/g, '') || '—'}</span></div>
           <div class="detail-item" style="grid-column:1/-1"><label>Swagger filtrado</label><span>${k.docsUrl ? `<a href="${escapeHtml(k.docsUrl)}" target="_blank" rel="noopener">${escapeHtml(k.docsUrl)}</a>` : '—'}</span></div>
         </div>
-        <h3 style="margin:0 0 .65rem;font-size:.88rem;color:var(--blue)">Permisos (scopes)</h3>
-        ${scopeCards}`;
+        <h3 style="margin:0 0 .65rem;font-size:.88rem;color:var(--blue)">Endpoints permitidos</h3>
+        ${routeCards}`;
       setModalButtons('view', k);
     }
 
@@ -671,11 +703,15 @@
           <div><label class="field-label" for="editTipo">ctipocanal</label><input id="editTipo" type="text" maxlength="1" value="${escapeHtml(k.ctipocanal || '')}" /></div>
         </div>
         <div class="edit-section">
-          <h3>Permisos (scopes)</h3>
-          <div class="catalog-note">Desmarque todos para dejar solo acceso a catálogos. Las rutas listadas son las que desbloquea cada scope.</div>
-          <div id="editScopeList" class="scope-detail-list"></div>
+          <h3>Endpoints permitidos</h3>
+          <div class="catalog-note">Marque cada ruta que este token pueda invocar. Sin marcar ninguna = solo catálogos.</div>
+          <div class="route-toolbar">
+            <button type="button" class="btn btn-ghost btn-sm" data-select-all="editScope">Marcar todos</button>
+            <button type="button" class="btn btn-ghost btn-sm" data-clear-all="editScope">Quitar todos</button>
+          </div>
+          <div id="editScopeList" class="route-list"></div>
         </div>`;
-      renderScopeCheckboxes('editScopeList', k.scopes || [], 'editScope');
+      renderRouteCheckboxes('editScopeList', k.scopes || [], 'editScope');
       setModalButtons('edit', k);
     }
 
@@ -712,7 +748,7 @@
       if (!modalKeyId) return;
       const name = document.getElementById('editName').value.trim();
       if (!name) return showToast('El nombre es obligatorio.');
-      const scopes = [...document.querySelectorAll('input[name=editScope]:checked')].map((el) => el.value);
+      const scopes = getSelectedRouteGrants('editScope');
       const body = {
         name,
         scopes,
@@ -753,9 +789,37 @@
     async function loadScopes() {
       const data = await api('/scopes');
       scopesCatalog = data.scopes || [];
+      routesCatalog = data.routes || scopesCatalog
+        .filter((s) => s.id !== 'admin:keys')
+        .flatMap((s) => (s.routes || []).map((routeId) => ({
+          routeId,
+          scopeId: s.id,
+          scopeLabel: s.label,
+          description: s.description,
+        })));
       renderScopeDetails();
       renderGuideScopes();
     }
+
+    function bindRouteToolbar(selectId, clearId, inputName) {
+      document.getElementById(selectId)?.addEventListener('click', () => {
+        document.querySelectorAll(`input[name=${inputName}]`).forEach((el) => { el.checked = true; });
+      });
+      document.getElementById(clearId)?.addEventListener('click', () => {
+        document.querySelectorAll(`input[name=${inputName}]`).forEach((el) => { el.checked = false; });
+      });
+    }
+
+    document.addEventListener('click', (e) => {
+      const selectAll = e.target.closest('[data-select-all]');
+      if (selectAll) {
+        document.querySelectorAll(`input[name=${selectAll.dataset.selectAll}]`).forEach((el) => { el.checked = true; });
+      }
+      const clearAll = e.target.closest('[data-clear-all]');
+      if (clearAll) {
+        document.querySelectorAll(`input[name=${clearAll.dataset.clearAll}]`).forEach((el) => { el.checked = false; });
+      }
+    });
 
     async function loadKeys() {
       const data = await api('/keys');
@@ -860,6 +924,7 @@
 
     setConnected(false);
     setWizardStep(1);
+    bindRouteToolbar('btnSelectAllRoutes', 'btnClearRoutes', 'scope');
 
     if (token()) {
       document.getElementById('adminToken').value = token();
