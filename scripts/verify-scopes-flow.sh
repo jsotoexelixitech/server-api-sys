@@ -12,7 +12,7 @@ if [ ! -f "$ENV_FILE" ]; then
   exit 1
 fi
 
-ADMIN=$(grep -E '^NEST_ADMIN_TOKEN=' "$ENV_FILE" | cut -d= -f2- | tr -d ' "'\'')
+ADMIN=$(grep -E '^NEST_ADMIN_TOKEN=' "$ENV_FILE" | cut -d= -f2- | tr -d ' "')
 [ -z "$ADMIN" ] && echo "ERROR: NEST_ADMIN_TOKEN vacío" && exit 1
 
 pass() { echo "  OK  $1"; }
