@@ -12,6 +12,12 @@ set -e  # salir si cualquier comando falla
 APP="sysip-nest-api"
 LOG_DIR="./logs"
 
+# Quitar archivos/carpetas no rastreados (alinea working tree tras git pull)
+if git rev-parse --is-inside-work-tree > /dev/null 2>&1; then
+  echo "▶ git clean (untracked)..."
+  git clean -fd --exclude=.env --exclude=logs
+fi
+
 echo ""
 echo "╔══════════════════════════════════════════╗"
 echo "║      SysIP NestJS API — Deploy           ║"

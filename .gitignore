@@ -51,3 +51,16 @@ Thumbs.db
 /inspect_pdf.js
 /test.pdf
 *.rar
+
+# Artefactos debug en raíz (SQL oficial va en docs/sql/)
+/trigger*.txt
+/trigger*.sql
+/trigger_*
+/spGeneraAdpolrea*
+/spContador_*.txt
+/speeValidate*.txt
+/old_emissions.txt
+/logo_base64.txt
+/start-and-test.ps1
+/setup-labels.ps1
+/body-viaje.json
