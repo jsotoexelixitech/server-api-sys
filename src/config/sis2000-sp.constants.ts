@@ -27,3 +27,8 @@ export const SP_SYNC_POL_VEH_COUNTER = 'spSyncPolVehCounter';
 export const SP_LOOKUP_EMISSION_RCV_BY_PLACA = 'spLookupEmissionRcvByPlaca';
 export const SP_SEARCH_VEHICLE_RCV = 'spSearchVehicleRcv';
 export const SP_APPLY_BENEFICIARIO_PREFERENCIAL_RCV = 'spApplyBeneficiarioPreferencialRcv';
+
+// ── Condominio ──────────────────────────────────────────────────────────────
+export const SP_BUSCA_PLANES_CONDOMINIO = 'sp_busca_planes_condominio_nexus';
+export const SP_CALCULO_COTIZACION_CONDOMINIO = 'sp_calculo_cotizacion_condominio_nexus';
+export const SP_PRE_EMISION_CONDOMINIO = 'sp_pre_emision_condominio_nexus';
