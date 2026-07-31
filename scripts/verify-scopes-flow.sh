@@ -7,12 +7,16 @@ set -euo pipefail
 BASE="${BASE:-http://127.0.0.1:3002}"
 ENV_FILE="${ENV_FILE:-$HOME/server-api-sys/.env}"
 
+strip_env_val() {
+  printf '%s' "$1" | tr -d ' "'
+}
+
 if [ ! -f "$ENV_FILE" ]; then
   echo "ERROR: no existe $ENV_FILE"
   exit 1
 fi
 
-ADMIN=$(grep -E '^NEST_ADMIN_TOKEN=' "$ENV_FILE" | cut -d= -f2- | tr -d ' "')
+ADMIN=$(strip_env_val "$(grep -E '^NEST_ADMIN_TOKEN=' "$ENV_FILE" | cut -d= -f2-)")
 [ -z "$ADMIN" ] && echo "ERROR: NEST_ADMIN_TOKEN vacío" && exit 1
 
 pass() { echo "  OK  $1"; }
@@ -100,7 +104,7 @@ fi
 
 echo ""
 echo "8) Key legacy emision-api (scope emissions:person)"
-LEGACY=$(grep -E '^NEST_API_KEY=' "$HOME/exelixi/Emision-Plan-modulo/server/.env" 2>/dev/null | cut -d= -f2- | tr -d ' "'\''')
+LEGACY=$(strip_env_val "$(grep -E '^NEST_API_KEY=' "$HOME/exelixi/Emision-Plan-modulo/server/.env" 2>/dev/null | cut -d= -f2-)")
 if [ -n "$LEGACY" ]; then
   HTTP_LEGACY=$(curl -s -o /dev/null -w "%{http_code}" -X POST "$BASE/api/v1/personas/emision" \
     -H "Content-Type: application/json" \
