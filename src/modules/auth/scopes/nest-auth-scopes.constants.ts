@@ -2,6 +2,7 @@
 export const NEST_AUTH_SCOPES = {
   EMISSIONS_AUTO: 'emissions:auto',
   EMISSIONS_PERSON: 'emissions:person',
+  EMISSIONS_CONDOMINIO: 'emissions:condominio',
   COLLECTION_WRITE: 'collection:write',
   DOCUMENTS_WRITE: 'documents:write',
   ADMIN_KEYS: 'admin:keys',
@@ -29,6 +30,12 @@ export const NEST_AUTH_SCOPE_CATALOG: NestAuthScopeMeta[] = [
     label: 'Emisión personas / viajero',
     description: 'Emitir pólizas de personas',
     routes: [],
+  },
+  {
+    id: NEST_AUTH_SCOPES.EMISSIONS_CONDOMINIO,
+    label: 'Emisión condominio',
+    description: 'Emitir pólizas de condominio',
+    routes: ['POST /api/v1/condominio/emision'],
   },
   {
     id: NEST_AUTH_SCOPES.COLLECTION_WRITE,
