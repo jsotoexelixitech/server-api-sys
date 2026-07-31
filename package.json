@@ -24,6 +24,15 @@
     "lint": "eslint \"{src,test}/**/*.ts\" --fix",
     "test": "jest"
   },
+  "jest": {
+    "moduleFileExtensions": ["js", "json", "ts"],
+    "rootDir": "src",
+    "testRegex": ".*\\.spec\\.ts$",
+    "transform": {
+      "^.+\\.(t|j)s$": "ts-jest"
+    },
+    "testEnvironment": "node"
+  },
   "dependencies": {
     "@exelixi/partner-api-starter": "file:packages/partner-api-starter",
     "@jsotoexelixitech/nest-api-sdk": "file:packages/nest-api-sdk",

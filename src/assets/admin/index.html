@@ -571,7 +571,7 @@
     }
 
     function getSelectedRouteGrants(inputName) {
-      return [...document.querySelectorAll(`input[name=${inputName}]:checked`)].map((el) => el.value);
+      return [...document.querySelectorAll(`input[name="${inputName}"]:checked`)].map((el) => el.value);
     }
 
     function renderScopeDetails() {
@@ -803,21 +803,21 @@
 
     function bindRouteToolbar(selectId, clearId, inputName) {
       document.getElementById(selectId)?.addEventListener('click', () => {
-        document.querySelectorAll(`input[name=${inputName}]`).forEach((el) => { el.checked = true; });
+        document.querySelectorAll(`input[name="${inputName}"]`).forEach((el) => { el.checked = true; });
       });
       document.getElementById(clearId)?.addEventListener('click', () => {
-        document.querySelectorAll(`input[name=${inputName}]`).forEach((el) => { el.checked = false; });
+        document.querySelectorAll(`input[name="${inputName}"]`).forEach((el) => { el.checked = false; });
       });
     }
 
     document.addEventListener('click', (e) => {
       const selectAll = e.target.closest('[data-select-all]');
       if (selectAll) {
-        document.querySelectorAll(`input[name=${selectAll.dataset.selectAll}]`).forEach((el) => { el.checked = true; });
+        document.querySelectorAll(`input[name="${selectAll.dataset.selectAll}"]`).forEach((el) => { el.checked = true; });
       }
       const clearAll = e.target.closest('[data-clear-all]');
       if (clearAll) {
-        document.querySelectorAll(`input[name=${clearAll.dataset.clearAll}]`).forEach((el) => { el.checked = false; });
+        document.querySelectorAll(`input[name="${clearAll.dataset.clearAll}"]`).forEach((el) => { el.checked = false; });
       }
     });
 
