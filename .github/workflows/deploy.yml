@@ -1,0 +1,76 @@
+name: Deploy to Server 120 (PM2)
+
+on:
+  push:
+    branches:
+      - main
+      - master
+  workflow_dispatch:
+
+jobs:
+  deploy:
+    name: Deploy to QA Server (192.168.8.120)
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Deploy via SSH
+        uses: appleboy/ssh-action@v1.0.3
+        with:
+          host: ${{ secrets.SSH_HOST || '192.168.8.120' }}
+          username: ${{ secrets.SSH_USER || secrets.SSH_USERNAME || 'jsoto' }}
+          key: ${{ secrets.SSH_KEY }}
+          password: ${{ secrets.SSH_PASSWORD }}
+          port: ${{ secrets.SSH_PORT || 22 }}
+          script_stop: true
+          script: |
+            # Cargar NVM y PATH de Node/PM2 si existen en la sesión SSH
+            export NVM_DIR="$HOME/.nvm"
+            [ -s "$NVM_DIR/nvm.sh" ] && \. "$NVM_DIR/nvm.sh"
+            export PATH=$PATH:/usr/local/bin:/usr/bin:~/.nvm/versions/node/$(ls ~/.nvm/versions/node 2>/dev/null | tail -n 1)/bin
+
+            echo "=== Despliegue en Servidor 120 (PM2) ==="
+            
+            # Navegar a la ruta /home/jsoto/server-api-sys
+            if [ -d "/home/jsoto/server-api-sys" ]; then
+              cd /home/jsoto/server-api-sys
+            elif [ -d "/opt/services/server-api-sys" ]; then
+              cd /opt/services/server-api-sys
+            elif [ -d "/opt/services" ]; then
+              cd /opt/services
+            else
+              echo "Error: La ruta de despliegue no existe en el servidor."
+              exit 1
+            fi
+
+            echo "▶ Ruta de trabajo: $(pwd)"
+
+            # Traer los últimos cambios del repositorio
+            echo "▶ git pull..."
+            git pull origin main || git pull origin master
+
+            # Ejecutar deploy.sh si existe, o flujo PM2 equivalente
+            if [ -f "deploy.sh" ]; then
+              echo "▶ Ejecutando deploy.sh..."
+              chmod +x deploy.sh
+              bash deploy.sh
+            else
+              echo "▶ Instalandos dependencias..."
+              npm install --prefer-offline
+
+              echo "▶ Generando cliente de Prisma..."
+              npm run prisma:generate || true
+
+              echo "▶ Compilando proyecto NestJS..."
+              npm run build:all || npm run build
+
+              echo "▶ Reiniciando servicio PM2..."
+              mkdir -p ./logs
+              if pm2 describe "sysip-nest-api" > /dev/null 2>&1; then
+                pm2 restart ecosystem.config.js --env production --update-env
+              else
+                pm2 start ecosystem.config.js --env production
+              fi
+              pm2 save
+            fi
+
+            echo "✔ Despliegue completado con éxito."
