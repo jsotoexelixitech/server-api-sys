@@ -9,6 +9,7 @@ import { EmissionsModule } from './modules/emissions/emissions.module';
 import { ChangesModule } from './modules/changes/changes.module';
 import { PersonasModule } from './modules/personas/personas.module';
 import { CondominioModule } from './modules/condominio/condominio.module';
+import { EndososModule } from './modules/endosos/endosos.module';
 
 import { AppApiModule } from './modules/app/app.module';
 import { ExternalModule } from './modules/external/external.module';
@@ -42,6 +43,7 @@ import { PrismaModule } from './database/prisma/prisma.module';
     ChangesModule,
     PersonasModule,
     CondominioModule,
+    EndososModule,
     AppApiModule,
     ExternalModule,
     DocumentsModule,

@@ -82,9 +82,9 @@ export async function listApiKeysLegacy(
   const select = withDocsSlug
     ? `${LEGACY_SELECT}, docs_slug`
     : LEGACY_SELECT;
-  const rows = await prisma.$queryRawUnsafe<LegacyApiKeyRow[]>(
+  const rows = (await prisma.$queryRawUnsafe(
     `SELECT ${select} FROM nest_auth.api_key ORDER BY created_at DESC`,
-  );
+  )) as LegacyApiKeyRow[];
   return rows.map(mapLegacyApiKeyRow);
 }
 
@@ -96,10 +96,10 @@ export async function findApiKeyByHashLegacy(
   const select = withDocsSlug
     ? `${LEGACY_SELECT}, docs_slug`
     : LEGACY_SELECT;
-  const rows = await prisma.$queryRawUnsafe<LegacyApiKeyRow[]>(
+  const rows = (await prisma.$queryRawUnsafe(
     `SELECT ${select} FROM nest_auth.api_key WHERE key_hash = $1 LIMIT 1`,
     keyHash,
-  );
+  )) as LegacyApiKeyRow[];
   return rows[0] ? mapLegacyApiKeyRow(rows[0]) : null;
 }
 
@@ -107,11 +107,11 @@ export async function findApiKeyByDocsSlugLegacy(
   prisma: PrismaService,
   docsSlug: string,
 ): Promise<ApiKeyRecord | null> {
-  const rows = await prisma.$queryRawUnsafe<LegacyApiKeyRow[]>(
+  const rows = (await prisma.$queryRawUnsafe(
     `SELECT ${LEGACY_SELECT}, docs_slug
      FROM nest_auth.api_key WHERE docs_slug = $1 LIMIT 1`,
     docsSlug,
-  );
+  )) as LegacyApiKeyRow[];
   return rows[0] ? mapLegacyApiKeyRow(rows[0]) : null;
 }
 
@@ -123,10 +123,10 @@ export async function findApiKeyByIdLegacy(
   const select = withDocsSlug
     ? `${LEGACY_SELECT}, docs_slug`
     : LEGACY_SELECT;
-  const rows = await prisma.$queryRawUnsafe<LegacyApiKeyRow[]>(
+  const rows = (await prisma.$queryRawUnsafe(
     `SELECT ${select} FROM nest_auth.api_key WHERE id = $1 LIMIT 1`,
     id,
-  );
+  )) as LegacyApiKeyRow[];
   return rows[0] ? mapLegacyApiKeyRow(rows[0]) : null;
 }
 
@@ -207,12 +207,12 @@ export async function createApiKeyLegacy(
     ? `${LEGACY_SELECT}, docs_slug`
     : LEGACY_SELECT;
 
-  const rows = await prisma.$queryRawUnsafe<LegacyApiKeyRow[]>(
+  const rows = (await prisma.$queryRawUnsafe(
     `INSERT INTO nest_auth.api_key (${columns.join(', ')})
      VALUES (${placeholders})
      RETURNING ${returning}`,
     ...values,
-  );
+  )) as LegacyApiKeyRow[];
 
   return mapLegacyApiKeyRow(rows[0]);
 }
