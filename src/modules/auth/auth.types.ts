@@ -25,8 +25,23 @@ export interface TokenPairResponse {
   expires_in: number;
 }
 
+declare global {
+  namespace Express {
+    interface Request {
+      nestAuth?: NestAuthContext;
+    }
+  }
+}
+
 declare module 'express-serve-static-core' {
   interface Request {
     nestAuth?: NestAuthContext;
   }
 }
+
+declare module 'express' {
+  interface Request {
+    nestAuth?: NestAuthContext;
+  }
+}
+
