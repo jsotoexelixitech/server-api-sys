@@ -179,6 +179,18 @@ function convertCoverageBlock(xml, firstAnchor, lastAnchor, fromCursor, convertF
 // AUTOMOVIL — mapeo relativo a la 1ra copia (0-328). La 2da copia repite
 // exactamente la misma estructura con offset +330 (verificado token a token).
 // ---------------------------------------------------------------------------
+
+/** 7 filas fijas de COBERTURAS CONTRATADAS (1 parrafo Word por fila). */
+const AUTO_MAIN_COV_OPS = [
+  [216, set('{cov0Nombre}')], [217, clear()], [218, set('{cov0Suma}')], [219, clear()], [220, set('{cov0Tag}')], [221, set('{cov0Prima}')],
+  [222, set('{cov1Nombre}')], [223, clear()], [224, set('{cov1Suma}')], [225, clear()], [226, set('{cov1Tag}')], [227, set('{cov1Prima}')],
+  [228, set('{cov2Nombre}')], [229, clear()], [230, set('{cov2Suma}')], [231, set('{cov2Tag}')], [232, set('{cov2Prima}')],
+  [233, set('{cov3Nombre}')], [234, clear()], [235, set('{cov3Suma}')], [236, set('{cov3Tag}')], [237, set('{cov3Prima}')],
+  [238, set('{cov4Nombre}')], [239, clear()], [240, set('{cov4Suma}')], [241, set('{cov4Tag}')], [242, set('{cov4Prima}')],
+  [243, set('{cov5Nombre}')], [244, clear()], [245, set('{cov5Suma}')], [246, set('{cov5Tag}')], [247, set('{cov5Prima}')],
+  [248, set('{cov6Nombre}')], [249, clear()], [250, set('{cov6Suma}')], [251, set('{cov6Tag}')], [252, set('{cov6Prima}')],
+];
+
 const AUTO_MAIN_OPS = [
   [5, set('{tomadorNombre}')], [6, clear()], [7, clear()], [8, clear()], [9, clear()],
   [12, set('{tomadorIdentificacion}')], [13, clear()],
@@ -232,7 +244,7 @@ const AUTO_MAIN_OPS = [
   [203, set('{vehUso}')],
   [205, set('{vehPuestos}')],
   [209, set('{vehColor}')],
-  // 211-252: tabla de coberturas -> se procesa aparte (convertCoverageBlock)
+  // 216-252: tabla de coberturas -> ver AUTO_MAIN_COV_OPS (7 filas fijas)
   [254, set('{primaTotalFormateada}')],
   [273, set('{numeroPoliza}')], [274, clear()],
   [277, set('{vigenciaDesde}')],
@@ -288,15 +300,8 @@ const AUTO_WALLET_COVLIST_OPS = [
 
 function tagAutomovilDocument(xml) {
   let out = xml;
-  const mainMap = buildOpsMap(AUTO_MAIN_OPS, [0, 330]);
+  const mainMap = buildOpsMap([...AUTO_MAIN_OPS, ...AUTO_MAIN_COV_OPS], [0, 330]);
   out = applyOps(out, mainMap, 'auto-main');
-
-  // Tabla de coberturas (con PRIMA): copia 1 y copia 2.
-  let cursor = 0;
-  let r = convertCoverageBlock(out, '2.505,00', '61,05', cursor, convertCoverageParagraphWithTagAndPrima);
-  out = r.xml; cursor = r.nextCursor;
-  r = convertCoverageBlock(out, '2.505,00', '61,05', cursor, convertCoverageParagraphWithTagAndPrima);
-  out = r.xml; cursor = r.nextCursor;
 
   // Carnet-resumen RCV (2 tarjetas + 2 listas de coberturas sin prima).
   const introIdx = out.indexOf('recorte de las siguientes im');
@@ -330,6 +335,13 @@ function tagAutomovilDocument(xml) {
 // ---------------------------------------------------------------------------
 // SALUD — mapeo relativo a la 1ra copia (0-233). 2da copia offset +235.
 // ---------------------------------------------------------------------------
+/** 3 filas fijas de COBERTURAS (salud tiene 3 filas en la plantilla original). */
+const SALUD_MAIN_COV_OPS = [
+  [141, set('{cov0Nombre}')], [142, set('{cov0Suma}')], [143, set('{cov0Prima}')],
+  [144, set('{cov1Nombre}')], [145, clear()], [146, set('{cov1Suma}')], [147, set('{cov1Prima}')],
+  [148, set('{cov2NombreFull}')], [149, clear()], [150, set('{cov2Suma}')], [151, set('{cov2Prima}')],
+];
+
 const SALUD_MAIN_OPS = [
   [4, clear()], [5, clear()], // mini-box decorativo antes de "TOMADOR:" (sin dato equivalente en el payload)
   [7, set('{tomadorNombre}')], [8, clear()], [9, clear()], [10, clear()], [11, clear()], [12, clear()], [13, clear()],
@@ -355,7 +367,7 @@ const SALUD_MAIN_OPS = [
   [129, clear()], // fecha nacimiento de muestra (sin campo equivalente en el payload)
   [133, clear()], // sexo de muestra (sin campo equivalente en el payload)
   [136, set('{vigenciaDesde}')],
-  // 137-152: tabla de coberturas -> se procesa aparte (convertCoverageBlock)
+  // 141-151: tabla de coberturas -> ver SALUD_MAIN_COV_OPS
   [153, set('{primaTotalFormateada}')],
   [159, set('{beneficiarioNombre}')], [160, clear()],
   [164, set('{beneficiarioParentesco}')], [165, clear()],
@@ -413,14 +425,8 @@ const SALUD_INSERT_OPS = [
 
 function tagSaludDocument(xml) {
   let out = xml;
-  const mainMap = buildOpsMap(SALUD_MAIN_OPS, [0, 235]);
+  const mainMap = buildOpsMap([...SALUD_MAIN_OPS, ...SALUD_MAIN_COV_OPS], [0, 235]);
   out = applyOps(out, mainMap, 'salud-main');
-
-  let cursor = 0;
-  let r = convertCoverageBlock(out, '0,00', '5.000,00', cursor, convertCoverageParagraphNoTag);
-  out = r.xml; cursor = r.nextCursor;
-  r = convertCoverageBlock(out, '0,00', '5.000,00', cursor, convertCoverageParagraphNoTag);
-  out = r.xml;
 
   for (const copy of [0, 1]) {
     for (const { label, occurrence, tag, perCopy } of SALUD_INSERT_OPS) {

@@ -130,7 +130,6 @@ function buildTemplateData(data: PolicyDocumentData, templateKey: PolicyTemplate
   const beneficiario = data.beneficiarios?.[0];
 
   const coberturas = (data.coberturas ?? []).map((c) => coverageEntry(c, data.moneda));
-  const totalPrima = (data.coberturas ?? []).reduce((acc, c) => acc + (c.prima ?? 0), 0) || data.primaTotal;
 
   const base: Record<string, unknown> = {
     ramoPoliza: dash(data.ramoPoliza),
@@ -146,19 +145,28 @@ function buildTemplateData(data: PolicyDocumentData, templateKey: PolicyTemplate
     canalVenta: dash(data.canalVenta || 'AGENTE EXCLUSIVO'),
     intermediario: dash(data.intermediario || 'EXELIXI TECHNOLOGY'),
     planContratado: dash(data.planName),
-    primaTotalFormateada: `${currencyLabel} ${formatMoneyVe(totalPrima)}`,
+    primaTotalFormateada: `${currencyLabel} ${formatMoneyVe(data.primaTotal)}`,
 
     ...partyFields('tomador', data.tomador),
     ...partyFields('asegurado', data.asegurado),
     ...partyFields('beneficiario', beneficiario),
     beneficiarioParentesco: dash(beneficiario?.parentesco || 'Beneficiario'),
-
-    coberturas,
   };
+
+  // 7 slots fijos en la plantilla .docx (tabla principal + carnet resumen).
+  // Filas sin cobertura quedan vacias — igual que La Mundial dejaba filas en blanco.
+  for (let i = 0; i < 7; i += 1) {
+    const cov = coberturas[i];
+    base[`cov${i}Nombre`] = cov?.name ?? '';
+    base[`cov${i}NombreFull`] = cov?.name ?? '';
+    base[`cov${i}Suma`] = cov?.suma ?? '';
+    base[`cov${i}Tag`] = cov?.covTag ?? '';
+    base[`cov${i}Prima`] = cov?.prima ?? '';
+  }
 
   if (templateKey === 'automovil') {
     const risk = data.riskData ?? {};
-    base.vehTransmision = pickRiskValue(risk, 'Transmision', 'Transmisión') || 'AUTOMATICA';
+    base.vehTransmision = pickRiskValue(risk, 'Transmision', 'Transmisión') || '—';
     base.vehMarca = pickRiskValue(risk, 'Marca') || '—';
     base.vehModelo = pickRiskValue(risk, 'Modelo') || '—';
     base.vehVersion = pickRiskValue(risk, 'Version', 'Versión') || '—';
@@ -169,14 +177,6 @@ function buildTemplateData(data: PolicyDocumentData, templateKey: PolicyTemplate
     base.vehUso = pickRiskValue(risk, 'Uso') || 'PARTICULAR';
     base.vehPuestos = pickRiskValue(risk, 'Puestos', 'NumeroDePuestos') || '—';
     base.vehColor = pickRiskValue(risk, 'Color') || '—';
-
-    for (let i = 0; i < 7; i += 1) {
-      const cov = coberturas[i];
-      base[`cov${i}Nombre`] = cov?.name ?? '';
-      base[`cov${i}NombreFull`] = cov?.name ?? '';
-      base[`cov${i}Suma`] = cov?.suma ?? '';
-      base[`cov${i}Tag`] = cov?.covTag ?? '';
-    }
   }
 
   return base;
