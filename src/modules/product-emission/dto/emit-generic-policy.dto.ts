@@ -68,4 +68,29 @@ export class EmitGenericPolicyDto {
   @IsOptional()
   @IsObject()
   riskData?: Record<string, unknown>;
+
+  @ApiPropertyOptional({
+    description: 'Estatus de pago del cuadro-póliza. Default: PENDIENTE.',
+    example: 'PENDIENTE',
+    enum: ['PENDIENTE', 'PAGADO'],
+  })
+  @IsOptional()
+  @IsString()
+  estatus?: string;
+
+  @ApiPropertyOptional({
+    description: 'Canal de venta. Default: AGENTE EXCLUSIVO.',
+    example: 'AGENTE EXCLUSIVO',
+  })
+  @IsOptional()
+  @IsString()
+  canalVenta?: string;
+
+  @ApiPropertyOptional({
+    description: 'Nombre del intermediario/corredor. Default: EXELIXI TECHNOLOGY.',
+    example: 'EXELIXI TECHNOLOGY',
+  })
+  @IsOptional()
+  @IsString()
+  intermediario?: string;
 }

@@ -29,6 +29,9 @@ export interface PolicyDocumentData {
   coberturas: PolicyDocumentCoverageRow[];
   legalNoticeTitle?: string;
   legalNoticeText?: string;
+  estatus?: string;
+  canalVenta?: string;
+  intermediario?: string;
 }
 
 export interface PolicyPdfResult {

@@ -262,6 +262,9 @@ export class ProductEmissionService {
       })),
       legalNoticeTitle: legalDoc?.title,
       legalNoticeText: legalDoc?.content,
+      estatus: dto.estatus,
+      canalVenta: dto.canalVenta,
+      intermediario: dto.intermediario,
     };
 
     const { pdfBuffer } = await this.documentBuilder.buildPdf(

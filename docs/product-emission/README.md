@@ -183,3 +183,32 @@ which soffice   # debe existir
   asegurado y `riskData` sustituyen los textos de ejemplo de la plantilla Word.
 - `riskData` usa los **labels** de FormField RISK_DATA de product-builder
   (ej. `Placa` en RCV; `Marca`, `Modelo` si el producto los define).
+- **Logo:** encabezado usa `src/assets/product-emission/exelixi-logo-blanco.png`
+  (fondo blanco, apto para el header del cuadro-póliza). Solo se reemplaza
+  `word/media/image1.png` (logo pequeño del header) — las demás imágenes del
+  `.docx` son gráficos decorativos grandes y no deben tocarse.
+- **Motor de reemplazo por tokens:** `policy-template.util.ts` NO escribe los
+  valores finales directamente sobre el XML. Cada ancla se sustituye primero
+  por un token opaco (`\uE000TPL<n>\uE001`) y solo al final se resuelven todos
+  los tokens a sus valores reales. Esto evita que un valor recién insertado
+  (p.ej. un número de póliza que por coincidencia contenga "2026", el mismo
+  año usado como ancla de muestra) sea "reescaneado" y corrompido por un
+  reemplazo posterior — este era un bug real que corrompía el número de
+  póliza y otros campos en producción.
+- **Campos agregados tras comparar contra cuadros-póliza reales de La Mundial**
+  (`PartyDto.zonaPostal`, `EmitGenericPolicyDto.estatus/canalVenta/intermediario`):
+  antes quedaban fijos con los valores de muestra de la plantilla original
+  (zona postal "2015"/"1010", estatus "PAGADO", canal "CORREDOR", intermediario
+  vacío) sin importar los datos reales de la emisión.
+- **Bloque TOMADOR/BENEFICIARIO:** la plantilla repite el mismo texto literal
+  (ciudad, estado, zona postal, dirección) para el tomador y para el
+  beneficiario/garante. Se distinguen por **orden de aparición** (1ª ocurrencia
+  = tomador, 2ª = beneficiario) usando `replaceAlternating`. Si no se envía
+  `beneficiarios`, esa fila queda en blanco/guion.
+- **Limitación conocida:** la tabla de coberturas tiene **7 filas fijas** en la
+  plantilla capturada (no es un template dinámico como el de La Mundial, que
+  agrega/quita filas según el plan). Si el plan tiene más de 7 coberturas, las
+  adicionales no se muestran. Para pólizas con más líneas (ej. EXCESO DE
+  LÍMITES, DEFENSA PENAL, CLUB ARYS) se necesitaría una plantilla con más filas
+  o generar la tabla dinámicamente en vez de reemplazar texto sobre un `.docx`
+  capturado.

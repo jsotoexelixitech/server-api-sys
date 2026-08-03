@@ -97,16 +97,86 @@ function escapeXml(value: string): string {
     .replace(/"/g, '&quot;');
 }
 
-function replaceAll(xml: string, from: string, to: string): string {
-  if (!from || !xml.includes(from)) return xml;
-  return xml.split(from).join(escapeXml(to));
+/**
+ * Los valores dinámicos (número de póliza, fechas, etc.) pueden contener por
+ * coincidencia el mismo texto usado como ancla en otro reemplazo (p.ej. una
+ * póliza "AUT-2026-00000123" contiene el literal "2026", que también es el
+ * año de muestra a reemplazar). Si se sustituyera directamente sobre el XML,
+ * una operación posterior podría "reescanear" y corromper un valor recién
+ * insertado. Para evitarlo, cada operación de reemplazo NO escribe el valor
+ * final: escribe un token opaco único, y solo al final —cuando ya se
+ * aplicaron todas las anclas sobre el XML original— se resuelven los tokens
+ * a sus valores reales (escapados para XML).
+ */
+type TokenRegistrar = (value: string) => string;
+
+function createTokenRegistrar(pending: [string, string][]): TokenRegistrar {
+  let seq = 0;
+  return (value: string): string => {
+    const token = `\uE000TPL${seq++}\uE001`;
+    pending.push([token, escapeXml(value)]);
+    return token;
+  };
 }
 
-function replaceFirst(xml: string, from: string, to: string): string {
+function resolveTokens(xml: string, pending: [string, string][]): string {
+  let result = xml;
+  for (const [token, value] of pending) {
+    if (result.includes(token)) result = result.split(token).join(value);
+  }
+  return result;
+}
+
+function replaceAll(
+  xml: string,
+  from: string,
+  to: string,
+  registerToken: TokenRegistrar,
+): string {
+  if (!from || !xml.includes(from)) return xml;
+  return xml.split(from).join(registerToken(to));
+}
+
+function replaceFirst(
+  xml: string,
+  from: string,
+  to: string,
+  registerToken: TokenRegistrar,
+): string {
   if (!from) return xml;
   const idx = xml.indexOf(from);
   if (idx < 0) return xml;
-  return xml.slice(0, idx) + escapeXml(to) + xml.slice(idx + from.length);
+  return xml.slice(0, idx) + registerToken(to) + xml.slice(idx + from.length);
+}
+
+/**
+ * El cuadro-póliza repite bloques TOMADOR/BENEFICIARIO con el mismo texto
+ * literal (p.ej. misma ciudad/estado que el tomador). Reemplaza ocurrencias
+ * alternadas: la 1ª (tomador) con `toEven`, la 2ª (beneficiario) con `toOdd`,
+ * y así sucesivamente para cada copia del cuadro dentro del documento.
+ */
+function replaceAlternating(
+  xml: string,
+  from: string,
+  toEven: string,
+  toOdd: string,
+  registerToken: TokenRegistrar,
+): string {
+  if (!from || !xml.includes(from)) return xml;
+  const tokenEven = registerToken(toEven);
+  const tokenOdd = registerToken(toOdd);
+  let result = '';
+  let cursor = 0;
+  let occurrence = 0;
+  let idx: number;
+  while ((idx = xml.indexOf(from, cursor)) >= 0) {
+    const token = occurrence % 2 === 0 ? tokenEven : tokenOdd;
+    result += xml.slice(cursor, idx) + token;
+    cursor = idx + from.length;
+    occurrence++;
+  }
+  result += xml.slice(cursor);
+  return result;
 }
 
 function coverageTail(name: string): string {
@@ -117,6 +187,7 @@ function coverageTail(name: string): string {
 interface TemplateFillOps {
   global: [string, string][];
   firstOnly: [string, string][];
+  alternating: [string, string, string][];
 }
 
 const WORD_XML_RE = /^word\/(document|header\d+|footer\d+)\.xml$/;
@@ -269,9 +340,11 @@ function appendAutomovilPartyOps(
   data: PolicyDocumentData,
   global: [string, string][],
   firstOnly: [string, string][],
+  alternating: [string, string, string][],
 ): void {
   const tomador = data.tomador;
   const asegurado = data.asegurado;
+  const ben = data.beneficiarios?.[0];
   const tomadorNombre = tomador.nombre.trim();
   const aseguradoNombre = asegurado.nombre.trim();
   const tomadorNum = docNumber(tomador.identificacion);
@@ -285,7 +358,7 @@ function appendAutomovilPartyOps(
   global.push(
     ['502663061', tomadorNum],
     ['16719695', aseguradoNum],
-    ['505363506', dash],
+    ['505363506', ben ? docNumber(ben.identificacion) : dash],
     ['CONSORCIO', tomadorNombre],
     [' JA-NA,', ''],
     ['JA-NA,', ''],
@@ -296,13 +369,15 @@ function appendAutomovilPartyOps(
     [' GOMEZ', ''],
     [' ARAGUANEY', ''],
     ['ISAIAC', ''],
+    ['GOMEZ', ''],
+    ['ARAGUANEY', ''],
     ['JOSE', aseguradoNombre],
     ['JOSE ISAIAC GOMEZ ARAGUANEY', aseguradoNombre],
     ['CONSORCIO JA-NA, C.A.', tomadorNombre],
     ['CONSORCIO JA-NA,  ', `${tomadorNombre}, `],
-    ['RAPI-CREDIT,', dash],
-    ['RAPI-CREDIT', dash],
-    ['info@rapicredit.com', dash],
+    ['RAPI-CREDIT,', ben?.nombre ? `${ben.nombre},` : `${dash},`],
+    ['RAPI-CREDIT', ben?.nombre ?? dash],
+    ['info@rapicredit.com', ben?.email ?? dash],
     ['guac', ''],
     ['PIAR', ''],
     ['AREVALO', ''],
@@ -312,30 +387,35 @@ function appendAutomovilPartyOps(
     ['C/C', ''],
     ['CRUCE', ''],
     ['profesional', ''],
-    ['CALLE', tomadorDir],
     ['BARCELONA', aseguradoDir],
-    ['DA SILVA RODRIGUEZ,  ', dash],
+    ['DA SILVA RODRIGUEZ,  ', `${data.intermediario ?? 'EXELIXI TECHNOLOGY'} `],
     ['MIGUELANGEL', ''],
     ['MASIVOS@SIASESOR.COM', tomador.email ?? dash],
     ['josega_isaiac@gmail.com', asegurado.email ?? dash],
-    ['Guacara', tomador.ciudad ?? dash],
-    ['GUACARA', tomador.ciudad ?? dash],
-    ['Carabobo', tomador.estado ?? dash],
-    ['04264619840', tomador.telefono ?? dash],
     ['Barcelona', asegurado.ciudad ?? dash],
     ['Anzoategui', asegurado.estado ?? dash],
+    ['GUACARA', tomador.ciudad ?? dash],
+    ['1010', asegurado.zonaPostal ?? dash],
+    ['04264619840', tomador.telefono ?? dash],
     ['04127081044', asegurado.telefono ?? dash],
-    ['04123146689', tomador.telefono ?? dash],
+    ['04123146689', ben?.telefono ?? dash],
+    ['PAGADO', data.estatus ?? 'PENDIENTE'],
+    ['CORREDOR', data.canalVenta ?? 'AGENTE EXCLUSIVO'],
+  );
+
+  /** Ciudad/Estado/Zona postal del tomador y del beneficiario comparten el
+   * mismo texto en la plantilla original (2 veces por cada una de las 2
+   * copias del cuadro); se distinguen por orden de aparición
+   * (1ª = tomador, 2ª = beneficiario). */
+  alternating.push(
+    ['CALLE', tomadorDir, ben?.direccion?.trim() || dash],
+    ['Guacara', tomador.ciudad ?? dash, ben?.ciudad ?? dash],
+    ['Carabobo', tomador.estado ?? dash, ben?.estado ?? dash],
+    ['2015', tomador.zonaPostal ?? dash, ben?.zonaPostal ?? dash],
   );
 
   pushRepeatedFirst(firstOnly, 'J-', tomadorPref, 2);
   pushRepeatedFirst(firstOnly, 'V-', aseguradoPref, 2);
-
-  const ben = data.beneficiarios?.[0];
-  if (ben?.nombre) {
-    global.push(['RAPI-CREDIT,', `${ben.nombre},`]);
-    global.push(['505363506', docNumber(ben.identificacion)]);
-  }
 }
 
 function buildFillOps(data: PolicyDocumentData, templateKey: PolicyTemplateKey): TemplateFillOps {
@@ -355,6 +435,7 @@ function buildFillOps(data: PolicyDocumentData, templateKey: PolicyTemplateKey):
   ];
 
   const firstOnly: [string, string][] = [];
+  const alternating: [string, string, string][] = [];
   appendCommonBrandingOps(global);
 
   if (templateKey === 'salud') {
@@ -386,7 +467,7 @@ function buildFillOps(data: PolicyDocumentData, templateKey: PolicyTemplateKey):
     const riesgoSerialMot = pickRiskValue(risk, 'Serial motor', 'SerialMot') || '—';
     const productoLinea = `${data.productName} ${data.numeroPoliza}`;
 
-    appendAutomovilPartyOps(data, global, firstOnly);
+    appendAutomovilPartyOps(data, global, firstOnly, alternating);
 
     global.push(
       ['03/08/2026 - 03/08/2027', vigencia],
@@ -419,11 +500,11 @@ function buildFillOps(data: PolicyDocumentData, templateKey: PolicyTemplateKey):
   }
 
   global.sort((a, b) => b[0].length - a[0].length);
-  return { global, firstOnly };
+  return { global, firstOnly, alternating };
 }
 
 function injectExelixiLogo(zip: PizZip): void {
-  const logoPath = path.join(assetsProductEmissionDir(), 'exelixi-logo-negro.png');
+  const logoPath = path.join(assetsProductEmissionDir(), 'exelixi-logo-blanco.png');
   if (!fs.existsSync(logoPath)) return;
   const logo = fs.readFileSync(logoPath);
   for (const mediaPath of HEADER_LOGO_MEDIA) {
@@ -439,18 +520,27 @@ export function fillPolicyTemplate(
 ): Buffer {
   const zip = new PizZip(loadSeedTemplate(templateKey));
   injectExelixiLogo(zip);
-  const { global, firstOnly } = buildFillOps(data, templateKey);
+  const { global, firstOnly, alternating } = buildFillOps(data, templateKey);
 
   for (const fileName of Object.keys(zip.files)) {
     if (!WORD_XML_RE.test(fileName)) continue;
     let xml = zip.file(fileName)?.asText();
     if (!xml) continue;
+
+    const pending: [string, string][] = [];
+    const registerToken = createTokenRegistrar(pending);
+
+    for (const [from, toEven, toOdd] of alternating) {
+      xml = replaceAlternating(xml, from, toEven, toOdd, registerToken);
+    }
     for (const [from, to] of global) {
-      xml = replaceAll(xml, from, to);
+      xml = replaceAll(xml, from, to, registerToken);
     }
     for (const [from, to] of firstOnly) {
-      xml = replaceFirst(xml, from, to);
+      xml = replaceFirst(xml, from, to, registerToken);
     }
+
+    xml = resolveTokens(xml, pending);
     zip.file(fileName, xml);
   }
 

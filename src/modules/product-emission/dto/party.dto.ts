@@ -39,6 +39,12 @@ export class PartyDto {
   @MaxLength(100)
   estado?: string;
 
+  @ApiPropertyOptional({ example: '1010', description: 'Zona postal / código postal' })
+  @IsOptional()
+  @IsString()
+  @MaxLength(20)
+  zonaPostal?: string;
+
   @ApiPropertyOptional()
   @IsOptional()
   @IsString()
