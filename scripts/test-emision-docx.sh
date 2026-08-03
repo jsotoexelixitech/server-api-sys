@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # Prueba end-to-end del cuadro-poliza (.docx real -> PDF) contra los servicios
-# YA corriendo en srv001 (producto-builder-api :3001, sysip-nest-api :3002).
+# YA corriendo en srv001 (URLs se detectan del .env real de nest-api).
 # Correr directamente en el servidor: bash scripts/test-emision-docx.sh
 set -euo pipefail
 
@@ -13,6 +13,7 @@ if [ -f "$ENV_FILE" ]; then
   NEST_PORT=$(grep -E '^PORT=' "$ENV_FILE" | tail -1 | cut -d '=' -f2- | tr -d '\r')
   CONFIGURED_EMAIL=$(grep -E '^PRODUCT_BUILDER_API_EMAIL=' "$ENV_FILE" | tail -1 | cut -d '=' -f2- | tr -d '\r')
   CONFIGURED_PASSWORD=$(grep -E '^PRODUCT_BUILDER_API_PASSWORD=' "$ENV_FILE" | tail -1 | cut -d '=' -f2- | tr -d '\r')
+  ADMIN_TOKEN=$(grep -E '^NEST_ADMIN_TOKEN=' "$ENV_FILE" | tail -1 | cut -d '=' -f2- | tr -d '\r')
 fi
 PB_URL="${PB_BASE:-http://localhost:3001}/api"
 NEST_URL="http://localhost:${NEST_PORT:-3002}/api/v1/product-emission"
@@ -107,8 +108,29 @@ PLAN_JSON=$(curl -s -X PUT "$PB_URL/products/$PRODUCT_ID/plans" \
 echo "  $PLAN_JSON" | head -c 300
 echo ""
 
-echo "== 5) Emitir poliza (llena la plantilla .docx real -> PDF) =="
-RESPONSE=$(curl -s -X POST "$NEST_URL/emit" -H "Content-Type: application/json" -d "{
+echo "== 5) Generar apikey de prueba con scope product-emission:write =="
+APIKEY=""
+if [ -n "${ADMIN_TOKEN:-}" ]; then
+  KEY_JSON=$(curl -s -X POST "http://localhost:${NEST_PORT:-3002}/api/v1/admin/keys" \
+    -H "Content-Type: application/json" -H "X-Admin-Token: $ADMIN_TOKEN" \
+    -d "{\"name\":\"test-emision-docx-${STAMP}\",\"scopes\":[\"product-emission:write\"]}")
+  APIKEY=$(get_field "$KEY_JSON" "plainKey" || true)
+  if [ -z "${APIKEY:-}" ]; then
+    echo "  ERROR creando apikey. Respuesta:"
+    echo "  $KEY_JSON"
+  else
+    echo "  apikey OK (${#APIKEY} chars)"
+  fi
+else
+  echo "  NEST_ADMIN_TOKEN no encontrado en .env — se intentará /emit sin apikey."
+fi
+
+echo "== 6) Emitir poliza (llena la plantilla .docx real -> PDF) =="
+AUTH_HEADER=()
+if [ -n "${APIKEY:-}" ]; then
+  AUTH_HEADER=(-H "apikey: $APIKEY")
+fi
+RESPONSE=$(curl -s -X POST "$NEST_URL/emit" -H "Content-Type: application/json" "${AUTH_HEADER[@]}" -d "{
   \"productId\": \"$PRODUCT_ID\",
   \"tomador\": { \"nombre\": \"CARLOS EDUARDO PEREZ MATA\", \"identificacion\": \"V-14567890\", \"direccion\": \"Av. Libertador, Edif. Centro, Piso 4\", \"email\": \"carlos.perez@example.com\", \"ciudad\": \"Valencia\", \"estado\": \"Carabobo\", \"zonaPostal\": \"2001\", \"telefono\": \"0414-1234567\" },
   \"asegurado\": { \"nombre\": \"CARLOS EDUARDO PEREZ MATA\", \"identificacion\": \"V-14567890\", \"direccion\": \"Av. Libertador, Edif. Centro, Piso 4\", \"email\": \"carlos.perez@example.com\", \"ciudad\": \"Valencia\", \"estado\": \"Carabobo\", \"zonaPostal\": \"2001\", \"telefono\": \"0414-1234567\" },
@@ -121,3 +143,6 @@ RESPONSE=$(curl -s -X POST "$NEST_URL/emit" -H "Content-Type: application/json" 
 echo "$RESPONSE"
 echo ""
 echo "== Fin. Si ves \"documentUrl\" arriba, abrelo en el navegador para ver el PDF. =="
+echo "Nota: si no hay NEST_ADMIN_TOKEN en el .env y /emit sigue dando 401, genera"
+echo "la key manualmente en el panel /admin/ (header X-Admin-Token) con el scope"
+echo "product-emission:write."
