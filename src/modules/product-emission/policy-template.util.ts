@@ -103,6 +103,45 @@ interface TemplateFillOps {
 /** document.xml no lleva número; header1/footer1 sí. */
 const WORD_XML_RE = /^word\/(document|header\d+|footer\d+)\.xml$/;
 
+function coverageLabelUpper(name: string): string {
+  return name.trim().toUpperCase();
+}
+
+/** Filas fijas de coberturas en certificado-automovil.seed.docx (orden Sis2000, 7 filas). */
+const AUTO_COVERAGE_ROWS: { tag: string; suma: string; prima: string }[] = [
+  { tag: 'PERSONAS', suma: '2.505,00', prima: '1,00' },
+  { tag: 'COSAS', suma: '2.000,00', prima: '1,00' },
+  { tag: 'OCUPANTES', suma: '1.500,00', prima: '2,00' },
+  { tag: 'OCUPANTES', suma: '1.500,00', prima: '2,00' },
+  { tag: 'MEDICOS', suma: '3.000,00', prima: '3,59' },
+  { tag: 'FUNERARIOS', suma: '1.000,00', prima: '3,00' },
+  { tag: 'TOTAL', suma: '2.035,00', prima: '61,05' },
+];
+
+function appendAutomovilCoverageOps(
+  data: PolicyDocumentData,
+  firstOnly: [string, string][],
+): void {
+  const empty = '—';
+
+  AUTO_COVERAGE_ROWS.forEach((row, idx) => {
+    const cov = data.coberturas[idx];
+    if (cov) {
+      const label =
+        idx === 0 && cov.name.toUpperCase().includes('TERCEROS')
+          ? 'TERCEROS'
+          : coverageLabelUpper(cov.name).slice(0, 40);
+      firstOnly.push([row.suma, formatMoneyVe(cov.sumaAsegurada)]);
+      firstOnly.push([row.prima, formatMoneyVe(cov.prima ?? 0)]);
+      firstOnly.push([row.tag, label]);
+      return;
+    }
+    firstOnly.push([row.suma, empty]);
+    firstOnly.push([row.prima, empty]);
+    firstOnly.push([row.tag, empty]);
+  });
+}
+
 function buildFillOps(data: PolicyDocumentData, templateKey: PolicyTemplateKey): TemplateFillOps {
   const fecha = formatDate(data.fechaEmision);
   const vigencia = `${formatDate(data.vigenciaDesde)} - ${formatDate(data.vigenciaHasta)}`;
@@ -146,24 +185,31 @@ function buildFillOps(data: PolicyDocumentData, templateKey: PolicyTemplateKey):
       firstOnly.push(['JAVIER MONAGAS', data.beneficiarios[0].nombre]);
     }
   } else {
+    const riesgoUso = String(risk.Uso ?? risk.uso ?? '');
+    const riesgoColor = String(risk.Color ?? risk.color ?? '—');
+    const riesgoVersion = String(risk.Version ?? risk.version ?? '—');
+    const riesgoAnio = String(risk.Anio ?? risk.anio ?? risk.Año ?? '—');
+
     global.push(
       ['03/08/2026 - 03/08/2027', vigencia],
       ['03/08/2026', fecha],
       ['502663061', tomadorDoc],
       ['16719695', aseguradoDoc],
+      ['J-502663061', data.tomador.identificacion.trim()],
+      ['V-16719695', data.asegurado.identificacion.trim()],
+      ['CONSORCIO JA-NA,', `${tomadorNombre},`],
       ['CONSORCIO', tomadorNombre],
+      ['JA-NA,', ''],
       [' JA-NA,', ''],
+      [' C.A.', ''],
       ['JOSE', aseguradoNombre],
       [' ISAIAC', ''],
       [' GOMEZ', ''],
       [' ARAGUANEY', ''],
-      ['Plan Moto Toro', data.planName],
+      ['Plan Moto ', `${data.planName} `],
+      ['Toro', ''],
+      ['1100309101', data.numeroPoliza.replace(/^[^-]+-/, '')],
       ['73,64', prima],
-      ['TORO', String(risk.Marca ?? risk.marca ?? '—')],
-      ['LEON', String(risk.Modelo ?? risk.modelo ?? '—')],
-      ['AN5N09E', String(risk.Placa ?? risk.placa ?? '—')],
-      ['81J51F3E4TG011803', String(risk.SerialCarr ?? risk.serialCarr ?? '—')],
-      ['TR164FMLT9329132', String(risk.SerialMot ?? risk.serialMot ?? '—')],
       ['MASIVOS@SIASESOR.COM', data.tomador.email ?? '—'],
       ['josega_isaiac@gmail.com', data.asegurado.email ?? '—'],
       ['Guacara', data.tomador.ciudad ?? '—'],
@@ -172,13 +218,33 @@ function buildFillOps(data: PolicyDocumentData, templateKey: PolicyTemplateKey):
       ['Barcelona', data.asegurado.ciudad ?? '—'],
       ['Anzoategui', data.asegurado.estado ?? '—'],
       ['04127081044', data.asegurado.telefono ?? '—'],
+      ['DA SILVA RODRIGUEZ, MIGUELANGEL', '—'],
+      ['MOTOCICLETAS', riesgoUso || (data.ramoPoliza === 'RCV' ? 'PARTICULAR' : '—')],
+      ['TR 200CC', riesgoVersion],
+      ['SINCRONICO', ''],
+      ['ROJO', riesgoColor],
+      ['81J51F3E4TG011803', String(risk.SerialCarr ?? risk.serialCarr ?? '—')],
+      ['TR164FMLT9329132', String(risk.SerialMot ?? risk.serialMot ?? '—')],
     );
-    firstOnly.push(
-      [' C.A.', ''],
-      ['2.505,00', formatMoneyVe(c0?.sumaAsegurada)],
-      ['1,00', formatMoneyVe(c0?.prima ?? 0)],
-      ['PERSONAS', c0 ? coverageTail(c0.name) : 'COBERTURA'],
-    );
+
+    firstOnly.push(['TORO', String(risk.Marca ?? risk.marca ?? '—')]);
+    firstOnly.push(['LEON', String(risk.Modelo ?? risk.modelo ?? '—')]);
+    firstOnly.push(['AN5N09E', String(risk.Placa ?? risk.placa ?? '—')]);
+    if (riesgoAnio && riesgoAnio !== '—') {
+      firstOnly.push(['2026', riesgoAnio]);
+      firstOnly.push(['2026', riesgoAnio]);
+    }
+
+    if (data.beneficiarios?.[0]?.nombre) {
+      global.push(['RAPI-CREDIT,', `${data.beneficiarios[0].nombre},`]);
+      global.push(['505363506', docNumber(data.beneficiarios[0].identificacion)]);
+    } else {
+      global.push(['RAPI-CREDIT,', '—']);
+      global.push(['RAPI-CREDIT', '—']);
+      global.push(['505363506', '—']);
+    }
+
+    appendAutomovilCoverageOps(data, firstOnly);
   }
 
   global.sort((a, b) => b[0].length - a[0].length);
