@@ -212,3 +212,19 @@ which soffice   # debe existir
   LÍMITES, DEFENSA PENAL, CLUB ARYS) se necesitaría una plantilla con más filas
   o generar la tabla dinámicamente en vez de reemplazar texto sobre un `.docx`
   capturado.
+- **Reemplazos "por copia" (2 veces) y "cíclicos":** el `.docx` capturado
+  repite el cuadro-póliza completo 2 veces (footer "CLIENTE" / "INTERMEDIARIO").
+  Cualquier dato que use el mismo valor en todo el documento debe ir en
+  `global` (reemplaza TODAS las ocurrencias, sin importar cuántas veces
+  aparezca). Usar `firstOnly`/`pushRepeatedFirst` con una cantidad fija de
+  repeticiones es frágil: si la plantilla tiene el ancla en más lugares de los
+  contados, las copias/ocurrencias sobrantes quedan con el dato de muestra
+  original (bug real que afectó marca/modelo/placa/año del vehículo, visible
+  solo en la 2ª copia del documento). El prefijo de cédula "J-" usa
+  `cyclic` (patrón de N valores que se repite) porque aparece en 4 campos
+  distintos por copia en un orden fijo (tomador, beneficiario, tomador, tomador).
+- **Anclas de 2-3 letras son peligrosas:** "CC" y "CON" (fragmentos de la
+  dirección original de muestra) se anclan incluyendo las etiquetas `<w:t>`
+  exactas (`<w:t>CC</w:t>`) en vez de como texto suelto, porque como texto
+  libre coinciden con substrings de otras palabras del documento
+  ("DIRECCIÓN", "CONTRATADO") y corrompían el texto.

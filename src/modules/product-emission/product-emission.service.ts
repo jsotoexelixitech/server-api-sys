@@ -232,7 +232,9 @@ export class ProductEmissionService {
     const vigenciaDias = dto.vigenciaDias ?? 365;
     const vigenciaDesde = fechaEmision;
     const vigenciaHasta = new Date(fechaEmision);
-    vigenciaHasta.setDate(vigenciaHasta.getDate() + vigenciaDias);
+    // setUTCDate (no setDate) para que el cálculo no dependa del timezone
+    // configurado en el servidor donde corre el proceso.
+    vigenciaHasta.setUTCDate(vigenciaHasta.getUTCDate() + vigenciaDias);
 
     const numeroPoliza = await this.nextPolicyNumber(resolved.product.branch);
 
@@ -345,7 +347,8 @@ export class ProductEmissionService {
     const year = new Date().getFullYear();
 
     if (!this.prisma.isEnabled()) {
-      return `${prefix}-${year}-${Date.now()}`;
+      const fallbackSeq = String(Date.now()).slice(-8).padStart(8, '0');
+      return `${prefix}-${year}-${fallbackSeq}`;
     }
 
     const counter = await this.prisma.genericPolicyCounter.upsert({

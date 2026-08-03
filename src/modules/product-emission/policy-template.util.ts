@@ -53,11 +53,18 @@ function loadSeedTemplate(templateKey: PolicyTemplateKey): Buffer {
   return fs.readFileSync(filePath);
 }
 
+/**
+ * Se formatea siempre en horario de Venezuela, sin importar el timezone
+ * configurado en el servidor donde corre el proceso. Si no se fijara el
+ * timeZone explícito, una fecha "YYYY-MM-DD" parseada como medianoche UTC
+ * podía mostrarse un día antes en servidores con timezone negativo.
+ */
 function formatDate(d: Date): string {
   return new Intl.DateTimeFormat('es-VE', {
     day: '2-digit',
     month: '2-digit',
     year: 'numeric',
+    timeZone: 'America/Caracas',
   }).format(d);
 }
 
@@ -162,16 +169,30 @@ function replaceAlternating(
   toOdd: string,
   registerToken: TokenRegistrar,
 ): string {
-  if (!from || !xml.includes(from)) return xml;
-  const tokenEven = registerToken(toEven);
-  const tokenOdd = registerToken(toOdd);
+  return replaceCyclic(xml, from, [toEven, toOdd], registerToken);
+}
+
+/**
+ * Igual que `replaceAlternating` pero con un patrón cíclico de N valores
+ * (no solo 2). Necesario para anclas como el prefijo "J-"/"V-" de cédula,
+ * que dentro de una misma copia del cuadro aparece en varios campos
+ * distintos en un orden fijo (ej. tomador, beneficiario, tomador, tomador),
+ * y ese patrón se repite en cada copia del documento.
+ */
+function replaceCyclic(
+  xml: string,
+  from: string,
+  values: string[],
+  registerToken: TokenRegistrar,
+): string {
+  if (!from || !xml.includes(from) || values.length === 0) return xml;
+  const tokens = values.map((v) => registerToken(v));
   let result = '';
   let cursor = 0;
   let occurrence = 0;
   let idx: number;
   while ((idx = xml.indexOf(from, cursor)) >= 0) {
-    const token = occurrence % 2 === 0 ? tokenEven : tokenOdd;
-    result += xml.slice(cursor, idx) + token;
+    result += xml.slice(cursor, idx) + tokens[occurrence % tokens.length];
     cursor = idx + from.length;
     occurrence++;
   }
@@ -188,6 +209,7 @@ interface TemplateFillOps {
   global: [string, string][];
   firstOnly: [string, string][];
   alternating: [string, string, string][];
+  cyclic: [string, string[]][];
 }
 
 const WORD_XML_RE = /^word\/(document|header\d+|footer\d+)\.xml$/;
@@ -327,7 +349,21 @@ function appendCommonBrandingOps(global: [string, string][]): void {
     ['defensordelasegurado@lamundialdeseguros.com', 'info@exelixitech.com'],
     ['https://lamundialdeseguros.com/', 'https://exelixitech.com/'],
     ['www.lamundialdeseguros.com', 'www.exelixitech.com'],
+    /**
+     * Anclas más largas primero (incluyendo el sufijo "C.A" o "C.A.") para no
+     * dejar una coma duplicada al quitarlo, ya sea que continúe con coma,
+     * punto o espacio ("C.A,", "C.A.,", "C.A. o...").
+     */
+    ['La Mundial de Seguros, C.A,', 'Exelixi Technology,'],
+    ['La Mundial de Seguros, C.A.', 'Exelixi Technology'],
     ['La Mundial de Seguros', 'Exelixi Technology'],
+    /**
+     * Variante fragmentada en runs distintos ("La Mundial de" + " " +
+     * "Seguros, C.A para...", declaración del asegurado): no coincide con
+     * las anclas de arriba porque el XML corta el texto justo ahí.
+     */
+    ['La Mundial de', 'Exelixi'],
+    ['Seguros, C.A para', 'Technology para'],
     ['POR LA MUNDIAL DE  ', 'POR EXELIXI '],
     ['POR LA MUNDIAL DE ', 'POR EXELIXI '],
     ['Humberto  ', ''],
@@ -339,8 +375,8 @@ function appendCommonBrandingOps(global: [string, string][]): void {
 function appendAutomovilPartyOps(
   data: PolicyDocumentData,
   global: [string, string][],
-  firstOnly: [string, string][],
   alternating: [string, string, string][],
+  cyclic: [string, string[]][],
 ): void {
   const tomador = data.tomador;
   const asegurado = data.asegurado;
@@ -379,29 +415,55 @@ function appendAutomovilPartyOps(
     ['RAPI-CREDIT', ben?.nombre ?? dash],
     ['info@rapicredit.com', ben?.email ?? dash],
     ['guac', ''],
+    /**
+     * Dirección del TOMADOR en la plantilla original:
+     * "CALLE PIAR C/C AREVALO GONZALEZ, CCP GUACARA PLAZA" (nombre de un
+     * centro comercial, no tiene relación con el campo CIUDAD).
+     */
     ['PIAR', ''],
-    ['AREVALO', ''],
+    ['C/C', ''],
     ['GONZALEZ,', ''],
     ['CCP', ''],
     ['PLAZA', ''],
-    ['C/C', ''],
+    /**
+     * Dirección del BENEFICIARIO: "CALLE PIAR, CRUCE CON AREVALO GONZALEZ CC y profesional".
+     * "CON" y "CC" se anclan incluyendo las etiquetas `<w:t>` del run exacto
+     * (no como texto suelto) porque son substrings de otras palabras del
+     * documento ("CONTRATADO", "DIRECCIÓN") y un reemplazo global las
+     * corrompía.
+     */
+    ['PIAR,', ''],
     ['CRUCE', ''],
+    ['<w:t>CON</w:t>', ''],
+    ['AREVALO', ''],
+    ['GONZALEZ', ''],
+    ['<w:t>CC</w:t>', ''],
     ['profesional', ''],
     ['BARCELONA', aseguradoDir],
-    ['DA SILVA RODRIGUEZ,  ', `${data.intermediario ?? 'EXELIXI TECHNOLOGY'} `],
+    ['DA SILVA RODRIGUEZ, ', `${data.intermediario ?? 'EXELIXI TECHNOLOGY'} `],
     ['MIGUELANGEL', ''],
     ['MASIVOS@SIASESOR.COM', tomador.email ?? dash],
     ['josega_isaiac@gmail.com', asegurado.email ?? dash],
     ['Barcelona', asegurado.ciudad ?? dash],
     ['Anzoategui', asegurado.estado ?? dash],
-    ['GUACARA', tomador.ciudad ?? dash],
+    ['GUACARA', ''],
     ['1010', asegurado.zonaPostal ?? dash],
+    ['V-', aseguradoPref],
     ['04264619840', tomador.telefono ?? dash],
     ['04127081044', asegurado.telefono ?? dash],
     ['04123146689', ben?.telefono ?? dash],
     ['PAGADO', data.estatus ?? 'PENDIENTE'],
     ['CORREDOR', data.canalVenta ?? 'AGENTE EXCLUSIVO'],
   );
+
+  /**
+   * El prefijo de cédula "J-" aparece 4 veces por copia del cuadro, en este
+   * orden fijo: encabezado TOMADOR, encabezado BENEFICIARIO, firma TOMADOR,
+   * declaración de fe TOMADOR. El patrón se repite en cada una de las 2
+   * copias del documento.
+   */
+  const benPref = ben ? idPrefix(ben.identificacion) : '';
+  cyclic.push(['J-', [tomadorPref, benPref, tomadorPref, tomadorPref]]);
 
   /** Ciudad/Estado/Zona postal del tomador y del beneficiario comparten el
    * mismo texto en la plantilla original (2 veces por cada una de las 2
@@ -413,9 +475,6 @@ function appendAutomovilPartyOps(
     ['Carabobo', tomador.estado ?? dash, ben?.estado ?? dash],
     ['2015', tomador.zonaPostal ?? dash, ben?.zonaPostal ?? dash],
   );
-
-  pushRepeatedFirst(firstOnly, 'J-', tomadorPref, 2);
-  pushRepeatedFirst(firstOnly, 'V-', aseguradoPref, 2);
 }
 
 function buildFillOps(data: PolicyDocumentData, templateKey: PolicyTemplateKey): TemplateFillOps {
@@ -436,6 +495,7 @@ function buildFillOps(data: PolicyDocumentData, templateKey: PolicyTemplateKey):
 
   const firstOnly: [string, string][] = [];
   const alternating: [string, string, string][] = [];
+  const cyclic: [string, string[]][] = [];
   appendCommonBrandingOps(global);
 
   if (templateKey === 'salud') {
@@ -467,7 +527,7 @@ function buildFillOps(data: PolicyDocumentData, templateKey: PolicyTemplateKey):
     const riesgoSerialMot = pickRiskValue(risk, 'Serial motor', 'SerialMot') || '—';
     const productoLinea = `${data.productName} ${data.numeroPoliza}`;
 
-    appendAutomovilPartyOps(data, global, firstOnly, alternating);
+    appendAutomovilPartyOps(data, global, alternating, cyclic);
 
     global.push(
       ['03/08/2026 - 03/08/2027', vigencia],
@@ -487,20 +547,26 @@ function buildFillOps(data: PolicyDocumentData, templateKey: PolicyTemplateKey):
       ['ROJO', riesgoColor],
       ['81J51F3E4TG011803', riesgoSerialCarr],
       ['TR164FMLT9329132', riesgoSerialMot],
+      ['TORO', riesgoMarca],
+      ['LEON', riesgoModelo],
+      ['AN5N09E', riesgoPlaca],
     );
-
-    firstOnly.push(['TORO', riesgoMarca]);
-    firstOnly.push(['LEON', riesgoModelo]);
-    firstOnly.push(['AN5N09E', riesgoPlaca]);
+    /**
+     * "MARCA/PLACA/..." se sustituyen con `global` (todas las ocurrencias),
+     * no con `firstOnly`: cada dato del vehículo aparece 2 veces por copia
+     * del cuadro (sección DATOS DEL VEHÍCULO + síntesis RCV) x 2 copias del
+     * documento = hasta 4 apariciones, y usan siempre el mismo valor, así
+     * que no hace falta (ni conviene) limitarlo a la 1ª ocurrencia.
+     */
     if (riesgoAnio !== '—') {
-      pushRepeatedFirst(firstOnly, '2026', riesgoAnio, 2);
+      global.push(['2026', riesgoAnio]);
     }
 
     appendAutomovilCoverageOps(data, global, firstOnly);
   }
 
   global.sort((a, b) => b[0].length - a[0].length);
-  return { global, firstOnly, alternating };
+  return { global, firstOnly, alternating, cyclic };
 }
 
 function injectExelixiLogo(zip: PizZip): void {
@@ -520,7 +586,7 @@ export function fillPolicyTemplate(
 ): Buffer {
   const zip = new PizZip(loadSeedTemplate(templateKey));
   injectExelixiLogo(zip);
-  const { global, firstOnly, alternating } = buildFillOps(data, templateKey);
+  const { global, firstOnly, alternating, cyclic } = buildFillOps(data, templateKey);
 
   for (const fileName of Object.keys(zip.files)) {
     if (!WORD_XML_RE.test(fileName)) continue;
@@ -530,6 +596,9 @@ export function fillPolicyTemplate(
     const pending: [string, string][] = [];
     const registerToken = createTokenRegistrar(pending);
 
+    for (const [from, values] of cyclic) {
+      xml = replaceCyclic(xml, from, values, registerToken);
+    }
     for (const [from, toEven, toOdd] of alternating) {
       xml = replaceAlternating(xml, from, toEven, toOdd, registerToken);
     }
