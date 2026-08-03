@@ -118,9 +118,9 @@ genérica (product-builder)"**):
 
 - `POST /api/v1/product-emission/quote` — cotiza (no persiste).
 - `POST /api/v1/product-emission/validate` — valida antes de emitir.
-- `POST /api/v1/product-emission/emit` — emite, genera el `.docx` y guarda en BD.
+- `POST /api/v1/product-emission/emit` — emite, genera el **PDF** del cuadro-póliza y guarda en BD.
 - `GET /api/v1/product-emission/policies/:numeroPoliza` — consulta póliza.
-- `GET /api/v1/product-emission/documents/:filename` — descarga el documento.
+- `GET /api/v1/product-emission/documents/:filename` — abre/descarga el PDF (público, inline en navegador).
 
 Si `NEST_AUTH_ENABLED=true` (default), estas rutas requieren `apikey` o
 Bearer con scope `product-emission:write` (nuevo scope, ver
@@ -149,27 +149,31 @@ Respuesta esperada:
   "planName": "Plan RCV Obligatorio",
   "primaTotal": 125.5,
   "moneda": "USD",
-  "documentUrl": "https://cierrelmds.exelixitech.com/nest-api-docs/api/v1/product-emission/documents/poliza_RCV-2026-00000001.docx"
+  "documentUrl": "https://cierrelmds.exelixitech.com/nest-api-docs/api/v1/product-emission/documents/poliza_RCV-2026-00000001.pdf"
 }
 ```
 
-Abrir `documentUrl` (o el filename en `temp-product-emission-docs/`
-localmente) descarga el cuadro-póliza con el **RAMO PÓLIZA** dinámico
-("RCV", "AUTOMOVIL", "SALUD", según el `branch` del producto creado en
-product-builder).
+Abrir `documentUrl` en el navegador muestra el **PDF inline** (mismo patrón que
+conductor habitual). El cuadro-póliza usa las plantillas Sis2000 en
+`src/assets/product-emission/templates/` (`certificado-automovil.seed.docx`,
+`certificado-salud.seed.docx`) con el **RAMO PÓLIZA** dinámico
+("RCV", "AUTOMOVIL", "SALUD", según el `branch` del producto en product-builder).
+
+### LibreOffice en srv001 (requerido para PDF)
+
+```bash
+sudo apt-get update && sudo apt-get install -y libreoffice-writer
+which soffice   # debe existir
+```
 
 ## Notas de diseño
 
 - El título "RAMO PÓLIZA" del documento se resuelve en
   `product-branch-labels.util.ts` a partir del `branch` del producto en
   product-builder (RCV_OBLIGATORIO → "RCV", AUTOMOVIL → "AUTOMOVIL", etc.).
-- Las coberturas y el plan vienen 100% del catálogo de product-builder — no
-  hay ningún dato hardcodeado de La Mundial/Sis2000.
-- "Datos del riesgo" es una sección genérica (clave/valor) que aplica para
-  cualquier ramo (vehículo, salud, patrimonial, etc.) sin necesitar código
-  específico por ramo.
-- El documento se genera con la librería `docx` (Node, sin dependencias
-  nativas) — no requiere LibreOffice ni Word instalados. Se entrega en
-  `.docx` (editable/imprimible). Si más adelante se requiere PDF exacto, se
-  puede añadir una conversión opcional vía LibreOffice headless en el
-  servidor, sin tocar el resto del flujo.
+- Plantilla: `branch SALUD` → `certificado-salud.seed.docx`; resto (AUTOMOVIL,
+  RCV, etc.) → `certificado-automovil.seed.docx`. Relleno en
+  `policy-template.util.ts` + conversión PDF vía `libreoffice-convert`.
+- Las coberturas y el plan vienen del catálogo de product-builder.
+- `riskData` rellena datos del vehículo en plantilla automóvil (Placa, Marca,
+  Modelo, serial, etc.).

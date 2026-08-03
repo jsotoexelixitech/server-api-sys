@@ -72,8 +72,8 @@ export class ProductEmissionController {
   @ApiOperation({
     summary: 'Emitir póliza genérica (ramo de product-builder)',
     description:
-      'Genera el cuadro-póliza (.docx), lo guarda en disco y persiste la póliza en la BD ' +
-      'aislada (schema product_emission). Devuelve la URL de descarga del documento.',
+      'Genera el cuadro-póliza (.pdf) con plantilla Sis2000, lo guarda en disco y persiste ' +
+      'la póliza en la BD aislada (schema product_emission). Devuelve URL pública HTTPS.',
   })
   @ApiResponse({
     status: 201,
@@ -87,7 +87,7 @@ export class ProductEmissionController {
         primaTotal: 1250.5,
         moneda: 'USD',
         documentUrl:
-          'https://cierrelmds.exelixitech.com/nest-api-docs/api/v1/product-emission/documents/poliza_RCV-2026-00000001.docx',
+          'https://cierrelmds.exelixitech.com/nest-api-docs/api/v1/product-emission/documents/poliza_RCV-2026-00000001.pdf',
       },
     },
   })
@@ -137,9 +137,11 @@ export class ProductEmissionController {
       });
     }
     const disposition = req.query.download === 'true' ? 'attachment' : 'inline';
+    const isPdf = filename.toLowerCase().endsWith('.pdf');
     res.set({
-      'Content-Type':
-        'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
+      'Content-Type': isPdf
+        ? 'application/pdf'
+        : 'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
       'Content-Disposition': `${disposition}; filename="${filename}"`,
     });
     fs.createReadStream(filePath).pipe(res);

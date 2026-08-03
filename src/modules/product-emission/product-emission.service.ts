@@ -208,9 +208,12 @@ export class ProductEmissionService {
       legalNoticeText: legalDoc?.content,
     };
 
-    const docxBuffer = await this.documentBuilder.buildDocx(documentData);
-    const filename = `poliza_${numeroPoliza.replace(/[^a-zA-Z0-9-]/g, '_')}.docx`;
-    fs.writeFileSync(path.join(this.docsDir, filename), docxBuffer);
+    const { pdfBuffer } = await this.documentBuilder.buildPdf(
+      documentData,
+      resolved.product.branch,
+    );
+    const filename = `poliza_${numeroPoliza.replace(/[^a-zA-Z0-9-]/g, '_')}.pdf`;
+    fs.writeFileSync(path.join(this.docsDir, filename), pdfBuffer);
 
     const documentUrl = `${publicBaseUrl}/api/v1/product-emission/documents/${filename}`;
 
