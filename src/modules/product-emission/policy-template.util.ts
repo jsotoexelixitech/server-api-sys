@@ -16,12 +16,14 @@ const TEMPLATE_FILES: Record<PolicyTemplateKey, string> = {
   salud: 'certificado-salud.seed.docx',
 };
 
-/** Imágenes word/media/* con logo/sello La Mundial en plantilla automóvil. */
-const AUTO_LOGO_MEDIA = [
-  'word/media/image1.png',
-  'word/media/image2.png',
-  'word/media/image3.png',
-];
+/**
+ * En ambas plantillas (automóvil y salud), `word/media/image1.png` es el
+ * logo pequeño del encabezado (rId1 en header1.xml/header2.xml). Las demás
+ * imágenes (image2, image3...) son elementos gráficos grandes de fondo del
+ * cuadro-póliza y NO deben tocarse: si se sobreescriben con un logo de fondo
+ * sólido, tapan la tabla de coberturas.
+ */
+const HEADER_LOGO_MEDIA = ['word/media/image1.png'];
 
 export function resolvePolicyTemplateKey(productBranch: string): PolicyTemplateKey {
   if (productBranch === 'SALUD') return 'salud';
@@ -421,10 +423,10 @@ function buildFillOps(data: PolicyDocumentData, templateKey: PolicyTemplateKey):
 }
 
 function injectExelixiLogo(zip: PizZip): void {
-  const logoPath = path.join(assetsProductEmissionDir(), 'exelixi-logo.png');
+  const logoPath = path.join(assetsProductEmissionDir(), 'exelixi-logo-negro.png');
   if (!fs.existsSync(logoPath)) return;
   const logo = fs.readFileSync(logoPath);
-  for (const mediaPath of AUTO_LOGO_MEDIA) {
+  for (const mediaPath of HEADER_LOGO_MEDIA) {
     if (zip.file(mediaPath)) {
       zip.file(mediaPath, logo);
     }
