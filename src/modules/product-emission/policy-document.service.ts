@@ -4,7 +4,7 @@ import {
   buildPolicyPdfFromTemplate,
   PolicyTemplateKey,
   resolvePolicyTemplateKey,
-} from './policy-pdf.util';
+} from './policy-docx.util';
 
 export interface PolicyDocumentCoverageRow {
   name: string;
@@ -44,10 +44,11 @@ export class PolicyDocumentService {
   private readonly logger = new Logger(PolicyDocumentService.name);
 
   /**
-   * Genera el cuadro-póliza en PDF directamente con `pdfmake`, a partir de
-   * `data` (mismo patrón que el anexo de conductor habitual en
-   * `documents.service.ts`): el documento se arma en código desde el payload,
-   * sin plantilla `.docx` de muestra ni conversión con LibreOffice.
+   * Genera el cuadro-póliza en PDF llenando dinámicamente (con
+   * `docxtemplater`) la plantilla `.docx` real capturada del cuadro-póliza
+   * (mismo diseño, tablas y textos legales, con la marca Exelixi), y
+   * convirtiendo el resultado a PDF con LibreOffice. Las plantillas
+   * "tageadas" se generan una sola vez con `scripts/tag-policy-templates.js`.
    */
   async buildPdf(
     data: PolicyDocumentData,

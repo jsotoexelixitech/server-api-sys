@@ -5,11 +5,10 @@ Flujo nuevo e **independiente** de los módulos activos de La Mundial
 
 Usa como catálogo los ramos/planes/coberturas creados en
 `proyecto-product-builder` (vía su API HTTP, solo lectura) y genera el
-cuadro-póliza directamente en **PDF con `pdfmake`** (mismo patrón que el
-anexo de conductor habitual en `documents.service.ts`: el documento se arma
-en código a partir del payload, sin plantilla `.docx` de muestra ni
-conversión con LibreOffice), guardando la póliza en una **base de datos
-propia**.
+cuadro-póliza llenando dinámicamente (con `docxtemplater`) la **plantilla
+`.docx` real** del certificado (mismo diseño, tablas y textos legales que
+usa La Mundial, con la marca Exelixi), convirtiendo el resultado a PDF con
+LibreOffice. Persiste la póliza en una **base de datos propia**.
 
 ## Garantías de aislamiento
 
@@ -157,13 +156,14 @@ Respuesta esperada:
 }
 ```
 
-Abrir `documentUrl` en el navegador muestra el **PDF inline** (mismo patrón que
-conductor habitual: `pdfmake` genera el binario directamente, sin pasos
-intermedios). El **RAMO PÓLIZA** del título es dinámico ("RCV", "AUTOMOVIL",
-"SALUD", según el `branch` del producto en product-builder).
+Abrir `documentUrl` en el navegador muestra el **PDF inline**: es el cuadro-póliza
+real (mismo diseño, tablas y textos legales del certificado capturado),
+llenado con los datos del payload y con la marca Exelixi. El **RAMO PÓLIZA**
+del título es dinámico ("RCV", "AUTOMOVIL", "SALUD", según el `branch` del
+producto en product-builder, que determina qué plantilla usar).
 
-No requiere LibreOffice/`soffice` instalado en el servidor — `pdfmake` genera
-el PDF en el propio proceso Node.
+Requiere LibreOffice/`soffice` instalado en el servidor (ya está en srv001)
+para la conversión final `.docx` → `.pdf`.
 
 ## Notas de diseño
 
@@ -174,32 +174,38 @@ el PDF en el propio proceso Node.
   por cobertura, usa `actuarialData.commercialPremium` del producto.
 - El título "RAMO PÓLIZA" del documento se resuelve en
   `product-branch-labels.util.ts` a partir del `branch` del producto en
-  product-builder (RCV_OBLIGATORIO → "RCV", AUTOMOVIL → "AUTOMOVIL", etc.).
-- **Generación del PDF (`policy-pdf.util.ts`):** usa `pdfmake` para construir
-  un `docDefinition` 100% en código a partir de `PolicyDocumentData` — el
-  mismo patrón que el anexo de conductor habitual
-  (`src/modules/documents/documents.service.ts`). No hay plantilla `.docx`
-  de muestra, ni anclas de texto, ni conversión con LibreOffice: cada sección
-  del PDF (tomador, asegurado, beneficiario, datos del riesgo, coberturas,
-  firmas) se arma directamente desde los campos del payload/DTO. Esto
-  reemplaza el enfoque anterior de reemplazo de texto sobre un `.docx`
-  capturado de La Mundial, que dependía de que los valores de muestra de esa
-  plantilla no colisionaran con los datos reales (fuente de bugs recurrentes
-  de datos "hardcodeados" o mal sustituidos).
-- **`riskData` es genérico y dinámico:** la sección "DATOS DEL RIESGO" del PDF
-  renderiza automáticamente **todas** las claves que vengan en `riskData` (los
-  labels de FormField RISK_DATA definidos en product-builder para ese ramo:
-  `Placa`/`Marca`/`Modelo` en automóvil, u otros campos en salud/vida/etc.).
-  No hay mapeo fijo por ramo — si product-builder agrega un campo de riesgo
-  nuevo, aparece en el PDF sin tocar código.
-- **Coberturas sin límite de filas:** a diferencia de la plantilla `.docx`
-  capturada (que tenía 7 filas fijas), la tabla de coberturas ahora es
-  totalmente dinámica: agrega una fila por cada cobertura del plan (las que
-  sean) y calcula la fila TOTAL sumando suma asegurada y prima.
-- **Beneficiario opcional:** la sección "DATOS DEL BENEFICIARIO" solo se
-  incluye en el PDF si `beneficiarios[0]` viene en el payload.
-- **Logo:** encabezado usa `src/assets/product-emission/exelixi-logo-blanco.png`
-  (fondo blanco, apto para pdfmake). Si el archivo no existe, cae a un texto
-  "EXELIXI" en su lugar (no rompe la generación).
-- **Sin dependencia de LibreOffice:** al no convertir `.docx` a `.pdf`, el
-  servidor no necesita tener `soffice` instalado para este flujo.
+  product-builder (RCV_OBLIGATORIO → "RCV", AUTOMOVIL → "AUTOMOVIL", etc.), y
+  también determina si se usa la plantilla `automovil` o `salud`
+  (`resolvePolicyTemplateKey` en `policy-docx.util.ts`).
+- **Plantillas reales `.docx` (no generadas en código):** las plantillas de
+  `src/assets/product-emission/templates/*.template.docx` son los certificados
+  reales de La Mundial (`Certificadopoliza_automovil_...` y
+  `Certificadopoliza_salud_...`) con la marca ya cambiada a Exelixi y cada
+  dato de muestra reemplazado por un tag `docxtemplater` (`{tomadorNombre}`,
+  `{numeroPoliza}`, `{vehMarca}`, etc.) en la posición **exacta** que ocupaba
+  en el original. Se generaron una única vez con
+  `scripts/tag-policy-templates.js` (no se ejecuta en cada request; solo si
+  se necesita re-tagear una plantilla nueva). En runtime, `policy-docx.util.ts`
+  carga la plantilla, llena los tags con `docxtemplater` y convierte el
+  `.docx` resultante a PDF con `libreoffice-convert`.
+- **`riskData` alimenta los datos del vehículo (ramo automóvil):**
+  `pickRiskValue()` en `policy-docx.util.ts` busca en `riskData` (case/acento-
+  insensible) las claves `Marca`, `Modelo`, `Version`, `Año`, `Placa`, `Color`,
+  `Uso`, `Puestos`, `SerialCarroceria`, `SerialMotor`, `Transmision` — los
+  labels de FormField RISK_DATA que product-builder define para ese ramo.
+- **Coberturas sin límite de filas:** la tabla "COBERTURAS CONTRATADAS" del
+  `.docx` se convirtió en un bloque de repetición `{#coberturas}...{/coberturas}`
+  (`convertCoverageBlock` en el script de tageo), así que agrega una fila por
+  cada cobertura del plan (las que sean), no las 7 fijas del original. El
+  carnet-resumen RCV recortable (solo automóvil) sigue siendo de 7 slots fijos
+  (`cov0`..`cov6`) por ser una tarjeta física de tamaño fijo, igual que en la
+  plantilla original.
+- **Beneficiario opcional:** si no viene `beneficiarios[0]` en el payload, la
+  sección de beneficiario se llena con guiones (`—`) en vez de dejar el dato
+  de muestra de La Mundial.
+- **Logo:** se inyecta `src/assets/product-emission/exelixi-logo-blanco.png`
+  directamente en `word/media/image1.png` dentro de la plantilla tageada (una
+  sola vez, en el script de tageo — no en cada request).
+- **Re-tagear una plantilla (solo si se reemplaza el `.docx` de origen):**
+  `node scripts/tag-policy-templates.js <ruta auto.docx> <ruta salud.docx>`
+  regenera ambos `*.template.docx` en `src/assets/product-emission/templates/`.
