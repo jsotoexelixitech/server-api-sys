@@ -4,11 +4,22 @@
 # Correr directamente en el servidor: bash scripts/test-emision-docx.sh
 set -euo pipefail
 
-PB_URL="http://localhost:3001/api"
-NEST_URL="http://localhost:3002/api/v1/product-emission"
+# Lee PRODUCT_BUILDER_API_URL del .env real de nest-api (evita asumir puerto
+# fijo: en srv001 el 3001 lo usa pagos-api, no producto-builder-api).
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+ENV_FILE="$SCRIPT_DIR/.env"
+if [ -f "$ENV_FILE" ]; then
+  PB_BASE=$(grep -E '^PRODUCT_BUILDER_API_URL=' "$ENV_FILE" | tail -1 | cut -d '=' -f2- | tr -d '\r')
+  NEST_PORT=$(grep -E '^PORT=' "$ENV_FILE" | tail -1 | cut -d '=' -f2- | tr -d '\r')
+  CONFIGURED_EMAIL=$(grep -E '^PRODUCT_BUILDER_API_EMAIL=' "$ENV_FILE" | tail -1 | cut -d '=' -f2- | tr -d '\r')
+  CONFIGURED_PASSWORD=$(grep -E '^PRODUCT_BUILDER_API_PASSWORD=' "$ENV_FILE" | tail -1 | cut -d '=' -f2- | tr -d '\r')
+fi
+PB_URL="${PB_BASE:-http://localhost:3001}/api"
+NEST_URL="http://localhost:${NEST_PORT:-3002}/api/v1/product-emission"
+echo "== 0) URLs detectadas: PB_URL=$PB_URL  NEST_URL=$NEST_URL =="
 STAMP=$(date +%s)
-SVC_EMAIL="nest-api-test-${STAMP}@exelixitech.com"
-SVC_PASSWORD="CambiarEstaClave123!"
+SVC_EMAIL="${CONFIGURED_EMAIL:-nest-api-test-${STAMP}@exelixitech.com}"
+SVC_PASSWORD="${CONFIGURED_PASSWORD:-CambiarEstaClave123!}"
 
 get_field() {
   # $1 = json string, $2 = ruta de campo (ej. accessToken, id)
@@ -28,17 +39,25 @@ get_field() {
   " <<< "$1"
 }
 
-echo "== 1) Crear cuenta de servicio de prueba en product-builder ($SVC_EMAIL) =="
-SIGNUP_JSON=$(curl -s -X POST "$PB_URL/auth/signup" -H "Content-Type: application/json" \
-  -d "{\"email\":\"$SVC_EMAIL\",\"password\":\"$SVC_PASSWORD\",\"fullName\":\"nest-api test account\"}")
-TOKEN=$(get_field "$SIGNUP_JSON" "accessToken" || true)
+echo "== 1) Autenticar en product-builder ($SVC_EMAIL) =="
+LOGIN_JSON=$(curl -s -X POST "$PB_URL/auth/login" -H "Content-Type: application/json" \
+  -d "{\"email\":\"$SVC_EMAIL\",\"password\":\"$SVC_PASSWORD\"}")
+TOKEN=$(get_field "$LOGIN_JSON" "accessToken" || true)
 
 if [ -z "${TOKEN:-}" ]; then
-  echo "  ERROR creando cuenta de servicio. Respuesta de product-builder:"
-  echo "  $SIGNUP_JSON"
-  exit 1
+  echo "  (login fallo, creando cuenta nueva...)"
+  SVC_EMAIL="nest-api-test-${STAMP}@exelixitech.com"
+  SIGNUP_JSON=$(curl -s -X POST "$PB_URL/auth/signup" -H "Content-Type: application/json" \
+    -d "{\"email\":\"$SVC_EMAIL\",\"password\":\"$SVC_PASSWORD\",\"fullName\":\"nest-api test account\"}")
+  TOKEN=$(get_field "$SIGNUP_JSON" "accessToken" || true)
+  if [ -z "${TOKEN:-}" ]; then
+    echo "  ERROR autenticando/creando cuenta de servicio. Respuestas de product-builder:"
+    echo "  login:  $LOGIN_JSON"
+    echo "  signup: $SIGNUP_JSON"
+    exit 1
+  fi
 fi
-echo "  token OK (${#TOKEN} chars)"
+echo "  token OK (${#TOKEN} chars) via $SVC_EMAIL"
 
 echo "== 2) Crear producto de prueba (ramo AUTOMOVIL) =="
 PRODUCT_JSON=$(curl -s -X POST "$PB_URL/products" \
