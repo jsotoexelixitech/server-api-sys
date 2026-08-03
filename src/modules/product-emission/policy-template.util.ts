@@ -100,6 +100,9 @@ interface TemplateFillOps {
   firstOnly: [string, string][];
 }
 
+/** document.xml no lleva número; header1/footer1 sí. */
+const WORD_XML_RE = /^word\/(document|header\d+|footer\d+)\.xml$/;
+
 function buildFillOps(data: PolicyDocumentData, templateKey: PolicyTemplateKey): TemplateFillOps {
   const fecha = formatDate(data.fechaEmision);
   const vigencia = `${formatDate(data.vigenciaDesde)} - ${formatDate(data.vigenciaHasta)}`;
@@ -190,7 +193,7 @@ export function fillPolicyTemplate(
   const { global, firstOnly } = buildFillOps(data, templateKey);
 
   for (const fileName of Object.keys(zip.files)) {
-    if (!/^word\/(document|header|footer)\d+\.xml$/.test(fileName)) continue;
+    if (!WORD_XML_RE.test(fileName)) continue;
     let xml = zip.file(fileName)?.asText();
     if (!xml) continue;
     for (const [from, to] of global) {
