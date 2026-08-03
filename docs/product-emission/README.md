@@ -5,7 +5,11 @@ Flujo nuevo e **independiente** de los módulos activos de La Mundial
 
 Usa como catálogo los ramos/planes/coberturas creados en
 `proyecto-product-builder` (vía su API HTTP, solo lectura) y genera el
-cuadro-póliza en `.docx`, guardando la póliza en una **base de datos propia**.
+cuadro-póliza directamente en **PDF con `pdfmake`** (mismo patrón que el
+anexo de conductor habitual en `documents.service.ts`: el documento se arma
+en código a partir del payload, sin plantilla `.docx` de muestra ni
+conversión con LibreOffice), guardando la póliza en una **base de datos
+propia**.
 
 ## Garantías de aislamiento
 
@@ -154,17 +158,12 @@ Respuesta esperada:
 ```
 
 Abrir `documentUrl` en el navegador muestra el **PDF inline** (mismo patrón que
-conductor habitual). El cuadro-póliza usa las plantillas Sis2000 en
-`src/assets/product-emission/templates/` (`certificado-automovil.seed.docx`,
-`certificado-salud.seed.docx`) con el **RAMO PÓLIZA** dinámico
-("RCV", "AUTOMOVIL", "SALUD", según el `branch` del producto en product-builder).
+conductor habitual: `pdfmake` genera el binario directamente, sin pasos
+intermedios). El **RAMO PÓLIZA** del título es dinámico ("RCV", "AUTOMOVIL",
+"SALUD", según el `branch` del producto en product-builder).
 
-### LibreOffice en srv001 (requerido para PDF)
-
-```bash
-sudo apt-get update && sudo apt-get install -y libreoffice-writer
-which soffice   # debe existir
-```
+No requiere LibreOffice/`soffice` instalado en el servidor — `pdfmake` genera
+el PDF en el propio proceso Node.
 
 ## Notas de diseño
 
@@ -176,55 +175,31 @@ which soffice   # debe existir
 - El título "RAMO PÓLIZA" del documento se resuelve en
   `product-branch-labels.util.ts` a partir del `branch` del producto en
   product-builder (RCV_OBLIGATORIO → "RCV", AUTOMOVIL → "AUTOMOVIL", etc.).
-- Plantilla: `branch SALUD` → `certificado-salud.seed.docx`; resto (AUTOMOVIL,
-  RCV, etc.) → `certificado-automovil.seed.docx`. Relleno en
-  `policy-template.util.ts` + conversión PDF vía `libreoffice-convert`.
-- **PDF:** ramo, nombre comercial, plan, coberturas (nombre/suma/prima), tomador,
-  asegurado y `riskData` sustituyen los textos de ejemplo de la plantilla Word.
-- `riskData` usa los **labels** de FormField RISK_DATA de product-builder
-  (ej. `Placa` en RCV; `Marca`, `Modelo` si el producto los define).
+- **Generación del PDF (`policy-pdf.util.ts`):** usa `pdfmake` para construir
+  un `docDefinition` 100% en código a partir de `PolicyDocumentData` — el
+  mismo patrón que el anexo de conductor habitual
+  (`src/modules/documents/documents.service.ts`). No hay plantilla `.docx`
+  de muestra, ni anclas de texto, ni conversión con LibreOffice: cada sección
+  del PDF (tomador, asegurado, beneficiario, datos del riesgo, coberturas,
+  firmas) se arma directamente desde los campos del payload/DTO. Esto
+  reemplaza el enfoque anterior de reemplazo de texto sobre un `.docx`
+  capturado de La Mundial, que dependía de que los valores de muestra de esa
+  plantilla no colisionaran con los datos reales (fuente de bugs recurrentes
+  de datos "hardcodeados" o mal sustituidos).
+- **`riskData` es genérico y dinámico:** la sección "DATOS DEL RIESGO" del PDF
+  renderiza automáticamente **todas** las claves que vengan en `riskData` (los
+  labels de FormField RISK_DATA definidos en product-builder para ese ramo:
+  `Placa`/`Marca`/`Modelo` en automóvil, u otros campos en salud/vida/etc.).
+  No hay mapeo fijo por ramo — si product-builder agrega un campo de riesgo
+  nuevo, aparece en el PDF sin tocar código.
+- **Coberturas sin límite de filas:** a diferencia de la plantilla `.docx`
+  capturada (que tenía 7 filas fijas), la tabla de coberturas ahora es
+  totalmente dinámica: agrega una fila por cada cobertura del plan (las que
+  sean) y calcula la fila TOTAL sumando suma asegurada y prima.
+- **Beneficiario opcional:** la sección "DATOS DEL BENEFICIARIO" solo se
+  incluye en el PDF si `beneficiarios[0]` viene en el payload.
 - **Logo:** encabezado usa `src/assets/product-emission/exelixi-logo-blanco.png`
-  (fondo blanco, apto para el header del cuadro-póliza). Solo se reemplaza
-  `word/media/image1.png` (logo pequeño del header) — las demás imágenes del
-  `.docx` son gráficos decorativos grandes y no deben tocarse.
-- **Motor de reemplazo por tokens:** `policy-template.util.ts` NO escribe los
-  valores finales directamente sobre el XML. Cada ancla se sustituye primero
-  por un token opaco (`\uE000TPL<n>\uE001`) y solo al final se resuelven todos
-  los tokens a sus valores reales. Esto evita que un valor recién insertado
-  (p.ej. un número de póliza que por coincidencia contenga "2026", el mismo
-  año usado como ancla de muestra) sea "reescaneado" y corrompido por un
-  reemplazo posterior — este era un bug real que corrompía el número de
-  póliza y otros campos en producción.
-- **Campos agregados tras comparar contra cuadros-póliza reales de La Mundial**
-  (`PartyDto.zonaPostal`, `EmitGenericPolicyDto.estatus/canalVenta/intermediario`):
-  antes quedaban fijos con los valores de muestra de la plantilla original
-  (zona postal "2015"/"1010", estatus "PAGADO", canal "CORREDOR", intermediario
-  vacío) sin importar los datos reales de la emisión.
-- **Bloque TOMADOR/BENEFICIARIO:** la plantilla repite el mismo texto literal
-  (ciudad, estado, zona postal, dirección) para el tomador y para el
-  beneficiario/garante. Se distinguen por **orden de aparición** (1ª ocurrencia
-  = tomador, 2ª = beneficiario) usando `replaceAlternating`. Si no se envía
-  `beneficiarios`, esa fila queda en blanco/guion.
-- **Limitación conocida:** la tabla de coberturas tiene **7 filas fijas** en la
-  plantilla capturada (no es un template dinámico como el de La Mundial, que
-  agrega/quita filas según el plan). Si el plan tiene más de 7 coberturas, las
-  adicionales no se muestran. Para pólizas con más líneas (ej. EXCESO DE
-  LÍMITES, DEFENSA PENAL, CLUB ARYS) se necesitaría una plantilla con más filas
-  o generar la tabla dinámicamente en vez de reemplazar texto sobre un `.docx`
-  capturado.
-- **Reemplazos "por copia" (2 veces) y "cíclicos":** el `.docx` capturado
-  repite el cuadro-póliza completo 2 veces (footer "CLIENTE" / "INTERMEDIARIO").
-  Cualquier dato que use el mismo valor en todo el documento debe ir en
-  `global` (reemplaza TODAS las ocurrencias, sin importar cuántas veces
-  aparezca). Usar `firstOnly`/`pushRepeatedFirst` con una cantidad fija de
-  repeticiones es frágil: si la plantilla tiene el ancla en más lugares de los
-  contados, las copias/ocurrencias sobrantes quedan con el dato de muestra
-  original (bug real que afectó marca/modelo/placa/año del vehículo, visible
-  solo en la 2ª copia del documento). El prefijo de cédula "J-" usa
-  `cyclic` (patrón de N valores que se repite) porque aparece en 4 campos
-  distintos por copia en un orden fijo (tomador, beneficiario, tomador, tomador).
-- **Anclas de 2-3 letras son peligrosas:** "CC" y "CON" (fragmentos de la
-  dirección original de muestra) se anclan incluyendo las etiquetas `<w:t>`
-  exactas (`<w:t>CC</w:t>`) en vez de como texto suelto, porque como texto
-  libre coinciden con substrings de otras palabras del documento
-  ("DIRECCIÓN", "CONTRATADO") y corrompían el texto.
+  (fondo blanco, apto para pdfmake). Si el archivo no existe, cae a un texto
+  "EXELIXI" en su lugar (no rompe la generación).
+- **Sin dependencia de LibreOffice:** al no convertir `.docx` a `.pdf`, el
+  servidor no necesita tener `soffice` instalado para este flujo.

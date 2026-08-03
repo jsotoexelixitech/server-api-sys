@@ -72,8 +72,9 @@ export class ProductEmissionController {
   @ApiOperation({
     summary: 'Emitir póliza genérica (ramo de product-builder)',
     description:
-      'Genera el cuadro-póliza (.pdf) con plantilla Sis2000, lo guarda en disco y persiste ' +
-      'la póliza en la BD aislada (schema product_emission). Devuelve URL pública HTTPS.',
+      'Genera el cuadro-póliza (.pdf) con pdfmake a partir de los datos del payload, ' +
+      'lo guarda en disco y persiste la póliza en la BD aislada (schema product_emission). ' +
+      'Devuelve URL pública HTTPS.',
   })
   @ApiResponse({
     status: 201,

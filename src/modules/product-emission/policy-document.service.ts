@@ -4,7 +4,7 @@ import {
   buildPolicyPdfFromTemplate,
   PolicyTemplateKey,
   resolvePolicyTemplateKey,
-} from './policy-template.util';
+} from './policy-pdf.util';
 
 export interface PolicyDocumentCoverageRow {
   name: string;
@@ -36,7 +36,6 @@ export interface PolicyDocumentData {
 
 export interface PolicyPdfResult {
   pdfBuffer: Buffer;
-  docxBuffer: Buffer;
   templateKey: PolicyTemplateKey;
 }
 
@@ -44,14 +43,19 @@ export interface PolicyPdfResult {
 export class PolicyDocumentService {
   private readonly logger = new Logger(PolicyDocumentService.name);
 
-  /** Genera cuadro-póliza PDF con plantilla Sis2000 (.docx) + conversión LibreOffice. */
+  /**
+   * Genera el cuadro-póliza en PDF directamente con `pdfmake`, a partir de
+   * `data` (mismo patrón que el anexo de conductor habitual en
+   * `documents.service.ts`): el documento se arma en código desde el payload,
+   * sin plantilla `.docx` de muestra ni conversión con LibreOffice.
+   */
   async buildPdf(
     data: PolicyDocumentData,
     productBranch: string,
   ): Promise<PolicyPdfResult> {
     const templateKey = resolvePolicyTemplateKey(productBranch);
     this.logger.log(
-      `Generando cuadro-póliza PDF (plantilla=${templateKey}, póliza=${data.numeroPoliza}, ramo=${data.ramoPoliza})`,
+      `Generando cuadro-póliza PDF (layout=${templateKey}, póliza=${data.numeroPoliza}, ramo=${data.ramoPoliza})`,
     );
     try {
       const result = await buildPolicyPdfFromTemplate(templateKey, data);
@@ -61,9 +65,7 @@ export class PolicyDocumentService {
         `Error generando PDF del cuadro-póliza: ${error.message}`,
         error.stack,
       );
-      throw new Error(
-        'No se pudo generar el PDF del cuadro-póliza. Verifique que LibreOffice (soffice) esté instalado en el servidor.',
-      );
+      throw new Error('No se pudo generar el PDF del cuadro-póliza.');
     }
   }
 }
