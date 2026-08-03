@@ -20,6 +20,8 @@ import {
 import { Request, Response } from 'express';
 import * as fs from 'fs';
 import * as path from 'path';
+import { resolvePublicApiPaths } from '../../common/config/public-path';
+import { Public } from '../auth/decorators/public.decorator';
 import { NestProtected } from '../auth/decorators/nest-protected.decorator';
 import { NEST_AUTH_SCOPES } from '../auth/scopes/nest-auth-scopes.constants';
 import { EmitGenericPolicyDto } from './dto/emit-generic-policy.dto';
@@ -85,7 +87,7 @@ export class ProductEmissionController {
         primaTotal: 1250.5,
         moneda: 'USD',
         documentUrl:
-          'http://192.168.8.120:3002/api/v1/product-emission/documents/poliza_RCV-2026-00000001.docx',
+          'https://cierrelmds.exelixitech.com/nest-api-docs/api/v1/product-emission/documents/poliza_RCV-2026-00000001.docx',
       },
     },
   })
@@ -95,10 +97,11 @@ export class ProductEmissionController {
     @Res() res: Response,
   ) {
     try {
-      const baseUrl =
-        this.config.get<string>('PUBLIC_URL') ||
-        `http://192.168.8.120:${this.config.get<string>('PORT') || 3002}`;
-      const result = await this.service.emit(dto, baseUrl);
+      const { publicBaseUrl } = resolvePublicApiPaths({
+        publicApiPrefix: this.config.get<string>('PUBLIC_API_PREFIX'),
+        publicApiOrigin: this.config.get<string>('PUBLIC_API_ORIGIN'),
+      });
+      const result = await this.service.emit(dto, publicBaseUrl);
       res.status(HttpStatus.CREATED).json(result);
     } catch (error: any) {
       this.logger.error(`Error emitiendo póliza genérica: ${error.message}`, error.stack);
@@ -117,7 +120,9 @@ export class ProductEmissionController {
     return this.service.findByNumero(numeroPoliza);
   }
 
+  /** Enlace público para abrir el cuadro-póliza en el navegador (sin apikey). */
   @Get('documents/:filename')
+  @Public()
   @ApiExcludeEndpoint()
   async getDocument(
     @Param('filename') filename: string,

@@ -149,7 +149,7 @@ Respuesta esperada:
   "planName": "Plan RCV Obligatorio",
   "primaTotal": 125.5,
   "moneda": "USD",
-  "documentUrl": "http://192.168.8.120:3002/api/v1/product-emission/documents/poliza_RCV-2026-00000001.docx"
+  "documentUrl": "https://cierrelmds.exelixitech.com/nest-api-docs/api/v1/product-emission/documents/poliza_RCV-2026-00000001.docx"
 }
 ```
 
