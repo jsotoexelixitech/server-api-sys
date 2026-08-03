@@ -168,12 +168,18 @@ which soffice   # debe existir
 
 ## Notas de diseño
 
+- **Catálogo:** `GET /api/products/:id` + `GET /api/products/:id/plans` en
+  product-builder. Si el producto no tiene planes guardados en BD, product-builder
+  devuelve planes por defecto según ramo (ej. RCV → `Plan RCV Obligatorio`).
+- **Prima:** suma de `tariffPremium` de las coberturas del plan; si no hay tarifas
+  por cobertura, usa `actuarialData.commercialPremium` del producto.
 - El título "RAMO PÓLIZA" del documento se resuelve en
   `product-branch-labels.util.ts` a partir del `branch` del producto en
   product-builder (RCV_OBLIGATORIO → "RCV", AUTOMOVIL → "AUTOMOVIL", etc.).
 - Plantilla: `branch SALUD` → `certificado-salud.seed.docx`; resto (AUTOMOVIL,
   RCV, etc.) → `certificado-automovil.seed.docx`. Relleno en
   `policy-template.util.ts` + conversión PDF vía `libreoffice-convert`.
-- Las coberturas y el plan vienen del catálogo de product-builder.
-- `riskData` rellena datos del vehículo en plantilla automóvil (Placa, Marca,
-  Modelo, serial, etc.).
+- **PDF:** ramo, nombre comercial, plan, coberturas (nombre/suma/prima), tomador,
+  asegurado y `riskData` sustituyen los textos de ejemplo de la plantilla Word.
+- `riskData` usa los **labels** de FormField RISK_DATA de product-builder
+  (ej. `Placa` en RCV; `Marca`, `Modelo` si el producto los define).

@@ -43,6 +43,11 @@ export interface ProductBuilderLegalDocument {
   content: string;
 }
 
+export interface ProductBuilderActuarialData {
+  commercialPremium: number | null;
+  purePremium: number | null;
+}
+
 export interface ProductBuilderProduct {
   id: string;
   commercialName: string;
@@ -53,6 +58,14 @@ export interface ProductBuilderProduct {
   coverages: ProductBuilderCoverage[];
   productPlans: ProductBuilderPlan[];
   legalDocuments: ProductBuilderLegalDocument[];
+  actuarialData?: ProductBuilderActuarialData | null;
+}
+
+export interface ProductBuilderPlansResponse {
+  productId: string;
+  branch: string;
+  coverages: ProductBuilderCoverage[];
+  plans: ProductBuilderPlan[];
 }
 
 /**
@@ -143,5 +156,19 @@ export class ProductBuilderClient {
     }
 
     return response.json() as Promise<ProductBuilderProduct>;
+  }
+
+  /** Planes comerciales; si no hay planes guardados, product-builder devuelve defaults por ramo. */
+  async getPlans(productId: string): Promise<ProductBuilderPlansResponse> {
+    const response = await this.request(`/products/${productId}/plans`);
+
+    if (!response.ok) {
+      const body = await response.text().catch(() => '');
+      throw new ServiceUnavailableException(
+        `proyecto-product-builder respondió ${response.status} al consultar planes de ${productId}: ${body}`,
+      );
+    }
+
+    return response.json() as Promise<ProductBuilderPlansResponse>;
   }
 }

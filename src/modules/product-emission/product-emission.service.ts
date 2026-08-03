@@ -24,6 +24,7 @@ import {
 interface ResolvedQuote {
   product: ProductBuilderProduct;
   plan: ProductBuilderPlan;
+  planesDisponibles: string[];
   ramoPoliza: string;
   primaTotal: number;
   coberturas: {
@@ -33,6 +34,8 @@ interface ResolvedQuote {
     prima: number | null;
   }[];
 }
+
+type ResolvedCoverage = ResolvedQuote['coberturas'][number];
 
 @Injectable()
 export class ProductEmissionService {
@@ -56,41 +59,36 @@ export class ProductEmissionService {
   }
 
   private resolvePlan(
-    product: ProductBuilderProduct,
+    plans: ProductBuilderPlan[],
+    productName: string,
     planName?: string,
   ): ProductBuilderPlan {
-    if (!product.productPlans?.length) {
+    if (!plans.length) {
       throw new BadRequestException(
-        `El producto "${product.commercialName}" no tiene planes comerciales configurados en product-builder.`,
+        `El producto "${productName}" no tiene planes comerciales configurados en product-builder.`,
       );
     }
     if (planName) {
-      const found = product.productPlans.find(
+      const found = plans.find(
         (p) => p.name.toLowerCase() === planName.toLowerCase(),
       );
       if (!found) {
         throw new BadRequestException(
-          `El plan "${planName}" no existe para este producto. Planes disponibles: ${product.productPlans
+          `El plan "${planName}" no existe para este producto. Planes disponibles: ${plans
             .map((p) => p.name)
             .join(', ')}`,
         );
       }
       return found;
     }
-    return (
-      product.productPlans.find((p) => p.isRecommended) ??
-      product.productPlans[0]
-    );
+    return plans.find((p) => p.isRecommended) ?? plans[0];
   }
 
-  private async resolveQuote(
-    productId: string,
-    planName?: string,
-  ): Promise<ResolvedQuote> {
-    const product = await this.catalog.getProduct(productId);
-    const plan = this.resolvePlan(product, planName);
-
-    const coberturas = plan.coverageIds.map((coverageId, idx) => {
+  private buildCoveragesFromPlan(
+    product: ProductBuilderProduct,
+    plan: ProductBuilderPlan,
+  ): ResolvedCoverage[] {
+    return plan.coverageIds.map((coverageId, idx) => {
       const coverage = product.coverages.find((c) => c.id === coverageId);
       return {
         id: coverageId,
@@ -100,13 +98,71 @@ export class ProductEmissionService {
         prima: coverage?.tariffPremium ?? null,
       };
     });
+  }
 
-    // priceFactor en product-builder = suma de primas del plan (ver ProductsService.replacePlans).
-    const primaTotal = Number(plan.priceFactor);
+  /** Prima comercial: primero suma de tarifas del plan; si no, actuarial; si no, priceFactor del plan. */
+  private resolvePrimaTotal(
+    product: ProductBuilderProduct,
+    plan: ProductBuilderPlan,
+    coberturas: ResolvedCoverage[],
+  ): number {
+    const sumTariffs = coberturas.reduce((acc, c) => acc + (c.prima ?? 0), 0);
+    if (sumTariffs > 0) return sumTariffs;
+
+    const commercial = product.actuarialData?.commercialPremium;
+    if (commercial != null && commercial > 0) {
+      return Number(commercial);
+    }
+
+    if (plan.priceFactor > 1) {
+      return plan.priceFactor;
+    }
+
+    return plan.priceFactor > 0 ? plan.priceFactor : 0;
+  }
+
+  private assignCoveragePremiums(
+    coberturas: ResolvedCoverage[],
+    primaTotal: number,
+  ): void {
+    if (!coberturas.length || primaTotal <= 0) return;
+
+    const withPrima = coberturas.filter((c) => c.prima != null && c.prima > 0);
+    if (withPrima.length === coberturas.length) return;
+
+    if (coberturas.length === 1) {
+      coberturas[0].prima = primaTotal;
+      return;
+    }
+
+    const each = primaTotal / coberturas.length;
+    coberturas.forEach((c) => {
+      if (c.prima == null || c.prima <= 0) {
+        c.prima = each;
+      }
+    });
+  }
+
+  private async resolveQuote(
+    productId: string,
+    planName?: string,
+  ): Promise<ResolvedQuote> {
+    const product = await this.catalog.getProduct(productId);
+    const plansResponse = await this.catalog.getPlans(productId);
+    const plans =
+      product.productPlans?.length > 0
+        ? product.productPlans
+        : plansResponse.plans;
+
+    const plan = this.resolvePlan(plans, product.commercialName, planName);
+    const coberturas = this.buildCoveragesFromPlan(product, plan);
+    const primaTotal = this.resolvePrimaTotal(product, plan, coberturas);
+    this.assignCoveragePremiums(coberturas, primaTotal);
 
     return {
       product,
       plan,
+      planesDisponibles: plans.map((p) => p.name),
       ramoPoliza: branchToRamoPolizaLabel(product.branch),
       primaTotal,
       coberturas,
@@ -123,7 +179,7 @@ export class ProductEmissionService {
       ramoPoliza: resolved.ramoPoliza,
       moneda: resolved.product.currency,
       planName: resolved.plan.name,
-      planesDisponibles: resolved.product.productPlans.map((p) => p.name),
+      planesDisponibles: resolved.planesDisponibles,
       primaTotal: resolved.primaTotal,
       coberturas: resolved.coberturas,
     };
