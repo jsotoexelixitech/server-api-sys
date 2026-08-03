@@ -181,7 +181,9 @@ export class EmissionsService {
     try {
       const T = this.db.types;
       const authReq = this.db.request();
-      authReq.input('xtoken', T.VarChar(100), apikey);
+      const safeKey = String(apikey ?? '').trim();
+      const truncatedKey = safeKey.length > 100 ? safeKey.substring(0, 100) : safeKey;
+      authReq.input('xtoken', T.VarChar(500), truncatedKey);
       const authResult = await authReq.query(`
         SELECT TOP 1 * FROM maclient_api WHERE xtoken = @xtoken
       `);
