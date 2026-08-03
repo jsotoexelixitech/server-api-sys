@@ -13,7 +13,10 @@
     "build:all": "npm run build:partners && npm run build",
     "prisma:generate": "prisma generate",
     "prisma:push": "prisma db push",
-    "postinstall": "prisma generate",
+    "prisma:generate:product-emission": "prisma generate --schema=prisma-product-emission/schema.prisma",
+    "prisma:migrate:product-emission": "prisma migrate dev --schema=prisma-product-emission/schema.prisma",
+    "prisma:push:product-emission": "prisma db push --schema=prisma-product-emission/schema.prisma",
+    "postinstall": "prisma generate && prisma generate --schema=prisma-product-emission/schema.prisma",
     "publish:sdk": "npm run build --prefix packages/nest-api-sdk && npm publish --prefix packages/nest-api-sdk --registry=https://npm.pkg.github.com",
     "format": "prettier --write \"src/**/*.ts\"",
     "start": "nest start",
@@ -25,7 +28,11 @@
     "test": "jest"
   },
   "jest": {
-    "moduleFileExtensions": ["js", "json", "ts"],
+    "moduleFileExtensions": [
+      "js",
+      "json",
+      "ts"
+    ],
     "rootDir": "src",
     "testRegex": ".*\\.spec\\.ts$",
     "transform": {
@@ -46,6 +53,7 @@
     "@types/pdfmake": "^0.3.3",
     "class-transformer": "^0.5.1",
     "class-validator": "^0.14.1",
+    "docx": "^9.7.1",
     "joi": "^17.13.3",
     "mssql": "^10.0.4",
     "pdf2json": "^4.0.3",

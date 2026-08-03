@@ -52,6 +52,10 @@ Thumbs.db
 /test.pdf
 *.rar
 
+# Cliente Prisma generado del ambiente separado product-emission
+/generated/
+/temp-product-emission-docs/
+
 # Artefactos debug en raíz (SQL oficial va en docs/sql/)
 /trigger*.txt
 /trigger*.sql

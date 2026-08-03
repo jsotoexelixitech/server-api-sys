@@ -54,4 +54,20 @@ export const envValidationSchema = Joi.object({
   NEST_PG_DATABASE_URL: Joi.string().optional(),
   /** Token para panel /api/v1/admin y UI /admin/ */
   NEST_ADMIN_TOKEN: Joi.string().min(16).optional(),
+
+  /**
+   * Flujo NUEVO y AISLADO: emisión genérica multi-ramo (product-emission).
+   * Ambiente separado: BD propia, cliente Prisma propio (prisma-product-emission/),
+   * catálogo (ramo/planes/coberturas) vía API de proyecto-product-builder.
+   * No afecta módulos activos de La Mundial (emissions/personas/collection/external)
+   * ni comparte BD/schema con NEST_PG_DATABASE_URL (auth nest_auth).
+   */
+  PRODUCT_BUILDER_API_URL: Joi.string().uri().default('http://localhost:3001'),
+  /** Cuenta de servicio para autenticarse contra proyecto-product-builder (requiere Bearer). */
+  PRODUCT_BUILDER_API_EMAIL: Joi.string().optional(),
+  PRODUCT_BUILDER_API_PASSWORD: Joi.string().optional(),
+  /** BD propia y separada de la póliza genérica (schema prisma-product-emission/). */
+  PRODUCT_EMISSION_DATABASE_URL: Joi.string().optional(),
+  /** Ruta absoluta o relativa donde se guardan los documentos generados (.docx/.pdf). */
+  PRODUCT_EMISSION_DOCS_DIR: Joi.string().default('temp-product-emission-docs'),
 });

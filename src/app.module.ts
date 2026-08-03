@@ -21,6 +21,7 @@ import { AuthModule } from './modules/auth/auth.module';
 import { AdminModule } from './modules/admin/admin.module';
 import { DocsModule } from './modules/docs/docs.module';
 import { PrismaModule } from './database/prisma/prisma.module';
+import { ProductEmissionModule } from './modules/product-emission/product-emission.module';
 
 @Module({
   imports: [
@@ -52,6 +53,7 @@ import { PrismaModule } from './database/prisma/prisma.module';
     DocsModule,
     PartnerHostModule,
     PartnerIntegrationModule,
+    ProductEmissionModule,
   ],
 })
 export class AppModule {}

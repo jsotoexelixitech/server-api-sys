@@ -6,6 +6,7 @@ export const NEST_AUTH_SCOPES = {
   COLLECTION_WRITE: 'collection:write',
   DOCUMENTS_WRITE: 'documents:write',
   ADMIN_KEYS: 'admin:keys',
+  PRODUCT_EMISSION_WRITE: 'product-emission:write',
 } as const;
 
 export type NestAuthScopeId =
@@ -53,6 +54,12 @@ export const NEST_AUTH_SCOPE_CATALOG: NestAuthScopeMeta[] = [
     id: NEST_AUTH_SCOPES.ADMIN_KEYS,
     label: 'Administrar keys',
     description: 'Panel y API de gestión de API keys',
+    routes: [],
+  },
+  {
+    id: NEST_AUTH_SCOPES.PRODUCT_EMISSION_WRITE,
+    label: 'Emisión genérica (product-builder)',
+    description: 'Cotizar/validar/emitir pólizas de ramos creados en proyecto-product-builder',
     routes: [],
   },
 ];
