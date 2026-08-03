@@ -16,8 +16,24 @@ if [ -f "$ENV_FILE" ]; then
   ADMIN_TOKEN=$(grep -E '^NEST_ADMIN_TOKEN=' "$ENV_FILE" | tail -1 | cut -d '=' -f2- | tr -d '\r')
 fi
 PB_URL="${PB_BASE:-http://localhost:3001}/api"
-NEST_URL="http://localhost:${NEST_PORT:-3002}/api/v1/product-emission"
+NEST_PORT="${NEST_PORT:-3002}"
+NEST_BASE="http://localhost:${NEST_PORT}"
+NEST_URL="${NEST_BASE}/api/v1/product-emission"
 echo "== 0) URLs detectadas: PB_URL=$PB_URL  NEST_URL=$NEST_URL =="
+
+wait_for_nest() {
+  local tries="${1:-30}"
+  echo "  Esperando nest-api en ${NEST_BASE} (max ${tries}s)..."
+  for i in $(seq 1 "$tries"); do
+    if curl -s -o /dev/null --connect-timeout 2 "${NEST_BASE}/api/v1/admin/keys" 2>/dev/null; then
+      echo "  nest-api listo (${i}s)"
+      return 0
+    fi
+    sleep 1
+  done
+  echo "  ERROR: nest-api no respondio tras ${tries}s (¿pm2 restart reciente?)"
+  return 1
+}
 STAMP=$(date +%s)
 SVC_EMAIL="${CONFIGURED_EMAIL:-nest-api-test-${STAMP}@exelixitech.com}"
 SVC_PASSWORD="${CONFIGURED_PASSWORD:-CambiarEstaClave123!}"
@@ -109,11 +125,13 @@ echo "  $PLAN_JSON" | head -c 300
 echo ""
 
 echo "== 5) Generar apikey de prueba con scope product-emission:write =="
+wait_for_nest 30
 APIKEY=""
 if [ -n "${ADMIN_TOKEN:-}" ]; then
-  KEY_JSON=$(curl -s -X POST "http://localhost:${NEST_PORT:-3002}/api/v1/admin/keys" \
+  KEY_JSON=$(curl -s -X POST "${NEST_BASE}/api/v1/admin/keys" \
     -H "Content-Type: application/json" -H "X-Admin-Token: $ADMIN_TOKEN" \
-    -d "{\"name\":\"test-emision-docx-${STAMP}\",\"scopes\":[\"product-emission:write\"]}")
+    -d "{\"name\":\"test-emision-docx-${STAMP}\",\"scopes\":[\"product-emission:write\"]}" \
+    || echo '{"error":"curl fallo al crear apikey"}')
   APIKEY=$(get_field "$KEY_JSON" "plainKey" || true)
   if [ -z "${APIKEY:-}" ]; then
     echo "  ERROR creando apikey. Respuesta:"
@@ -138,7 +156,7 @@ RESPONSE=$(curl -s -X POST "$NEST_URL/emit" -H "Content-Type: application/json" 
   \"estatus\": \"PAGADO\",
   \"canalVenta\": \"AGENTE EXCLUSIVO\",
   \"intermediario\": \"EXELIXI TECHNOLOGY\"
-}")
+}" || echo '{"error":"curl fallo en /emit"}')
 
 echo "$RESPONSE"
 echo ""
