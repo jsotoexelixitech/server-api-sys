@@ -152,6 +152,55 @@ table.declaracion.firma-table td {
     margin: 4px 0 6px;
 }
 
+/* Tablas de coberturas — columnas fijas (no se corren entre ramos) */
+.table-coberturas-3,
+.table-coberturas-5 {
+    table-layout: fixed;
+    width: 100%;
+    border-collapse: collapse;
+}
+
+.table-coberturas-3 .cov-col-name {
+    width: 70%;
+    text-align: left;
+}
+
+.table-coberturas-3 .cov-col-suma,
+.table-coberturas-3 .cov-col-prima {
+    width: 15%;
+    text-align: right;
+}
+
+.table-coberturas-3 thead th {
+    font-weight: bold;
+    text-align: right;
+}
+
+.table-coberturas-3 thead th.cov-col-name {
+    text-align: left;
+}
+
+.table-coberturas-5 .cov5-col-name { width: 40%; text-align: left; }
+.table-coberturas-5 .cov5-col-suma { width: 18%; text-align: right; }
+.table-coberturas-5 .cov5-col-tasa { width: 12%; text-align: right; }
+.table-coberturas-5 .cov5-col-desc { width: 12%; text-align: right; }
+.table-coberturas-5 .cov5-col-prima { width: 18%; text-align: right; }
+
+.table-coberturas-5 thead th {
+    font-weight: bold;
+    text-align: right;
+}
+
+.table-coberturas-5 thead th.cov5-col-name {
+    text-align: left;
+}
+
+.table-coberturas-3 td,
+.table-coberturas-5 td {
+    vertical-align: top;
+    word-wrap: break-word;
+}
+
 /* .table_coberturas {
     height:300px !important;
 } */

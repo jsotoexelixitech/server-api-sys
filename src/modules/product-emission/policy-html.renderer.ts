@@ -117,18 +117,17 @@ function buildCoberturasAutomovilHtml(
   const rows = coberturas.map(
     (c) => `
     <tr>
-      <td class="bold">${escapeHtml(c.name)}</td>
-      <td class="right">${formatMoneyVe(c.sumaAsegurada)}</td>
-      <td class="right">${tasa}</td>
-      <td class="right">0,00</td>
-      <td class="right">${formatMoneyVe(c.prima)}</td>
+      <td class="bold cov5-col-name">${escapeHtml(c.name)}</td>
+      <td class="cov5-col-suma">${formatMoneyVe(c.sumaAsegurada)}</td>
+      <td class="cov5-col-tasa">${tasa}</td>
+      <td class="cov5-col-desc">0,00</td>
+      <td class="cov5-col-prima">${formatMoneyVe(c.prima)}</td>
     </tr>`,
   );
   rows.push(`
     <tr>
-      <td colspan="3" class="bold" style="vertical-align:top">TOTAL:</td>
-      <td></td>
-      <td class="right bold" style="vertical-align:bottom">${formatMoneyVe(primaTotal)}</td>
+      <td colspan="4" class="bold cov5-col-name">TOTAL:</td>
+      <td class="cov5-col-prima bold">${formatMoneyVe(primaTotal)}</td>
     </tr>`);
   return rows.join('');
 }
@@ -140,15 +139,16 @@ function buildCoberturasSaludHtml(
   const rows = coberturas.map(
     (c) => `
     <tr>
-      <td class="bold">${escapeHtml(c.name)}</td>
-      <td class="right">${formatMoneyVe(c.sumaAsegurada)}</td>
-      <td class="right">${formatMoneyVe(c.prima)}</td>
+      <td class="bold cov-col-name">${escapeHtml(c.name)}</td>
+      <td class="cov-col-suma">${formatMoneyVe(c.sumaAsegurada)}</td>
+      <td class="cov-col-prima">${formatMoneyVe(c.prima)}</td>
     </tr>`,
   );
   rows.push(`
     <tr>
-      <td colspan="2" class="bold" style="vertical-align:top">TOTAL:</td>
-      <td class="right bold" style="vertical-align:bottom">${formatMoneyVe(primaTotal)}</td>
+      <td class="bold cov-col-name">TOTAL:</td>
+      <td class="cov-col-suma"></td>
+      <td class="cov-col-prima bold">${formatMoneyVe(primaTotal)}</td>
     </tr>`);
   return rows.join('');
 }
@@ -410,13 +410,6 @@ export function renderPolicyHtml(
     beneficiarios: buildBeneficiariosHtml(data.beneficiarios ?? []),
     section_beneficiario_preferencial: '',
     xsuma_asegurada: '',
-    suma_asegurada: `
-        <tr>
-          <th width="64%"></th>
-          <th width="15%" style="text-align:right">SUMA ASEGURADA</th>
-          <th width="4%"></th>
-          <th width="15%" style="text-align:right">PRIMA</th>
-        </tr>`,
     ...partyTomador(data.tomador),
     ...partyAsegurado(data.asegurado),
     ...partyBeneficiario(beneficiario),
