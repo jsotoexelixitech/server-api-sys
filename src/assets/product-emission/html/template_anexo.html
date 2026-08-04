@@ -1,0 +1,364 @@
+<html>
+
+<head>
+  <title>{{title}}</title>
+  <style type="text/css">
+    * {
+      margin: 0;
+      padding: 0;
+      text-indent: 0;
+    }
+
+    h1 {
+      color: black;
+      font-family: Arial, sans-serif;
+      font-style: normal;
+      font-weight: bold;
+      text-decoration: none;
+      font-size: 12pt;
+    }
+
+    p {
+      color: black;
+      font-family: Arial, sans-serif;
+      font-style: normal;
+      font-weight: normal;
+      text-decoration: none;
+      font-size: 12pt;
+      margin: 0pt;
+    }
+
+    li {
+      display: block;
+    }
+
+    #l1 {
+      padding-left: 0pt;
+      counter-reset: c1 1;
+    }
+
+    #l1>li>*:first-child:before {
+      counter-increment: c1;
+      content: counter(c1, decimal) ". ";
+      color: black;
+      font-style: normal;
+      font-weight: normal;
+      text-decoration: none;
+    }
+
+    #l1>li:first-child>*:first-child:before {
+      counter-increment: c1 0;
+    }
+
+    #l2 {
+      padding-left: 0pt;
+    }
+
+    #l2>li>*:first-child:before {
+      content: " ";
+      color: black;
+      font-family: Symbol, serif;
+      font-style: normal;
+      font-weight: normal;
+      text-decoration: none;
+      font-size: 12pt;
+    }
+
+    #l3 {
+      padding-left: 0pt;
+    }
+
+    #l3>li>*:first-child:before {
+      content: " ";
+      color: black;
+      font-family: Symbol, serif;
+      font-style: normal;
+      font-weight: normal;
+      text-decoration: none;
+      font-size: 12pt;
+    }
+
+    #l4 {
+      padding-left: 0pt;
+    }
+
+    #l4>li>*:first-child:before {
+      content: " ";
+      color: black;
+      font-family: Symbol, serif;
+      font-style: normal;
+      font-weight: normal;
+      text-decoration: none;
+      font-size: 12pt;
+    }
+
+    #l5 {
+      padding-left: 0pt;
+    }
+
+    #l5>li>*:first-child:before {
+      content: " ";
+      color: black;
+      font-family: Symbol, serif;
+      font-style: normal;
+      font-weight: normal;
+      text-decoration: none;
+      font-size: 12pt;
+    }
+
+    #l6 {
+      padding-left: 0pt;
+    }
+
+    #l6>li>*:first-child:before {
+      content: " ";
+      color: black;
+      font-family: Symbol, serif;
+      font-style: normal;
+      font-weight: normal;
+      text-decoration: none;
+      font-size: 12pt;
+    }
+  </style>
+</head>
+
+<body>
+  <h1 style="padding-top: 8pt; text-indent: 0pt; text-align: center">
+    ANEXO {{title}}
+  </h1>
+  <h1 style="
+        padding-top: 12pt;
+        padding-left: 14pt;
+        text-indent: 0pt;
+        line-height: 150%;
+        text-align: center;
+      ">
+    Para ser adherido y formar parte integrante de la póliza individual de
+    accidentes personales n° {{cnpoliza}} cuyo Tomador es {{xtomador}} y Asegurado es
+    {{xasegurado}} y vigencia {{fdesde}} - {{fhasta}}
+  </h1>
+  <p style="
+        padding-top: 5pt;
+        padding-left: 5pt;
+        text-indent: 0pt;
+        line-height: 150%;
+        text-align: justify;
+      ">
+    Contrario a lo indicado en la cláusula 4, numeral 4.2. de las Condiciones
+    Particulares del Seguros de Accidentes Personales, la cobertura de gastos
+    médicos tendrá el alcance que se describe a continuación. Las coberturas
+    serán las siguientes<b>:</b>
+  </p>
+  <p style="text-indent: 0pt; text-align: left"><br /></p>
+  <p style="
+        padding-left: 5pt;
+        text-indent: 0pt;
+        line-height: 150%;
+        text-align: justify;
+      ">
+    Los servicios descritos a continuación, luego de haber trascurrido el
+    plazo de espera (si lo hubiere) {{clinica}}
+  </p>
+  <p style="text-indent: 0pt; text-align: left"><br /></p>
+  <ol id="l1">
+    <li data-list-text="1.">
+      <h1 style="padding-left: 41pt; text-indent: -17pt; text-align: left">
+        Consultas Preventivas
+      </h1>
+      <ul id="l2">
+        <li data-list-text="">
+          <p style="padding-left: 77pt; text-indent: -17pt; text-align: left">
+            Tres (3) consultas al año: Medicina General
+          </p>
+          <p style="padding-top: 1pt; text-indent: 0pt; text-align: left">
+            <br />
+          </p>
+        </li>
+      </ul>
+    </li>
+    <li data-list-text="2.">
+      <h1 style="padding-left: 41pt; text-indent: -17pt; text-align: left">
+        Exámenes o Laboratorios
+      </h1>
+      <ul id="l3">
+        <li data-list-text="">
+          <p style="padding-left: 77pt; text-indent: -17pt; text-align: left">
+            1 Rx de máximo 2 Proyecciones
+          </p>
+        </li>
+        <li data-list-text="">
+          <p style="
+                padding-top: 6pt;
+                padding-left: 77pt;
+                text-indent: -17pt;
+                text-align: left;
+              ">
+            1 Laboratorio Perfil 20
+          </p>
+        </li>
+      </ul>
+    </li>
+    <li data-list-text="3.">
+      <h1 style="
+            padding-top: 6pt;
+            padding-left: 41pt;
+            text-indent: -17pt;
+            text-align: left;
+          ">
+        Servicios
+      </h1>
+      <ul id="l4">
+        <li data-list-text="">
+          <h1 style="
+                padding-top: 6pt;
+                padding-left: 77pt;
+                text-indent: -17pt;
+                line-height: 15pt;
+                text-align: left;
+              ">
+            Atención y Orientación Médica (Telemedicina)
+          </h1>
+          <ul id="l5">
+            <li data-list-text="">
+              <p style="
+                    padding-left: 113pt;
+                    text-indent: -8pt;
+                    line-height: 15pt;
+                    text-align: left;
+                  ">
+                Récipe, indicaciones e informe médico digital.
+              </p>
+            </li>
+            <li data-list-text="">
+              <p style="
+                    padding-left: 113pt;
+                    text-indent: -8pt;
+                    line-height: 15pt;
+                    text-align: left;
+                  ">
+                Seguimiento Médico.
+              </p>
+            </li>
+            <li data-list-text="">
+              <p style="
+                    padding-left: 113pt;
+                    text-indent: -8pt;
+                    line-height: 15pt;
+                    text-align: left;
+                  ">
+                Lectura de resultados.
+              </p>
+            </li>
+          </ul>
+        </li>
+        <li data-list-text="">
+          <h1 style="
+                padding-left: 77pt;
+                text-indent: -17pt;
+                line-height: 15pt;
+                text-align: left;
+              ">
+            Asistencia Médica Domiciliaria
+          </h1>
+          <p style="padding-left: 76pt; text-indent: 0pt; text-align: justify">
+            Va dirigida apacientes que por inconvenientes de movilidad y/o
+            estado de salud no pueden dirigirse a un centro hospitalario y
+            amerita ser tratado en su domicilio e incluye:
+          </p>
+          <ul id="l6">
+            <li data-list-text="">
+              <p style="
+                    padding-left: 148pt;
+                    text-indent: -17pt;
+                    line-height: 15pt;
+                    text-align: left;
+                  ">
+                Tratamiento unidosis en caso que se requiera
+              </p>
+            </li>
+            <li data-list-text="">
+              <p style="
+                    padding-left: 148pt;
+                    text-indent: -17pt;
+                    line-height: 15pt;
+                    text-align: left;
+                  ">
+                Tratamiento vía oral, intramuscular o endovenoso.
+              </p>
+            </li>
+            <li data-list-text="">
+              <p style="
+                    padding-left: 148pt;
+                    text-indent: -17pt;
+                    line-height: 15pt;
+                    text-align: left;
+                  ">
+                Hidrataciones.
+              </p>
+            </li>
+            <li data-list-text="">
+              <p style="
+                    padding-left: 148pt;
+                    text-indent: -17pt;
+                    line-height: 15pt;
+                    text-align: left;
+                  ">
+                Nebulizaciones.
+              </p>
+            </li>
+          </ul>
+        </li>
+        <li data-list-text="">
+          <h1 style="
+                padding-left: 77pt;
+                text-indent: -17pt;
+                line-height: 15pt;
+                text-align: left;
+              ">
+            Traslado de Ambulancia (1 al año)
+          </h1>
+        </li>
+      </ul>
+    </li>
+  </ol>
+  <p style="padding-left: 76pt; text-indent: 0pt; text-align: left">
+    La solicitud de traslado se realizará siempre que la misma sea requerida
+    por la Asistencia médica Domiciliaria
+  </p>
+  <pagebreak />
+  <h1 style="
+        padding-top: 20pt;
+        padding-left: 5pt;
+        text-indent: 0pt;
+        text-align: left;
+      ">
+    Salvo para el Servicio de telemedicina, Para el uso de estos servicios Se
+    establece un plazo de espera de 30 días contínuos.
+  </h1>
+  <p style="text-indent: 0pt; text-align: left"><br /></p>
+  <h1 style="padding-left: 5pt; text-indent: 0pt; text-align: left">
+    La solicitud de servicios se realiza a través del 05005526256
+  </h1>
+  <p style="text-indent: 0pt; text-align: left"><br /></p>
+  <h1 style="padding-left: 5pt; text-indent: 0pt; text-align: left">
+    Todos los demás términos y condiciones generales y particulares se
+    mantienen vigentes siempre que no contradigan lo aquí convenido entre las
+    partes
+  </h1>
+  <p style="text-indent: 0pt; text-align: left"><br /></p>
+
+  <table style="padding-left: 17pt; padding-right: 17pt; text-align: center; width: 100%">
+    <tbody>
+      <tr>
+        <td style="text-align: left"><strong>POR EL ASEGURADOR</strong></td>
+        <td style="text-align: right"><strong>POR EL TOMADOR</strong></td>
+      </tr>
+    </tbody>
+  </table>
+  <!-- <h1 style="padding-left: 17pt; text-indent: 0pt; text-align: left">
+      Por EL ASEGURADOR Por EL TOMADOR
+    </h1> -->
+
+</body>
+
+</html>

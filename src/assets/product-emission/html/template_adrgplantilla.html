@@ -1,0 +1,125 @@
+<html>
+
+<head>
+	<title>{{titulo_pdf}}</title>
+	<link rel="stylesheet" href="templates/style.css">
+</head>
+
+<body>
+	<h5 class="title">{{title}}</h5>
+	<div class="subtitle">DATOS DEL TOMADOR - ASEGURADO</div>
+	{{section_tomador_asegurado}}
+	<div class="subtitle">DATOS DE LA PÓLIZA</div>
+	{{section_poliza}}
+	<div class="subtitle">DATOS DEL BIEN ASEGURADO</div> <!-- foreach ben -->
+	{{section_riesgos_generales}}
+	<div class="subtitle">COBERTURAS CONTRATADAS</div>
+	{{section_coberturas}}
+	<div class="subtitle">RECIBOS DE PRIMAS - FRACCIONAMIENTO</div>
+	{{section_recibos}}
+	<!-- <div class="subtitle">DECLARACIÓN DE FÉ</div>
+	{{section_declaracion}} -->
+	<table>
+		<thead>
+			<tr>
+				<th class="subtitle">POR EL TOMADOR</th>
+				<th class="subtitle">POR LA MUNDIAL DE SEGUROS</th>
+			</tr>
+		</thead>
+	</table>
+	{{section_firma}}
+	<div class="center_description bold size8" style="margin: 10px;">
+		En Caracas a los {{fdiapol}} dias del mes de {{fmespol}} del {{fanopol}}</div>
+	<div class="justify_description bold size8 line12">
+		El Asegurador entregará al Tomador este Cuadro Póliza, junto con las Condiciones Generales y
+		Particulares, los anexos, si los hubiere, copia de la solicitud de seguro y demás documentos que
+		formen parte del contrato de seguros. En las renovaciones del contrato de seguros, la obligación
+		del Asegurador se mantendrá, salvo que se modifiquen las condiciones originalmente pactadas entre
+		el Tomador, Asegurado y Asegurador, accediendo a nuestra página web www.lamundialdeseguros.com
+	</div>
+	<div class="subtitle" style="margin-top: 4px;">DECLARACIÓN DE FÉ</div>
+	<div class="justify_description bold size8 line12" style="margin-top: 4px">
+		Yo, {{xasegurado}}, como propuesto asegurado, en mi carácter de solicitante de la póliza o en
+		representación de este, declaro que la información aquí suministrada es exacta, sin omisión alguna
+		de detalle, hecho o circunstancia con el propósito de aminorar el riesgo, en el entendido que esta
+		servirá de base a La Mundial de Seguros, C.A para la emisión de la póliza y el cobro de la prima.
+		<br><br>
+		Yo, {{xtomador}}, con C.I. N° {{xcedula_tomador}}, Tomador de la Póliza, doy fe que el dinero
+		utilizado para el pago de la prima, proviene de actividades lícitas y, por tanto, no tiene
+		relación alguna con dinero, capitales, bienes, haberes, valores o títulos que se consideren
+		producto de las actividades o acciones derivadas de operaciones ilícitas contempladas en la Ley
+		Orgánica Contra la Delincuencia Organizada y Financiamiento al Terrorismo, y/o en La Mundial de
+		Seguros, C.A., se obliga a atender y resolver cualquier denuncia, queja, reclamo o sugerencia que
+		presente el Tomador, Asegurado o Beneficiario, derivadas de la ejecución del presente contrato de
+		seguro, en cuyo caso podrá acudir a la Unidad de Defensa del Tomador, Asegurado o Beneficiario de
+		La Mundial de Seguros, C.A. o comunicarse a través del siguiente correo: 
+		defensordelasegurado@lamundialdeseguros.com
+		<br><br>
+		La Mundial de Seguros, C.A, Inscrita en la Superintendencia de la Actividad Aseguradora Bajo El No.73.
+		<!-- <br><br> -->
+		APROBADO MEDIANTE OFICIO {{cnaprsudpr}} de fecha {{faprsudpr}}.
+	</div>
+	<br>
+	<div class="center_description bold size8" style="color: red">CLIENTE</div>
+
+	<pagebreak />
+
+	<h5 class="title">{{title}}</h5>
+	<div class="subtitle">DATOS DEL TOMADOR - ASEGURADO</div>
+	{{section_tomador_asegurado}}
+	<div class="subtitle">DATOS DE LA PÓLIZA</div>
+	{{section_poliza}}
+	<div class="subtitle">DATOS DEL BIEN ASEGURADO</div> <!-- foreach ben -->
+	{{section_riesgos_generales}}
+	<div class="subtitle">COBERTURAS CONTRATADAS</div>
+	{{section_coberturas}}
+	<div class="subtitle">RECIBOS DE PRIMAS - FRACCIONAMIENTO</div>
+	{{section_recibos}}
+	<!-- <div class="subtitle">DECLARACIÓN DE FÉ</div>
+	{{section_declaracion}} -->
+	<table>
+		<thead>
+			<tr>
+				<th class="subtitle">POR EL TOMADOR</th>
+				<th class="subtitle">POR LA MUNDIAL DE SEGUROS</th>
+			</tr>
+		</thead>
+	</table>
+	{{section_firma}}
+	<div class="center_description bold size8" style="margin: 10px;">En Caracas a los {{fdiapol}} dias del mes
+		de
+		{{fmespol}} del {{fanopol}}</div>
+		<div class="justify_description bold size8 line12">
+		El Asegurador entregará al Tomador este Cuadro Póliza, junto con las Condiciones Generales y
+		Particulares, los anexos, si los hubiere, copia de la solicitud de seguro y demás documentos que
+		formen parte del contrato de seguros. En las renovaciones del contrato de seguros, la obligación
+		del Asegurador se mantendrá, salvo que se modifiquen las condiciones originalmente pactadas entre
+		el Tomador, Asegurado y Asegurador, accediendo a nuestra página web www.lamundialdeseguros.com
+	</div>
+	<div class="subtitle" style="margin-top: 4px;">DECLARACIÓN DE FÉ</div>	
+	<div class="justify_description bold size8 line12" style="margin-top: 4px">
+		Yo, {{xasegurado}}, como propuesto asegurado, en mi carácter de solicitante de la póliza o en
+		representación de este, declaro que la información aquí suministrada es exacta, sin omisión alguna
+		de detalle, hecho o circunstancia con el propósito de aminorar el riesgo, en el entendido que esta
+		servirá de base a La Mundial de Seguros, C.A para la emisión de la póliza y el cobro de la prima.
+		<br><br>
+		Yo, {{xtomador}}, con C.I. N° {{xcedula_tomador}}, Tomador de la Póliza, doy fe que el dinero
+		utilizado para el pago de la prima, proviene de actividades lícitas y, por tanto, no tiene
+		relación alguna con dinero, capitales, bienes, haberes, valores o títulos que se consideren
+		producto de las actividades o acciones derivadas de operaciones ilícitas contempladas en la Ley
+		Orgánica Contra la Delincuencia Organizada y Financiamiento al Terrorismo, y/o en La Mundial de
+		Seguros, C.A., se obliga a atender y resolver cualquier denuncia, queja, reclamo o sugerencia que
+		presente el Tomador, Asegurado o Beneficiario, derivadas de la ejecución del presente contrato de
+		seguro, en cuyo caso podrá acudir a la Unidad de Defensa del Tomador, Asegurado o Beneficiario de
+		La Mundial de Seguros, C.A. o comunicarse a través del siguiente correo: 
+		defensordelasegurado@lamundialdeseguros.com
+		<br><br>
+		La Mundial de Seguros, C.A, Inscrita en la Superintendencia de la Actividad Aseguradora Bajo El No.73.
+		<!-- <br><br> -->
+		APROBADO MEDIANTE OFICIO {{cnaprsudpr}}.
+	</div>
+	<br>
+	<div class="center_description bold size8" style="color: red">INTERMEDIARIO</div>
+</body>
+
+</html>

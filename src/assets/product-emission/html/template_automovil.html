@@ -1,0 +1,91 @@
+<html>
+
+<head>
+	<title>{{titulo_pdf}}</title>
+	<link rel="stylesheet" href="templates/style.css">
+</head>
+
+<body>
+	<h5 class="title">{{title}}</h5>
+	<div class="subtitle">DATOS DEL TOMADOR - ASEGURADO</div>
+	{{section_tomador_asegurado}}
+	<div class="subtitle">DATOS DE LA PÓLIZA</div>
+	{{section_poliza}}
+	<div class="subtitle">DATOS DEL VEHÍCULO</div> <!-- foreach ben -->
+	{{section_automovil}}
+	<div class="subtitle">COBERTURAS CONTRATADAS</div>
+	{{section_coberturas_automovil}}
+	<div class="subtitle">DECLARACIÓN DE FÉ</div>
+	{{section_declaracion}}
+	
+	<table>
+		<thead>
+			<tr>
+				<th class="subtitle">POR EL TOMADOR</th>
+				<th class="subtitle">POR LA MUNDIAL DE SEGUROS</th>
+			</tr>
+		</thead>
+	</table>
+	{{section_firma}}
+	<div class="center_description bold size8" style="margin: 10px;">En Caracas a los {{fdiapol}} dias del mes
+		de
+		{{fmespol}} del {{fanopol}}</div>
+	<div class="justify_description bold size10 line12">
+		Obtenga y conozca el contenido de las Condiciones Generales, Condiciones Particulares y Anexos correspondientes
+		a las coberturas descritas en este Cuadro Recibo de la Póliza, accediendo a nuestra página web
+		www.lamundialdeseguros.com
+		<br><br>
+		Aprobado por la Superintendencia de la Actividad Aseguradora mediante Oficio N° FSAA-1-1-0438-2022 de fecha
+		26/09/2022. El Tomador Asegurado o Beneficiario de las Pólizas, que sienta vulneración de sus derechos, y
+		requiera presentar cualquier denuncia, queja, reclamo o solicitud de asesoría sugerida con ocasión de este
+		contrato de seguros; puede acudir a la Oficina de la Defensor del Asegurado de la Superintendencia de la
+		Actividad Aseguradora, o comunicarlo a través de la Pagina web: https://www.lamundialdeseguros.com
+	</div>
+	<br>
+	<div class="center_description bold size8" style="color: red">CLIENTE</div>
+
+	<pagebreak />
+
+	<h5 class="title">{{title}}</h5>
+	<div class="subtitle">DATOS DEL TOMADOR - ASEGURADO</div>
+	{{section_tomador_asegurado}}
+	<div class="subtitle">DATOS DE LA PÓLIZA</div>
+	{{section_poliza}}
+	<div class="subtitle">ASEGURADOS</div> <!-- foreach ben -->
+	{{section_asegurados}}
+	<div class="subtitle">COBERTURAS</div>
+	{{section_coberturas}}
+	<div class="subtitle">BENEFICIARIOS</div>
+	{{section_beneficiarios}}
+	<div class="subtitle">RECIBOS DE PRIMAS - FRACCIONAMIENTO</div>
+	{{section_recibos}}
+	<div class="subtitle">DECLARACIÓN DE FÉ</div>
+	{{section_declaracion}}
+	<table>
+		<thead>
+			<tr>
+				<th class="subtitle">POR EL TOMADOR</th>
+				<th class="subtitle">POR LA MUNDIAL DE SEGUROS</th>
+			</tr>
+		</thead>
+	</table>
+	{{section_firma}}
+	<div class="center_description bold size8" style="margin: 10px;">En Caracas a los {{fdiapol}} dias del mes
+		de
+		{{fmespol}} del {{fanopol}}</div>
+		<div class="justify_description bold size10 line12">
+		Obtenga y conozca el contenido de las Condiciones Generales, Condiciones Particulares y Anexos correspondientes
+		a las coberturas descritas en este Cuadro Recibo de la Póliza, accediendo a nuestra página web
+		www.lamundialdeseguros.com
+		<br><br>
+		Aprobado por la Superintendencia de la Actividad Aseguradora mediante Oficio N° FSAA-1-1-0438-2022 de fecha
+		26/09/2022. El Tomador Asegurado o Beneficiario de las Pólizas, que sienta vulneración de sus derechos, y
+		requiera presentar cualquier denuncia, queja, reclamo o solicitud de asesoría sugerida con ocasión de este
+		contrato de seguros; puede acudir a la Oficina de la Defensor del Asegurado de la Superintendencia de la
+		Actividad Aseguradora, o comunicarlo a través de la Pagina web: https://www.lamundialdeseguros.com
+	</div>
+	<br>
+	<div class="center_description bold size8" style="color: red">INTERMEDIARIO</div>
+</body>
+
+</html>

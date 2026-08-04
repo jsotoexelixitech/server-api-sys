@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Prueba end-to-end del cuadro-poliza (.docx real -> PDF) contra los servicios
+# Prueba end-to-end del cuadro-poliza (plantilla HTML -> PDF via Puppeteer) contra
 # YA corriendo en srv001 (URLs se detectan del .env real de nest-api).
 # Correr directamente en el servidor: bash scripts/test-emision-docx.sh
 set -euo pipefail
@@ -143,7 +143,7 @@ else
   echo "  NEST_ADMIN_TOKEN no encontrado en .env — se intentará /emit sin apikey."
 fi
 
-echo "== 6) Emitir poliza (llena la plantilla .docx real -> PDF) =="
+echo "== 6) Emitir poliza (plantilla HTML -> PDF via Puppeteer) =="
 AUTH_HEADER=()
 if [ -n "${APIKEY:-}" ]; then
   AUTH_HEADER=(-H "apikey: $APIKEY")

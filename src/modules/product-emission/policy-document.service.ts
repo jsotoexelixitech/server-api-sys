@@ -1,10 +1,8 @@
 import { Injectable, Logger } from '@nestjs/common';
 import { PartyDto } from './dto/party.dto';
-import {
-  buildPolicyPdfFromTemplate,
-  PolicyTemplateKey,
-  resolvePolicyTemplateKey,
-} from './policy-docx.util';
+import { htmlToPdfBuffer } from './policy-html-pdf.util';
+import { renderPolicyHtml } from './policy-html.renderer';
+import { PolicyTemplateKey, resolvePolicyTemplateKey } from './policy-template.util';
 
 export interface PolicyDocumentCoverageRow {
   name: string;
@@ -44,11 +42,8 @@ export class PolicyDocumentService {
   private readonly logger = new Logger(PolicyDocumentService.name);
 
   /**
-   * Genera el cuadro-póliza en PDF llenando dinámicamente (con
-   * `docxtemplater`) la plantilla `.docx` real capturada del cuadro-póliza
-   * (mismo diseño, tablas y textos legales, con la marca Exelixi), y
-   * convirtiendo el resultado a PDF con LibreOffice. Las plantillas
-   * "tageadas" se generan una sola vez con `scripts/tag-policy-templates.js`.
+   * Genera el cuadro-póliza en PDF renderizando plantillas HTML (port de PHP)
+   * con datos de emisión y convirtiendo a PDF con Puppeteer/Chromium.
    */
   async buildPdf(
     data: PolicyDocumentData,
@@ -56,11 +51,12 @@ export class PolicyDocumentService {
   ): Promise<PolicyPdfResult> {
     const templateKey = resolvePolicyTemplateKey(productBranch);
     this.logger.log(
-      `Generando cuadro-póliza PDF (layout=${templateKey}, póliza=${data.numeroPoliza}, ramo=${data.ramoPoliza})`,
+      `Generando cuadro-póliza PDF (html=${templateKey}, póliza=${data.numeroPoliza}, ramo=${data.ramoPoliza})`,
     );
     try {
-      const result = await buildPolicyPdfFromTemplate(templateKey, data);
-      return { ...result, templateKey };
+      const html = renderPolicyHtml(data, templateKey);
+      const pdfBuffer = await htmlToPdfBuffer(html);
+      return { pdfBuffer, templateKey };
     } catch (error: any) {
       this.logger.error(
         `Error generando PDF del cuadro-póliza: ${error.message}`,

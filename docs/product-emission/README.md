@@ -1,5 +1,11 @@
 # product-emission — Emisión genérica multi-ramo (NUEVO, AISLADO)
 
+> **Recordatorio fijo:** el **catálogo** (ramos, coberturas, planes) se crea en
+> `C:\Users\javier.soto\Desktop\proyecto-product-builder`. Este módulo **solo emite**
+> leyendo ese catálogo por HTTP. **No tocar** emisión RCV ni módulos La Mundial
+> (`emissions`, `collection`, `modulo-emision`, etc.). Regla workspace:
+> `.cursor/rules/05-product-emission-architecture.mdc`.
+
 Flujo nuevo e **independiente** de los módulos activos de La Mundial
 (`emissions`, `personas`, `collection`, `external`, Sis2000/mssql).
 

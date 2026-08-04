@@ -1,0 +1,79 @@
+<!-- Nota: Todas las filas deben contener una suma de 8 columnas. 
+La suma de los width deben dar un 100%.
+Al afectar el width de la primera columna, afecta las consecuentes.
+Los colspan definen la cantidad de columnas que ocupa ese campo -->
+<table class="section line10">
+	<tbody>
+		<tr>
+			<td width="9.5%"></td>
+			<td width="22%"></td>
+			<td width="7%"></td>
+			<td width="9%"></td>
+			<td width="10%"></td>
+			<td width="10%"></td>
+			<td width="7.5%"></td>
+			<td width="10%"></td>
+			<td width="9%"></td>
+			<td width="8%"></td>
+		</tr>
+		<tr>
+			<td class="bold">TOMADOR:</td>
+			<td>{{xtomador}}</td>
+			<td class="bold">C.I./R.I.F.:</td>
+			<td>{{xcedula_tomador}}</td>
+			<td class="bold">RAMO PÓLIZA:</td>
+			<td>{{xramo}}</td>
+			<td class="bold">PÓLIZA:</td>
+			<td>{{cpoliza}}</td>
+			<td class="bold">PÓLIZA REL:</td>
+			<td>{{cnpoliza_rel}}</td>
+		</tr>
+		<tr>
+			<td class="bold">DIRECCIÓN:</td>
+			<td colspan="3">{{xdireccion_tomador}}</td>
+			<td colspan="4"><strong>EMAIL:</strong> {{xcorreo_tomador}}</td>
+			<td class="bold">CERTIFICADO:</td>
+			<td >0</td>
+		</tr>
+		<tr>
+			<td class="bold">CIUDAD:</td>
+			<td>{{xciudad_tomador}}</td>
+			<td class="bold">ESTADO:</td>
+			<td>{{xestado_tomador}}</td>
+			<td class="bold">ZONA POSTAL:</td>
+			<td>{{xzona_postal_tomador}}</td>
+			<td class="bold">TELÉFONO:</td>
+			<td >{{xtelefono_tomador}}</td>
+			<td class="bold">ESTATUS:</td>
+			<td >{{istatpol}}</td>
+		</tr>
+		<tr>
+			<td class="bold">ASEGURADO:</td>
+			<td>{{xasegurado}}</td>
+			<td class="bold">C.I./R.I.F.:</td>
+			<td>{{xcedula_asegurado}}</td>
+			<td></td>
+			<td></td>
+			<td colspan="2"></td>
+			<td colspan="2"></td>
+		</tr>
+		<tr>
+			<td class="bold">DIRECCIÓN:</td>
+			<td colspan="3">{{xdireccion_asegurado}}</td>
+			<td colspan="6"><strong>EMAIL:</strong> {{xcorreo_asegurado}}</td>
+		</tr>
+		<tr>
+			<td class="bold">CIUDAD:</td>
+			<td>{{xciudad_asegurado}}</td>
+			<td class="bold">ESTADO:</td>
+			<td>{{xestado_asegurado}}</td>
+			<td class="bold">ZONA POSTAL:</td>
+			<td>{{xzona_postal_asegurado}}</td>
+			<td class="bold">TELÉFONO:</td>
+			<td >{{xtelefono_asegurado}}</td>
+			<td></td>
+			<td></td>
+		</tr>
+		{{section_beneficiario_preferencial}}
+	</tbody>
+</table>

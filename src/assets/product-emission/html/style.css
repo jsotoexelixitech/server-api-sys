@@ -1,0 +1,287 @@
+table {
+    width: 100%;
+    /*border-bottom: 1px solid #232323;
+/*margin-bottom: 1cm;*/
+}
+
+p {
+    font-size: 14px;
+    text-align: justify;
+}
+
+b,
+th {
+    font-size: 13px;
+    
+}
+
+.title {
+    text-align: center;
+    font-style: none;
+    line-height: 1.2;
+}
+
+.subtitle {
+    background-color: #ccc;
+    width: 100%;
+    text-align: center;
+    font-size: 10px;
+    font-weight: bold;
+    line-height: 2;
+}
+
+th.subtitle {
+    background-color: #ccc;
+    width: 100%;
+    text-align: center;
+    font-size: 16px;
+    font-weight: bold;
+    line-height: 2;
+}
+
+.section {
+    font-size: 8px;
+    text-align: left;
+    line-height: 1.5;
+}
+
+.section th {
+    font-size: 8px;
+    text-align: left;
+    line-height: 1.5;
+}
+
+.section td b {
+    font-size: 8px;
+    text-align: left;
+    line-height: 1.5;
+}
+
+table.declaracion {
+    border: 1px solid black;
+    font-size: 10px;
+    text-align: left;
+    line-height: 1.5;
+    /* font-weight: bold; */
+}
+
+/* .table_coberturas {
+    height:300px !important;
+} */
+
+.line31{
+    text-decoration: underline black;
+}
+.line30{
+    font-size: 12px;
+}
+
+ul li {
+    list-style-type: none;
+}
+
+.bold {
+    font-weight: bold;
+}
+
+.right {
+    text-align: right;
+}
+
+.center_description {
+    text-align: center;
+    font-style: none;
+}
+
+.justify_description {
+    text-align: justify;
+    font-style: none;
+}
+
+.line02 {
+    line-height: 0.2;
+}
+
+.line04 {
+    line-height: 0.4;
+}
+
+.line06 {
+    line-height: 0.6;
+}
+
+.line08 {
+    line-height: 0.8;
+}
+
+.line10 {
+    line-height: 1;
+}
+
+.line12 {
+    line-height: 1.2;
+}
+
+.line15 {
+    line-height: 1.5;
+}
+.line16 {
+    line-height: 2.8;
+}
+
+.size6 {
+    font-size: 6px;
+}
+
+.size8 {
+    font-size: 8px;
+}
+
+.size10 {
+    font-size: 10px;
+}
+
+.size12 {
+    font-size: 12px;
+}
+.size14 {
+    font-size: 14px;
+}
+.size16 {
+    font-size: 16px;
+}
+
+.mt6 {
+    margin-top: 6px;
+}
+
+.mt8 {
+    margin-top: 8px;
+}
+
+.mt10 {
+    margin-top: 10px;
+}
+
+
+/* CARNET ASEGURADOS RCV */
+
+.pre_cards {
+    text-align: center;
+    padding-top: 200px;
+}
+
+/* .cards {
+    display: inline-block;
+} */
+
+.pagado {
+    /* margin-top: 100px; */
+    /* position: fixed;
+    top: 400px;
+    right: 200px; */
+    /* float: left;
+    margin: 0 0 0 200px; */
+    /* z-index: 1;
+    position: absolute;
+    right: 0mm;
+    top: 500px; */
+
+    /* position: fixed;
+    z-index: 1; */
+}
+
+.card_background {
+    /* z-index: 1; */
+    /* background: rgba(230, 230, 230, 0.9); */
+    /* position: absolute;
+    bottom: -100px;
+    z-index: 0; */
+    /* position: relative; */
+    /* z-index: -1; */
+
+}
+
+.card {
+
+    /* display: flex;
+    flex-direction: column;
+    justify-content: space-between; */
+    width: 100%;
+    border: 4px dashed lightgray;
+    border-radius: 15px;
+    font-family: sans-serif;
+}
+
+.card table {
+    /* width: initial;
+    font-size: initial; */
+}
+
+.card_table_item {
+    font-size: 12px
+}
+
+.card_table_subitem {
+    font-size: 10px
+}
+
+.bold {
+    font-weight: bold;
+}
+
+
+.card_header {
+    /* display: flex;
+    flex-direction: row;
+    align-items: center;
+    justify-content: center; */
+    font-weight: bold;
+    margin-left: 10px;
+    margin-right: 10px;
+}
+
+.card_title {
+    font-size: 12px;
+    font-weight: bold;
+    /* justify-content: center;
+    align-items: center; */
+    padding-bottom: 10px;
+}
+
+.card_body {
+    /* display: flex;
+    flex-direction: row; */
+    /* font-size: 16px; */
+    /* font-size: 8px !important; */
+}
+
+.card_footer {
+    background: #003478;
+    border-radius: 0 0 15px 15px;
+    padding-top: 3px;
+    padding-bottom: 3px;
+    padding-left: 5px;
+    padding-right: 5px;
+    text-align: justify;
+    font-weight: bold;
+}
+
+.card_footer p {
+    padding: 0;
+    margin: 0;
+    color: white;
+    font-size: 9px;
+    line-height: 1;
+}
+
+.arys_data {
+    line-height: 0.8;
+    font-size: 9px;
+}
+
+.card_contact {
+
+    font-size: 10px;
+    text-align: center;
+}
