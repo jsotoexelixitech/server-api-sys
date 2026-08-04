@@ -15,7 +15,7 @@ if [ -f "$ENV_FILE" ]; then
   CONFIGURED_PASSWORD=$(grep -E '^PRODUCT_BUILDER_API_PASSWORD=' "$ENV_FILE" | tail -1 | cut -d '=' -f2- | tr -d '\r')
   ADMIN_TOKEN=$(grep -E '^NEST_ADMIN_TOKEN=' "$ENV_FILE" | tail -1 | cut -d '=' -f2- | tr -d '\r')
 fi
-PB_URL="${PB_BASE:-http://localhost:3001}/api"
+PB_URL="${PB_BASE:-http://localhost:3001}/producto-builder-api"
 NEST_PORT="${NEST_PORT:-3002}"
 NEST_BASE="http://localhost:${NEST_PORT}"
 NEST_URL="${NEST_BASE}/api/v1/product-emission"

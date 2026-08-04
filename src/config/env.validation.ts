@@ -63,6 +63,7 @@ export const envValidationSchema = Joi.object({
    * ni comparte BD/schema con NEST_PG_DATABASE_URL (auth nest_auth).
    */
   PRODUCT_BUILDER_API_URL: Joi.string().uri().default('http://localhost:3001'),
+  PRODUCT_BUILDER_API_PREFIX: Joi.string().default('producto-builder-api'),
   /** Cuenta de servicio para autenticarse contra proyecto-product-builder (requiere Bearer). */
   PRODUCT_BUILDER_API_EMAIL: Joi.string().optional(),
   PRODUCT_BUILDER_API_PASSWORD: Joi.string().optional(),

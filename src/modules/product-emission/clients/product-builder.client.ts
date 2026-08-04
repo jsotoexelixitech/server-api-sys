@@ -81,14 +81,23 @@ export class ProductBuilderClient {
   private readonly password?: string;
   private cachedToken: string | null = null;
 
+  private readonly apiPrefix: string;
+
   constructor(private readonly config: ConfigService) {
-    // proyecto-product-builder expone su API bajo el prefijo global "/api".
     this.baseUrl = (
       this.config.get<string>('PRODUCT_BUILDER_API_URL') ??
       'http://localhost:3001'
     ).replace(/\/$/, '');
+    this.apiPrefix = (
+      this.config.get<string>('PRODUCT_BUILDER_API_PREFIX') ?? 'producto-builder-api'
+    ).replace(/^\/|\/$/g, '');
     this.email = this.config.get<string>('PRODUCT_BUILDER_API_EMAIL')?.trim() || undefined;
     this.password = this.config.get<string>('PRODUCT_BUILDER_API_PASSWORD')?.trim() || undefined;
+  }
+
+  private apiPath(path: string): string {
+    const p = path.startsWith('/') ? path : `/${path}`;
+    return `${this.baseUrl}/${this.apiPrefix}${p}`;
   }
 
   private async login(): Promise<string> {
@@ -97,7 +106,7 @@ export class ProductBuilderClient {
         'proyecto-product-builder exige autenticación (Bearer). Configure PRODUCT_BUILDER_API_EMAIL / PRODUCT_BUILDER_API_PASSWORD (cuenta de servicio) en el .env de nest-api.',
       );
     }
-    const response = await fetch(`${this.baseUrl}/api/auth/login`, {
+    const response = await fetch(this.apiPath('/auth/login'), {
       method: 'POST',
       headers: { 'Content-Type': 'application/json', Accept: 'application/json' },
       body: JSON.stringify({ email: this.email, password: this.password }),
@@ -114,7 +123,7 @@ export class ProductBuilderClient {
   }
 
   private async request(path: string): Promise<Response> {
-    const url = `${this.baseUrl}/api${path}`;
+    const url = this.apiPath(path);
     const doFetch = async () => {
       const token = this.cachedToken ?? (await this.login());
       return fetch(url, {
