@@ -311,13 +311,13 @@
         <!-- Paso 3 -->
         <div class="wizard-pane" id="step3">
           <div class="summary-box" id="summaryBox"></div>
-          <p style="font-size:.78rem;color:var(--muted)">Al crear, recibirá el <strong>plainKey</strong> (una sola vez), el enlace Swagger filtrado y el bloque .env.</p>
+          <p style="font-size:.78rem;color:var(--muted)">Revise el resumen y pulse <strong>Crear key</strong> abajo. Recibirá el <strong>plainKey</strong> (una sola vez), el enlace Swagger filtrado y el bloque .env.</p>
         </div>
 
         <div class="wizard-nav">
           <button type="button" class="btn btn-secondary" id="btnPrev" disabled>← Anterior</button>
           <button type="button" class="btn btn-primary" id="btnNext">Siguiente →</button>
-          <button type="button" class="btn btn-primary hidden" id="btnSubmit" style="display:none">Crear key</button>
+          <button type="button" class="btn btn-primary hidden" id="btnSubmit">Crear key</button>
         </div>
 
         <div id="successPanel" class="success-panel hidden">
@@ -628,11 +628,11 @@
       const btnSubmit = document.getElementById('btnSubmit');
       if (n === 3) {
         renderSummary();
-        btnNext.style.display = 'none';
-        btnSubmit.style.display = 'inline-flex';
+        btnNext.classList.add('hidden');
+        btnSubmit.classList.remove('hidden');
       } else {
-        btnNext.style.display = 'inline-flex';
-        btnSubmit.style.display = 'none';
+        btnNext.classList.remove('hidden');
+        btnSubmit.classList.add('hidden');
       }
     }
 
