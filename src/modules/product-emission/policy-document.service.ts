@@ -66,7 +66,9 @@ export class PolicyDocumentService {
         `Error generando PDF del cuadro-póliza: ${error.message}`,
         error.stack,
       );
-      throw new Error('No se pudo generar el PDF del cuadro-póliza.');
+      throw new Error(
+        `No se pudo generar el PDF del cuadro-póliza: ${error.message}`,
+      );
     }
   }
 }

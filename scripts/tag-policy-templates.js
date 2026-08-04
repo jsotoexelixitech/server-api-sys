@@ -329,7 +329,7 @@ function tagAutomovilDocument(xml) {
 
   taggedWallet = rebrandRepeatedLegalPhrase(taggedWallet);
   out = out.slice(0, walletStart) + taggedWallet;
-  return out;
+  return removeBackgroundDrawings(out);
 }
 
 // ---------------------------------------------------------------------------
@@ -433,7 +433,7 @@ function tagSaludDocument(xml) {
       out = insertValueAfterLabel(out, label, tag, occurrence + copy * perCopy);
     }
   }
-  return out;
+  return removeBackgroundDrawings(out);
 }
 
 function tagHeaderFooterBranding(xml) {
@@ -447,19 +447,29 @@ function replaceRamoInHeader(xml, ramoSample) {
   return xml.split(ramoSample).join('{ramoPoliza}');
 }
 
-const TRANSPARENT_PNG = Buffer.from(
-  'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAAD0lEQVR42mP8/x8AAwMCAO+ip1sAAAAASUVORK5CYII=',
-  'base64',
-);
-
-/** Sello "PAGADO" y watermark La Mundial en zona de firmas (image2/image3). */
-function stripSignatureWatermarkImages(zip) {
-  for (const name of ['word/media/image2.png', 'word/media/image3.png']) {
-    if (zip.file(name)) {
-      zip.file(name, TRANSPARENT_PNG);
-      console.log(`  Watermark/sello removido: ${name}`);
+/** Quita runs con imagen de fondo (watermark La Mundial: behindDoc="1"). */
+function removeBackgroundDrawings(xml) {
+  let result = xml;
+  let idx = 0;
+  while ((idx = result.indexOf('<w:drawing>', idx)) >= 0) {
+    const drawEnd = result.indexOf('</w:drawing>', idx) + '</w:drawing>'.length;
+    const chunk = result.slice(idx, drawEnd);
+    if (!chunk.includes('behindDoc="1"')) {
+      idx = drawEnd;
+      continue;
+    }
+    let rStart = result.lastIndexOf('<w:r>', idx);
+    const rStartAlt = result.lastIndexOf('<w:r ', idx);
+    if (rStartAlt > rStart) rStart = rStartAlt;
+    const rEnd = result.indexOf('</w:r>', drawEnd) + '</w:r>'.length;
+    if (rStart >= 0 && rEnd > rStart) {
+      result = result.slice(0, rStart) + result.slice(rEnd);
+      idx = rStart;
+    } else {
+      idx = drawEnd;
     }
   }
+  return result;
 }
 
 function processTemplate(srcPath, outPath, kind) {
@@ -488,8 +498,6 @@ function processTemplate(srcPath, outPath, kind) {
     zip.file('word/media/image1.png', fs.readFileSync(logoPath));
     console.log('  Logo Exelixi inyectado en word/media/image1.png');
   }
-
-  stripSignatureWatermarkImages(zip);
 
   const buf = zip.generate({ type: 'nodebuffer', compression: 'DEFLATE' });
   fs.mkdirSync(path.dirname(outPath), { recursive: true });
