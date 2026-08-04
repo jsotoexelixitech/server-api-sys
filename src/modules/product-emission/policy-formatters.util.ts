@@ -92,7 +92,17 @@ export function pickRiskValue(
   for (const candidate of candidates) {
     const v = normalizedMap.get(normalizeKey(candidate));
     if (v !== undefined && v !== null && String(v).trim() !== '') {
-      return String(v);
+      return String(v).trim();
+    }
+  }
+  // Etiquetas largas del product-builder (ej. "Serial de carrocería" → serialdecarroceria)
+  for (const candidate of candidates) {
+    const needle = normalizeKey(candidate);
+    if (needle.length < 4) continue;
+    for (const [k, v] of normalizedMap) {
+      if (k.includes(needle) && v !== undefined && v !== null && String(v).trim() !== '') {
+        return String(v).trim();
+      }
     }
   }
   return '';

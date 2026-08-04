@@ -225,26 +225,51 @@ function buildFirmaHtml(data: PolicyDocumentData): string {
 }
 
 function buildVehicleVars(risk: Record<string, unknown>): Record<string, string> {
+  const v = (...candidates: string[]) =>
+    escapeHtml(pickRiskValue(risk, ...candidates) || '—');
+  const uso =
+    pickRiskValue(risk, 'Uso', 'Uso del vehículo', 'uso', 'Uso del Vehiculo') || 'PARTICULAR';
   return {
-    XMARCA: escapeHtml(pickRiskValue(risk, 'Marca') || '—'),
-    XMODELO: escapeHtml(pickRiskValue(risk, 'Modelo') || '—'),
-    XVERSION: escapeHtml(pickRiskValue(risk, 'Version', 'Versión') || '—'),
-    FANO: escapeHtml(pickRiskValue(risk, 'Anio', 'Año', 'Ano') || '—'),
-    XSERIALCARROCERIA: escapeHtml(
-      pickRiskValue(risk, 'SerialCarroceria', 'SerialCarr', 'Carroceria') || '—',
+    XMARCA: v('Marca', 'marca'),
+    XMODELO: v('Modelo', 'modelo'),
+    XVERSION: v('Version', 'Versión', 'version', 'versionVehiculo'),
+    FANO: v('Anio', 'Año', 'Ano', 'anio', 'ano', 'year'),
+    XSERIALCARROCERIA: v(
+      'serial',
+      'SerialCarroceria',
+      'SerialCarr',
+      'Serial de carrocería',
+      'Serial de carroceria',
+      'serialCarroceria',
+      'serial_carroceria',
+      'Carroceria',
+      'Carrocería',
     ),
-    XSERIALMOTOR: escapeHtml(pickRiskValue(risk, 'SerialMotor', 'SerialMot') || '—'),
-    XPLACA: escapeHtml(pickRiskValue(risk, 'Placa') || '—'),
-    XTRANSMISION: escapeHtml(pickRiskValue(risk, 'Transmision', 'Transmisión') || '—'),
-    XUSO: escapeHtml(pickRiskValue(risk, 'Uso') || 'PARTICULAR'),
-    NCAPACIDADPASAJEROS: escapeHtml(pickRiskValue(risk, 'Puestos', 'NumeroDePuestos') || '—'),
-    NPESOVACIO: escapeHtml(pickRiskValue(risk, 'Peso') || '—'),
-    NCAPCARGA: escapeHtml(pickRiskValue(risk, 'Capacidad') || '—'),
-    XCOLOR: escapeHtml(pickRiskValue(risk, 'Color') || '—'),
+    XSERIALMOTOR: v(
+      'serialMotor',
+      'SerialMotor',
+      'SerialMot',
+      'Serial de motor',
+      'serial_motor',
+      'Serial Motor',
+    ),
+    XPLACA: v('Placa', 'placa'),
+    XTRANSMISION: v('Transmision', 'Transmisión', 'transmision', 'transmisión'),
+    XUSO: escapeHtml(uso),
+    NCAPACIDADPASAJEROS: v(
+      'Puestos',
+      'puestos',
+      'NumeroDePuestos',
+      'Cantidad de puestos',
+      'Capacidad de pasajeros',
+    ),
+    NPESOVACIO: v('Peso', 'peso', 'Peso vacío', 'Peso vacio', 'Peso Vacio'),
+    NCAPCARGA: v('Capacidad', 'capacidad', 'Capacidad de carga', 'Cap. carga'),
+    XCOLOR: v('Color', 'color'),
   };
 }
 
-function buildPdfHeaderHtml(ramo: string, capitalSuscrito: string): string {
+function buildPdfHeaderHtml(_ramo: string, capitalSuscrito: string): string {
   const logo = resolveLogoDataUri();
   const rif = process.env.PRODUCT_EMISSION_RIF?.trim();
   const rifLine = rif ? `<p style="margin:2px 0 0;font-size:8px">${escapeHtml(rif)}</p>` : '';
@@ -252,19 +277,27 @@ function buildPdfHeaderHtml(ramo: string, capitalSuscrito: string): string {
     ? `<img style="width:140px;height:70px;object-fit:contain" src="${logo}" alt="Exelixi"/>${rifLine}`
     : `<strong>EXELIXI</strong>${rifLine}`;
   return `
-    <table style="width:100%;margin-bottom:8px">
+    <table style="width:100%;margin-bottom:8px;border-collapse:collapse">
       <tr>
-        <td style="text-align:left;width:40%">${logoCell}</td>
-        <td style="text-align:center;width:30%"></td>
-        <td style="text-align:right;font-size:10px;width:30%">
-          <p style="margin:0">Inscrita en la Superintendencia de la Actividad Aseguradora bajo el Nro.</p>
-          <p style="margin:0">Capital Suscrito Bs.</p>
-          <p style="margin:0">Capital Pagado Bs.</p>
-        </td>
-        <td style="text-align:right;font-size:10px;width:12%">
-          <p style="margin:0">ES-73</p>
-          <p style="margin:0">${capitalSuscrito}</p>
-          <p style="margin:0">${capitalSuscrito}</p>
+        <td style="text-align:left;width:42%;vertical-align:top">${logoCell}</td>
+        <td style="width:18%"></td>
+        <td style="text-align:right;width:40%;vertical-align:top;font-size:9px">
+          <table style="width:100%;border-collapse:collapse;margin-left:auto">
+            <tr>
+              <td style="text-align:right;padding:1px 6px 1px 0;vertical-align:top">
+                Inscrita en la Superintendencia de la Actividad Aseguradora bajo el Nro.
+              </td>
+              <td style="text-align:right;padding:1px 0;white-space:nowrap;vertical-align:top;width:32%">ES-73</td>
+            </tr>
+            <tr>
+              <td style="text-align:right;padding:1px 6px 1px 0">Capital Suscrito Bs.</td>
+              <td style="text-align:right;padding:1px 0;white-space:nowrap">${escapeHtml(capitalSuscrito)}</td>
+            </tr>
+            <tr>
+              <td style="text-align:right;padding:1px 6px 1px 0">Capital Pagado Bs.</td>
+              <td style="text-align:right;padding:1px 0;white-space:nowrap">${escapeHtml(capitalSuscrito)}</td>
+            </tr>
+          </table>
         </td>
       </tr>
     </table>`;
