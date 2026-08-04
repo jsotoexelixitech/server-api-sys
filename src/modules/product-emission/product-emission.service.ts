@@ -37,6 +37,13 @@ interface ResolvedQuote {
 
 type ResolvedCoverage = ResolvedQuote['coberturas'][number];
 
+/** product-builder a veces devuelve montos como string; evitar concat en reduce. */
+function toMoney(value: unknown): number | null {
+  if (value === null || value === undefined || value === '') return null;
+  const n = Number(value);
+  return Number.isFinite(n) ? n : null;
+}
+
 @Injectable()
 export class ProductEmissionService {
   private readonly logger = new Logger(ProductEmissionService.name);
@@ -94,8 +101,9 @@ export class ProductEmissionService {
         id: coverageId,
         name: coverage?.name ?? plan.coverageLabels[idx] ?? 'Cobertura',
         sumaAsegurada:
-          coverage?.insuredSumFixed ?? coverage?.insuredSumMax ?? null,
-        prima: coverage?.tariffPremium ?? null,
+          toMoney(coverage?.insuredSumFixed) ??
+          toMoney(coverage?.insuredSumMax),
+        prima: toMoney(coverage?.tariffPremium),
       };
     });
   }
@@ -106,19 +114,23 @@ export class ProductEmissionService {
     plan: ProductBuilderPlan,
     coberturas: ResolvedCoverage[],
   ): number {
-    const sumTariffs = coberturas.reduce((acc, c) => acc + (c.prima ?? 0), 0);
+    const sumTariffs = coberturas.reduce(
+      (acc, c) => acc + (toMoney(c.prima) ?? 0),
+      0,
+    );
     if (sumTariffs > 0) return sumTariffs;
 
-    const commercial = product.actuarialData?.commercialPremium;
+    const commercial = toMoney(product.actuarialData?.commercialPremium);
     if (commercial != null && commercial > 0) {
-      return Number(commercial);
+      return commercial;
     }
 
-    if (plan.priceFactor > 1) {
-      return plan.priceFactor;
+    const priceFactor = toMoney(plan.priceFactor) ?? 0;
+    if (priceFactor > 1) {
+      return priceFactor;
     }
 
-    return plan.priceFactor > 0 ? plan.priceFactor : 0;
+    return priceFactor > 0 ? priceFactor : 0;
   }
 
   private assignCoveragePremiums(

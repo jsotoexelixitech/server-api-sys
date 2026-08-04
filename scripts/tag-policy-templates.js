@@ -447,6 +447,21 @@ function replaceRamoInHeader(xml, ramoSample) {
   return xml.split(ramoSample).join('{ramoPoliza}');
 }
 
+const TRANSPARENT_PNG = Buffer.from(
+  'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAAD0lEQVR42mP8/x8AAwMCAO+ip1sAAAAASUVORK5CYII=',
+  'base64',
+);
+
+/** Sello "PAGADO" y watermark La Mundial en zona de firmas (image2/image3). */
+function stripSignatureWatermarkImages(zip) {
+  for (const name of ['word/media/image2.png', 'word/media/image3.png']) {
+    if (zip.file(name)) {
+      zip.file(name, TRANSPARENT_PNG);
+      console.log(`  Watermark/sello removido: ${name}`);
+    }
+  }
+}
+
 function processTemplate(srcPath, outPath, kind) {
   console.log(`\n== Procesando ${kind}: ${srcPath} ==`);
   const zip = new PizZip(fs.readFileSync(srcPath));
@@ -473,6 +488,8 @@ function processTemplate(srcPath, outPath, kind) {
     zip.file('word/media/image1.png', fs.readFileSync(logoPath));
     console.log('  Logo Exelixi inyectado en word/media/image1.png');
   }
+
+  stripSignatureWatermarkImages(zip);
 
   const buf = zip.generate({ type: 'nodebuffer', compression: 'DEFLATE' });
   fs.mkdirSync(path.dirname(outPath), { recursive: true });

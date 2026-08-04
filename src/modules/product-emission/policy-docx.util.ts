@@ -114,19 +114,22 @@ function partyFields(prefix: string, party: PartyDto | undefined): Record<string
   };
 }
 
-function coverageEntry(row: PolicyDocumentCoverageRow | undefined, moneda: string) {
-  if (!row) return { name: '—', suma: '—', prima: '—', covTag: '' };
-  const currencyLabel = (moneda ?? '').toUpperCase() === 'USD' ? 'US$' : moneda || '';
+function coverageEntry(
+  row: PolicyDocumentCoverageRow | undefined,
+  moneda: string,
+): { name: string; suma: string; prima: string; covTag: string } {
+  if (!row) return { name: '', suma: '', prima: '', covTag: '' };
+  const isUsd = (moneda ?? '').toUpperCase() === 'USD';
   return {
     name: row.name,
-    suma: row.sumaAsegurada != null ? `${currencyLabel} ${formatMoneyVe(row.sumaAsegurada)}` : '—',
-    prima: row.prima != null ? `${currencyLabel} ${formatMoneyVe(row.prima)}` : '—',
-    covTag: (moneda ?? '').toUpperCase() === 'USD' ? '$' : 'TCR',
+    // La plantilla .docx original pone montos sin prefijo; la columna Tag lleva $ o TCR.
+    suma: row.sumaAsegurada != null ? formatMoneyVe(row.sumaAsegurada) : '',
+    prima: row.prima != null ? formatMoneyVe(row.prima) : '',
+    covTag: isUsd ? '$' : 'TCR',
   };
 }
 
 function buildTemplateData(data: PolicyDocumentData, templateKey: PolicyTemplateKey): Record<string, unknown> {
-  const currencyLabel = (data.moneda ?? '').toUpperCase() === 'USD' ? 'US$' : data.moneda || '';
   const beneficiario = data.beneficiarios?.[0];
 
   const coberturas = (data.coberturas ?? []).map((c) => coverageEntry(c, data.moneda));
@@ -145,7 +148,8 @@ function buildTemplateData(data: PolicyDocumentData, templateKey: PolicyTemplate
     canalVenta: dash(data.canalVenta || 'AGENTE EXCLUSIVO'),
     intermediario: dash(data.intermediario || 'EXELIXI TECHNOLOGY'),
     planContratado: dash(data.planName),
-    primaTotalFormateada: `${currencyLabel} ${formatMoneyVe(data.primaTotal)}`,
+    // Token en columna PRIMA (sin prefijo US$ — el layout Word ya tiene columna Tag).
+    primaTotalFormateada: formatMoneyVe(data.primaTotal),
 
     ...partyFields('tomador', data.tomador),
     ...partyFields('asegurado', data.asegurado),
