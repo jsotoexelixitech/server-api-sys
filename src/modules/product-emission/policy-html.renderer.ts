@@ -213,17 +213,14 @@ function buildBeneficiariosHtml(beneficiarios: PartyDto[]): string {
 
 function buildFirmaHtml(data: PolicyDocumentData): string {
   const estatus = (data.estatus ?? 'PAGADO').toUpperCase();
-  const stamp =
-    estatus === 'PAGADO'
-      ? '<strong style="font-size:14px;color:#008000">PAGADO</strong>'
-      : estatus === 'ANULADO'
-        ? '<strong style="font-size:14px;color:#cc0000">ANULADO</strong>'
-        : '<strong style="font-size:14px;color:#666">PENDIENTE</strong>';
+  const stampColor =
+    estatus === 'PAGADO' ? '#008000' : estatus === 'ANULADO' ? '#cc0000' : '#666666';
+  const stamp = `<span class="firma-estatus" style="color:${stampColor}">${estatus}</span>`;
   return `
     <tr>
-      <td width="40%" class="bold" style="border-right:1px solid black">Nombre Apellido / Denominación Social:</td>
-      <td width="20%" class="bold">Representante:</td>
-      <td rowspan="5" style="text-align:center;">${stamp}</td>
+      <td width="39%" class="bold" style="border-right:1px solid black">Nombre Apellido / Denominación Social:</td>
+      <td width="39%" class="bold" style="border-right:1px solid black">Representante:</td>
+      <td rowspan="5" class="firma-stamp">${stamp}</td>
     </tr>`;
 }
 
@@ -249,9 +246,11 @@ function buildVehicleVars(risk: Record<string, unknown>): Record<string, string>
 
 function buildPdfHeaderHtml(ramo: string, capitalSuscrito: string): string {
   const logo = resolveLogoDataUri();
+  const rif = process.env.PRODUCT_EMISSION_RIF?.trim();
+  const rifLine = rif ? `<p style="margin:2px 0 0;font-size:8px">${escapeHtml(rif)}</p>` : '';
   const logoCell = logo
-    ? `<img style="width:140px;height:90px;object-fit:contain" src="${logo}" alt="Exelixi"/>`
-    : '<strong>EXELIXI</strong>';
+    ? `<img style="width:140px;height:70px;object-fit:contain" src="${logo}" alt="Exelixi"/>${rifLine}`
+    : `<strong>EXELIXI</strong>${rifLine}`;
   return `
     <table style="width:100%;margin-bottom:8px">
       <tr>
@@ -275,8 +274,8 @@ function inlineStyles(html: string, watermarkUri: string | null): string {
   const cssPath = path.join(htmlTemplatesRoot(), 'style.css');
   const css = fs.existsSync(cssPath) ? fs.readFileSync(cssPath, 'utf8') : '';
   const watermarkCss = watermarkUri
-    ? `.policy-watermark::before{background-image:url('${watermarkUri}');}`
-    : `.policy-watermark::after{content:'EXELIXI TECHNOLOGY';}`;
+    ? `.policy-watermark::before{background-image:url('${watermarkUri}');}.policy-watermark::after{display:none!important;}`
+    : `.policy-watermark::before{display:none;}`;
   const withoutLink = html.replace(
     /<link[^>]*href=["'][^"']*style\.css["'][^>]*>/i,
     `<style>${css}
@@ -287,10 +286,14 @@ function inlineStyles(html: string, watermarkUri: string | null): string {
   return withoutLink.replace(/<pagebreak\s*\/?>/gi, '<div class="pagebreak"></div>');
 }
 
-function wrapPolicyPages(html: string, header: string): string {
+function wrapPolicyPages(html: string, header: string, footer: string): string {
   const parts = html.split('<div class="pagebreak"></div>');
   return parts
-    .map((part) => `<div class="policy-page policy-watermark">${header}${part.trim()}</div>`)
+    .map((part, index) => {
+      const isLast = index === parts.length - 1;
+      const pageFooter = isLast ? footer : '';
+      return `<div class="policy-page policy-watermark">${header}${part.trim()}${pageFooter}</div>`;
+    })
     .join('<div class="pagebreak"></div>');
 }
 
@@ -369,8 +372,8 @@ export function renderPolicyHtml(
   html = inlineStyles(html, resolveWatermarkDataUri());
 
   const header = buildPdfHeaderHtml(data.ramoPoliza, capitalSuscrito);
-  const footer = `<div style="text-align:center;font-size:9px;margin-top:8px">Tel: +58-212-7726767 | info@exelixitech.com | https://exelixitech.com/</div>`;
-  const body = wrapPolicyPages(html, header);
+  const footer = `<div class="policy-footer">Tel: +58-212-7726767 | info@exelixitech.com | https://exelixitech.com/</div>`;
+  const body = wrapPolicyPages(html, header, footer);
 
-  return `<!DOCTYPE html><html><head><meta charset="utf-8"></head><body>${body}${footer}</body></html>`;
+  return `<!DOCTYPE html><html><head><meta charset="utf-8"></head><body>${body}</body></html>`;
 }

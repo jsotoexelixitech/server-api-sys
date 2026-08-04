@@ -9,24 +9,28 @@ body {
     font-size: 10px;
     margin: 0;
     padding: 0;
+    -webkit-print-color-adjust: exact;
+    print-color-adjust: exact;
 }
 
 .policy-page {
     position: relative;
+    padding-bottom: 4mm;
 }
 
+/* Marca de agua sutil (como mPDF SetWatermarkImage) */
 .policy-watermark::before {
     content: '';
     position: fixed;
-    top: 42%;
+    top: 50%;
     left: 50%;
     transform: translate(-50%, -50%);
-    width: 380px;
-    height: 380px;
+    width: 260px;
+    height: 260px;
     background-size: contain;
     background-repeat: no-repeat;
     background-position: center;
-    opacity: 0.10;
+    opacity: 0.07;
     z-index: -1;
     pointer-events: none;
 }
@@ -34,15 +38,22 @@ body {
 .policy-watermark::after {
     content: 'EXELIXI TECHNOLOGY';
     position: fixed;
-    top: 48%;
+    top: 52%;
     left: 50%;
-    transform: translate(-50%, -50%) rotate(-18deg);
-    font-size: 42px;
+    transform: translate(-50%, -50%) rotate(-20deg);
+    font-size: 34px;
     font-weight: bold;
-    color: rgba(0, 52, 120, 0.07);
+    color: rgba(0, 52, 120, 0.05);
     white-space: nowrap;
     z-index: -2;
     pointer-events: none;
+}
+
+.policy-footer {
+    text-align: center;
+    font-size: 9px;
+    margin-top: 6px;
+    color: #333;
 }
 
 p {
@@ -69,21 +80,30 @@ th {
     font-size: 10px;
     font-weight: bold;
     line-height: 2;
+    margin: 2px 0;
+    padding: 1px 0;
 }
 
 th.subtitle {
     background-color: #ccc;
-    width: 100%;
+    width: 50%;
     text-align: center;
-    font-size: 16px;
+    font-size: 10px;
     font-weight: bold;
     line-height: 2;
+    padding: 2px 4px;
 }
 
 .section {
     font-size: 8px;
     text-align: left;
-    line-height: 1.5;
+    line-height: 1.35;
+}
+
+.section td,
+.section th {
+    padding: 1px 3px;
+    vertical-align: top;
 }
 
 .section th {
@@ -100,10 +120,36 @@ th.subtitle {
 
 table.declaracion {
     border: 1px solid black;
-    font-size: 10px;
+    font-size: 8px;
     text-align: left;
-    line-height: 1.5;
-    /* font-weight: bold; */
+    line-height: 1.35;
+    border-collapse: collapse;
+    width: 100%;
+}
+
+table.declaracion.firma-table td {
+    padding: 3px 5px;
+    vertical-align: top;
+    line-height: 1.35;
+}
+
+.firma-stamp {
+    text-align: center;
+    vertical-align: middle !important;
+    width: 22%;
+    border-left: 1px solid black;
+}
+
+.firma-estatus {
+    display: inline-block;
+    font-size: 13px;
+    font-weight: bold;
+    letter-spacing: 0.5px;
+}
+
+.declaracion-text {
+    line-height: 1.35;
+    margin: 4px 0 6px;
 }
 
 /* .table_coberturas {
@@ -152,11 +198,11 @@ ul li {
 }
 
 .line08 {
-    line-height: 0.8;
+    line-height: 1.1;
 }
 
 .line10 {
-    line-height: 1;
+    line-height: 1.2;
 }
 
 .line12 {
