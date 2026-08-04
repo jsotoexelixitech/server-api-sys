@@ -1,18 +1,25 @@
 import { BadRequestException, Body, Controller, Get, HttpCode, HttpStatus, Param, Post } from '@nestjs/common';
-import { ApiBody, ApiOperation, ApiParam, ApiResponse, ApiTags } from '@nestjs/swagger';
+import { ApiBody, ApiHeader, ApiOperation, ApiParam, ApiResponse, ApiTags } from '@nestjs/swagger';
 import { ClientService } from './client.service';
 import { ApiCommonErrors } from '../../common/swagger/api-error-responses';
+import { APIKEY_HEADER } from '../../common/swagger/api-docs.constants';
+import { NestProtected } from '../auth/decorators/nest-protected.decorator';
+import { NEST_AUTH_SCOPES } from '../auth/scopes/nest-auth-scopes.constants';
 import { SearchCoveragesDto } from './dto/search-coverages.dto';
 
 @ApiTags('7. Consulta de clientes')
 @Controller('v1/client')
+@NestProtected(NEST_AUTH_SCOPES.CLIENT_READ)
 export class ClientController {
   constructor(private readonly clientService: ClientService) {}
 
   @Get('search/policies/:cci_rif')
+  @ApiHeader(APIKEY_HEADER)
   @ApiOperation({
     summary: 'Pólizas del asegurado',
-    description: 'Devuelve las pólizas vigentes e históricas asociadas a la cédula o RIF del asegurado.',
+    description:
+      'Devuelve las pólizas vigentes e históricas asociadas a la cédula o RIF del asegurado. ' +
+      '**Seguridad**: requiere API Key con scope `client:read`.',
   })
   @ApiParam({ name: 'cci_rif', type: String, example: '12345678', description: 'Cédula o RIF numérico del asegurado' })
   @ApiResponse({ status: 200, schema: { example: { status: true, result: { polizas: [{ cnpoliza: '18-1-0000011500', cramo: 18, cplan: 'RCVBAS' }] } } } })
@@ -27,9 +34,12 @@ export class ClientController {
   }
 
   @Get('search/:cci_rif')
+  @ApiHeader(APIKEY_HEADER)
   @ApiOperation({
     summary: 'Datos completos del cliente',
-    description: 'Consulta datos personales, teléfonos, direcciones y correos del cliente por cédula o RIF.',
+    description:
+      'Consulta datos personales, teléfonos, direcciones y correos del cliente por cédula o RIF. ' +
+      '**Seguridad**: requiere API Key con scope `client:read`.',
   })
   @ApiParam({ name: 'cci_rif', type: String, example: '12345678', description: 'Cédula o RIF numérico del cliente' })
   @ApiResponse({
@@ -59,11 +69,13 @@ export class ClientController {
 
   @Post('search/coverages')
   @HttpCode(HttpStatus.OK)
+  @ApiHeader(APIKEY_HEADER)
   @ApiOperation({
     summary: 'Coberturas de una póliza',
     description:
       'Consulta coberturas y datos de la póliza por número de póliza, año y mes. ' +
-      'Devuelve información de la póliza y el detalle de coberturas contratadas.',
+      'Devuelve información de la póliza y el detalle de coberturas contratadas. ' +
+      '**Seguridad**: requiere API Key con scope `client:read`.',
   })
   @ApiBody({ type: SearchCoveragesDto })
   @ApiResponse({

@@ -7,6 +7,7 @@ export const NEST_AUTH_SCOPES = {
   DOCUMENTS_WRITE: 'documents:write',
   ADMIN_KEYS: 'admin:keys',
   PRODUCT_EMISSION_WRITE: 'product-emission:write',
+  CLIENT_READ: 'client:read',
 } as const;
 
 export type NestAuthScopeId =
@@ -61,6 +62,16 @@ export const NEST_AUTH_SCOPE_CATALOG: NestAuthScopeMeta[] = [
     label: 'Emisión genérica (product-builder)',
     description: 'Cotizar/validar/emitir pólizas de ramos creados en proyecto-product-builder',
     routes: [],
+  },
+  {
+    id: NEST_AUTH_SCOPES.CLIENT_READ,
+    label: 'Consulta de clientes',
+    description: 'Datos del cliente, pólizas del asegurado y coberturas',
+    routes: [
+      'GET /api/v1/client/search/{cci_rif}',
+      'GET /api/v1/client/search/policies/{cci_rif}',
+      'POST /api/v1/client/search/coverages',
+    ],
   },
 ];
 
