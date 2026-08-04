@@ -120,7 +120,7 @@ function buildCoberturasAutomovilHtml(
       <td class="bold">${escapeHtml(c.name)}</td>
       <td class="right">${formatMoneyVe(c.sumaAsegurada)}</td>
       <td class="right">${tasa}</td>
-      <td class="right"></td>
+      <td class="right">0,00</td>
       <td class="right">${formatMoneyVe(c.prima)}</td>
     </tr>`,
   );
@@ -168,20 +168,51 @@ function buildRecibosHtml(data: PolicyDocumentData): string {
     </tr>`;
 }
 
-function buildAseguradosHtml(asegurado: PartyDto): string {
+function buildAseguradosHtml(
+  asegurado: PartyDto,
+  risk: Record<string, unknown>,
+  fechaIngreso: Date,
+): string {
+  const fnacRaw = pickRiskValue(
+    risk,
+    'fechaNacimiento',
+    'Fecha de nacimiento',
+    'fecha_nacimiento',
+    'fnacimiento',
+    'F. Nacimiento',
+  );
+  let fnac = '—';
+  if (fnacRaw) {
+    fnac = fnacRaw.includes('/') ? fnacRaw : formatDateVe(new Date(fnacRaw));
+  }
+  const sexo = pickRiskValue(risk, 'sexo', 'Sexo', 'genero', 'Género') || '—';
+  const edad = pickRiskValue(risk, 'edad', 'Edad');
+  const ocupacion = pickRiskValue(risk, 'ocupacion', 'Ocupación', 'ocupacion');
+  const titular = pickRiskValue(risk, 'parentescoAsegurado', 'Parentesco') || 'TITULAR';
+
   return `
     <tr>
       <td class="bold" width="12%">Nombre y Apellido:</td>
       <td width="26%">${escapeHtml(dash(asegurado.nombre))}</td>
       <td class="bold" width="10%">${escapeHtml(dash(asegurado.identificacion))}</td>
-      <td class="bold" width="9%">TITULAR</td>
+      <td class="bold" width="9%">${escapeHtml(titular)}</td>
       <td class="bold" width="9%">F. Nacimiento:</td>
-      <td>—</td>
+      <td>${escapeHtml(fnac)}</td>
       <td class="bold" style="text-align:right">SEXO:</td>
-      <td style="text-align:left">—</td>
+      <td style="text-align:left">${escapeHtml(sexo)}</td>
       <td class="bold" style="text-align:right">F. Ingreso:</td>
-      <td style="text-align:left">${formatDateVe(new Date())}</td>
-    </tr>`;
+      <td style="text-align:left">${formatDateVe(fechaIngreso)}</td>
+    </tr>
+    ${edad || ocupacion ? `<tr>
+      <td class="bold">Edad:</td>
+      <td>${escapeHtml(edad || '—')}</td>
+      <td class="bold" colspan="2">Ocupación:</td>
+      <td colspan="6">${escapeHtml(ocupacion || '—')}</td>
+    </tr>` : ''}`;
+}
+
+function emptyOr(value: string, fallback = 'N/A'): string {
+  return value.trim() ? value : fallback;
 }
 
 function buildBeneficiariosHtml(beneficiarios: PartyDto[]): string {
@@ -225,16 +256,19 @@ function buildFirmaHtml(data: PolicyDocumentData): string {
 }
 
 function buildVehicleVars(risk: Record<string, unknown>): Record<string, string> {
-  const v = (...candidates: string[]) =>
+  const req = (...candidates: string[]) =>
     escapeHtml(pickRiskValue(risk, ...candidates) || '—');
+  const opt = (...candidates: string[]) =>
+    escapeHtml(emptyOr(pickRiskValue(risk, ...candidates), 'N/A'));
   const uso =
     pickRiskValue(risk, 'Uso', 'Uso del vehículo', 'uso', 'Uso del Vehiculo') || 'PARTICULAR';
+  const gruaRaw = pickRiskValue(risk, 'Grua', 'Grúa', 'grua', 'Servicio de grua', 'Servicio de grúa');
   return {
-    XMARCA: v('Marca', 'marca'),
-    XMODELO: v('Modelo', 'modelo'),
-    XVERSION: v('Version', 'Versión', 'version', 'versionVehiculo'),
-    FANO: v('Anio', 'Año', 'Ano', 'anio', 'ano', 'year'),
-    XSERIALCARROCERIA: v(
+    XMARCA: req('Marca', 'marca'),
+    XMODELO: req('Modelo', 'modelo'),
+    XVERSION: req('Version', 'Versión', 'version', 'versionVehiculo'),
+    FANO: req('Anio', 'Año', 'Ano', 'anio', 'ano', 'year'),
+    XSERIALCARROCERIA: req(
       'serial',
       'SerialCarroceria',
       'SerialCarr',
@@ -245,7 +279,7 @@ function buildVehicleVars(risk: Record<string, unknown>): Record<string, string>
       'Carroceria',
       'Carrocería',
     ),
-    XSERIALMOTOR: v(
+    XSERIALMOTOR: req(
       'serialMotor',
       'SerialMotor',
       'SerialMot',
@@ -253,19 +287,20 @@ function buildVehicleVars(risk: Record<string, unknown>): Record<string, string>
       'serial_motor',
       'Serial Motor',
     ),
-    XPLACA: v('Placa', 'placa'),
-    XTRANSMISION: v('Transmision', 'Transmisión', 'transmision', 'transmisión'),
+    XPLACA: req('Placa', 'placa'),
+    XTRANSMISION: req('Transmision', 'Transmisión', 'transmision', 'transmisión'),
     XUSO: escapeHtml(uso),
-    NCAPACIDADPASAJEROS: v(
+    NCAPACIDADPASAJEROS: req(
       'Puestos',
       'puestos',
       'NumeroDePuestos',
       'Cantidad de puestos',
       'Capacidad de pasajeros',
     ),
-    NPESOVACIO: v('Peso', 'peso', 'Peso vacío', 'Peso vacio', 'Peso Vacio'),
-    NCAPCARGA: v('Capacidad', 'capacidad', 'Capacidad de carga', 'Cap. carga'),
-    XCOLOR: v('Color', 'color'),
+    NPESOVACIO: opt('Peso', 'peso', 'Peso vacío', 'Peso vacio', 'Peso Vacio'),
+    NCAPCARGA: opt('Capacidad', 'capacidad', 'Capacidad de carga', 'Cap. carga'),
+    XCOLOR: req('Color', 'color'),
+    XGRUA: escapeHtml(gruaRaw || 'NO'),
   };
 }
 
@@ -352,7 +387,7 @@ export function renderPolicyHtml(
     titulo_pdf: `RECIBO DE PÓLIZA - ${data.ramoPoliza}`,
     xramo: escapeHtml(data.ramoPoliza),
     cpoliza: escapeHtml(data.numeroPoliza),
-    cnpoliza_rel: '—',
+    cnpoliza_rel: 'N/A',
     certificado: '1',
     istatpol: escapeHtml(estatusLabel),
     femision_pol: formatDateVe(data.fechaEmision),
@@ -371,7 +406,7 @@ export function renderPolicyHtml(
     coberturas_automovil: coberturasAutomovilHtml,
     recibos: buildRecibosHtml(data),
     firma_html: buildFirmaHtml(data),
-    asegurados: buildAseguradosHtml(data.asegurado),
+    asegurados: buildAseguradosHtml(data.asegurado, data.riskData ?? {}, data.vigenciaDesde),
     beneficiarios: buildBeneficiariosHtml(data.beneficiarios ?? []),
     section_beneficiario_preferencial: '',
     xsuma_asegurada: '',

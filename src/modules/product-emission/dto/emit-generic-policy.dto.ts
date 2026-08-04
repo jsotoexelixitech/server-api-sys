@@ -93,4 +93,14 @@ export class EmitGenericPolicyDto {
   @IsOptional()
   @IsString()
   intermediario?: string;
+
+  @ApiPropertyOptional({
+    description:
+      'Plantilla HTML del cuadro-póliza. Si se omite, se infiere del branch/nombre del producto.',
+    enum: ['automovil', 'salud', 'funerario', 'personas'],
+    example: 'funerario',
+  })
+  @IsOptional()
+  @IsString()
+  policyTemplate?: 'automovil' | 'salud' | 'funerario' | 'personas';
 }

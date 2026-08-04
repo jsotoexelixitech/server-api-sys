@@ -13,6 +13,8 @@ export interface PolicyDocumentCoverageRow {
 export interface PolicyDocumentData {
   ramoPoliza: string;
   productName: string;
+  productInternalCode?: string;
+  policyTemplate?: PolicyTemplateKey;
   numeroPoliza: string;
   planName: string;
   moneda: string;
@@ -49,7 +51,11 @@ export class PolicyDocumentService {
     data: PolicyDocumentData,
     productBranch: string,
   ): Promise<PolicyPdfResult> {
-    const templateKey = resolvePolicyTemplateKey(productBranch);
+    const templateKey = resolvePolicyTemplateKey(productBranch, {
+      productName: data.productName,
+      internalCode: data.productInternalCode,
+      templateOverride: data.policyTemplate,
+    });
     this.logger.log(
       `Generando cuadro-póliza PDF (html=${templateKey}, póliza=${data.numeroPoliza}, ramo=${data.ramoPoliza})`,
     );

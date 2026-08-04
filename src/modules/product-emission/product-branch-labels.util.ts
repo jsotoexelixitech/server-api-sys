@@ -12,8 +12,15 @@ const BRANCH_LABELS: Record<string, string> = {
   PATRIMONIAL: 'PATRIMONIAL',
   INCLUSIVO: 'INCLUSIVO',
   RCV_OBLIGATORIO: 'RCV',
+  FUNERARIO: 'GASTOS FUNERARIOS',
+  PERSONAS: 'ACCIDENTES PERSONALES',
 };
 
-export function branchToRamoPolizaLabel(branch: string): string {
+export function branchToRamoPolizaLabel(
+  branch: string,
+  template?: 'automovil' | 'salud' | 'funerario' | 'personas',
+): string {
+  if (template === 'funerario') return 'GASTOS FUNERARIOS';
+  if (template === 'personas') return 'ACCIDENTES PERSONALES';
   return BRANCH_LABELS[branch] ?? branch;
 }

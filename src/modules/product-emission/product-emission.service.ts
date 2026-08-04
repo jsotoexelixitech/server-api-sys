@@ -256,8 +256,13 @@ export class ProductEmissionService {
       resolved.product.legalDocuments?.find((d) => d.documentType === 'POLIZA');
 
     const documentData: PolicyDocumentData = {
-      ramoPoliza: resolved.ramoPoliza,
+      ramoPoliza: branchToRamoPolizaLabel(
+        resolved.product.branch,
+        dto.policyTemplate,
+      ),
       productName: resolved.product.commercialName,
+      productInternalCode: resolved.product.internalCode,
+      policyTemplate: dto.policyTemplate,
       numeroPoliza,
       planName: resolved.plan.name,
       moneda: resolved.product.currency,

@@ -152,7 +152,7 @@ RESPONSE=$(curl -s -X POST "$NEST_URL/emit" -H "Content-Type: application/json" 
   \"productId\": \"$PRODUCT_ID\",
   \"tomador\": { \"nombre\": \"CARLOS EDUARDO PEREZ MATA\", \"identificacion\": \"V-14567890\", \"direccion\": \"Av. Libertador, Edif. Centro, Piso 4\", \"email\": \"carlos.perez@example.com\", \"ciudad\": \"Valencia\", \"estado\": \"Carabobo\", \"zonaPostal\": \"2001\", \"telefono\": \"0414-1234567\" },
   \"asegurado\": { \"nombre\": \"CARLOS EDUARDO PEREZ MATA\", \"identificacion\": \"V-14567890\", \"direccion\": \"Av. Libertador, Edif. Centro, Piso 4\", \"email\": \"carlos.perez@example.com\", \"ciudad\": \"Valencia\", \"estado\": \"Carabobo\", \"zonaPostal\": \"2001\", \"telefono\": \"0414-1234567\" },
-  \"riskData\": { \"marca\": \"Chevrolet\", \"modelo\": \"Aveo\", \"version\": \"LS\", \"anio\": \"2022\", \"placa\": \"AC123BC\", \"color\": \"Blanco\", \"uso\": \"Particular\", \"puestos\": \"5\", \"serial\": \"1HGBH41JXMN109186\", \"serialMotor\": \"ENG123456\", \"transmision\": \"Automatica\" },
+  \"riskData\": { \"marca\": \"Chevrolet\", \"modelo\": \"Aveo\", \"version\": \"LS\", \"anio\": \"2022\", \"placa\": \"AC123BC\", \"color\": \"Blanco\", \"uso\": \"Particular\", \"puestos\": \"5\", \"serial\": \"1HGBH41JXMN109186\", \"serialMotor\": \"ENG123456\", \"transmision\": \"Automatica\", \"peso\": \"1100\", \"capacidad\": \"500\", \"grua\": \"NO\" },
   \"estatus\": \"PAGADO\",
   \"canalVenta\": \"AGENTE EXCLUSIVO\",
   \"intermediario\": \"EXELIXI TECHNOLOGY\"
