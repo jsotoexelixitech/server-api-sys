@@ -638,11 +638,62 @@
 
     function setModalButtons(mode, key) {
       modalMode = mode;
+      const isSuccess = mode === 'success';
       document.getElementById('btnModalEdit').classList.toggle('hidden', mode !== 'view');
       document.getElementById('btnModalSave').classList.toggle('hidden', mode !== 'edit');
       document.getElementById('btnModalRevoke').classList.toggle('hidden', mode !== 'view' || !key?.active);
       document.getElementById('btnModalReactivate').classList.toggle('hidden', mode !== 'view' || key?.active);
-      document.getElementById('btnModalCancel').textContent = mode === 'edit' ? 'Cancelar edición' : 'Cerrar';
+      document.getElementById('btnModalCancel').textContent = isSuccess
+        ? 'Entendido, ya copié'
+        : mode === 'edit'
+          ? 'Cancelar edición'
+          : 'Cerrar';
+    }
+
+    function resetCreateWizard() {
+      document.getElementById('keyName').value = '';
+      document.getElementById('xcanalVenta').value = '';
+      document.getElementById('ccanalalt').value = '';
+      document.getElementById('cscanalalt').value = '';
+      document.getElementById('ctipocanal').value = '';
+      document.getElementById('cproductor').value = '80080';
+      renderRouteCheckboxes('scopeDetailList', [], 'scope');
+      setWizardStep(1);
+    }
+
+    function showCreateSuccessModal(name, plain, docsUrl) {
+      modalKeyId = null;
+      modalDetail = null;
+      const apiBase = window.location.origin.replace(/\/admin\/?$/, '');
+      const env = `NEST_API_URL=${apiBase}\nNEST_API_KEY=${plain}\nNEST_AUTH_USE_TOKEN=true`;
+      document.getElementById('keyModalTitle').textContent = '✓ Key creada correctamente';
+      document.getElementById('keyModalSubtitle').textContent =
+        `${name} — copie el secreto ahora (solo se muestra una vez)`;
+      document.getElementById('keyModalBody').innerHTML = `
+        <div class="access-banner scoped">
+          <strong>Guarde estos datos antes de cerrar.</strong> El plainKey no se volverá a mostrar en el panel.
+        </div>
+        <div class="detail-item" style="margin-top:1rem">
+          <label>NEST_API_KEY (plainKey)</label>
+          <div class="code-block" style="margin-top:.35rem;background:#0f172a;color:#7dd3fc">${escapeHtml(plain)}</div>
+          <div class="copy-row"><button type="button" id="btnModalCopyKey">Copiar key</button></div>
+        </div>
+        <div class="detail-item" style="margin-top:1rem">
+          <label>Swagger filtrado</label>
+          <div class="code-block" style="margin-top:.35rem;background:#f8fafc;color:#0f1a5a">${escapeHtml(docsUrl || '—')}</div>
+          <div class="copy-row"><button type="button" id="btnModalCopyDocs">Copiar enlace Swagger</button></div>
+        </div>
+        <div class="detail-item" style="margin-top:1rem">
+          <label>Variables .env del consumidor</label>
+          <div class="code-block" style="margin-top:.35rem;background:#f8fafc;color:#0f1a5a">${escapeHtml(env)}</div>
+          <div class="copy-row"><button type="button" id="btnModalCopyEnv">Copiar .env</button></div>
+        </div>`;
+      setModalButtons('success', null);
+      document.getElementById('keyModalBackdrop').classList.add('open');
+      document.getElementById('keyModalBackdrop').setAttribute('aria-hidden', 'false');
+      document.getElementById('btnModalCopyKey')?.addEventListener('click', () => copyText(plain, 'Key copiada.'));
+      document.getElementById('btnModalCopyDocs')?.addEventListener('click', () => copyText(docsUrl || '', 'Enlace Swagger copiado.'));
+      document.getElementById('btnModalCopyEnv')?.addEventListener('click', () => copyText(env, '.env copiado.'));
     }
 
     function renderKeyView(detail) {
@@ -861,12 +912,14 @@
         const data = await api('/keys', { method: 'POST', body: JSON.stringify(body) });
         const plain = data.plainKey;
         const docsUrl = data.docsUrl || data.key?.docsUrl || '';
-        const env = `NEST_API_URL=http://127.0.0.1:3002\nNEST_API_KEY=${plain}\nNEST_AUTH_USE_TOKEN=true`;
         document.getElementById('plainKeyText').textContent = plain;
         document.getElementById('docsUrlText').textContent = docsUrl || '—';
-        document.getElementById('envSnippet').textContent = env;
+        document.getElementById('envSnippet').textContent =
+          `NEST_API_URL=${window.location.origin.replace(/\/admin\/?$/, '')}\nNEST_API_KEY=${plain}\nNEST_AUTH_USE_TOKEN=true`;
         document.getElementById('successPanel').classList.remove('hidden');
-        showToast('Key creada. Copie el secreto.', 'ok');
+        showCreateSuccessModal(name, plain, docsUrl);
+        resetCreateWizard();
+        showToast('Key creada. Copie el secreto del modal.', 'ok');
         loadKeys();
         switchTab('create');
       } catch (e) { showToast(e.message); }
