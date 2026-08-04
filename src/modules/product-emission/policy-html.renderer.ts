@@ -17,7 +17,7 @@ import {
   PolicyDocumentCoverageRow,
   PolicyDocumentData,
 } from './policy-document.service';
-import { htmlTemplatesRoot, readTemplateFile, resolveLogoDataUri } from './policy-html.paths.util';
+import { htmlTemplatesRoot, readTemplateFile, resolveLogoDataUri, resolveWatermarkDataUri } from './policy-html.paths.util';
 import { PolicyTemplateKey, templateFileName } from './policy-template.util';
 
 const EXELIXI_REBRAND: Array<[string, string]> = [
@@ -48,8 +48,21 @@ function replaceAll(html: string, vars: Record<string, string>): string {
   return out;
 }
 
+/** Varias pasadas: las secciones se insertan después de vars escalares en el objeto. */
+function fillTemplate(html: string, vars: Record<string, string>, passes = 3): string {
+  let out = html;
+  for (let i = 0; i < passes; i++) {
+    out = replaceAll(out, vars);
+  }
+  return out;
+}
+
 function loadSection(name: string): string {
   return rebrand(readTemplateFile(path.join('sections', `section_${name}.html`)));
+}
+
+function fillSection(name: string, vars: Record<string, string>): string {
+  return replaceAll(loadSection(name), vars);
 }
 
 function partyTomador(p: PartyDto | undefined): Record<string, string> {
@@ -100,13 +113,13 @@ function buildCoberturasAutomovilHtml(
   moneda: string,
   primaTotal: number,
 ): string {
-  const tag = mapMonedaSymbol(moneda);
+  const tasa = moneda.toUpperCase().includes('USD') ? 'TCR' : 'Bs';
   const rows = coberturas.map(
     (c) => `
     <tr>
       <td class="bold">${escapeHtml(c.name)}</td>
       <td class="right">${formatMoneyVe(c.sumaAsegurada)}</td>
-      <td class="right">${tag}</td>
+      <td class="right">${tasa}</td>
       <td class="right"></td>
       <td class="right">${formatMoneyVe(c.prima)}</td>
     </tr>`,
@@ -258,16 +271,27 @@ function buildPdfHeaderHtml(ramo: string, capitalSuscrito: string): string {
     </table>`;
 }
 
-function inlineStyles(html: string): string {
+function inlineStyles(html: string, watermarkUri: string | null): string {
   const cssPath = path.join(htmlTemplatesRoot(), 'style.css');
   const css = fs.existsSync(cssPath) ? fs.readFileSync(cssPath, 'utf8') : '';
+  const watermarkCss = watermarkUri
+    ? `.policy-watermark::before{background-image:url('${watermarkUri}');}`
+    : `.policy-watermark::after{content:'EXELIXI TECHNOLOGY';}`;
   const withoutLink = html.replace(
     /<link[^>]*href=["'][^"']*style\.css["'][^>]*>/i,
     `<style>${css}
       pagebreak, .pagebreak { display:block; page-break-before: always; }
+      ${watermarkCss}
     </style>`,
   );
   return withoutLink.replace(/<pagebreak\s*\/?>/gi, '<div class="pagebreak"></div>');
+}
+
+function wrapPolicyPages(html: string, header: string): string {
+  const parts = html.split('<div class="pagebreak"></div>');
+  return parts
+    .map((part) => `<div class="policy-page policy-watermark">${header}${part.trim()}</div>`)
+    .join('<div class="pagebreak"></div>');
 }
 
 export function renderPolicyHtml(
@@ -280,8 +304,14 @@ export function renderPolicyHtml(
   const estatusLabel = (data.estatus ?? 'PAGADO').toUpperCase();
   const title = `CUADRO - RECIBO DE PÓLIZA<br>${escapeHtml(data.ramoPoliza)}`;
   const capitalSuscrito = process.env.PRODUCT_EMISSION_CAPITAL_SUSCRITO ?? '70.000.000,00';
+  const coberturasAutomovilHtml = buildCoberturasAutomovilHtml(
+    data.coberturas,
+    data.moneda,
+    data.primaTotal,
+  );
+  const coberturasSaludHtml = buildCoberturasSaludHtml(data.coberturas, data.primaTotal);
 
-  const vars: Record<string, string> = {
+  const dataVars: Record<string, string> = {
     title,
     titulo_pdf: `RECIBO DE PÓLIZA - ${data.ramoPoliza}`,
     xramo: escapeHtml(data.ramoPoliza),
@@ -301,56 +331,46 @@ export function renderPolicyHtml(
     fdiapol: formatDayVe(data.fechaEmision),
     fmespol: formatMonthNameVe(data.fechaEmision),
     fanopol: formatYearVe(data.fechaEmision),
-    section_tomador_asegurado: loadSection('tomador_asegurado'),
-    section_poliza: loadSection('poliza'),
-    section_declaracion: loadSection('declaracion'),
-    section_firma: replaceAll(loadSection('firma'), {
-      firma_html: buildFirmaHtml(data),
-      ...partyTomador(data.tomador),
-    }),
-    section_recibos: replaceAll(loadSection('recibos'), {
-      recibos: buildRecibosHtml(data),
-    }),
-    section_coberturas: replaceAll(loadSection('coberturas'), {
-      suma_asegurada: `
+    coberturas: coberturasSaludHtml,
+    coberturas_automovil: coberturasAutomovilHtml,
+    recibos: buildRecibosHtml(data),
+    firma_html: buildFirmaHtml(data),
+    asegurados: buildAseguradosHtml(data.asegurado),
+    beneficiarios: buildBeneficiariosHtml(data.beneficiarios ?? []),
+    section_beneficiario_preferencial: '',
+    xsuma_asegurada: '',
+    suma_asegurada: `
         <tr>
           <th width="64%"></th>
           <th width="15%" style="text-align:right">SUMA ASEGURADA</th>
           <th width="4%"></th>
           <th width="15%" style="text-align:right">PRIMA</th>
         </tr>`,
-      coberturas: buildCoberturasSaludHtml(data.coberturas, data.primaTotal),
-    }),
-    section_coberturas_automovil: replaceAll(loadSection('coberturas_automovil'), {
-      coberturas_automovil: buildCoberturasAutomovilHtml(
-        data.coberturas,
-        data.moneda,
-        data.primaTotal,
-      ),
-    }),
-    section_automovil: loadSection('automovil'),
-    section_asegurados: buildAseguradosHtml(data.asegurado),
-    section_beneficiarios: buildBeneficiariosHtml(data.beneficiarios ?? []),
-    coberturas: buildCoberturasSaludHtml(data.coberturas, data.primaTotal),
-    coberturas_automovil: buildCoberturasAutomovilHtml(
-      data.coberturas,
-      data.moneda,
-      data.primaTotal,
-    ),
-    recibos: buildRecibosHtml(data),
-    firma_html: buildFirmaHtml(data),
-    section_beneficiario_preferencial: '',
     ...partyTomador(data.tomador),
     ...partyAsegurado(data.asegurado),
     ...partyBeneficiario(beneficiario),
     ...buildVehicleVars(data.riskData ?? {}),
   };
 
-  html = replaceAll(html, vars);
-  html = inlineStyles(html);
+  const sectionVars: Record<string, string> = {
+    section_tomador_asegurado: fillSection('tomador_asegurado', dataVars),
+    section_poliza: fillSection('poliza', dataVars),
+    section_declaracion: fillSection('declaracion', dataVars),
+    section_automovil: fillSection('automovil', dataVars),
+    section_firma: fillSection('firma', dataVars),
+    section_recibos: fillSection('recibos', dataVars),
+    section_coberturas: fillSection('coberturas', dataVars),
+    section_coberturas_automovil: fillSection('coberturas_automovil', dataVars),
+    section_asegurados: fillSection('asegurados', dataVars),
+    section_beneficiarios: fillSection('beneficiarios', dataVars),
+  };
+
+  html = fillTemplate(html, { ...dataVars, ...sectionVars });
+  html = inlineStyles(html, resolveWatermarkDataUri());
 
   const header = buildPdfHeaderHtml(data.ramoPoliza, capitalSuscrito);
   const footer = `<div style="text-align:center;font-size:9px;margin-top:8px">Tel: +58-212-7726767 | info@exelixitech.com | https://exelixitech.com/</div>`;
+  const body = wrapPolicyPages(html, header);
 
-  return `<!DOCTYPE html><html><head><meta charset="utf-8"></head><body>${header}${html}${footer}</body></html>`;
+  return `<!DOCTYPE html><html><head><meta charset="utf-8"></head><body>${body}${footer}</body></html>`;
 }

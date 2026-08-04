@@ -4,6 +4,47 @@ table {
 /*margin-bottom: 1cm;*/
 }
 
+body {
+    font-family: Arial, Helvetica, sans-serif;
+    font-size: 10px;
+    margin: 0;
+    padding: 0;
+}
+
+.policy-page {
+    position: relative;
+}
+
+.policy-watermark::before {
+    content: '';
+    position: fixed;
+    top: 42%;
+    left: 50%;
+    transform: translate(-50%, -50%);
+    width: 380px;
+    height: 380px;
+    background-size: contain;
+    background-repeat: no-repeat;
+    background-position: center;
+    opacity: 0.10;
+    z-index: -1;
+    pointer-events: none;
+}
+
+.policy-watermark::after {
+    content: 'EXELIXI TECHNOLOGY';
+    position: fixed;
+    top: 48%;
+    left: 50%;
+    transform: translate(-50%, -50%) rotate(-18deg);
+    font-size: 42px;
+    font-weight: bold;
+    color: rgba(0, 52, 120, 0.07);
+    white-space: nowrap;
+    z-index: -2;
+    pointer-events: none;
+}
+
 p {
     font-size: 14px;
     text-align: justify;
