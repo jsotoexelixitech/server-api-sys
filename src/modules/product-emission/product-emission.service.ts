@@ -255,11 +255,13 @@ export class ProductEmissionService {
     ) ??
       resolved.product.legalDocuments?.find((d) => d.documentType === 'POLIZA');
 
+    const ramoPolizaLabel = branchToRamoPolizaLabel(
+      resolved.product.branch,
+      dto.policyTemplate,
+    );
+
     const documentData: PolicyDocumentData = {
-      ramoPoliza: branchToRamoPolizaLabel(
-        resolved.product.branch,
-        dto.policyTemplate,
-      ),
+      ramoPoliza: ramoPolizaLabel,
       productName: resolved.product.commercialName,
       productInternalCode: resolved.product.internalCode,
       policyTemplate: dto.policyTemplate,
@@ -302,7 +304,7 @@ export class ProductEmissionService {
       return {
         persisted: false,
         numeroPoliza,
-        ramoPoliza: resolved.ramoPoliza,
+        ramoPoliza: ramoPolizaLabel,
         productName: resolved.product.commercialName,
         planName: resolved.plan.name,
         primaTotal: resolved.primaTotal,
@@ -319,7 +321,7 @@ export class ProductEmissionService {
         numeroPoliza,
         productId: resolved.product.id,
         productBranch: resolved.product.branch,
-        ramoPoliza: resolved.ramoPoliza,
+        ramoPoliza: ramoPolizaLabel,
         productName: resolved.product.commercialName,
         planName: resolved.plan.name,
         moneda: resolved.product.currency,

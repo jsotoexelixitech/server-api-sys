@@ -20,7 +20,16 @@ export function branchToRamoPolizaLabel(
   branch: string,
   template?: 'automovil' | 'salud' | 'funerario' | 'personas',
 ): string {
+  // Plantilla funerario: productos VIDA con nombre funerario usan ese rótulo.
   if (template === 'funerario') return 'GASTOS FUNERARIOS';
-  if (template === 'personas') return 'ACCIDENTES PERSONALES';
+  // Plantilla "personas" = layout genérico (sin vehículo). Solo etiquetar como
+  // Accidentes Personales cuando el ramo es VIDA/PERSONAS — NO cuando es
+  // PATRIMONIAL, INCLUSIVO, etc. (bug: "Naves" salía como ACCIDENTES PERSONALES).
+  if (
+    template === 'personas'
+    && (branch === 'VIDA' || branch === 'PERSONAS')
+  ) {
+    return 'ACCIDENTES PERSONALES';
+  }
   return BRANCH_LABELS[branch] ?? branch;
 }
