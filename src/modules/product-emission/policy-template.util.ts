@@ -24,7 +24,16 @@ export function resolvePolicyTemplateKey(
   ) {
     return 'personas';
   }
-  return 'automovil';
+  if (
+    productBranch === 'AUTOMOVIL' ||
+    productBranch === 'RCV_OBLIGATORIO' ||
+    blob.includes('AUTO')
+  ) {
+    return 'automovil';
+  }
+  // Ramos nuevos sin plantilla dedicada: cuadro genérico de personas
+  // (la plantilla automóvil mostraría una sección de vehículo vacía).
+  return 'personas';
 }
 
 export function templateFileName(key: PolicyTemplateKey): string {
