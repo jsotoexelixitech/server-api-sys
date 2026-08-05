@@ -1,6 +1,6 @@
-import { Injectable, Logger } from '@nestjs/common';
+import { Injectable, Logger, OnModuleInit } from '@nestjs/common';
 import { PartyDto } from './dto/party.dto';
-import { htmlToPdfBuffer } from './policy-html-pdf.util';
+import { htmlToPdfBuffer, warmUpPdfRenderer } from './policy-html-pdf.util';
 import { renderPolicyHtml } from './policy-html.renderer';
 import { PolicyTemplateKey, resolvePolicyTemplateKey } from './policy-template.util';
 
@@ -40,8 +40,13 @@ export interface PolicyPdfResult {
 }
 
 @Injectable()
-export class PolicyDocumentService {
+export class PolicyDocumentService implements OnModuleInit {
   private readonly logger = new Logger(PolicyDocumentService.name);
+
+  onModuleInit(): void {
+    // Pre-lanza Chromium para que la primera emisión no pague el arranque frío.
+    warmUpPdfRenderer();
+  }
 
   /**
    * Genera el cuadro-póliza en PDF renderizando plantillas HTML (port de PHP)

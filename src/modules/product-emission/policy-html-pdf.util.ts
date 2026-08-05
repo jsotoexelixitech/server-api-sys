@@ -1,5 +1,5 @@
 import * as fs from 'fs';
-import puppeteer from 'puppeteer';
+import puppeteer, { Browser } from 'puppeteer';
 
 const SYSTEM_CHROME_CANDIDATES = [
   process.env.PUPPETEER_EXECUTABLE_PATH,
@@ -17,15 +17,39 @@ function resolveChromeExecutable(): string | undefined {
   return undefined;
 }
 
-export async function htmlToPdfBuffer(html: string): Promise<Buffer> {
-  const executablePath = resolveChromeExecutable();
-  const browser = await puppeteer.launch({
+// Chromium persistente: lanzarlo cuesta ~30s en srv001, así que se reutiliza
+// entre emisiones y solo se relanza si el proceso muere.
+let browserPromise: Promise<Browser> | null = null;
+
+async function getBrowser(): Promise<Browser> {
+  if (browserPromise) {
+    const existing = await browserPromise.catch(() => null);
+    if (existing && existing.connected) return existing;
+    browserPromise = null;
+  }
+
+  browserPromise = puppeteer.launch({
     headless: true,
-    executablePath,
+    executablePath: resolveChromeExecutable(),
     args: ['--no-sandbox', '--disable-setuid-sandbox', '--disable-dev-shm-usage'],
   });
+
   try {
-    const page = await browser.newPage();
+    const browser = await browserPromise;
+    browser.once('disconnected', () => {
+      browserPromise = null;
+    });
+    return browser;
+  } catch (err) {
+    browserPromise = null;
+    throw err;
+  }
+}
+
+export async function htmlToPdfBuffer(html: string): Promise<Buffer> {
+  const browser = await getBrowser();
+  const page = await browser.newPage();
+  try {
     await page.setContent(html, { waitUntil: 'load' });
     const pdf = await page.pdf({
       format: 'A4',
@@ -34,6 +58,11 @@ export async function htmlToPdfBuffer(html: string): Promise<Buffer> {
     });
     return Buffer.from(pdf);
   } finally {
-    await browser.close();
+    await page.close().catch(() => undefined);
   }
+}
+
+/** Pre-lanza Chromium al arrancar para que la primera emisión no pague el frío. */
+export function warmUpPdfRenderer(): void {
+  void getBrowser().catch(() => undefined);
 }
