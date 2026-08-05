@@ -21,6 +21,7 @@ import { Request, Response } from 'express';
 import * as fs from 'fs';
 import * as path from 'path';
 import { resolvePublicApiPaths } from '../../common/config/public-path';
+import { SWAGGER_TAGS } from '../../common/swagger/swagger-tags.constants';
 import { Public } from '../auth/decorators/public.decorator';
 import { NestProtected } from '../auth/decorators/nest-protected.decorator';
 import { NEST_AUTH_SCOPES } from '../auth/scopes/nest-auth-scopes.constants';
@@ -34,7 +35,7 @@ import { ProductEmissionService } from './product-emission.service';
  * No toca ni depende de los módulos activos de La Mundial (emissions/personas/
  * collection/external) ni de Sis2000.
  */
-@ApiTags('10. Emisión genérica (product-builder)')
+@ApiTags(SWAGGER_TAGS.PRODUCT_EMISSION)
 @Controller('v1/product-emission')
 export class ProductEmissionController {
   private readonly logger = new Logger(ProductEmissionController.name);

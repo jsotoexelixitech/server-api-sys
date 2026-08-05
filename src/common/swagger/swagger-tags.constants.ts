@@ -9,6 +9,10 @@ export const SWAGGER_TAGS = {
   CLIENT: '7. Consulta de clientes',
   PARTNER: '8. Integraciones partner',
   CONDOMINIO: '9. Emisión condominio',
+  ENDOSOS: '10. Endosos',
+  /** Reservado para módulos partner (ej. renovaciones del integrador). */
+  RENOVATIONS: '11. Renovaciones',
+  PRODUCT_EMISSION: '12. Emisión genérica (product-builder)',
 } as const;
 
 export const SWAGGER_TAG_ORDER: string[] = Object.values(SWAGGER_TAGS);
@@ -33,4 +37,8 @@ export const SWAGGER_TAG_DESCRIPTIONS: Record<string, string> = {
   [SWAGGER_TAGS.PARTNER]:
     'Endpoints de integradores externos (paquetes npm registrados en PARTNER_PACKAGES).',
   [SWAGGER_TAGS.CONDOMINIO]: 'Planes, cotización y emisión de póliza de condominio.',
+  [SWAGGER_TAGS.ENDOSOS]: 'Endosos, anulaciones, cambios de datos y recibos.',
+  [SWAGGER_TAGS.RENOVATIONS]: 'Renovación de pólizas (integradores partner).',
+  [SWAGGER_TAGS.PRODUCT_EMISSION]:
+    'Cotizar, validar y emitir pólizas de ramos creados en product-builder.',
 };

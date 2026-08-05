@@ -49,3 +49,6 @@ export function NestPartnerProtected(scope: string) {
 
 /** Tag Swagger unificado para integraciones externas. */
 export const PARTNER_SWAGGER_TAG = '8. Integraciones partner';
+
+/** Tag reservado para módulos partner de renovaciones (orden Swagger). */
+export const PARTNER_RENOVATIONS_SWAGGER_TAG = '11. Renovaciones';

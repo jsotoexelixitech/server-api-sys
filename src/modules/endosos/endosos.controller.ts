@@ -11,8 +11,9 @@ import { CambioDatosVehiculoDto } from './dto/cambio-datos-vehiculo.dto';
 import { AsientoContableEndosoDto } from './dto/asiento-contable.dto';
 import { CalcularPrimaEndosoDto } from './dto/calcular-prima-endoso.dto';
 import { ApiCrudErrors } from '../../common/swagger/api-error-responses';
+import { SWAGGER_TAGS } from '../../common/swagger/swagger-tags.constants';
 
-@ApiTags('10. Endosos')
+@ApiTags(SWAGGER_TAGS.ENDOSOS)
 @Controller('endosos')
 export class EndososController {
   constructor(private readonly endososService: EndososService) {}
