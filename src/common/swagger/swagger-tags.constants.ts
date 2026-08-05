@@ -10,7 +10,7 @@ export const SWAGGER_TAGS = {
   PARTNER: '8. Integraciones partner',
   CONDOMINIO: '9. Emisión condominio',
   ENDOSOS: '10. Endosos',
-  /** Reservado para módulos partner (ej. renovaciones del integrador). */
+  /** Solo para paquetes partner — no addTag en main (evita sección vacía en Swagger). */
   RENOVATIONS: '11. Renovaciones',
   PRODUCT_EMISSION: '12. Emisión genérica (product-builder)',
 } as const;
