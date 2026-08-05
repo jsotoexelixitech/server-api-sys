@@ -183,7 +183,14 @@ function buildAseguradosHtml(
   );
   let fnac = '—';
   if (fnacRaw) {
-    fnac = fnacRaw.includes('/') ? fnacRaw : formatDateVe(new Date(fnacRaw));
+    // Ya en DD/MM/YYYY o MM/DD/YYYY → mostrar tal cual si viene formateado;
+    // ISO / Date → es-VE.
+    if (/^\d{2}\/\d{2}\/\d{4}$/.test(fnacRaw)) {
+      fnac = fnacRaw;
+    } else {
+      const parsed = new Date(fnacRaw);
+      fnac = Number.isNaN(parsed.getTime()) ? fnacRaw : formatDateVe(parsed);
+    }
   }
   const sexo = pickRiskValue(risk, 'sexo', 'Sexo', 'genero', 'Género') || '—';
   const edad = pickRiskValue(risk, 'edad', 'Edad');
