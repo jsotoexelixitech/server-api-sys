@@ -15,7 +15,7 @@ export class MssqlService implements OnModuleInit, OnModuleDestroy {
 
   constructor(private readonly config: ConfigService) {}
 
-  async onModuleInit(): Promise<void> {
+  private async connectPool(): Promise<void> {
     const cfg: sql.config = {
       user: this.config.getOrThrow<string>('USER_BD'),
       password: this.config.getOrThrow<string>('PASSWORD_BD'),
@@ -57,6 +57,10 @@ export class MssqlService implements OnModuleInit, OnModuleDestroy {
       );
       this.pool = null;
     }
+  }
+
+  async onModuleInit(): Promise<void> {
+    await this.connectPool();
   }
 
   async onModuleDestroy(): Promise<void> {
