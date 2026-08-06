@@ -98,6 +98,12 @@ async function bootstrap(): Promise<void> {
   app.set('trust proxy', 1);
   app.setGlobalPrefix('api');
 
+  // Permitir acceso a la red privada (Private Network Access / LNA) para evitar bloqueos del navegador
+  app.use((req: any, res: any, next: any) => {
+    res.setHeader('Access-Control-Allow-Private-Network', 'true');
+    next();
+  });
+
   app.enableCors({
     origin: corsOrigin === '*' ? true : corsOrigin.split(','),
     methods: 'GET,HEAD,PUT,PATCH,POST,DELETE,OPTIONS',
