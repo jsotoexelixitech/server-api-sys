@@ -8,6 +8,8 @@ export const NEST_AUTH_SCOPES = {
   ADMIN_KEYS: 'admin:keys',
   PRODUCT_EMISSION_WRITE: 'product-emission:write',
   CLIENT_READ: 'client:read',
+  /** Rutas bajo /api/v1/renovations/* (paquetes partner de renovación). */
+  RENOVATIONS_WRITE: 'renovations:write',
 } as const;
 
 export type NestAuthScopeId =
@@ -72,6 +74,12 @@ export const NEST_AUTH_SCOPE_CATALOG: NestAuthScopeMeta[] = [
       'GET /api/v1/client/search/policies/{cci_rif}',
       'POST /api/v1/client/search/coverages',
     ],
+  },
+  {
+    id: NEST_AUTH_SCOPES.RENOVATIONS_WRITE,
+    label: 'Renovaciones',
+    description: 'Renovación de pólizas (integradores partner bajo /api/v1/renovations/)',
+    routes: [],
   },
 ];
 

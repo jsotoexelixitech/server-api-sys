@@ -25,3 +25,9 @@ import {
 ```
 
 Exporte `register()` desde su paquete npm para que el host lo cargue vía `PARTNER_PACKAGES`.
+
+## Renovaciones (`/api/v1/renovations/*`)
+
+- Tag Swagger: `PARTNER_RENOVATIONS_SWAGGER_TAG` (`11. Renovaciones`)
+- Scope recomendado: `renovations:write` vía `@NestPartnerProtected('renovations:write')`
+- El host auto-indexa rutas bajo `/api/v1/renovations/` en el panel `/admin` aunque no exporte `partnerScopes`

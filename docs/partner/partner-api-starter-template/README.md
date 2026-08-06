@@ -46,7 +46,32 @@ Envia:
 3. Token de lectura de tu paquete (`read:packages`) o acceso al registry
 4. (Opcional) `partnerScopes` en `src/partner-scopes.ts` — el host los muestra en el panel admin al crear tokens
 
-Exelixi instala en el servidor, configura `PARTNER_PACKAGES` y despliega. Tus APIs quedan en Swagger sin tocar el core. Si no exportas `partnerScopes`, el host descubre las rutas al arrancar y crea scopes `partner:{slug}` automáticamente.
+Exelixi instala en el servidor, configura `PARTNER_PACKAGES` y despliega. Tus APIs quedan en Swagger sin tocar el core.
+
+### Rutas bajo `/api/v1/renovations/` (renovaciones)
+
+El host indexa automáticamente el scope **`renovations:write`** para cualquier ruta en ese prefijo (aparece en `/admin` al crear tokens).
+
+En tu controller usa el tag unificado del SDK (evita duplicar secciones en Swagger):
+
+```typescript
+import {
+  NestPartnerProtected,
+  PARTNER_RENOVATIONS_SWAGGER_TAG,
+} from '@jsotoexelixitech/nest-api-sdk';
+
+@ApiTags(PARTNER_RENOVATIONS_SWAGGER_TAG)
+@Controller('v1/renovations/v2')
+export class RenovationsController {
+  @Post('create')
+  @NestPartnerProtected('renovations:write')
+  create() { /* ... */ }
+}
+```
+
+Opcional: exporta también `partnerScopes` con la ruta exacta (`POST /api/v1/renovations/v2/create`) para descripción en el panel admin.
+
+Si no exportas `partnerScopes`, el host descubre las rutas al arrancar y crea scopes `partner:{slug}` solo bajo `/api/v1/partner/{slug}/`.
 
 ## Referencia QA (plantilla de ejemplo ya activa)
 

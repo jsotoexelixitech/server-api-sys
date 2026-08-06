@@ -17,6 +17,22 @@ export interface RouteCatalogEntry {
   description: string;
 }
 
+/** Scope inferido por prefijo de ruta (partner, renovaciones, admin). */
+export function inferScopeFromPath(normalizedPath: string): string | undefined {
+  const partnerMatch = normalizedPath.match(/\/api\/v1\/partner\/([^/]+)/i);
+  if (partnerMatch) return `partner:${partnerMatch[1]}`;
+
+  if (/\/api\/v1\/renovations\//i.test(normalizedPath)) {
+    return 'renovations:write';
+  }
+
+  if (/\/api\/v1\/admin\/(keys|scopes)/i.test(normalizedPath)) {
+    return 'admin:keys';
+  }
+
+  return undefined;
+}
+
 const partnerDeclaredScopes = new Map<string, NestAuthScopeMeta>();
 const discoveredRoutesByScope = new Map<string, Set<string>>();
 
@@ -54,6 +70,13 @@ export function registerPartnerScopeCatalog(
 function defaultScopeMeta(
   scopeId: string,
 ): Pick<NestAuthScopeMeta, 'label' | 'description'> {
+  if (scopeId === 'renovations:write') {
+    return {
+      label: 'Renovaciones',
+      description: 'Endpoints bajo /api/v1/renovations/ (integradores partner)',
+    };
+  }
+
   if (scopeId.startsWith('partner:')) {
     const slug = scopeId.slice('partner:'.length);
     return {
@@ -78,14 +101,8 @@ export function registerDiscoveredRoutes(routes: DiscoveredRoute[]): void {
     let scopeId = route.scopeId?.trim();
 
     if (!scopeId) {
-      const partnerMatch = normalizedPath.match(/\/api\/v1\/partner\/([^/]+)/i);
-      if (partnerMatch) {
-        scopeId = `partner:${partnerMatch[1]}`;
-      } else if (/\/api\/v1\/admin\/(keys|scopes)/i.test(normalizedPath)) {
-        scopeId = 'admin:keys';
-      } else {
-        continue;
-      }
+      scopeId = inferScopeFromPath(normalizedPath);
+      if (!scopeId) continue;
     }
 
     const bucket = discoveredRoutesByScope.get(scopeId) ?? new Set<string>();

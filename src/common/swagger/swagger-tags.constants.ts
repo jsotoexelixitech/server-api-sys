@@ -1,5 +1,6 @@
 /** Tags Swagger — nombres orientados a integradores (La Mundial). */
 export const SWAGGER_TAGS = {
+  AUTH: '0. Autenticación nest-api',
   INMA: '1. Catálogo vehicular',
   VALREP: '2. Cotización y catálogos',
   EMISSION: '3. Emisión automóvil',
@@ -27,6 +28,7 @@ export function createBrowserTagsSorter(): (a: string, b: string) => number {
 }
 
 export const SWAGGER_TAG_DESCRIPTIONS: Record<string, string> = {
+  [SWAGGER_TAGS.AUTH]: 'Canje de apikey por Bearer token y renovación de sesión.',
   [SWAGGER_TAGS.INMA]: 'Año, marca, modelo, versión y categoría de uso del vehículo.',
   [SWAGGER_TAGS.VALREP]: 'Estados, ciudades, planes, frecuencias y cálculo de prima.',
   [SWAGGER_TAGS.EMISSION]: 'Validación de placa/serial y emisión de póliza automóvil.',

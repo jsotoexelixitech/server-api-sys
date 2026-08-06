@@ -18,6 +18,7 @@ import {
   SWAGGER_TAGS,
   createBrowserTagsSorter,
 } from './common/swagger/swagger-tags.constants';
+import { normalizeSwaggerDocumentTags } from './common/swagger/normalize-swagger-tags';
 import {
   LA_MUNDIAL_BRAND,
   SWAGGER_BRAND_META,
@@ -154,6 +155,7 @@ async function bootstrap(): Promise<void> {
     }
 
     const swaggerConfig = swaggerConfigBuilder
+      .addTag(SWAGGER_TAGS.AUTH, SWAGGER_TAG_DESCRIPTIONS[SWAGGER_TAGS.AUTH])
       .addTag(SWAGGER_TAGS.INMA, SWAGGER_TAG_DESCRIPTIONS[SWAGGER_TAGS.INMA])
       .addTag(SWAGGER_TAGS.VALREP, SWAGGER_TAG_DESCRIPTIONS[SWAGGER_TAGS.VALREP])
       .addTag(SWAGGER_TAGS.EMISSION, SWAGGER_TAG_DESCRIPTIONS[SWAGGER_TAGS.EMISSION])
@@ -171,6 +173,7 @@ async function bootstrap(): Promise<void> {
       .build();
 
     const document = SwaggerModule.createDocument(app, swaggerConfig);
+    normalizeSwaggerDocumentTags(document);
     document.security = [{ bearer: [] }, { apikey: [] }];
     for (const pathKey of Object.keys(document.paths ?? {})) {
       if (pathKey.includes('/auth/token') || pathKey.includes('/auth/refresh')) {

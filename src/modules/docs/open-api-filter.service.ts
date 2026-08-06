@@ -1,7 +1,10 @@
 import { Injectable, NotFoundException } from '@nestjs/common';
 import { OpenAPIObject } from '@nestjs/swagger/dist/interfaces';
 import { grantMatchesRoute } from '../auth/scopes/nest-auth-scopes.constants';
-import { buildScopeCatalog } from '../auth/scopes/scope-catalog.registry';
+import {
+  buildScopeCatalog,
+  inferScopeFromPath,
+} from '../auth/scopes/scope-catalog.registry';
 import { OpenApiDocumentStore } from './open-api-document.store';
 
 const HTTP_METHODS = new Set([
@@ -96,7 +99,7 @@ export class OpenApiFilterService {
     const normalizedPath = this.normalizePath(pathKey);
     const lookupKey = `${method.toUpperCase()} ${normalizedPath}`;
     const requiredScope =
-      scopeIndex.get(lookupKey) ?? this.inferPartnerScope(normalizedPath);
+      scopeIndex.get(lookupKey) ?? inferScopeFromPath(normalizedPath);
 
     if (!requiredScope) return true;
     return grantMatchesRoute(
@@ -105,12 +108,6 @@ export class OpenApiFilterService {
       normalizedPath,
       requiredScope,
     );
-  }
-
-  private inferPartnerScope(path: string): string | undefined {
-    const match = path.match(/\/api\/v1\/partner\/([^/]+)/i);
-    if (!match) return undefined;
-    return `partner:${match[1]}`;
   }
 
   private isAlwaysVisible(path: string): boolean {
