@@ -24,19 +24,58 @@ export function parsePartnerPackageNames(raw: string | undefined): string[] {
   return [...new Set(raw.split(',').map((s) => s.trim()).filter(Boolean))];
 }
 
+function bindModuleRegister(
+  pkgName: string,
+  moduleClass: { register: PartnerModuleFactory; name?: string },
+  source: string,
+): PartnerModuleFactory {
+  loaderLog.warn(
+    `${pkgName}: exporte register() desde index.ts — usando ${source} como compatibilidad.`,
+  );
+  return moduleClass.register.bind(moduleClass);
+}
+
 function resolveRegister(
   pkgName: string,
   pkg: unknown,
 ): PartnerModuleFactory | null {
-  const mod = pkg as PartnerPackageExports & { default?: PartnerPackageExports };
-  const register = mod.register ?? mod.default?.register;
-  if (typeof register !== 'function') {
-    loaderLog.error(
-      `Paquete ${pkgName} inválido: exporte register() (DynamicModule).`,
-    );
-    return null;
+  const mod = pkg as PartnerPackageExports & { default?: unknown };
+  const direct = mod.register ?? (mod.default as PartnerPackageExports | undefined)?.register;
+  if (typeof direct === 'function') return direct;
+
+  const defaultExport = mod.default;
+  if (typeof defaultExport === 'function') {
+    const moduleClass = defaultExport as {
+      register?: PartnerModuleFactory;
+      name?: string;
+    };
+    if (typeof moduleClass.register === 'function') {
+      return bindModuleRegister(
+        pkgName,
+        moduleClass as { register: PartnerModuleFactory; name?: string },
+        `${moduleClass.name ?? 'default'}.register`,
+      );
+    }
   }
-  return register;
+
+  if (mod && typeof mod === 'object') {
+    for (const [key, value] of Object.entries(mod as unknown as Record<string, unknown>)) {
+      if (!key.endsWith('Module') || typeof value !== 'function') continue;
+      const moduleClass = value as { register?: PartnerModuleFactory; name?: string };
+      if (typeof moduleClass.register === 'function') {
+        return bindModuleRegister(
+          pkgName,
+          moduleClass as { register: PartnerModuleFactory; name?: string },
+          `${key}.register`,
+        );
+      }
+    }
+  }
+
+  loaderLog.error(
+    `Paquete ${pkgName} inválido: exporte register() (DynamicModule) desde index.js.`,
+  );
+  return null;
 }
 
 function resolvePartnerScopes(
