@@ -9,6 +9,7 @@ import {
   registerPartnerScopeCatalog,
 } from '../modules/auth/scopes/scope-catalog.registry';
 import { discoverRoutesFromController } from '../modules/auth/scopes/scope-route-discovery';
+import { requirePartnerPackage } from './partner-package-require';
 
 const loaderLog = new Logger('PartnerLoader');
 
@@ -97,8 +98,7 @@ export function loadPartnerDynamicModules(packageNames: string[]): DynamicModule
 
   for (const pkgName of packageNames) {
     try {
-      // eslint-disable-next-line @typescript-eslint/no-require-imports, @typescript-eslint/no-var-requires
-      const pkg = require(pkgName) as unknown;
+      const pkg = requirePartnerPackage(pkgName) as unknown;
       const register = resolveRegister(pkgName, pkg);
       if (!register) continue;
 
