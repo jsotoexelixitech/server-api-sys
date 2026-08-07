@@ -88,11 +88,32 @@
     .quick-links a:hover { color: var(--red); }
     .stats { display: grid; grid-template-columns: repeat(3,1fr); gap: 1rem; margin-bottom: 1rem; }
     @media (max-width:640px){ .stats { grid-template-columns: 1fr; } }
-    .stat { background: var(--card); border-radius: var(--radius); padding: 1rem; box-shadow: var(--shadow); border-left: 4px solid var(--blue-accent); }
-    .stat:nth-child(2){ border-left-color: var(--red); }
-    .stat:nth-child(3){ border-left-color: #10b981; }
-    .stat-label { font-size: .7rem; text-transform: uppercase; letter-spacing: .06em; color: var(--muted); font-weight: 600; }
-    .stat-value { font-size: 1.75rem; font-weight: 700; color: var(--blue); }
+    .stat { background: var(--card); border-radius: var(--radius); padding: 1.1rem 1.15rem; box-shadow: var(--shadow); border: 1px solid rgba(15,26,90,.06); position: relative; overflow: hidden; }
+    .stat::before { content: ''; position: absolute; left: 0; top: 0; bottom: 0; width: 4px; background: var(--blue-accent); border-radius: 4px 0 0 4px; }
+    .stat:nth-child(2)::before { background: var(--red); }
+    .stat:nth-child(3)::before { background: var(--success); }
+    .stat-label { font-size: .68rem; text-transform: uppercase; letter-spacing: .07em; color: var(--muted); font-weight: 600; }
+    .stat-value { font-size: 2rem; font-weight: 700; color: var(--blue); line-height: 1.1; margin-top: .15rem; }
+    .empty-state { text-align: center; padding: 3rem 1.5rem; color: var(--muted); }
+    .empty-state-icon { font-size: 2.5rem; margin-bottom: .75rem; opacity: .85; }
+    .empty-state h3 { margin: 0 0 .35rem; font-size: 1rem; color: var(--blue); font-weight: 600; }
+    .empty-state p { margin: 0 0 1rem; font-size: .82rem; line-height: 1.5; max-width: 360px; margin-left: auto; margin-right: auto; }
+    .sidebar-auth.disconnected { box-shadow: inset 0 0 0 2px rgba(232,79,81,.35); border-radius: 10px; }
+    .sidebar-auth .btn-connect { width: 100%; background: linear-gradient(135deg,var(--red),var(--red-dark)); color: #fff; border: none; font-weight: 700; }
+    .sidebar-auth .btn-connect:hover { filter: brightness(1.05); }
+    .page-header { background: linear-gradient(135deg, #fff 0%, #f8fafc 100%); }
+    .card { transition: box-shadow .2s; }
+    .card:hover { box-shadow: 0 8px 32px rgba(15,26,90,.1); }
+    .wizard-steps { background: #f8fafc; border-radius: 12px; padding: 1rem; border: 1px solid var(--border); }
+    .scope-group { transition: box-shadow .15s; }
+    .scope-group:not(.collapsed):hover { box-shadow: 0 4px 16px rgba(15,26,90,.06); }
+    .scope-group-head { border-left: 3px solid var(--blue-accent); }
+    .keys-search-wrap { position: relative; }
+    .keys-search-wrap::before { content: '🔍'; position: absolute; left: .75rem; top: 50%; transform: translateY(-50%); font-size: .85rem; opacity: .5; pointer-events: none; }
+    .keys-search { padding-left: 2.25rem; }
+    .table-wrap { box-shadow: inset 0 1px 0 rgba(15,26,90,.04); }
+    .conn-pill.offline { background: #fef2f2; border-color: #fecaca; color: #991b1b; }
+    .conn-pill.offline .dot { background: var(--red); }
     .tabs { display: flex; gap: .35rem; margin-bottom: 1rem; flex-wrap: wrap; }
     .tab { padding: .55rem 1.1rem; border-radius: 10px; border: 1px solid var(--border); background: #fff; font-family: inherit; font-size: .82rem; font-weight: 600; color: var(--muted); cursor: pointer; transition: all .15s; }
     .tab:hover { border-color: #cbd5e1; color: var(--blue); }
@@ -293,7 +314,7 @@
         <button type="button" class="nav-item" data-tab="create"><span class="nav-icon">➕</span> Crear token</button>
         <button type="button" class="nav-item" data-tab="guide"><span class="nav-icon">📖</span> Guía y scopes</button>
       </nav>
-      <div class="sidebar-auth">
+      <div class="sidebar-auth" id="sidebarAuth">
         <label for="adminToken">Token admin</label>
         <div class="input-wrap">
           <input id="adminToken" type="password" placeholder="NEST_ADMIN_TOKEN" autocomplete="off" />
@@ -339,7 +360,9 @@
           <button type="button" id="btnRefresh" class="btn btn-ghost">↻ Actualizar</button>
         </div>
         <div class="keys-toolbar">
-          <input type="search" id="keysSearch" class="keys-search" placeholder="Buscar por nombre, prefijo o canal…" autocomplete="off" />
+          <div class="keys-search-wrap" style="flex:1;max-width:360px">
+            <input type="search" id="keysSearch" class="keys-search" placeholder="Buscar por nombre, prefijo o canal…" autocomplete="off" style="width:100%;max-width:none" />
+          </div>
         </div>
         <div class="table-wrap">
           <table>
@@ -672,21 +695,6 @@
         syncGroupCheckbox(cb.dataset.scopeId, inputName);
       });
     }
-      const selected = new Set();
-      const scopeIds = new Set(scopesCatalog.map((s) => s.id));
-      for (const grant of grants ?? []) {
-        if (routesCatalog.some((r) => r.routeId === grant)) {
-          selected.add(grant);
-          continue;
-        }
-        if (scopeIds.has(grant)) {
-          routesCatalog
-            .filter((r) => r.scopeId === grant)
-            .forEach((r) => selected.add(r.routeId));
-        }
-      }
-      return selected;
-    }
 
     function formatScopesRich(scopes) {
       if (!scopes?.length) {
@@ -711,14 +719,17 @@
       connected = on;
       const pill = document.getElementById('connPill');
       const wizardCard = document.getElementById('wizardCard');
+      const sidebarAuth = document.getElementById('sidebarAuth');
       if (on) {
         pill.className = 'conn-pill online';
         pill.innerHTML = '<span class="dot"></span> Conectado';
         wizardCard.classList.remove('not-connected');
+        sidebarAuth?.classList.remove('disconnected');
       } else {
         pill.className = 'conn-pill offline';
         pill.innerHTML = '<span class="dot"></span> Sin conexión';
         wizardCard.classList.add('not-connected');
+        sidebarAuth?.classList.add('disconnected');
       }
       renderKeys(keysCache);
     }
@@ -799,11 +810,23 @@
           })
         : keys;
       if (!connected || !token()) {
-        tbody.innerHTML = '<tr class="empty-row"><td colspan="8">Conecte con el token de administración (barra lateral)</td></tr>';
+        tbody.innerHTML = `<tr class="empty-row"><td colspan="8">
+          <div class="empty-state">
+            <div class="empty-state-icon">🔐</div>
+            <h3>Conecte para ver los tokens</h3>
+            <p>Ingrese su <strong>NEST_ADMIN_TOKEN</strong> en la barra lateral y pulse <strong>Conectar</strong>.</p>
+          </div>
+        </td></tr>`;
         return;
       }
       if (!keys.length) {
-        tbody.innerHTML = '<tr class="empty-row"><td colspan="8">No hay tokens — use «Crear token»</td></tr>';
+        tbody.innerHTML = `<tr class="empty-row"><td colspan="8">
+          <div class="empty-state">
+            <div class="empty-state-icon">📭</div>
+            <h3>No hay tokens aún</h3>
+            <p>Use <strong>Crear token</strong> en el menú lateral para generar el primer API key.</p>
+          </div>
+        </td></tr>`;
         return;
       }
       if (!filtered.length) {
