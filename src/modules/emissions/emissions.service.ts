@@ -430,7 +430,6 @@ export class EmissionsService {
       xtelefono != null ? String(xtelefono).replace(/\D/g, '').slice(0, 20) : null,
     );
     macReq.input('ifuente', T.Char(10), ifuente);
-    macReq.output('salida', T.VarChar(50), '');
     await macReq.execute('spCreateMaclient');
 
     const polReq = this.db.request();

@@ -12,6 +12,12 @@ export interface CotizacionResult {
   mprimaext: number;
   mprima: number;
   ptasa: number;
+  rates?: {
+    CA: number;
+    PT: number;
+    PP: number;
+  };
+  referenceSuma?: number;
 }
 
 export interface PlanItem {
@@ -196,14 +202,14 @@ export class ValrepService {
       const ptasa: number = rateResult.recordset[0]?.ptasamon ?? 0;
       if (!ptasa) this.logger.warn('getCotizacionAuto: ptasa = 0 (verificar mamonedas)');
 
-      // 2. tipoV y puestos desde VInma (parámetros del SP)
+      // 2. tipoV, puestos y mvalor desde VInma
       const vinmaReq = this.db.request();
       vinmaReq.input('cmarca',   T.VarChar(4), body.cmarca);
       vinmaReq.input('cmodelo',  T.VarChar(4), body.cmodelo);
       vinmaReq.input('cversion', T.VarChar(4), body.cversion);
       vinmaReq.input('cano',     T.Int,        body.fano);
-      const vinmaResult = await vinmaReq.query<{ ctipo: number; npasajero: number }>(
-        `SELECT ctipo, npasajero
+      const vinmaResult = await vinmaReq.query<{ ctipo: number; npasajero: number; mvalor?: number }>(
+        `SELECT ctipo, npasajero, mvalor
            FROM VInma
           WHERE cmarca   = @cmarca
             AND cmodelo  = @cmodelo
@@ -212,6 +218,27 @@ export class ValrepService {
       );
       const tipoV   = vinmaResult.recordset[0]?.ctipo    ?? 0;
       const puestos = vinmaResult.recordset[0]?.npasajero ?? 0;
+      const mvalor  = vinmaResult.recordset[0]?.mvalor    ?? 5000;
+
+      // 2b. Buscar tasas de casco en Sis2000
+      const targetSuma = body.sumaAsegurada ?? mvalor;
+      const rateQueryReq = this.db.request();
+      rateQueryReq.input('cmarca',   T.VarChar(4), body.cmarca);
+      rateQueryReq.input('cmodelo',  T.VarChar(4), body.cmodelo);
+      rateQueryReq.input('cversion', T.VarChar(4), body.cversion);
+      rateQueryReq.input('cano',     T.Int,        body.fano);
+      rateQueryReq.input('suma',     T.Numeric(18, 2), targetSuma);
+
+      const rateQueryRes = await rateQueryReq.query<{ tasaCA: number; tasaPT: number; tasaPP: number }>(
+        `SELECT 
+           dbo.fn_buscar_tasa_casco(@cmarca, @cmodelo, @cversion, @cano, '1', @suma) AS tasaCA,
+           dbo.fn_buscar_tasa_casco(@cmarca, @cmodelo, @cversion, @cano, '2', @suma) AS tasaPT,
+           dbo.fn_buscar_tasa_casco(@cmarca, @cmodelo, @cversion, @cano, '28', @suma) AS tasaPP`
+      );
+
+      const tasaCA = rateQueryRes.recordset[0]?.tasaCA ?? 9.32;
+      const tasaPT = rateQueryRes.recordset[0]?.tasaPT ?? 6.52;
+      const tasaPP = rateQueryRes.recordset[0]?.tasaPP ?? 3.50;
 
       // 3. Fechas: póliza anual por defecto
       const fdesde = new Date();
@@ -270,7 +297,17 @@ export class ValrepService {
         `getCotizacionAuto: plan=${body.cplan} fano=${body.fano} mprimaext=$${mprimaext} mprima=Bs${mprima} ptasa=${ptasa}`,
       );
 
-      return { mprimaext, mprima, ptasa };
+      return { 
+        mprimaext, 
+        mprima, 
+        ptasa, 
+        rates: {
+          CA: tasaCA,
+          PT: tasaPT,
+          PP: tasaPP
+        },
+        referenceSuma: mvalor
+      };
     } catch (err) {
       if (err instanceof BadRequestException) throw err;
       if (err instanceof InternalServerErrorException) throw err;
