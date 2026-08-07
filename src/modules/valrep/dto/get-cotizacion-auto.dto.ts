@@ -68,4 +68,10 @@ export class GetCotizacionAutoDto {
   @IsInt()
   @Min(1)
   cramo?: number;
+
+  @ApiPropertyOptional({ example: 5000, description: 'Suma asegurada del vehículo' })
+  @IsOptional()
+  @Type(() => Number)
+  @Min(0)
+  sumaAsegurada?: number;
 }
