@@ -10,6 +10,10 @@ export const NEST_AUTH_SCOPES = {
   CLIENT_READ: 'client:read',
   /** Rutas bajo /api/v1/renovations/* (paquetes partner de renovación). */
   RENOVATIONS_WRITE: 'renovations:write',
+  /** Catálogos INMA / valrep (consultas auxiliares de emisión). */
+  CATALOG_READ: 'catalog:read',
+  /** Endosos bajo /api/endosos/ o /api/v1/endosos/. */
+  ENDOSOS_WRITE: 'endosos:write',
 } as const;
 
 export type NestAuthScopeId =
@@ -79,6 +83,18 @@ export const NEST_AUTH_SCOPE_CATALOG: NestAuthScopeMeta[] = [
     id: NEST_AUTH_SCOPES.RENOVATIONS_WRITE,
     label: 'Renovaciones',
     description: 'Renovación de pólizas (integradores partner bajo /api/v1/renovations/)',
+    routes: [],
+  },
+  {
+    id: NEST_AUTH_SCOPES.CATALOG_READ,
+    label: 'Catálogos INMA / valrep',
+    description: 'Consultas de catálogo vehicular y tarifario RCV',
+    routes: [],
+  },
+  {
+    id: NEST_AUTH_SCOPES.ENDOSOS_WRITE,
+    label: 'Endosos',
+    description: 'Consultas y operaciones de endosos',
     routes: [],
   },
 ];

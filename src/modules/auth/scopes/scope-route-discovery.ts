@@ -1,5 +1,7 @@
 import { RequestMethod, Type } from '@nestjs/common';
 import { PATH_METADATA, METHOD_METADATA } from '@nestjs/common/constants';
+import { DECORATORS } from '@nestjs/swagger/dist/constants';
+import { IS_PUBLIC_KEY } from '../decorators/public.decorator';
 import { NEST_SCOPE_KEY } from '../decorators/nest-scope.decorator';
 import type { DiscoveredRoute } from './scope-catalog.registry';
 
@@ -29,6 +31,25 @@ function buildFullPath(
   return `/${segments.join('/')}`.replace(/\/{2,}/g, '/');
 }
 
+function isPublicRoute(controller: Function, handler: unknown): boolean {
+  const target = handler as object;
+  return (
+    Reflect.getMetadata(IS_PUBLIC_KEY, target) === true ||
+    Reflect.getMetadata(IS_PUBLIC_KEY, controller) === true
+  );
+}
+
+/** Solo indexa rutas visibles en Swagger (excluye @ApiExclude* y @Public). */
+function isSwaggerPublishedRoute(controller: Function, handler: unknown): boolean {
+  if (Reflect.getMetadata(DECORATORS.API_EXCLUDE_CONTROLLER, controller) === true) {
+    return false;
+  }
+  if (Reflect.getMetadata(DECORATORS.API_EXCLUDE_ENDPOINT, handler as object) === true) {
+    return false;
+  }
+  return true;
+}
+
 /** Introspección de rutas HTTP desde metadatos Nest (core + partner). */
 export function discoverRoutesFromController(
   controller: Type<unknown> | Function,
@@ -48,6 +69,8 @@ export function discoverRoutesFromController(
   for (const methodName of methodNames) {
     const handler = prototype[methodName];
     if (typeof handler !== 'function') continue;
+    if (isPublicRoute(controller, handler)) continue;
+    if (!isSwaggerPublishedRoute(controller, handler)) continue;
 
     const routeSegment = Reflect.getMetadata(PATH_METADATA, handler) as
       | string

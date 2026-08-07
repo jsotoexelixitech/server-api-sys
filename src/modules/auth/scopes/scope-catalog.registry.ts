@@ -17,18 +17,39 @@ export interface RouteCatalogEntry {
   description: string;
 }
 
-/** Scope inferido por prefijo de ruta (partner, renovaciones, admin). */
+/** Scope inferido por prefijo de ruta (core, partner, admin). */
 export function inferScopeFromPath(normalizedPath: string): string | undefined {
-  const partnerMatch = normalizedPath.match(/\/api\/v1\/partner\/([^/]+)/i);
+  const path = normalizedPath.replace(/\/{2,}/g, '/');
+
+  const partnerMatch = path.match(/\/api\/v1\/partner\/([^/]+)/i);
   if (partnerMatch) return `partner:${partnerMatch[1]}`;
 
-  if (/\/api\/v1\/renovations\//i.test(normalizedPath)) {
+  if (/\/api\/v1\/renovations\//i.test(path)) {
     return 'renovations:write';
   }
 
-  if (/\/api\/v1\/admin\/(keys|scopes)/i.test(normalizedPath)) {
+  if (/\/api\/v1\/admin\/(keys|scopes)/i.test(path)) {
     return 'admin:keys';
   }
+
+  if (/\/api\/v1\/auth\//i.test(path)) return undefined;
+
+  if (/\/api\/v1\/client\//i.test(path)) return 'client:read';
+  if (/\/api\/v1\/product-emission\//i.test(path)) return 'product-emission:write';
+  if (/\/api\/v1\/external\/collection\//i.test(path)) return 'collection:write';
+  if (/\/api\/v1\/documents\//i.test(path)) return 'documents:write';
+  if (/\/api\/v1\/condominio\//i.test(path)) return 'emissions:condominio';
+  if (/\/api\/v1\/personas\//i.test(path)) return 'emissions:person';
+  if (/\/api\/v1\/external\/(?:getCotizacionPer|validateEmissionPerson|createEmissionPerson)/i.test(path)) {
+    return 'emissions:person';
+  }
+  if (/\/api\/v1\/external\/(?:validateEmissionAuto|createEmissionAuto)/i.test(path)) {
+    return 'emissions:auto';
+  }
+  if (/\/api\/v1\/emissions\//i.test(path)) return 'emissions:auto';
+  if (/\/api\/v1\/valrep\//i.test(path)) return 'catalog:read';
+  if (/\/api\/v1\/inma\//i.test(path)) return 'catalog:read';
+  if (/\/api\/(?:v1\/)?endosos\//i.test(path)) return 'endosos:write';
 
   return undefined;
 }
@@ -82,6 +103,20 @@ function defaultScopeMeta(
     return {
       label: `Partner: ${slug}`,
       description: `Endpoints bajo /api/v1/partner/${slug}/`,
+    };
+  }
+
+  if (scopeId === 'catalog:read') {
+    return {
+      label: 'Catálogos INMA / valrep',
+      description: 'Consultas de catálogo vehicular y tarifario RCV',
+    };
+  }
+
+  if (scopeId === 'endosos:write') {
+    return {
+      label: 'Endosos',
+      description: 'Endpoints bajo /api/endosos/ o /api/v1/endosos/',
     };
   }
 
