@@ -180,6 +180,12 @@
     .route-row-main code { display: block; font-family: Consolas, monospace; font-size: .76rem; color: var(--blue); word-break: break-all; }
     .route-row-hint { font-size: .65rem; color: var(--muted); margin-top: .2rem; }
     .route-toolbar { display: flex; gap: .5rem; flex-wrap: wrap; margin-bottom: .65rem; }
+    .route-search-bar { display: flex; flex-wrap: wrap; align-items: center; gap: .65rem; margin-bottom: .65rem; }
+    .route-search { flex: 1; min-width: 200px; max-width: 420px; padding: .55rem .85rem; border: 1px solid var(--border); border-radius: 10px; font-family: inherit; font-size: .82rem; background: #fff; }
+    .route-search:focus { outline: none; border-color: var(--blue-accent); box-shadow: 0 0 0 3px rgba(46,109,191,.12); }
+    .route-search-meta { font-size: .68rem; color: var(--muted); font-weight: 600; white-space: nowrap; }
+    .route-row.hidden-by-search { display: none; }
+    .route-list-empty { padding: 1.5rem 1rem; text-align: center; font-size: .78rem; color: var(--muted); }
   </style>
 </head>
 <body>
@@ -301,9 +307,13 @@
             Elija <strong>cada endpoint</strong> que el cliente pueda usar (emisión, cobro, documentos, partner…).
             Puede marcar solo algunos de un mismo módulo (ej. cobrar sin notificar).
           </div>
-          <div class="route-toolbar">
-            <button type="button" class="btn btn-ghost btn-sm" id="btnSelectAllRoutes">Marcar todos</button>
-            <button type="button" class="btn btn-ghost btn-sm" id="btnClearRoutes">Quitar todos</button>
+          <div class="route-search-bar">
+            <input type="search" id="scopeRouteSearch" class="route-search" placeholder="Buscar endpoint, scope o método…" autocomplete="off" />
+            <div class="route-toolbar" style="margin:0">
+              <button type="button" class="btn btn-ghost btn-sm" id="btnSelectAllRoutes">Marcar todos</button>
+              <button type="button" class="btn btn-ghost btn-sm" id="btnClearRoutes">Quitar todos</button>
+            </div>
+            <span class="route-search-meta" id="scopeRouteSearchMeta"></span>
           </div>
           <div id="scopeDetailList" class="route-list"></div>
         </div>
@@ -558,16 +568,68 @@
       });
     }
 
-    function renderRouteCheckboxes(containerId, selectedGrants, inputName) {
+    function buildRouteSearchText(route) {
+      return [route.routeId, route.scopeId, route.scopeLabel, route.description]
+        .filter(Boolean)
+        .join(' ')
+        .toLowerCase();
+    }
+
+    function filterRouteList(containerId, query, metaId) {
+      const container = document.getElementById(containerId);
+      if (!container) return;
+      const q = String(query ?? '').trim().toLowerCase();
+      const rows = container.querySelectorAll('.route-row');
+      let visible = 0;
+      rows.forEach((row) => {
+        const match = !q || (row.dataset.searchText || '').includes(q);
+        row.classList.toggle('hidden-by-search', !match);
+        if (match) visible += 1;
+      });
+      const emptyEl = container.querySelector('.route-list-empty');
+      if (rows.length && visible === 0) {
+        if (!emptyEl) {
+          const msg = document.createElement('div');
+          msg.className = 'route-list-empty';
+          msg.textContent = 'Ningún endpoint coincide con la búsqueda.';
+          container.appendChild(msg);
+        }
+      } else if (emptyEl) {
+        emptyEl.remove();
+      }
+      if (metaId) {
+        const meta = document.getElementById(metaId);
+        if (meta) {
+          meta.textContent = q
+            ? `${visible} de ${rows.length} endpoints`
+            : `${rows.length} endpoints`;
+        }
+      }
+    }
+
+    function bindRouteSearch(inputId, containerId, metaId) {
+      const input = document.getElementById(inputId);
+      if (!input) return;
+      const run = () => filterRouteList(containerId, input.value, metaId);
+      input.addEventListener('input', run);
+      run();
+    }
+
+    function renderRouteCheckboxes(containerId, selectedGrants, inputName, searchInputId, searchMetaId) {
       const selected = grantsToSelectedRoutes(selectedGrants);
       document.getElementById(containerId).innerHTML = routesCatalog.map((route) => `
-        <label class="route-row">
+        <label class="route-row" data-search-text="${escapeHtml(buildRouteSearchText(route))}">
           <input type="checkbox" name="${inputName}" value="${escapeHtml(route.routeId)}" ${selected.has(route.routeId) ? 'checked' : ''} />
           <div class="route-row-main">
             <code>${escapeHtml(route.routeId)}</code>
             <div class="route-row-hint">${escapeHtml(route.scopeLabel)} · ${escapeHtml(route.scopeId)}</div>
           </div>
         </label>`).join('');
+      if (searchInputId) {
+        const searchInput = document.getElementById(searchInputId);
+        if (searchInput) searchInput.value = '';
+        bindRouteSearch(searchInputId, containerId, searchMetaId);
+      }
     }
 
     function getSelectedRouteGrants(inputName) {
@@ -575,7 +637,7 @@
     }
 
     function renderScopeDetails() {
-      renderRouteCheckboxes('scopeDetailList', [], 'scope');
+      renderRouteCheckboxes('scopeDetailList', [], 'scope', 'scopeRouteSearch', 'scopeRouteSearchMeta');
     }
 
     function renderGuideScopes() {
@@ -657,7 +719,7 @@
       document.getElementById('cscanalalt').value = '';
       document.getElementById('ctipocanal').value = '';
       document.getElementById('cproductor').value = '80080';
-      renderRouteCheckboxes('scopeDetailList', [], 'scope');
+      renderRouteCheckboxes('scopeDetailList', [], 'scope', 'scopeRouteSearch', 'scopeRouteSearchMeta');
       setWizardStep(1);
     }
 
@@ -756,13 +818,17 @@
         <div class="edit-section">
           <h3>Endpoints permitidos</h3>
           <div class="catalog-note">Marque cada ruta que este token pueda invocar. Sin marcar ninguna = solo catálogos.</div>
-          <div class="route-toolbar">
-            <button type="button" class="btn btn-ghost btn-sm" data-select-all="editScope">Marcar todos</button>
-            <button type="button" class="btn btn-ghost btn-sm" data-clear-all="editScope">Quitar todos</button>
+          <div class="route-search-bar">
+            <input type="search" id="editScopeSearch" class="route-search" placeholder="Buscar endpoint, scope o método…" autocomplete="off" />
+            <div class="route-toolbar" style="margin:0">
+              <button type="button" class="btn btn-ghost btn-sm" data-select-all="editScope">Marcar todos</button>
+              <button type="button" class="btn btn-ghost btn-sm" data-clear-all="editScope">Quitar todos</button>
+            </div>
+            <span class="route-search-meta" id="editScopeSearchMeta"></span>
           </div>
           <div id="editScopeList" class="route-list"></div>
         </div>`;
-      renderRouteCheckboxes('editScopeList', k.scopes || [], 'editScope');
+      renderRouteCheckboxes('editScopeList', k.scopes || [], 'editScope', 'editScopeSearch', 'editScopeSearchMeta');
       setModalButtons('edit', k);
     }
 
@@ -852,23 +918,30 @@
       renderGuideScopes();
     }
 
-    function bindRouteToolbar(selectId, clearId, inputName) {
+    function visibleRouteInputs(inputName, containerId) {
+      const base = containerId
+        ? `#${containerId} .route-row:not(.hidden-by-search) input[name="${inputName}"]`
+        : `input[name="${inputName}"]`;
+      return document.querySelectorAll(base);
+    }
+
+    function bindRouteToolbar(selectId, clearId, inputName, containerId) {
       document.getElementById(selectId)?.addEventListener('click', () => {
-        document.querySelectorAll(`input[name="${inputName}"]`).forEach((el) => { el.checked = true; });
+        visibleRouteInputs(inputName, containerId).forEach((el) => { el.checked = true; });
       });
       document.getElementById(clearId)?.addEventListener('click', () => {
-        document.querySelectorAll(`input[name="${inputName}"]`).forEach((el) => { el.checked = false; });
+        visibleRouteInputs(inputName, containerId).forEach((el) => { el.checked = false; });
       });
     }
 
     document.addEventListener('click', (e) => {
       const selectAll = e.target.closest('[data-select-all]');
       if (selectAll) {
-        document.querySelectorAll(`input[name="${selectAll.dataset.selectAll}"]`).forEach((el) => { el.checked = true; });
+        visibleRouteInputs(selectAll.dataset.selectAll, 'editScopeList').forEach((el) => { el.checked = true; });
       }
       const clearAll = e.target.closest('[data-clear-all]');
       if (clearAll) {
-        document.querySelectorAll(`input[name="${clearAll.dataset.clearAll}"]`).forEach((el) => { el.checked = false; });
+        visibleRouteInputs(clearAll.dataset.clearAll, 'editScopeList').forEach((el) => { el.checked = false; });
       }
     });
 
@@ -977,7 +1050,7 @@
 
     setConnected(false);
     setWizardStep(1);
-    bindRouteToolbar('btnSelectAllRoutes', 'btnClearRoutes', 'scope');
+    bindRouteToolbar('btnSelectAllRoutes', 'btnClearRoutes', 'scope', 'scopeDetailList');
 
     if (token()) {
       document.getElementById('adminToken').value = token();
