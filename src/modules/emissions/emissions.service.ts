@@ -3,12 +3,16 @@ import {
   Injectable,
   InternalServerErrorException,
   Logger,
+  NotFoundException,
 } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { MssqlService } from '../../database/mssql.service';
 import { parseSPError, formatValidateAutoError } from '../../common/helpers/sp-error.helper';
 import { buildPolicyPdfUrl } from '../../common/helpers/policy-url.helper';
-import { SP_PRE_EMISION_AUTO_RCV } from '../../config/sis2000-sp.constants';
+import {
+  SP_PRE_EMISION_AUTO_RCV,
+  SP_SEARCH_AUTOMOBILE_PROPIETARY,
+} from '../../config/sis2000-sp.constants';
 
 @Injectable()
 export class EmissionsService {
@@ -135,6 +139,38 @@ export class EmissionsService {
       };
     }
     return { status: false, vehicle: vehicle[0] };
+  }
+
+  async searchNewPropietary(xrif_cliente: string) {
+    const cid = xrif_cliente.trim();
+    if (!cid) {
+      throw new BadRequestException('xrif_cliente es requerido.');
+    }
+
+    try {
+      const req = this.db.request();
+      const T = this.db.types;
+      req.input('cid', T.VarChar(20), cid);
+      const result = await req.execute(SP_SEARCH_AUTOMOBILE_PROPIETARY);
+      const rows = result.recordset ?? [];
+      if (rows.length === 0) {
+        throw new NotFoundException({
+          status: false,
+          notFound: 'Propietario no encontrado',
+        });
+      }
+      return { status: true as const, info: rows[0] as Record<string, unknown> };
+    } catch (err) {
+      if (err instanceof NotFoundException || err instanceof BadRequestException) {
+        throw err;
+      }
+      const msg = err instanceof Error ? err.message : String(err);
+      this.logger.error(`searchNewPropietary: ${msg}`);
+      throw new InternalServerErrorException({
+        status: false,
+        message: msg,
+      });
+    }
   }
 
   async searchByPlate(xplaca: string) {

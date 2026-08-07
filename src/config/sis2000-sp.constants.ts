@@ -26,6 +26,8 @@ export const SP_GET_COVERAGE_CLIENT = 'spGetCoverageClient';
 export const SP_SYNC_POL_VEH_COUNTER = 'spSyncPolVehCounter';
 export const SP_LOOKUP_EMISSION_RCV_BY_PLACA = 'spLookupEmissionRcvByPlaca';
 export const SP_SEARCH_VEHICLE_RCV = 'spSearchVehicleRcv';
+/** POST automobile_new/propietary — propietario por maclient.cid (V-12345678). */
+export const SP_SEARCH_AUTOMOBILE_PROPIETARY = 'sp_search_automobile_propietary_nexus';
 export const SP_APPLY_BENEFICIARIO_PREFERENCIAL_RCV = 'spApplyBeneficiarioPreferencialRcv';
 
 // ── Condominio ──────────────────────────────────────────────────────────────

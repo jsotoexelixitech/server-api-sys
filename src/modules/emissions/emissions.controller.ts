@@ -12,6 +12,7 @@ import { EmissionsService } from './emissions.service';
 import { CreateEmissionAutoDto } from './dto/create-emission-auto.dto';
 import { ValidateEmissionAutoDto } from './dto/validate-emission-auto.dto';
 import { SearchVehicleByPlateDto, SearchVehicleBySerialDto } from './dto/search-vehicle.dto';
+import { SearchAutomobilePropietaryDto } from './dto/search-propietary.dto';
 import { Api401, ApiCommonErrors } from '../../common/swagger/api-error-responses';
 import {
   APIKEY_HEADER,
@@ -30,6 +31,48 @@ import { NestApiKey } from '../auth/decorators/nest-api-key.decorator';
 @Controller('v1')
 export class EmissionsController {
   constructor(private readonly emissionsService: EmissionsService) {}
+
+  @Post('emissions/automobile_new/propietary')
+  @NestProtected(NEST_AUTH_SCOPES.EMISSIONS_AUTO)
+  @HttpCode(HttpStatus.OK)
+  @ApiHeader(APIKEY_HEADER)
+  @ApiOperation({
+    summary: 'Buscar propietario/tomador por documento',
+    description:
+      'Consulta `maclient` por `cid` vía `sp_search_automobile_propietary_nexus`. ' +
+      'Paridad con SysIP `POST /emissions/automobile_new/propietary`.\n\n' +
+      '**Seguridad**: requiere API Key o Bearer con scope `emissions:auto`.',
+    operationId: 'searchAutomobilePropietary',
+  })
+  @ApiBody({ type: SearchAutomobilePropietaryDto })
+  @ApiResponse({
+    status: 200,
+    schema: {
+      example: {
+        status: true,
+        info: {
+          xnombre: 'JUAN',
+          xapellido: 'PEREZ',
+          cid: 'V-15700585',
+          es_mayor_de_edad: 1,
+        },
+      },
+    },
+  })
+  @ApiResponse({
+    status: 404,
+    schema: {
+      example: {
+        status: false,
+        notFound: 'Propietario no encontrado',
+      },
+    },
+  })
+  @Api401()
+  @ApiCommonErrors()
+  async searchNewPropietary(@Body() dto: SearchAutomobilePropietaryDto) {
+    return await this.emissionsService.searchNewPropietary(dto.xrif_cliente);
+  }
 
   @Post('emissions/automobile/vehicle')
   @ApiExcludeEndpoint()
