@@ -184,6 +184,11 @@ export const RCV_CREATE_EMISSION_AUTO_BODY: Record<string, unknown> = {
   fecha_emision: '2026-07-20',
   fdesde: '2026-07-20',
   fhasta: '2027-07-19',
+  itipoEmi: 'NU',
+  coberAdicional: 'RC',
+  tasaPt: 0,
+  tasaCa: 0,
+  tasaPp: 0,
 };
 
 /** Mismo flujo con prima tomada de cotización (opcional). */
