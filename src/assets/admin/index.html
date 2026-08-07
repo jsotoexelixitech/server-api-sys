@@ -13,10 +13,58 @@
       --red: #E84F51; --red-dark: #b23f44;
       --bg: #eef1f6; --card: #fff; --muted: #6b7280;
       --border: #e5e7eb; --shadow: 0 4px 24px rgba(15,26,90,0.08); --radius: 14px;
+      --sidebar-w: 260px;
+      --success: #10b981; --warning: #f59e0b;
     }
     * { box-sizing: border-box; }
     body { margin: 0; min-height: 100vh; font-family: Poppins, system-ui, sans-serif; background: var(--bg); color: #1f2937; }
-    .topbar { background: linear-gradient(135deg, var(--blue-dark), var(--blue) 55%, var(--blue-accent)); color: #fff; box-shadow: 0 4px 20px rgba(9,17,51,.35); }
+    .app { display: flex; min-height: 100vh; }
+    .sidebar {
+      width: var(--sidebar-w); background: linear-gradient(180deg, var(--blue-dark), var(--blue));
+      color: #fff; display: flex; flex-direction: column; flex-shrink: 0;
+      position: sticky; top: 0; height: 100vh; box-shadow: 4px 0 24px rgba(9,17,51,.15);
+    }
+    .sidebar-brand { padding: 1.25rem 1rem 1rem; border-bottom: 1px solid rgba(255,255,255,.1); }
+    .sidebar-brand img { height: 36px; margin-bottom: .65rem; filter: drop-shadow(0 2px 6px rgba(0,0,0,.2)); }
+    .sidebar-brand h1 { margin: 0; font-size: .92rem; font-weight: 700; line-height: 1.3; }
+    .sidebar-brand p { margin: .25rem 0 0; font-size: .65rem; opacity: .75; line-height: 1.4; }
+    .sidebar-nav { padding: .75rem; flex: 1; display: flex; flex-direction: column; gap: .35rem; }
+    .nav-item {
+      display: flex; align-items: center; gap: .65rem; width: 100%; padding: .65rem .85rem;
+      border: none; border-radius: 10px; background: transparent; color: rgba(255,255,255,.78);
+      font-family: inherit; font-size: .82rem; font-weight: 600; cursor: pointer; text-align: left;
+      transition: background .15s, color .15s;
+    }
+    .nav-item:hover { background: rgba(255,255,255,.08); color: #fff; }
+    .nav-item.active { background: rgba(255,255,255,.14); color: #fff; box-shadow: inset 3px 0 0 var(--red); }
+    .nav-icon { width: 1.25rem; text-align: center; opacity: .9; }
+    .sidebar-auth { padding: .85rem; border-top: 1px solid rgba(255,255,255,.1); background: rgba(0,0,0,.12); }
+    .sidebar-auth label { display: block; font-size: .62rem; font-weight: 600; text-transform: uppercase; letter-spacing: .06em; opacity: .8; margin-bottom: .35rem; }
+    .sidebar-auth .input-wrap { display: flex; background: rgba(255,255,255,.1); border: 1px solid rgba(255,255,255,.18); border-radius: 8px; overflow: hidden; margin-bottom: .5rem; }
+    .sidebar-auth .input-wrap input { flex: 1; border: none; background: transparent; color: #fff; padding: .5rem .65rem; font-family: inherit; font-size: .78rem; min-width: 0; }
+    .sidebar-auth .input-wrap input::placeholder { color: rgba(255,255,255,.4); }
+    .sidebar-auth .input-wrap button.icon-btn { background: transparent; border: none; border-left: 1px solid rgba(255,255,255,.12); color: rgba(255,255,255,.75); padding: 0 .55rem; cursor: pointer; font-size: .85rem; }
+    .sidebar-auth .btn-connect { width: 100%; padding: .5rem; font-size: .78rem; border-radius: 8px; }
+    .main-wrap { flex: 1; min-width: 0; display: flex; flex-direction: column; }
+    .page-header {
+      background: var(--card); border-bottom: 1px solid var(--border); padding: 1rem 1.5rem;
+      display: flex; align-items: center; justify-content: space-between; gap: 1rem; flex-wrap: wrap;
+    }
+    .page-header h2 { margin: 0; font-size: 1.1rem; font-weight: 700; color: var(--blue); }
+    .page-header p { margin: .15rem 0 0; font-size: .75rem; color: var(--muted); }
+    .page-actions { display: flex; align-items: center; gap: .65rem; flex-wrap: wrap; }
+    main { flex: 1; padding: 1.25rem 1.5rem 2rem; max-width: 1100px; width: 100%; }
+    @media (max-width:900px) {
+      .app { flex-direction: column; }
+      .sidebar { width: 100%; height: auto; position: relative; }
+      .sidebar-nav { flex-direction: row; overflow-x: auto; padding: .5rem; }
+      .nav-item { white-space: nowrap; flex-shrink: 0; }
+      .sidebar-auth { display: none; }
+      .mobile-auth { display: flex !important; }
+    }
+    .mobile-auth { display: none; padding: .75rem 1rem; background: var(--card); border-bottom: 1px solid var(--border); gap: .5rem; flex-wrap: wrap; align-items: flex-end; }
+    .mobile-auth input { flex: 1; min-width: 160px; padding: .5rem .75rem; border: 1px solid var(--border); border-radius: 8px; font-family: inherit; font-size: .82rem; }
+    .topbar { display: none; }
     .topbar-inner { max-width: 1180px; margin: 0 auto; padding: 1rem 1.5rem; display: flex; align-items: center; justify-content: space-between; gap: 1rem; flex-wrap: wrap; }
     .brand { display: flex; align-items: center; gap: 1rem; }
     .brand img { height: 44px; filter: drop-shadow(0 2px 6px rgba(0,0,0,.2)); }
@@ -186,59 +234,112 @@
     .route-search-meta { font-size: .68rem; color: var(--muted); font-weight: 600; white-space: nowrap; }
     .route-row.hidden-by-search { display: none; }
     .route-list-empty { padding: 1.5rem 1rem; text-align: center; font-size: .78rem; color: var(--muted); }
+    .scope-groups { display: flex; flex-direction: column; gap: .65rem; }
+    .scope-group { border: 1px solid var(--border); border-radius: 12px; overflow: hidden; background: #fff; }
+    .scope-group.hidden-by-filter { display: none; }
+    .scope-group-head {
+      display: flex; align-items: center; gap: .65rem; padding: .75rem 1rem;
+      background: linear-gradient(180deg, #fafbff, #f8fafc); cursor: pointer; user-select: none;
+    }
+    .scope-group-head:hover { background: #f1f5f9; }
+    .scope-group-head input[type=checkbox] { accent-color: var(--red); flex-shrink: 0; }
+    .scope-group-toggle { margin-left: auto; background: none; border: none; color: var(--muted); font-size: .75rem; cursor: pointer; padding: .25rem .5rem; border-radius: 6px; }
+    .scope-group-toggle:hover { background: #e5e7eb; color: var(--blue); }
+    .scope-group-title { flex: 1; min-width: 0; }
+    .scope-group-title strong { display: block; font-size: .82rem; color: var(--blue); }
+    .scope-group-title span { font-size: .68rem; color: var(--muted); }
+    .scope-group-title code { font-size: .62rem; color: var(--red-dark); background: #fef2f2; padding: .05rem .35rem; border-radius: 4px; margin-left: .35rem; }
+    .scope-group-body { border-top: 1px solid var(--border); max-height: 280px; overflow-y: auto; }
+    .scope-group.collapsed .scope-group-body { display: none; }
+    .scope-group.collapsed .scope-group-toggle { transform: rotate(-90deg); }
+    .preset-bar { display: flex; flex-wrap: wrap; gap: .4rem; margin-bottom: .75rem; align-items: center; }
+    .preset-bar span { font-size: .68rem; font-weight: 600; color: var(--muted); margin-right: .25rem; }
+    .preset-chip {
+      padding: .35rem .7rem; border-radius: 999px; border: 1px solid var(--border); background: #fff;
+      font-family: inherit; font-size: .72rem; font-weight: 600; color: var(--blue); cursor: pointer;
+      transition: all .12s;
+    }
+    .preset-chip:hover { border-color: var(--blue-accent); background: #eff6ff; }
+    .filter-row { display: flex; flex-wrap: wrap; gap: .65rem; align-items: center; margin-bottom: .75rem; }
+    .filter-row select {
+      padding: .5rem .75rem; border: 1px solid var(--border); border-radius: 8px;
+      font-family: inherit; font-size: .78rem; background: #fff; min-width: 180px;
+    }
+    .keys-toolbar { display: flex; gap: .65rem; flex-wrap: wrap; margin-bottom: 1rem; align-items: center; }
+    .keys-search { flex: 1; min-width: 200px; max-width: 320px; padding: .55rem .85rem; border: 1px solid var(--border); border-radius: 10px; font-family: inherit; font-size: .82rem; }
+    .keys-search:focus { outline: none; border-color: var(--blue-accent); box-shadow: 0 0 0 3px rgba(46,109,191,.1); }
+    .field-section { margin-bottom: 1.25rem; }
+    .field-section-head { display: flex; align-items: center; justify-content: space-between; margin-bottom: .75rem; }
+    .field-section-head h3 { margin: 0; font-size: .85rem; color: var(--blue); font-weight: 700; }
+    .field-section-head span { font-size: .68rem; color: var(--muted); }
+    .field-hint { font-size: .72rem; color: var(--muted); margin: -.35rem 0 .75rem; line-height: 1.45; }
+    .guide-search { width: 100%; max-width: 400px; margin-bottom: 1rem; padding: .55rem .85rem; border: 1px solid var(--border); border-radius: 10px; font-family: inherit; font-size: .82rem; }
+    .guide-group { margin-bottom: 1rem; }
+    .guide-group-head { font-size: .78rem; font-weight: 700; color: var(--blue); margin-bottom: .5rem; padding-bottom: .35rem; border-bottom: 2px solid var(--blue-accent); }
+    .modal { width: min(820px, 100%); }
+    footer { text-align: center; padding: 1rem; font-size: .68rem; color: var(--muted); border-top: 1px solid var(--border); background: var(--card); }
   </style>
 </head>
 <body>
-  <header class="topbar">
-    <div class="topbar-inner">
-      <div class="brand">
+  <div class="app">
+    <aside class="sidebar">
+      <div class="sidebar-brand">
         <img src="/assets/brand/logo-lamundial-sidebar.png" alt="La Mundial" onerror="this.style.display='none'" />
-        <div class="brand-text">
-          <h1>nest-api · Tokens de acceso</h1>
-          <p>Gestión de tokens de acceso a la API · PostgreSQL nest_auth · srv001 QA</p>
-        </div>
+        <h1>Tokens API</h1>
+        <p>nest-api · La Mundial · QA</p>
       </div>
-      <div class="auth-box">
-        <div class="auth-field">
-          <label for="adminToken">Token de administración</label>
-          <div class="input-wrap">
-            <input id="adminToken" type="password" placeholder="NEST_ADMIN_TOKEN" autocomplete="off" />
-            <button type="button" class="icon-btn" id="btnToggleToken" title="Mostrar/ocultar">👁</button>
-          </div>
+      <nav class="sidebar-nav" role="tablist">
+        <button type="button" class="nav-item active" data-tab="keys"><span class="nav-icon">📋</span> Keys registradas</button>
+        <button type="button" class="nav-item" data-tab="create"><span class="nav-icon">➕</span> Crear token</button>
+        <button type="button" class="nav-item" data-tab="guide"><span class="nav-icon">📖</span> Guía y scopes</button>
+      </nav>
+      <div class="sidebar-auth">
+        <label for="adminToken">Token admin</label>
+        <div class="input-wrap">
+          <input id="adminToken" type="password" placeholder="NEST_ADMIN_TOKEN" autocomplete="off" />
+          <button type="button" class="icon-btn" id="btnToggleToken" title="Mostrar/ocultar">👁</button>
         </div>
         <button type="button" id="btnConnect" class="btn btn-connect">Conectar</button>
       </div>
-    </div>
-  </header>
+    </aside>
 
-  <main>
-    <div class="status-bar">
-      <span id="connPill" class="conn-pill offline"><span class="dot"></span> Sin conexión</span>
-      <div class="quick-links">
-        <a href="/docs" target="_blank">Swagger API</a>
-        <a href="/api/v1/admin/keys" target="_blank">JSON keys</a>
+    <div class="main-wrap">
+      <div class="mobile-auth">
+        <input id="adminTokenMobile" type="password" placeholder="NEST_ADMIN_TOKEN" autocomplete="off" />
+        <button type="button" id="btnConnectMobile" class="btn btn-primary btn-sm">Conectar</button>
       </div>
-    </div>
-    <div id="toast" class="toast hidden"></div>
+      <header class="page-header">
+        <div>
+          <h2 id="pageTitle">Keys registradas</h2>
+          <p id="pageSubtitle">Gestión de tokens de acceso a nest-api</p>
+        </div>
+        <div class="page-actions">
+          <span id="connPill" class="conn-pill offline"><span class="dot"></span> Sin conexión</span>
+          <div class="quick-links">
+            <a href="/docs" target="_blank">Swagger</a>
+            <a href="/api/v1/admin/scopes" target="_blank">JSON scopes</a>
+          </div>
+        </div>
+      </header>
 
-    <div class="stats">
-      <div class="stat"><div class="stat-label">Keys totales</div><div class="stat-value" id="statTotal">—</div></div>
-      <div class="stat"><div class="stat-label">Activas</div><div class="stat-value" id="statActive">—</div></div>
-      <div class="stat"><div class="stat-label">Con scopes</div><div class="stat-value" id="statScoped">—</div></div>
-    </div>
+      <main>
+        <div id="toast" class="toast hidden"></div>
 
-    <nav class="tabs" role="tablist">
-      <button type="button" class="tab active" data-tab="keys">📋 Keys registradas</button>
-      <button type="button" class="tab" data-tab="create">➕ Crear token API</button>
-      <button type="button" class="tab" data-tab="guide">📖 Guía scopes &amp; auth</button>
-    </nav>
+        <div class="stats">
+          <div class="stat"><div class="stat-label">Keys totales</div><div class="stat-value" id="statTotal">—</div></div>
+          <div class="stat"><div class="stat-label">Activas</div><div class="stat-value" id="statActive">—</div></div>
+          <div class="stat"><div class="stat-label">Con permisos</div><div class="stat-value" id="statScoped">—</div></div>
+        </div>
 
     <!-- TAB: Keys -->
     <section class="panel active" id="panel-keys">
       <div class="card">
         <div class="card-head">
-          <div><h2>Keys en PostgreSQL</h2><span class="sub">Prefijo visible · secreto completo solo al crear</span></div>
+          <div><h2>Tokens en PostgreSQL</h2><span class="sub">El secreto completo solo se muestra al crear el token</span></div>
           <button type="button" id="btnRefresh" class="btn btn-ghost">↻ Actualizar</button>
+        </div>
+        <div class="keys-toolbar">
+          <input type="search" id="keysSearch" class="keys-search" placeholder="Buscar por nombre, prefijo o canal…" autocomplete="off" />
         </div>
         <div class="table-wrap">
           <table>
@@ -265,37 +366,43 @@
         <!-- Paso 1 -->
         <div class="wizard-pane active" id="step1">
           <div class="catalog-note">
-            Cree un <strong>token de uso</strong> para quien consuma nest-api (integrador, partner, servicio interno).
-            <strong>Canal y subcanal</strong> se guardan en la key y se usan en emisión/cobranza (Sis2000) al igual que en metadata SSO.
+            Token de uso para integradores, partners o servicios internos. Los campos de <strong>canal</strong> se aplican en emisión/cobranza (Sis2000).
           </div>
-          <div class="row" style="margin-top:1rem">
-            <div>
-              <label class="field-label" for="keyName">Nombre del token / cliente</label>
-              <input id="keyName" type="text" placeholder="ej. esanchez-partner QA, mi-app-prod" />
-            </div>
-            <div>
-              <label class="field-label" for="cproductor">cproductor (La Mundial)</label>
-              <input id="cproductor" type="number" value="80080" />
-            </div>
-          </div>
-          <div class="row" style="margin-top:1rem">
-            <div>
-              <label class="field-label" for="ccanalalt">Canal (ccanalalt)</label>
-              <input id="ccanalalt" type="number" placeholder="Opcional — macanalalt" />
-            </div>
-            <div>
-              <label class="field-label" for="cscanalalt">Subcanal (cscanalalt)</label>
-              <input id="cscanalalt" type="number" placeholder="Opcional — subcanal Sis2000" />
+          <div class="field-section">
+            <div class="field-section-head"><h3>Identificación</h3><span>Obligatorio</span></div>
+            <div class="row">
+              <div>
+                <label class="field-label" for="keyName">Nombre del cliente / token</label>
+                <input id="keyName" type="text" placeholder="ej. partner-aquintero QA" />
+              </div>
+              <div>
+                <label class="field-label" for="cproductor">cproductor</label>
+                <input id="cproductor" type="number" value="80080" />
+              </div>
             </div>
           </div>
-          <div class="row" style="margin-top:1rem">
-            <div>
-              <label class="field-label" for="xcanalVenta">Nombre canal (xcanal_venta)</label>
-              <input id="xcanalVenta" type="text" placeholder="ej. ExelixiTech-Partner" />
+          <div class="field-section">
+            <div class="field-section-head"><h3>Canal Sis2000</h3><span>Opcional</span></div>
+            <p class="field-hint">Usado en metadata de emisión y cobranza. Déjelo vacío si no aplica.</p>
+            <div class="row">
+              <div>
+                <label class="field-label" for="ccanalalt">Canal (ccanalalt)</label>
+                <input id="ccanalalt" type="number" placeholder="Opcional" />
+              </div>
+              <div>
+                <label class="field-label" for="cscanalalt">Subcanal (cscanalalt)</label>
+                <input id="cscanalalt" type="number" placeholder="Opcional" />
+              </div>
             </div>
-            <div>
-              <label class="field-label" for="ctipocanal">Tipo canal (ctipocanal)</label>
-              <input id="ctipocanal" type="text" maxlength="1" placeholder="T, A o D (opcional)" />
+            <div class="row" style="margin-top:1rem">
+              <div>
+                <label class="field-label" for="xcanalVenta">Nombre canal (xcanal_venta)</label>
+                <input id="xcanalVenta" type="text" placeholder="ej. ExelixiTech-Partner" />
+              </div>
+              <div>
+                <label class="field-label" for="ctipocanal">Tipo (ctipocanal)</label>
+                <input id="ctipocanal" type="text" maxlength="1" placeholder="T, A o D" />
+              </div>
             </div>
           </div>
         </div>
@@ -303,19 +410,29 @@
         <!-- Paso 2 -->
         <div class="wizard-pane" id="step2">
           <div class="catalog-note">
-            <strong>Catálogos INMA / valrep</strong> solo requieren token válido — <em>no marque endpoints</em>.
-            Elija <strong>cada endpoint</strong> que el cliente pueda usar (emisión, cobro, documentos, partner…).
-            Puede marcar solo algunos de un mismo módulo (ej. cobrar sin notificar).
+            <strong>Sin marcar nada</strong> = solo catálogos (INMA/valrep) + auth. Marque los endpoints de negocio que este token pueda invocar.
           </div>
-          <div class="route-search-bar">
-            <input type="search" id="scopeRouteSearch" class="route-search" placeholder="Buscar endpoint, scope o método…" autocomplete="off" />
+          <div class="preset-bar" id="scopePresetBar">
+            <span>Atajos:</span>
+            <button type="button" class="preset-chip" data-preset="none">Solo catálogos</button>
+            <button type="button" class="preset-chip" data-preset="emissions:auto">Emisión auto</button>
+            <button type="button" class="preset-chip" data-preset="emissions:person">Personas</button>
+            <button type="button" class="preset-chip" data-preset="collection:write">Cobranza</button>
+            <button type="button" class="preset-chip" data-preset="partner">Partner</button>
+            <button type="button" class="preset-chip" data-preset="visible">Todo visible</button>
+          </div>
+          <div class="filter-row">
+            <input type="search" id="scopeRouteSearch" class="route-search" placeholder="Buscar endpoint, scope o método…" autocomplete="off" style="flex:1;min-width:200px;max-width:none" />
+            <select id="scopeModuleFilter" aria-label="Filtrar por módulo">
+              <option value="">Todos los módulos</option>
+            </select>
             <div class="route-toolbar" style="margin:0">
-              <button type="button" class="btn btn-ghost btn-sm" id="btnSelectAllRoutes">Marcar todos</button>
+              <button type="button" class="btn btn-ghost btn-sm" id="btnSelectAllRoutes">Marcar visibles</button>
               <button type="button" class="btn btn-ghost btn-sm" id="btnClearRoutes">Quitar todos</button>
             </div>
             <span class="route-search-meta" id="scopeRouteSearchMeta"></span>
           </div>
-          <div id="scopeDetailList" class="route-list"></div>
+          <div id="scopeDetailList" class="scope-groups"></div>
         </div>
 
         <!-- Paso 3 -->
@@ -367,7 +484,8 @@
         </p>
       </div>
       <div class="card">
-        <div class="card-head"><div><h2>Catálogo de scopes</h2><span class="sub">Qué endpoint desbloquea cada permiso</span></div></div>
+        <div class="card-head"><div><h2>Catálogo de endpoints</h2><span class="sub">Referencia de permisos disponibles</span></div></div>
+        <input type="search" id="guideSearch" class="guide-search" placeholder="Buscar en el catálogo…" autocomplete="off" />
         <div id="guideScopes"></div>
         <div class="catalog-note" style="margin-top:.75rem">
           Keys <strong>sin scopes</strong> pueden consultar catálogos (INMA, valrep, personas/planes).
@@ -375,8 +493,10 @@
         </div>
       </div>
     </section>
-  </main>
-  <footer>Exélixi Tech · nest-api · La Mundial de Seguros QA</footer>
+      </main>
+      <footer>Exélixi Tech · nest-api · La Mundial de Seguros QA</footer>
+    </div>
+  </div>
 
   <div id="keyModalBackdrop" class="modal-backdrop" aria-hidden="true">
     <div class="modal" role="dialog" aria-labelledby="keyModalTitle">
@@ -411,7 +531,147 @@
     let modalMode = 'view';
     let modalDetail = null;
 
+    let keysFilterQuery = '';
+
+    const PAGE_TITLES = {
+      keys: ['Keys registradas', 'Tokens de acceso activos en PostgreSQL'],
+      create: ['Crear token', 'Asistente en 3 pasos: datos, permisos y confirmación'],
+      guide: ['Guía y scopes', 'Autenticación y catálogo de endpoints'],
+    };
+
     function grantsToSelectedRoutes(grants) {
+      const selected = new Set();
+      const scopeIds = new Set(scopesCatalog.map((s) => s.id));
+      for (const grant of grants ?? []) {
+        if (routesCatalog.some((r) => r.routeId === grant)) {
+          selected.add(grant);
+          continue;
+        }
+        if (scopeIds.has(grant)) {
+          routesCatalog
+            .filter((r) => r.scopeId === grant)
+            .forEach((r) => selected.add(r.routeId));
+        }
+      }
+      return selected;
+    }
+
+    function groupRoutesByScope(routes) {
+      const groups = new Map();
+      for (const route of routes) {
+        const scopeId = route.scopeId || 'other';
+        if (!groups.has(scopeId)) {
+          groups.set(scopeId, {
+            scopeId,
+            label: route.scopeLabel || scopeId,
+            description: route.description || '',
+            routes: [],
+          });
+        }
+        groups.get(scopeId).routes.push(route);
+      }
+      return [...groups.values()].sort((a, b) => a.label.localeCompare(b.label));
+    }
+
+    function populateModuleFilter(selectId) {
+      const select = document.getElementById(selectId);
+      if (!select) return;
+      const current = select.value;
+      const groups = groupRoutesByScope(routesCatalog);
+      select.innerHTML = '<option value="">Todos los módulos</option>' +
+        groups.map((g) => `<option value="${escapeHtml(g.scopeId)}">${escapeHtml(g.label)} (${g.routes.length})</option>`).join('');
+      select.value = current || '';
+    }
+
+    function syncGroupCheckbox(scopeId, inputName) {
+      const inputs = document.querySelectorAll(`input[name="${inputName}"][data-scope-id="${scopeId}"]`);
+      const groupCb = document.querySelector(`.scope-group-cb[data-scope-id="${scopeId}"]`);
+      if (!groupCb || !inputs.length) return;
+      const checked = [...inputs].filter((el) => el.checked).length;
+      groupCb.checked = checked === inputs.length;
+      groupCb.indeterminate = checked > 0 && checked < inputs.length;
+    }
+
+    function renderRouteGroupsHtml(routes, selected, inputName, containerClass) {
+      const groups = groupRoutesByScope(routes);
+      if (!groups.length) {
+        return '<div class="route-list-empty">No hay endpoints en el catálogo. Conecte primero.</div>';
+      }
+      return groups.map((group, idx) => {
+        const groupRoutes = group.routes.map((route) => `
+          <label class="route-row" data-search-text="${escapeHtml(buildRouteSearchText(route))}" data-scope-id="${escapeHtml(group.scopeId)}">
+            <input type="checkbox" name="${inputName}" value="${escapeHtml(route.routeId)}" data-scope-id="${escapeHtml(group.scopeId)}" ${selected.has(route.routeId) ? 'checked' : ''} />
+            <div class="route-row-main">
+              <code>${escapeHtml(route.routeId)}</code>
+            </div>
+          </label>`).join('');
+        const allChecked = group.routes.every((r) => selected.has(r.routeId));
+        const someChecked = group.routes.some((r) => selected.has(r.routeId));
+        return `
+          <div class="scope-group${idx > 2 ? ' collapsed' : ''}" data-scope-group="${escapeHtml(group.scopeId)}">
+            <div class="scope-group-head" data-toggle-group="${escapeHtml(group.scopeId)}">
+              <input type="checkbox" class="scope-group-cb" data-scope-id="${escapeHtml(group.scopeId)}" ${allChecked ? 'checked' : ''} ${someChecked && !allChecked ? 'data-indeterminate="1"' : ''} />
+              <div class="scope-group-title">
+                <strong>${escapeHtml(group.label)}</strong>
+                <span>${group.routes.length} endpoint(s) · <code>${escapeHtml(group.scopeId)}</code></span>
+              </div>
+              <button type="button" class="scope-group-toggle" aria-label="Expandir/contraer">▼</button>
+            </div>
+            <div class="scope-group-body ${containerClass || 'route-list'}" style="max-height:240px;border:none;border-radius:0">${groupRoutes}</div>
+          </div>`;
+      }).join('');
+    }
+
+    function bindRouteGroupEvents(containerId, inputName) {
+      const container = document.getElementById(containerId);
+      if (!container) return;
+      container.querySelectorAll('.scope-group-cb').forEach((cb) => {
+        if (cb.dataset.indeterminate) cb.indeterminate = true;
+        cb.addEventListener('click', (e) => e.stopPropagation());
+        cb.addEventListener('change', () => {
+          const scopeId = cb.dataset.scopeId;
+          container.querySelectorAll(`input[name="${inputName}"][data-scope-id="${scopeId}"]`).forEach((el) => {
+            el.checked = cb.checked;
+          });
+          cb.indeterminate = false;
+        });
+      });
+      container.querySelectorAll('[data-toggle-group]').forEach((head) => {
+        head.addEventListener('click', (e) => {
+          if (e.target.closest('.scope-group-cb')) return;
+          head.closest('.scope-group')?.classList.toggle('collapsed');
+        });
+      });
+      container.querySelectorAll(`input[name="${inputName}"]`).forEach((el) => {
+        el.addEventListener('change', () => syncGroupCheckbox(el.dataset.scopeId, inputName));
+      });
+    }
+
+    function applyScopePreset(preset, inputName, containerId) {
+      const inputs = document.querySelectorAll(`#${containerId} input[name="${inputName}"]`);
+      inputs.forEach((el) => { el.checked = false; });
+      if (preset === 'none') {
+        syncAllGroupCheckboxes(containerId, inputName);
+        return;
+      }
+      inputs.forEach((el) => {
+        const row = el.closest('.route-row');
+        if (row?.classList.contains('hidden-by-search')) return;
+        const group = row?.closest('.scope-group');
+        if (group?.classList.contains('hidden-by-filter')) return;
+        const scopeId = el.dataset.scopeId || '';
+        if (preset === 'visible') { el.checked = true; return; }
+        if (preset === 'partner' && scopeId.startsWith('partner:')) el.checked = true;
+        else if (preset === scopeId) el.checked = true;
+      });
+      syncAllGroupCheckboxes(containerId, inputName);
+    }
+
+    function syncAllGroupCheckboxes(containerId, inputName) {
+      document.querySelectorAll(`#${containerId} .scope-group-cb`).forEach((cb) => {
+        syncGroupCheckbox(cb.dataset.scopeId, inputName);
+      });
+    }
       const selected = new Set();
       const scopeIds = new Set(scopesCatalog.map((s) => s.id));
       for (const grant of grants ?? []) {
@@ -531,15 +791,26 @@
     function renderKeys(keys) {
       updateStats(keys);
       const tbody = document.getElementById('keysBody');
+      const q = keysFilterQuery.trim().toLowerCase();
+      const filtered = q
+        ? keys.filter((k) => {
+            const hay = [k.name, k.keyPrefix, k.xcanalVenta, String(k.ccanalalt ?? ''), String(k.cproductor ?? '')].join(' ').toLowerCase();
+            return hay.includes(q);
+          })
+        : keys;
       if (!connected || !token()) {
-        tbody.innerHTML = '<tr class="empty-row"><td colspan="8">🔐 Conecte con el token de administración</td></tr>';
+        tbody.innerHTML = '<tr class="empty-row"><td colspan="8">Conecte con el token de administración (barra lateral)</td></tr>';
         return;
       }
       if (!keys.length) {
-        tbody.innerHTML = '<tr class="empty-row"><td colspan="8">📭 No hay keys — use «Crear token API»</td></tr>';
+        tbody.innerHTML = '<tr class="empty-row"><td colspan="8">No hay tokens — use «Crear token»</td></tr>';
         return;
       }
-      tbody.innerHTML = keys.map((k) => `
+      if (!filtered.length) {
+        tbody.innerHTML = '<tr class="empty-row"><td colspan="8">Ningún token coincide con la búsqueda</td></tr>';
+        return;
+      }
+      tbody.innerHTML = filtered.map((k) => `
         <tr>
           <td><span class="key-name">${escapeHtml(k.name)}</span></td>
           <td style="font-size:.75rem">${formatCanal(k)}</td>
@@ -575,23 +846,32 @@
         .toLowerCase();
     }
 
-    function filterRouteList(containerId, query, metaId) {
+    function filterRouteList(containerId, query, metaId, moduleFilterId) {
       const container = document.getElementById(containerId);
       if (!container) return;
       const q = String(query ?? '').trim().toLowerCase();
+      const moduleFilter = moduleFilterId
+        ? String(document.getElementById(moduleFilterId)?.value ?? '')
+        : '';
       const rows = container.querySelectorAll('.route-row');
       let visible = 0;
       rows.forEach((row) => {
-        const match = !q || (row.dataset.searchText || '').includes(q);
-        row.classList.toggle('hidden-by-search', !match);
-        if (match) visible += 1;
+        const matchSearch = !q || (row.dataset.searchText || '').includes(q);
+        const matchModule = !moduleFilter || row.dataset.scopeId === moduleFilter;
+        const show = matchSearch && matchModule;
+        row.classList.toggle('hidden-by-search', !show);
+        if (show) visible += 1;
+      });
+      container.querySelectorAll('.scope-group').forEach((group) => {
+        const groupRows = group.querySelectorAll('.route-row:not(.hidden-by-search)');
+        group.classList.toggle('hidden-by-filter', groupRows.length === 0);
       });
       const emptyEl = container.querySelector('.route-list-empty');
       if (rows.length && visible === 0) {
         if (!emptyEl) {
           const msg = document.createElement('div');
           msg.className = 'route-list-empty';
-          msg.textContent = 'Ningún endpoint coincide con la búsqueda.';
+          msg.textContent = 'Ningún endpoint coincide con los filtros.';
           container.appendChild(msg);
         }
       } else if (emptyEl) {
@@ -600,35 +880,31 @@
       if (metaId) {
         const meta = document.getElementById(metaId);
         if (meta) {
-          meta.textContent = q
+          meta.textContent = q || moduleFilter
             ? `${visible} de ${rows.length} endpoints`
-            : `${rows.length} endpoints`;
+            : `${rows.length} endpoints · ${container.querySelectorAll('.scope-group').length} módulos`;
         }
       }
     }
 
-    function bindRouteSearch(inputId, containerId, metaId) {
+    function bindRouteSearch(inputId, containerId, metaId, moduleFilterId) {
       const input = document.getElementById(inputId);
-      if (!input) return;
-      const run = () => filterRouteList(containerId, input.value, metaId);
-      input.addEventListener('input', run);
+      const moduleSelect = moduleFilterId ? document.getElementById(moduleFilterId) : null;
+      const run = () => filterRouteList(containerId, input?.value ?? '', metaId, moduleFilterId);
+      input?.addEventListener('input', run);
+      moduleSelect?.addEventListener('change', run);
       run();
     }
 
-    function renderRouteCheckboxes(containerId, selectedGrants, inputName, searchInputId, searchMetaId) {
+    function renderRouteCheckboxes(containerId, selectedGrants, inputName, searchInputId, searchMetaId, moduleFilterId) {
       const selected = grantsToSelectedRoutes(selectedGrants);
-      document.getElementById(containerId).innerHTML = routesCatalog.map((route) => `
-        <label class="route-row" data-search-text="${escapeHtml(buildRouteSearchText(route))}">
-          <input type="checkbox" name="${inputName}" value="${escapeHtml(route.routeId)}" ${selected.has(route.routeId) ? 'checked' : ''} />
-          <div class="route-row-main">
-            <code>${escapeHtml(route.routeId)}</code>
-            <div class="route-row-hint">${escapeHtml(route.scopeLabel)} · ${escapeHtml(route.scopeId)}</div>
-          </div>
-        </label>`).join('');
+      document.getElementById(containerId).innerHTML = renderRouteGroupsHtml(routesCatalog, selected, inputName);
+      bindRouteGroupEvents(containerId, inputName);
+      if (moduleFilterId) populateModuleFilter(moduleFilterId);
       if (searchInputId) {
         const searchInput = document.getElementById(searchInputId);
         if (searchInput) searchInput.value = '';
-        bindRouteSearch(searchInputId, containerId, searchMetaId);
+        bindRouteSearch(searchInputId, containerId, searchMetaId, moduleFilterId);
       }
     }
 
@@ -637,20 +913,33 @@
     }
 
     function renderScopeDetails() {
-      renderRouteCheckboxes('scopeDetailList', [], 'scope', 'scopeRouteSearch', 'scopeRouteSearchMeta');
+      renderRouteCheckboxes('scopeDetailList', [], 'scope', 'scopeRouteSearch', 'scopeRouteSearchMeta', 'scopeModuleFilter');
     }
 
     function renderGuideScopes() {
-      document.getElementById('guideScopes').innerHTML = routesCatalog.length
-        ? routesCatalog.map((route) => `
-          <div class="guide-scope-card">
-            <h4><code>${escapeHtml(route.routeId)}</code></h4>
-            <p style="font-size:.78rem;color:var(--muted);margin:0">${escapeHtml(route.scopeLabel)} · ${escapeHtml(route.description)}</p>
-          </div>`).join('')
-        : scopesCatalog
-            .filter((s) => s.id !== 'admin:keys')
-            .flatMap((s) => (s.routes || []).map((r) => `
-              <div class="guide-scope-card"><h4><code>${escapeHtml(r)}</code></h4></div>`)).join('');
+      const q = String(document.getElementById('guideSearch')?.value ?? '').trim().toLowerCase();
+      const groups = groupRoutesByScope(routesCatalog);
+      if (!groups.length && scopesCatalog.length) {
+        document.getElementById('guideScopes').innerHTML = scopesCatalog
+          .filter((s) => s.id !== 'admin:keys')
+          .flatMap((s) => (s.routes || []).map((r) => `
+            <div class="guide-scope-card"><h4><code>${escapeHtml(r)}</code></h4></div>`)).join('');
+        return;
+      }
+      document.getElementById('guideScopes').innerHTML = groups
+        .filter((g) => !q || g.label.toLowerCase().includes(q) || g.scopeId.includes(q) ||
+          g.routes.some((r) => buildRouteSearchText(r).includes(q)))
+        .map((group) => `
+          <div class="guide-group">
+            <div class="guide-group-head">${escapeHtml(group.label)} · <code>${escapeHtml(group.scopeId)}</code> (${group.routes.length})</div>
+            ${group.routes
+              .filter((r) => !q || buildRouteSearchText(r).includes(q))
+              .map((route) => `
+              <div class="guide-scope-card">
+                <h4><code>${escapeHtml(route.routeId)}</code></h4>
+                <p style="font-size:.78rem;color:var(--muted);margin:0">${escapeHtml(route.description || '')}</p>
+              </div>`).join('')}
+          </div>`).join('');
     }
 
     function getSelectedScopes() {
@@ -719,7 +1008,7 @@
       document.getElementById('cscanalalt').value = '';
       document.getElementById('ctipocanal').value = '';
       document.getElementById('cproductor').value = '80080';
-      renderRouteCheckboxes('scopeDetailList', [], 'scope', 'scopeRouteSearch', 'scopeRouteSearchMeta');
+      renderRouteCheckboxes('scopeDetailList', [], 'scope', 'scopeRouteSearch', 'scopeRouteSearchMeta', 'scopeModuleFilter');
       setWizardStep(1);
     }
 
@@ -817,18 +1106,24 @@
         </div>
         <div class="edit-section">
           <h3>Endpoints permitidos</h3>
-          <div class="catalog-note">Marque cada ruta que este token pueda invocar. Sin marcar ninguna = solo catálogos.</div>
-          <div class="route-search-bar">
-            <input type="search" id="editScopeSearch" class="route-search" placeholder="Buscar endpoint, scope o método…" autocomplete="off" />
+          <div class="catalog-note">Sin marcar ninguno = solo catálogos. Use atajos o agrupe por módulo.</div>
+          <div class="preset-bar" id="editPresetBar">
+            <span>Atajos:</span>
+            <button type="button" class="preset-chip" data-preset-edit="none">Solo catálogos</button>
+            <button type="button" class="preset-chip" data-preset-edit="visible">Todo visible</button>
+          </div>
+          <div class="filter-row">
+            <input type="search" id="editScopeSearch" class="route-search" placeholder="Buscar endpoint…" autocomplete="off" style="flex:1;min-width:200px;max-width:none" />
+            <select id="editModuleFilter" aria-label="Filtrar módulo"><option value="">Todos los módulos</option></select>
             <div class="route-toolbar" style="margin:0">
-              <button type="button" class="btn btn-ghost btn-sm" data-select-all="editScope">Marcar todos</button>
+              <button type="button" class="btn btn-ghost btn-sm" data-select-all="editScope">Marcar visibles</button>
               <button type="button" class="btn btn-ghost btn-sm" data-clear-all="editScope">Quitar todos</button>
             </div>
             <span class="route-search-meta" id="editScopeSearchMeta"></span>
           </div>
-          <div id="editScopeList" class="route-list"></div>
+          <div id="editScopeList" class="scope-groups"></div>
         </div>`;
-      renderRouteCheckboxes('editScopeList', k.scopes || [], 'editScope', 'editScopeSearch', 'editScopeSearchMeta');
+      renderRouteCheckboxes('editScopeList', k.scopes || [], 'editScope', 'editScopeSearch', 'editScopeSearchMeta', 'editModuleFilter');
       setModalButtons('edit', k);
     }
 
@@ -928,9 +1223,11 @@
     function bindRouteToolbar(selectId, clearId, inputName, containerId) {
       document.getElementById(selectId)?.addEventListener('click', () => {
         visibleRouteInputs(inputName, containerId).forEach((el) => { el.checked = true; });
+        syncAllGroupCheckboxes(containerId, inputName);
       });
       document.getElementById(clearId)?.addEventListener('click', () => {
         visibleRouteInputs(inputName, containerId).forEach((el) => { el.checked = false; });
+        syncAllGroupCheckboxes(containerId, inputName);
       });
     }
 
@@ -938,10 +1235,12 @@
       const selectAll = e.target.closest('[data-select-all]');
       if (selectAll) {
         visibleRouteInputs(selectAll.dataset.selectAll, 'editScopeList').forEach((el) => { el.checked = true; });
+        syncAllGroupCheckboxes('editScopeList', 'editScope');
       }
       const clearAll = e.target.closest('[data-clear-all]');
       if (clearAll) {
         visibleRouteInputs(clearAll.dataset.clearAll, 'editScopeList').forEach((el) => { el.checked = false; });
+        syncAllGroupCheckboxes('editScopeList', 'editScope');
       }
     });
 
@@ -999,15 +1298,45 @@
     }
 
     function switchTab(id) {
-      document.querySelectorAll('.tab').forEach((t) => t.classList.toggle('active', t.dataset.tab === id));
+      document.querySelectorAll('.nav-item').forEach((t) => t.classList.toggle('active', t.dataset.tab === id));
       document.querySelectorAll('.panel').forEach((p) => p.classList.toggle('active', p.id === 'panel-' + id));
+      const titles = PAGE_TITLES[id] || ['Admin', ''];
+      document.getElementById('pageTitle').textContent = titles[0];
+      document.getElementById('pageSubtitle').textContent = titles[1];
     }
 
-    document.querySelectorAll('.tab').forEach((tab) => {
+    document.querySelectorAll('.nav-item').forEach((tab) => {
       tab.addEventListener('click', () => switchTab(tab.dataset.tab));
     });
 
+    document.getElementById('scopePresetBar')?.addEventListener('click', (e) => {
+      const btn = e.target.closest('[data-preset]');
+      if (!btn) return;
+      applyScopePreset(btn.dataset.preset, 'scope', 'scopeDetailList');
+      filterRouteList('scopeDetailList', document.getElementById('scopeRouteSearch')?.value ?? '', 'scopeRouteSearchMeta', 'scopeModuleFilter');
+    });
+
+    document.getElementById('editPresetBar')?.addEventListener('click', (e) => {
+      const btn = e.target.closest('[data-preset-edit]');
+      if (!btn) return;
+      applyScopePreset(btn.dataset.presetEdit, 'editScope', 'editScopeList');
+    });
+
+    document.getElementById('keysSearch')?.addEventListener('input', (e) => {
+      keysFilterQuery = e.target.value;
+      renderKeys(keysCache);
+    });
+
+    document.getElementById('guideSearch')?.addEventListener('input', () => renderGuideScopes());
+
     document.getElementById('btnConnect').addEventListener('click', connect);
+    document.getElementById('btnConnectMobile')?.addEventListener('click', () => {
+      const mobile = document.getElementById('adminTokenMobile');
+      if (mobile?.value.trim()) {
+        document.getElementById('adminToken').value = mobile.value.trim();
+      }
+      connect();
+    });
     document.getElementById('btnToggleToken').addEventListener('click', () => {
       const inp = document.getElementById('adminToken');
       inp.type = inp.type === 'password' ? 'text' : 'password';
@@ -1054,6 +1383,8 @@
 
     if (token()) {
       document.getElementById('adminToken').value = token();
+      const mobile = document.getElementById('adminTokenMobile');
+      if (mobile) mobile.value = token();
       connect().catch(() => {});
     }
   </script>
