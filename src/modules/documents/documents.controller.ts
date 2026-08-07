@@ -1,10 +1,12 @@
 import { Controller, Post, Get, Param, Body, Res, Req, HttpStatus, Logger } from '@nestjs/common';
-import { ApiExcludeEndpoint, ApiTags, ApiOperation, ApiResponse, ApiBody, ApiSecurity, ApiHeader } from '@nestjs/swagger';
+import { ConfigService } from '@nestjs/config';
+import { ApiExcludeEndpoint, ApiTags, ApiOperation, ApiResponse, ApiBody, ApiHeader } from '@nestjs/swagger';
 import { Response, Request } from 'express';
 import { DocumentsService } from './documents.service';
 import { GenerateConductorPdfDto } from './dto/generate-conductor.dto';
 import { NestProtected } from '../auth/decorators/nest-protected.decorator';
 import { NEST_AUTH_SCOPES } from '../auth/scopes/nest-auth-scopes.constants';
+import { resolvePublicApiPaths } from '../../common/config/public-path';
 import * as path from 'path';
 import * as fs from 'fs';
 
@@ -13,7 +15,25 @@ import * as fs from 'fs';
 export class DocumentsController {
   private readonly logger = new Logger(DocumentsController.name);
 
-  constructor(private readonly documentsService: DocumentsService) {}
+  constructor(
+    private readonly documentsService: DocumentsService,
+    private readonly config: ConfigService,
+  ) {}
+
+  /** Base pública para enlaces PDF abiertos desde el navegador del cliente. */
+  private resolveDocumentPublicBase(): string {
+    const publicPaths = resolvePublicApiPaths({
+      publicApiPrefix: this.config.get<string>('PUBLIC_API_PREFIX'),
+      publicApiOrigin: this.config.get<string>('PUBLIC_API_ORIGIN'),
+    });
+    if (publicPaths.prefix) {
+      return publicPaths.publicBaseUrl.replace(/\/$/, '');
+    }
+    const explicit = String(this.config.get<string>('PUBLIC_URL') ?? '').trim().replace(/\/$/, '');
+    if (explicit) return explicit;
+    const port = this.config.get<number>('PORT', 3002);
+    return `http://127.0.0.1:${port}`;
+  }
 
   @Post('conductor-habitual')
   @NestProtected(NEST_AUTH_SCOPES.DOCUMENTS_WRITE)
@@ -37,7 +57,7 @@ export class DocumentsController {
       example: {
         success: true,
         message: 'PDF generado exitosamente',
-        url: 'http://192.168.8.120:3002/api/v1/documents/pdf/conductor-18-1-0000078926.pdf',
+        url: 'https://cierrelmds.exelixitech.com/nest-api-docs/api/v1/documents/pdf/conductor_1234567890.pdf',
       },
     },
   })
@@ -49,8 +69,8 @@ export class DocumentsController {
     try {
       this.logger.log(`[DocumentsController] Iniciando generación de anexo conductor para póliza ${dto.poliza}`);
       const { filename } = await this.documentsService.generateConductorHabitualPdf(dto);
-      
-      const baseUrl = process.env.PUBLIC_URL || `http://192.168.8.120:${process.env.PORT || 3002}`;
+
+      const baseUrl = this.resolveDocumentPublicBase();
       const fileUrl = `${baseUrl}/api/v1/documents/pdf/${filename}`;
 
       this.logger.log(`[DocumentsController] PDF generado con éxito. URL: ${fileUrl}`);
