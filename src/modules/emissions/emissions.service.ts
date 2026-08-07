@@ -645,6 +645,26 @@ export class EmissionsService {
         type: T.Numeric(18, 2),
         value: this.pick(b, 'precargorcv') ?? null,
       },
+      itipoEmi: {
+        type: T.VarChar(10),
+        value: this.pick(b, 'itipoEmi') ?? 'NU',
+      },
+      coberAdicional: {
+        type: T.VarChar(2),
+        value: this.pick(b, 'coberAdicional') ?? 'RC',
+      },
+      tasaPt: {
+        type: T.Numeric(18, 2),
+        value: this.pick(b, 'tasaPt') ?? 0,
+      },
+      tasaCa: {
+        type: T.Numeric(18, 2),
+        value: this.pick(b, 'tasaCa') ?? 0,
+      },
+      tasaPp: {
+        type: T.Numeric(18, 2),
+        value: this.pick(b, 'tasaPp') ?? 0,
+      },
       fdesde: { type: T.Date, value: b['fdesde'] },
       fhasta: { type: T.Date, value: b['fhasta'] },
     };
