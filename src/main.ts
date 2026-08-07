@@ -510,6 +510,7 @@ async function bootstrap(): Promise<void> {
         .sb-logo {
           width: 100%; max-width: 168px; height: auto;
           object-fit: contain; flex-shrink: 0;
+          image-rendering: -webkit-optimize-contrast;
         }
         .sb-tagline {
           margin: 10px 0 0; padding: 0;

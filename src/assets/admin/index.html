@@ -75,7 +75,15 @@
       background: linear-gradient(90deg, var(--navy-soft), var(--accent));
       opacity: .85;
     }
-    .sidebar-brand img { height: 34px; margin-bottom: .7rem; display: block; }
+    .sidebar-brand img {
+      width: 100%;
+      max-width: 168px;
+      height: auto;
+      margin-bottom: .85rem;
+      display: block;
+      object-fit: contain;
+      image-rendering: -webkit-optimize-contrast;
+    }
     .sidebar-brand .eyebrow {
       font-size: .62rem; font-weight: 700; letter-spacing: .14em; text-transform: uppercase;
       color: rgba(255,255,255,.55); margin: 0 0 .2rem;
@@ -525,7 +533,7 @@
   <div class="app">
     <aside class="sidebar">
       <div class="sidebar-brand">
-        <img src="/assets/brand/logo-lamundial-sidebar.png" alt="La Mundial" onerror="this.style.display='none'" />
+        <img src="/assets/brand/logo-lamundial-sidebar.png" alt="La Mundial de Seguros" width="168" height="97" decoding="async" onerror="this.style.display='none'" />
         <p class="eyebrow">nest-api · QA</p>
         <h1>Tokens API</h1>
         <p>Gestión de claves y permisos para integradores</p>
