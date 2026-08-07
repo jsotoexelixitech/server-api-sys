@@ -137,7 +137,7 @@
     .sidebar-auth .btn-connect:hover { filter: brightness(1.06); }
 
     /* ——— Main ——— */
-    .main-wrap { min-width: 0; display: flex; flex-direction: column; }
+    .main-wrap { min-width: 0; display: flex; flex-direction: column; width: 100%; }
     .mobile-auth {
       display: none; padding: .75rem 1rem; gap: .5rem; flex-wrap: wrap; align-items: flex-end;
       background: var(--surface); border-bottom: 1px solid var(--line);
@@ -147,8 +147,9 @@
       border-radius: 8px; background: #fff;
     }
     .page-header {
-      padding: 1.15rem 1.75rem .95rem;
+      padding: 1.15rem 2rem .95rem;
       display: flex; align-items: flex-end; justify-content: space-between; gap: 1rem; flex-wrap: wrap;
+      width: 100%;
     }
     .page-header h2 {
       margin: 0; font-size: 1.45rem; font-weight: 800; letter-spacing: -.03em; color: var(--navy);
@@ -162,7 +163,7 @@
     }
     .quick-links a:hover { border-color: #b8c4dc; color: var(--accent-dark); }
 
-    main { flex: 1; padding: 0 1.75rem 2rem; width: 100%; max-width: 1180px; }
+    main { flex: 1; padding: 0 2rem 2rem; width: 100%; max-width: none; }
 
     .conn-pill {
       display: inline-flex; align-items: center; gap: .45rem;
