@@ -4,6 +4,7 @@ import { ApiExcludeEndpoint, ApiTags, ApiOperation, ApiResponse, ApiBody, ApiHea
 import { Response, Request } from 'express';
 import { DocumentsService } from './documents.service';
 import { GenerateConductorPdfDto } from './dto/generate-conductor.dto';
+import { Public } from '../auth/decorators/public.decorator';
 import { NestProtected } from '../auth/decorators/nest-protected.decorator';
 import { NEST_AUTH_SCOPES } from '../auth/scopes/nest-auth-scopes.constants';
 import { resolvePublicApiPaths } from '../../common/config/public-path';
@@ -90,11 +91,20 @@ export class DocumentsController {
   }
 
   @Get('pdf/:filename')
+  @Public()
   @ApiExcludeEndpoint()
-  @ApiOperation({ summary: 'Descarga o visualiza un PDF generado' })
+  @ApiOperation({ summary: 'Descarga o visualiza un PDF generado (enlace temporal sin auth)' })
   async getPdf(@Param('filename') filename: string, @Req() req: Request, @Res() res: Response) {
+    const safeName = path.basename(String(filename ?? ''));
+    if (!/^conductor_\d+\.pdf$/i.test(safeName)) {
+      return res.status(HttpStatus.BAD_REQUEST).json({
+        success: false,
+        message: 'Nombre de archivo no válido.',
+      });
+    }
+
     const tempDir = path.join(process.cwd(), 'temp-pdfs');
-    const filePath = path.join(tempDir, filename);
+    const filePath = path.join(tempDir, safeName);
 
     if (!fs.existsSync(filePath)) {
       return res.status(HttpStatus.NOT_FOUND).json({
@@ -107,7 +117,7 @@ export class DocumentsController {
 
     res.set({
       'Content-Type': 'application/pdf',
-      'Content-Disposition': `${disposition}; filename="${filename}"`,
+      'Content-Disposition': `${disposition}; filename="${safeName}"`,
     });
 
     const fileStream = fs.createReadStream(filePath);
