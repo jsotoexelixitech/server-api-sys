@@ -587,7 +587,7 @@
           groups.set(scopeId, {
             scopeId,
             label: route.scopeLabel || scopeId,
-            description: route.description || '',
+            description: route.scopeDescription || route.description || '',
             routes: [],
           });
         }
@@ -626,6 +626,7 @@
             <input type="checkbox" name="${inputName}" value="${escapeHtml(route.routeId)}" data-scope-id="${escapeHtml(group.scopeId)}" ${selected.has(route.routeId) ? 'checked' : ''} />
             <div class="route-row-main">
               <code>${escapeHtml(route.routeId)}</code>
+              <div class="route-row-hint">${escapeHtml(route.description || '')}</div>
             </div>
           </label>`).join('');
         const allChecked = group.routes.every((r) => selected.has(r.routeId));
@@ -637,6 +638,7 @@
               <div class="scope-group-title">
                 <strong>${escapeHtml(group.label)}</strong>
                 <span>${group.routes.length} endpoint(s) · <code>${escapeHtml(group.scopeId)}</code></span>
+                <span class="route-row-hint" style="display:block;margin-top:.2rem">${escapeHtml(group.description || '')}</span>
               </div>
               <button type="button" class="scope-group-toggle" aria-label="Expandir/contraer">▼</button>
             </div>
@@ -863,7 +865,7 @@
     }
 
     function buildRouteSearchText(route) {
-      return [route.routeId, route.scopeId, route.scopeLabel, route.description]
+      return [route.routeId, route.scopeId, route.scopeLabel, route.description, route.scopeDescription]
         .filter(Boolean)
         .join(' ')
         .toLowerCase();
@@ -954,7 +956,10 @@
           g.routes.some((r) => buildRouteSearchText(r).includes(q)))
         .map((group) => `
           <div class="guide-group">
-            <div class="guide-group-head">${escapeHtml(group.label)} · <code>${escapeHtml(group.scopeId)}</code> (${group.routes.length})</div>
+            <div class="guide-group-head">
+              ${escapeHtml(group.label)} · <code>${escapeHtml(group.scopeId)}</code> (${group.routes.length})
+              <div style="font-weight:400;font-size:.72rem;color:var(--muted);margin-top:.25rem">${escapeHtml(group.description || '')}</div>
+            </div>
             ${group.routes
               .filter((r) => !q || buildRouteSearchText(r).includes(q))
               .map((route) => `
@@ -1230,7 +1235,8 @@
           routeId,
           scopeId: s.id,
           scopeLabel: s.label,
-          description: s.description,
+          scopeDescription: s.description,
+          description: routeId,
         })));
       renderScopeDetails();
       renderGuideScopes();

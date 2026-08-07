@@ -3,6 +3,7 @@ import {
   NEST_AUTH_SCOPE_CATALOG,
   NestAuthScopeMeta,
 } from './nest-auth-scopes.constants';
+import { describeRouteLine } from './route-descriptions';
 
 export interface DiscoveredRoute {
   method: string;
@@ -14,6 +15,9 @@ export interface RouteCatalogEntry {
   routeId: string;
   scopeId: string;
   scopeLabel: string;
+  /** Descripción del módulo/scope (agrupación). */
+  scopeDescription: string;
+  /** Descripción específica del endpoint. */
   description: string;
 }
 
@@ -202,7 +206,8 @@ export function buildRouteCatalog(): RouteCatalogEntry[] {
         routeId,
         scopeId: String(scope.id),
         scopeLabel: scope.label,
-        description: scope.description,
+        scopeDescription: scope.description,
+        description: describeRouteLine(routeId),
       });
     }
   }
