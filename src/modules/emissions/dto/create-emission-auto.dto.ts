@@ -303,4 +303,29 @@ export class CreateEmissionAutoDto {
   @IsOptional()
   @IsNumber()
   ptasa?: number;
+
+  @ApiPropertyOptional({ example: 'NU', description: 'Tipo de emisión (NU, SO, RE, RM)' })
+  @IsOptional()
+  @IsString()
+  itipoEmi?: string;
+
+  @ApiPropertyOptional({ example: 'RC', description: 'Cobertura adicional (RC, CA, PT)' })
+  @IsOptional()
+  @IsString()
+  coberAdicional?: string;
+
+  @ApiPropertyOptional({ example: 0, description: 'Tasa Pérdida Total' })
+  @IsOptional()
+  @IsNumber()
+  tasaPt?: number;
+
+  @ApiPropertyOptional({ example: 0, description: 'Tasa Cobertura Amplia' })
+  @IsOptional()
+  @IsNumber()
+  tasaCa?: number;
+
+  @ApiPropertyOptional({ example: 0, description: 'Tasa Pérdida Parcial' })
+  @IsOptional()
+  @IsNumber()
+  tasaPp?: number;
 }
