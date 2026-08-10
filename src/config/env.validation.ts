@@ -31,6 +31,11 @@ export const envValidationSchema = Joi.object({
   POLICY_PDF_URL: Joi.string().optional(),
   /** Alias legacy Express (misma URL base PDF). */
   URLPoliza: Joi.string().optional(),
+  /** Base PDF ingreso de caja Sis2000 (alias legacy URLingreso_caja). */
+  URLingreso_caja: Joi.string().optional(),
+  INGRESO_CAJA_URL: Joi.string().optional(),
+  ARYS_TRADICIONAL_PDF_URL: Joi.string().uri().optional(),
+  ARYS_AUTO_BI_PDF_URL: Joi.string().uri().optional(),
   EXTERNAL_API_URL_AUTO: Joi.string().optional(),
   EXTERNAL_API_KEY: Joi.string().optional(),
   EXTERNAL_BASIC_AUTH: Joi.string().optional(),

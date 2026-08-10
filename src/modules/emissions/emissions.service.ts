@@ -8,7 +8,7 @@ import {
 import { ConfigService } from '@nestjs/config';
 import { MssqlService } from '../../database/mssql.service';
 import { parseSPError, formatValidateAutoError } from '../../common/helpers/sp-error.helper';
-import { buildPolicyPdfUrl } from '../../common/helpers/policy-url.helper';
+import { buildPolicyPdfUrl, resolveClubArysPdfUrl } from '../../common/helpers/policy-url.helper';
 import {
   SP_PRE_EMISION_AUTO_RCV,
   SP_SEARCH_AUTOMOBILE_PROPIETARY,
@@ -107,6 +107,50 @@ export class EmissionsService {
       ORDER BY pol.femision DESC, rec.cnrecibo DESC
     `);
     return (result.recordset?.[0] ?? {}) as Record<string, unknown>;
+  }
+
+  /** Cobertura Club Arys: adpolcob ccober=15 en ramo 18 (igual SysIP Poliza.js). */
+  private async hasClubArysCoverage(cnpoliza: string): Promise<boolean> {
+    const poliza = String(cnpoliza ?? '').trim();
+    if (!poliza) return false;
+
+    const T = this.db.types;
+    const req = this.db.request();
+    req.input('cnpoliza', T.Char(30), poliza);
+    const result = await req.query(`
+      SELECT CASE WHEN EXISTS (
+        SELECT 1
+        FROM adpolcob c
+        INNER JOIN adpoliza p ON p.cpoliza = c.cpoliza
+        WHERE LTRIM(RTRIM(p.cnpoliza)) = LTRIM(RTRIM(@cnpoliza))
+          AND c.ccober = '15'
+          AND c.cramo = 18
+      ) THEN 1 ELSE 0 END AS hasArys
+    `);
+    return Number(result.recordset?.[0]?.['hasArys'] ?? 0) === 1;
+  }
+
+  private resolveClubArysPdfUrl(hasCoverage: boolean, iplaca?: unknown): string {
+    return resolveClubArysPdfUrl(
+      hasCoverage,
+      iplaca,
+      this.config.get<string>('ARYS_TRADICIONAL_PDF_URL'),
+      this.config.get<string>('ARYS_AUTO_BI_PDF_URL'),
+    );
+  }
+
+  private async resolveClubArysPdfForEmission(
+    cnpoliza: string,
+    body: Record<string, unknown>,
+  ): Promise<string> {
+    try {
+      const hasArys = await this.hasClubArysCoverage(cnpoliza);
+      return this.resolveClubArysPdfUrl(hasArys, this.pick(body, 'iplaca'));
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : String(err);
+      this.logger.warn(`Club Arys PDF omitido cnpoliza=${cnpoliza}: ${msg}`);
+      return '';
+    }
   }
 
   private async searchVehicle(field: 'xplaca' | 'xsercar', value: string) {
@@ -763,6 +807,7 @@ export class EmissionsService {
     const pdfBase =
       this.config.get<string>('POLICY_PDF_URL') ?? this.config.get<string>('URLPoliza');
     const urlpoliza = buildPolicyPdfUrl(pdfBase, cnpoliza, fanopol, fmespol);
+    const url_club_arys = await this.resolveClubArysPdfForEmission(cnpoliza, b);
 
     this.logger.log(`emitLocal OK cnpoliza=${cnpoliza} cnrecibo=${cnrecibo}`);
 
@@ -780,6 +825,7 @@ export class EmissionsService {
       cnpoliza,
       cnrecibo,
       urlpoliza,
+      url_club_arys: url_club_arys || undefined,
       ncuota,
       fanopol,
       fmespol,
@@ -841,11 +887,16 @@ export class EmissionsService {
       }
 
       const dataObj = (resData['result'] ?? resData['data'] ?? resData) as Record<string, unknown>;
+      const cnpoliza = String(dataObj['poliza'] ?? dataObj['cnpoliza'] ?? '');
+      const url_club_arys = cnpoliza
+        ? await this.resolveClubArysPdfForEmission(cnpoliza, b)
+        : '';
       return {
         message: (resData['message'] as string) || 'Emisión registrada via API externa.',
-        cnpoliza: String(dataObj['poliza'] ?? dataObj['cnpoliza'] ?? ''),
+        cnpoliza,
         cnrecibo: String(dataObj['recibo'] ?? dataObj['cnrecibo'] ?? ''),
         urlpoliza: String(dataObj['urlpoliza'] ?? ''),
+        url_club_arys: url_club_arys || undefined,
         ncuota: dataObj['ncuota'] as number | undefined,
         fanopol: dataObj['fanopol'] as number | undefined,
         fmespol: dataObj['fmespol'] as number | undefined,

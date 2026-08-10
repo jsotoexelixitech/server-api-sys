@@ -4,9 +4,11 @@ import {
   InternalServerErrorException,
   Logger,
 } from '@nestjs/common';
+import { ConfigService } from '@nestjs/config';
 import { MssqlService } from '../../database/mssql.service';
 import { CollectionPaymentDto } from './dto/collection-payment.dto';
 import { parseSPError } from '../../common/helpers/sp-error.helper';
+import { buildIngresoCajaUrl } from '../../common/helpers/policy-url.helper';
 
 interface ApiClientRow {
   cproductor?: number;
@@ -75,7 +77,10 @@ interface CollectionPayload {
 export class CollectionService {
   private readonly logger = new Logger(CollectionService.name);
 
-  constructor(private readonly db: MssqlService) {}
+  constructor(
+    private readonly db: MssqlService,
+    private readonly config: ConfigService,
+  ) {}
 
   /** Rechaza referencias internas Exélixi; exige ref. bancaria del pago verificado. */
   private assertValidBankReference(xreferencia: string): void {
@@ -793,9 +798,13 @@ export class CollectionService {
     );
 
     const collect = await this.collectPayment(payload);
+    const ingresoBase =
+      this.config.get<string>('URLingreso_caja') ??
+      this.config.get<string>('INGRESO_CAJA_URL');
     return {
       message: 'Recibo cobrado exitosamente.',
       cobro: collect,
+      ingresoCaja: buildIngresoCajaUrl(ingresoBase, collect.transaccion),
     };
   }
 }
