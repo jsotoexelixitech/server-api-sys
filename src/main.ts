@@ -19,6 +19,7 @@ import {
   createBrowserTagsSorter,
 } from './common/swagger/swagger-tags.constants';
 import { normalizeSwaggerDocumentTags } from './common/swagger/normalize-swagger-tags';
+import { sanitizeSwaggerDocForNestUi } from './common/swagger/sanitize-swagger-for-ui';
 import {
   LA_MUNDIAL_BRAND,
   SWAGGER_BRAND_META,
@@ -186,7 +187,12 @@ async function bootstrap(): Promise<void> {
     }
     app.get(OpenApiDocumentStore).setDocument(document);
 
-    SwaggerModule.setup(swaggerPath, app, document, {
+    // Copia sanitizada solo para swagger-ui-init.js (Nest String.replace + $')
+    const documentForUi = sanitizeSwaggerDocForNestUi(
+      JSON.parse(JSON.stringify(document)),
+    );
+
+    SwaggerModule.setup(swaggerPath, app, documentForUi, {
       customSiteTitle: SWAGGER_BRAND_META.siteTitle,
       customfavIcon: brandFaviconUrl,
       customCssUrl: LA_MUNDIAL_BRAND.fontsCss,
