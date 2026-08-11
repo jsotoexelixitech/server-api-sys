@@ -76,4 +76,21 @@ export const envValidationSchema = Joi.object({
   PRODUCT_EMISSION_DATABASE_URL: Joi.string().optional(),
   /** Ruta absoluta o relativa donde se guardan los documentos generados (.docx/.pdf). */
   PRODUCT_EMISSION_DOCS_DIR: Joi.string().default('temp-product-emission-docs'),
+
+  /** Correo post-emisión RCV (SMTP directo o proxy sendmail_sisip). */
+  MAIL_ENABLED: Joi.boolean().default(false),
+  /** smtp = Nodemailer + plantilla welcome. sisip = POST URL_API_EMAIL (PHP La Mundial). */
+  MAIL_TRANSPORT: Joi.string().valid('smtp', 'sisip').default('smtp'),
+  MAIL_AUTO_ON_EMIT: Joi.boolean().default(false),
+  MAIL_DEFAULT_CC: Joi.string().allow('').optional(),
+  SMTP_HOST: Joi.string().default('mail.lamundialdeseguros.com'),
+  SMTP_PORT: Joi.number().default(25),
+  SMTP_SECURE: Joi.boolean().default(false),
+  SMTP_USER: Joi.string().allow('').optional(),
+  SMTP_PASS: Joi.string().allow('').optional(),
+  SMTP_FROM: Joi.string().email().default('info@lamundialdeseguros.com'),
+  SMTP_FROM_NAME: Joi.string().default('La Mundial de Seguros'),
+  SMTP_REPLY_TO: Joi.string().email().optional(),
+  /** Endpoint PHP sendmail_sisip (modo sisip). Mismo contrato que SysIP email_php.service.js */
+  URL_API_EMAIL: Joi.string().uri().optional(),
 });
