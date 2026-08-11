@@ -59,6 +59,50 @@ export class EmissionsService {
     return prima != null ? Number(prima) : null;
   }
 
+  /** Moneda del plan en maplanes (ej. '$' para planes premium AutoV). */
+  private async resolvePlanMoneda(cplan: string): Promise<string | null> {
+    const plan = String(cplan ?? '').trim();
+    if (!plan) return null;
+    const T = this.db.types;
+    const req = this.db.request();
+    req.input('cplan', T.VarChar(10), plan);
+    const result = await req.query<{ cmoneda: string }>(
+      `SELECT TOP 1 RTRIM(cmoneda) AS cmoneda FROM maplanes WHERE cplan = @cplan AND iestado = 'V'`,
+    );
+    const raw = result.recordset?.[0]?.cmoneda;
+    return raw != null && String(raw).trim() !== '' ? String(raw).trim() : null;
+  }
+
+  /**
+   * Prima y moneda para el SP RCV2.
+   * Planes en USD (maplanes.cmoneda='$') reciben mprimaext — igual createEmissionAutoExternal.
+   */
+  private async resolveMprimaForSp(
+    b: Record<string, unknown>,
+  ): Promise<{ mprima: number | null; cmoneda: string | null }> {
+    const cplan = String(this.pick(b, 'cplan', 'plan') ?? '').trim();
+    let cmoneda = this.pick(b, 'cmoneda')
+      ? String(this.pick(b, 'cmoneda')).trim().slice(0, 4)
+      : null;
+    if (!cmoneda && cplan) {
+      cmoneda = await this.resolvePlanMoneda(cplan);
+    }
+
+    const isUsdPlan =
+      cmoneda === '$' ||
+      cmoneda === 'USD' ||
+      cmoneda?.toUpperCase() === 'DOL';
+
+    if (isUsdPlan) {
+      const ext = this.pick<number>(b, 'mprimaext', 'mprima_ext', 'prima');
+      if (ext != null && Number(ext) > 0) {
+        return { mprima: Number(ext), cmoneda: '$' };
+      }
+    }
+
+    return { mprima: this.resolveMprima(b), cmoneda };
+  }
+
   /** Tasa BCV: ptasa / tasa / ptasamon (alias La Mundial). */
   private resolvePtasamon(b: Record<string, unknown>): number | null {
     const v = this.pick<number>(b, 'ptasa', 'tasa', 'ptasamon', 'ptasamon_pago');
@@ -620,7 +664,7 @@ export class EmissionsService {
   ) {
     const T = this.db.types;
     const ptasamon = this.resolvePtasamon(b);
-    const mprima = this.resolveMprima(b);
+    const { mprima, cmoneda: planMoneda } = await this.resolveMprimaForSp(b);
     const defaultRamo = parseInt(this.config.get<string>('LAMUNDIAL_RAMO', '18') ?? '18', 10);
     const femision =
       this.pick<string>(b, 'fecha_emision', 'femision') ??
@@ -762,7 +806,7 @@ export class EmissionsService {
       ptasamon_pago: { type: T.Numeric(18, 6), value: ptasamon },
       cmoneda: {
         type: T.Char(4),
-        value: this.pick(b, 'cmoneda') ? String(this.pick(b, 'cmoneda')).slice(0, 4) : null,
+        value: planMoneda ? String(planMoneda).slice(0, 4) : null,
       },
       msumaaseg: {
         type: T.Numeric(18, 2),
@@ -822,7 +866,7 @@ export class EmissionsService {
     const xplaca = String(this.pick(b, 'xplaca', 'placa') ?? '').trim();
     const preEmisionSp = SP_PRE_EMISION_AUTO_RCV;
     this.logger.log(
-      `emitLocal: EXEC ${preEmisionSp} placa=${xplaca} plan=${b['cplan'] ?? b['plan']} mprima=${mprima} ptasamon=${ptasamon}`,
+      `emitLocal: EXEC ${preEmisionSp} placa=${xplaca} plan=${b['cplan'] ?? b['plan']} mprima=${mprima} cmoneda=${planMoneda ?? 'null'} ifrecuencia=${this.pick(b, 'ifrecuencia', 'frecuencia') ?? 'A'} msumaaseg=${this.pick(b, 'msumaaseg', 'sumaaseg') ?? 'null'} fhasta=${b['fhasta'] ?? 'null'} ptasamon=${ptasamon}`,
     );
 
     await this.syncPolVehCounter(
