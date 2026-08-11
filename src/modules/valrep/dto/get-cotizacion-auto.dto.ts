@@ -74,4 +74,21 @@ export class GetCotizacionAutoDto {
   @Type(() => Number)
   @Min(0)
   sumaAsegurada?: number;
+
+  @ApiPropertyOptional({
+    example: 'A',
+    description: 'Frecuencia de pago (ifrecuencia) — de spBuscaFrecuenciaPlan',
+  })
+  @IsOptional()
+  @IsIn(['A', 'S', 'M', 'T', 'C'])
+  ifrecuencia?: string;
+
+  @ApiPropertyOptional({
+    example: 365,
+    description: 'Días de vigencia según frecuencia (maplanes_frec.ndias)',
+  })
+  @IsOptional()
+  @Type(() => Number)
+  @IsInt()
+  ndias?: number;
 }

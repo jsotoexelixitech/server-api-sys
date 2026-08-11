@@ -240,10 +240,20 @@ export class ValrepService {
       const tasaPT = rateQueryRes.recordset[0]?.tasaPT ?? 6.52;
       const tasaPP = rateQueryRes.recordset[0]?.tasaPP ?? 3.50;
 
-      // 3. Fechas: póliza anual por defecto
+      // 3. Fechas según frecuencia (paridad SysIP receipt-vehicle-form)
       const fdesde = new Date();
-      const fhasta = new Date();
-      fhasta.setFullYear(fhasta.getFullYear() + 1);
+      const fhasta = new Date(fdesde);
+      const ndias =
+        body.ndias != null && !Number.isNaN(Number(body.ndias))
+          ? Number(body.ndias)
+          : null;
+      if (ndias != null && ndias > 0) {
+        fhasta.setDate(fhasta.getDate() + ndias);
+      } else if (ndias != null && ndias < 0) {
+        fhasta.setDate(fhasta.getDate() + Math.abs(ndias));
+      } else {
+        fhasta.setFullYear(fhasta.getFullYear() + 1);
+      }
 
       // 4. Ejecutar spCalculoAuto (replica exacta de externalChannelsModel.js)
       const calcReq = this.db.request();
@@ -252,7 +262,7 @@ export class ValrepService {
       calcReq.input('cversion',  T.VarChar(3),      body.cversion);
       calcReq.input('cano',      T.Int,             body.fano);
       calcReq.input('cplan',     T.NVarChar(50),    body.cplan);
-      calcReq.input('sumaAseg',  T.Numeric(18, 2),  null);
+      calcReq.input('sumaAseg',  T.Numeric(18, 2),  body.sumaAsegurada ?? null);
       calcReq.input('sumaAsegBl',T.Numeric(18, 2),  0);
       calcReq.input('sumaAsegAd',T.Numeric(18, 2),  0);
       calcReq.input('iplaca',    T.Char(1),         body.iplaca ?? 'N');
@@ -409,7 +419,11 @@ export class ValrepService {
       req.output('mensaje', T.NVarChar(60), '');
 
       const result = await req.execute('spBuscaFrecuenciaPlan');
-      const rows = (result.recordset ?? []) as { cvalor: string; xdescripcion: string }[];
+      const rows = (result.recordset ?? []) as {
+        cvalor: string;
+        xdescripcion: string;
+        ndias?: number | null;
+      }[];
       if (Boolean(result.output['berror']) || !rows.length) {
         throw new BadRequestException(
           String(result.output['mensaje'] ?? 'No se encontraron frecuencias para el plan.'),
