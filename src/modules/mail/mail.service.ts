@@ -19,8 +19,16 @@ export class MailService {
 
   constructor(private readonly config: ConfigService) {}
 
+  /** Joi puede devolver boolean; .env suele ser string — aceptar ambos. */
+  private envFlag(key: string, defaultValue = false): boolean {
+    const raw = this.config.get<boolean | string | undefined>(key);
+    if (raw === undefined || raw === null) return defaultValue;
+    if (typeof raw === 'boolean') return raw;
+    return String(raw).trim().toLowerCase() === 'true';
+  }
+
   isEnabled(): boolean {
-    return this.config.get<string>('MAIL_ENABLED', 'false').toLowerCase() === 'true';
+    return this.envFlag('MAIL_ENABLED', false);
   }
 
   getTransportMode(): 'smtp' | 'sisip' {
@@ -29,10 +37,7 @@ export class MailService {
   }
 
   shouldAutoSendOnEmit(): boolean {
-    return (
-      this.isEnabled()
-      && this.config.get<string>('MAIL_AUTO_ON_EMIT', 'false').toLowerCase() === 'true'
-    );
+    return this.isEnabled() && this.envFlag('MAIL_AUTO_ON_EMIT', false);
   }
 
   async sendPolicyEmissionEmail(dto: SendPolicyEmailDto): Promise<PolicyEmissionMailResult> {
@@ -52,7 +57,7 @@ export class MailService {
 
     const host = this.config.get<string>('SMTP_HOST', 'mail.lamundialdeseguros.com');
     const port = Number(this.config.get<string>('SMTP_PORT', '25'));
-    const secure = this.config.get<string>('SMTP_SECURE', 'false').toLowerCase() === 'true';
+    const secure = this.envFlag('SMTP_SECURE', false);
     const user = this.config.get<string>('SMTP_USER')?.trim();
     const pass = this.config.get<string>('SMTP_PASS')?.trim();
 
