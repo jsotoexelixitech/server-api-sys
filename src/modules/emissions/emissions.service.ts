@@ -130,8 +130,8 @@ export class EmissionsService {
     return Number(result.recordset?.[0]?.['hasArys'] ?? 0) === 1;
   }
 
-  /** SysIP receipt-vehicle-form: planArys si cotización incluye ccobertura 15. */
-  private planIncludesClubArys(body: Record<string, unknown>): boolean {
+  /** Planes legacy / patrimoniales con Club Arys sin depender del catálogo. */
+  private planIncludesClubArysLegacy(body: Record<string, unknown>): boolean {
     const plan = String(this.pick(body, 'cplan', 'plan') ?? '')
       .trim()
       .toUpperCase();
@@ -140,22 +140,60 @@ export class EmissionsService {
     return centidad === 'P';
   }
 
+  /** SysIP receipt-vehicle-form: ccobertura 15 en maplancob (cotización / catálogo plan). */
+  private async queryPlanHasClubArysInCatalog(
+    cplan: string,
+    cramo = 18,
+  ): Promise<boolean> {
+    const plan = String(cplan ?? '').trim();
+    if (!plan) return false;
+
+    const T = this.db.types;
+    const req = this.db.request();
+    req.input('cplan', T.NVarChar(20), plan);
+    req.input('cramo', T.Int, cramo);
+    const result = await req.query(`
+      SELECT CASE WHEN EXISTS (
+        SELECT 1
+        FROM maplancob m
+        WHERE m.cramo = @cramo
+          AND LTRIM(RTRIM(m.cplan)) = LTRIM(RTRIM(@cplan))
+          AND LTRIM(RTRIM(CAST(m.ccobertura AS VARCHAR(10)))) = '15'
+      ) THEN 1 ELSE 0 END AS hasArys
+    `);
+    return Number(result.recordset?.[0]?.['hasArys'] ?? 0) === 1;
+  }
+
   private async hasClubArysCoverage(
     cnpoliza: string,
     body?: Record<string, unknown>,
   ): Promise<boolean> {
-    for (let attempt = 0; attempt < 3; attempt += 1) {
+    if (body) {
+      const cplan = String(this.pick(body, 'cplan', 'plan') ?? '').trim();
+      const cramo = this.intField(this.pick(body, 'cramo', 'ramo')) ?? 18;
+      if (cplan) {
+        try {
+          if (await this.queryPlanHasClubArysInCatalog(cplan, cramo)) return true;
+        } catch (err) {
+          const msg = err instanceof Error ? err.message : String(err);
+          this.logger.warn(`Club Arys catálogo cplan=${cplan}: ${msg}`);
+        }
+      }
+      if (this.planIncludesClubArysLegacy(body)) return true;
+    }
+
+    for (let attempt = 0; attempt < 5; attempt += 1) {
       try {
         if (await this.queryClubArysInDb(cnpoliza)) return true;
       } catch (err) {
         const msg = err instanceof Error ? err.message : String(err);
         this.logger.warn(`Club Arys query cnpoliza=${cnpoliza}: ${msg}`);
       }
-      if (attempt < 2) {
-        await new Promise((resolve) => setTimeout(resolve, 200));
+      if (attempt < 4) {
+        await new Promise((resolve) => setTimeout(resolve, 400));
       }
     }
-    return body ? this.planIncludesClubArys(body) : false;
+    return false;
   }
 
   private resolveClubArysPdfUrl(hasCoverage: boolean, iplaca?: unknown): string {
