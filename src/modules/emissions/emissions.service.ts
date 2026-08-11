@@ -110,7 +110,7 @@ export class EmissionsService {
   }
 
   /** Cobertura Club Arys: adpolcob ccober=15 en ramo 18 (igual SysIP Poliza.js). */
-  private async hasClubArysCoverage(cnpoliza: string): Promise<boolean> {
+  private async queryClubArysInDb(cnpoliza: string): Promise<boolean> {
     const poliza = String(cnpoliza ?? '').trim();
     if (!poliza) return false;
 
@@ -123,11 +123,39 @@ export class EmissionsService {
         FROM adpolcob c
         INNER JOIN adpoliza p ON p.cpoliza = c.cpoliza
         WHERE LTRIM(RTRIM(p.cnpoliza)) = LTRIM(RTRIM(@cnpoliza))
-          AND c.ccober = '15'
+          AND LTRIM(RTRIM(c.ccober)) = '15'
           AND c.cramo = 18
       ) THEN 1 ELSE 0 END AS hasArys
     `);
     return Number(result.recordset?.[0]?.['hasArys'] ?? 0) === 1;
+  }
+
+  /** SysIP receipt-vehicle-form: planArys si cotización incluye ccobertura 15. */
+  private planIncludesClubArys(body: Record<string, unknown>): boolean {
+    const plan = String(this.pick(body, 'cplan', 'plan') ?? '')
+      .trim()
+      .toUpperCase();
+    if (['RCVBAS', 'RUSPAT'].includes(plan)) return true;
+    const centidad = String(this.pick(body, 'centidad') ?? '').trim().toUpperCase();
+    return centidad === 'P';
+  }
+
+  private async hasClubArysCoverage(
+    cnpoliza: string,
+    body?: Record<string, unknown>,
+  ): Promise<boolean> {
+    for (let attempt = 0; attempt < 3; attempt += 1) {
+      try {
+        if (await this.queryClubArysInDb(cnpoliza)) return true;
+      } catch (err) {
+        const msg = err instanceof Error ? err.message : String(err);
+        this.logger.warn(`Club Arys query cnpoliza=${cnpoliza}: ${msg}`);
+      }
+      if (attempt < 2) {
+        await new Promise((resolve) => setTimeout(resolve, 200));
+      }
+    }
+    return body ? this.planIncludesClubArys(body) : false;
   }
 
   private resolveClubArysPdfUrl(hasCoverage: boolean, iplaca?: unknown): string {
@@ -144,7 +172,7 @@ export class EmissionsService {
     body: Record<string, unknown>,
   ): Promise<string> {
     try {
-      const hasArys = await this.hasClubArysCoverage(cnpoliza);
+      const hasArys = await this.hasClubArysCoverage(cnpoliza, body);
       return this.resolveClubArysPdfUrl(hasArys, this.pick(body, 'iplaca'));
     } catch (err) {
       const msg = err instanceof Error ? err.message : String(err);
