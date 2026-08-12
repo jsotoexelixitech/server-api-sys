@@ -105,6 +105,13 @@ export class EmissionsService {
     return { mprima: this.resolveMprima(b), cmoneda };
   }
 
+  /** Log de trazabilidad prima: body HTTP vs valor enviado al SP. */
+  private logEmissionPrima(b: Record<string, unknown>, mprima: number | null, cmoneda: string | null): void {
+    this.logger.log(
+      `emitLocal prima trace body.mprimaext=${this.pick(b, 'mprimaext') ?? 'null'} body.mprima=${this.pick(b, 'mprima') ?? 'null'} → SP @mprima=${mprima} cmoneda=${cmoneda ?? 'null'} ifrecuencia=${this.pick(b, 'ifrecuencia', 'frecuencia') ?? 'A'}`,
+    );
+  }
+
   /** Tasa BCV: ptasa / tasa / ptasamon (alias La Mundial). */
   private resolvePtasamon(b: Record<string, unknown>): number | null {
     const v = this.pick<number>(b, 'ptasa', 'tasa', 'ptasamon', 'ptasamon_pago');
@@ -667,6 +674,7 @@ export class EmissionsService {
     const T = this.db.types;
     const ptasamon = this.resolvePtasamon(b);
     const { mprima, cmoneda: planMoneda } = await this.resolveMprimaForSp(b);
+    this.logEmissionPrima(b, mprima, planMoneda);
     const defaultRamo = parseInt(this.config.get<string>('LAMUNDIAL_RAMO', '18') ?? '18', 10);
     const femision =
       this.pick<string>(b, 'fecha_emision', 'femision') ??
