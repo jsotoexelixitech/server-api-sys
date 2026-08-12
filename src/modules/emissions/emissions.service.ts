@@ -11,6 +11,7 @@ import { parseSPError, formatValidateAutoError } from '../../common/helpers/sp-e
 import { buildPolicyPdfUrl, resolveClubArysPdfUrl } from '../../common/helpers/policy-url.helper';
 import {
   SP_PRE_EMISION_AUTO_RCV,
+  SP_REPAIR_RCV_COBERTURAS,
   SP_SEARCH_AUTOMOBILE_PROPIETARY,
 } from '../../config/sis2000-sp.constants';
 
@@ -59,6 +60,31 @@ export class EmissionsService {
     return prima != null ? Number(prima) : null;
   }
 
+  /** Cuotas por vigencia anual — paridad sp_genera_coberturas_recibos / adrecibos. */
+  private rcvCuotasByFrecuencia(code: unknown): number {
+    const c = String(code ?? 'A').trim().toUpperCase().charAt(0);
+    const map: Record<string, number> = { A: 1, E: 1, S: 2, T: 4, C: 3, M: 12 };
+    return map[c] ?? 1;
+  }
+
+  /**
+   * sp_genera_coberturas_recibos (QA) fracciona TMEMISION.mprima más de una vez cuando
+   * ifrecuencia ≠ A. Escalamos × cuotas para que cada recibo quede en anual ÷ cuotas.
+   * La cotización/API conserva la prima anual sin escalar.
+   */
+  private scaleMprimaForRcvSp(mprimaAnual: number, ifrecuencia: unknown): number {
+    const cuotas = this.rcvCuotasByFrecuencia(ifrecuencia);
+    if (cuotas <= 1 || mprimaAnual <= 0) return mprimaAnual;
+    return Math.round(mprimaAnual * cuotas * 100) / 100;
+  }
+
+  /** Plan en USD/Dólares (maplanes.cmoneda). */
+  private isUsdMoneda(cmoneda: string | null | undefined): boolean {
+    const m = String(cmoneda ?? '').trim().toUpperCase();
+    if (!m || m === 'BS') return false;
+    return m === '$' || m === 'USD' || m.startsWith('DOL');
+  }
+
   /** Moneda del plan en maplanes (ej. '$' para planes premium AutoV). */
   private async resolvePlanMoneda(cplan: string): Promise<string | null> {
     const plan = String(cplan ?? '').trim();
@@ -79,8 +105,9 @@ export class EmissionsService {
    */
   private async resolveMprimaForSp(
     b: Record<string, unknown>,
-  ): Promise<{ mprima: number | null; cmoneda: string | null }> {
+  ): Promise<{ mprima: number | null; cmoneda: string | null; mprimaAnual: number | null }> {
     const cplan = String(this.pick(b, 'cplan', 'plan') ?? '').trim();
+    const ifrecuencia = this.pick(b, 'ifrecuencia', 'frecuencia') ?? 'A';
     let cmoneda = this.pick(b, 'cmoneda')
       ? String(this.pick(b, 'cmoneda')).trim().slice(0, 4)
       : null;
@@ -88,19 +115,27 @@ export class EmissionsService {
       cmoneda = await this.resolvePlanMoneda(cplan);
     }
 
-    const isUsdPlan =
-      cmoneda === '$' ||
-      cmoneda === 'USD' ||
-      cmoneda?.toUpperCase() === 'DOL';
-
-    if (isUsdPlan) {
+    if (this.isUsdMoneda(cmoneda)) {
       const ext = this.pick<number>(b, 'mprimaext', 'mprima_ext', 'prima');
       if (ext != null && Number(ext) > 0) {
-        return { mprima: Number(ext), cmoneda: '$' };
+        const mprimaAnual = Number(ext);
+        return {
+          mprima: this.scaleMprimaForRcvSp(mprimaAnual, ifrecuencia),
+          cmoneda: '$',
+          mprimaAnual,
+        };
       }
     }
 
-    return { mprima: this.resolveMprima(b), cmoneda };
+    const mprimaAnual = this.resolveMprima(b);
+    return {
+      mprima:
+        mprimaAnual != null && mprimaAnual > 0
+          ? this.scaleMprimaForRcvSp(mprimaAnual, ifrecuencia)
+          : mprimaAnual,
+      cmoneda,
+      mprimaAnual,
+    };
   }
 
   /** Tasa BCV: ptasa / tasa / ptasamon (alias La Mundial). */
@@ -130,6 +165,63 @@ export class EmissionsService {
       return result.recordset[0];
     }
     return {};
+  }
+
+  /** Coberturas con prima > 0 en adpolcob (detecta PDF en cero). */
+  private async countAdpolcobPrima(cnpoliza: string): Promise<number> {
+    const T = this.db.types;
+    const req = this.db.request();
+    req.input('cnpoliza', T.VarChar(30), cnpoliza.trim());
+    const result = await req.query<{ n: number }>(`
+      SELECT COUNT(*) AS n
+      FROM adpolcob c
+      INNER JOIN adrecibos r ON r.crecibo = c.crecibo
+      WHERE RTRIM(r.cnpoliza) = @cnpoliza AND c.mprimabruta > 0
+    `);
+    return Number(result.recordset?.[0]?.n ?? 0);
+  }
+
+  /**
+   * Repara adpoltar/adpolcob vacíos en planes maplantar (AutoV).
+   * Requiere sp_repair_rcv_coberturas_nexus desplegado en Sis2000.
+   */
+  private async repairRcvCoberturasIfEmpty(
+    cnpoliza: string,
+    cplan: string,
+  ): Promise<boolean> {
+    const plan = cplan.trim();
+    if (!plan || plan === 'RCVBAS') return false;
+
+    const existing = await this.countAdpolcobPrima(cnpoliza);
+    if (existing > 0) return false;
+
+    const T = this.db.types;
+    const req = this.db.request();
+    req.input('cnpoliza', T.VarChar(30), cnpoliza.trim());
+    req.output('pSuccess', T.Bit, false);
+    req.output('pErrorMessage', T.NVarChar(4000), '');
+
+    try {
+      const result = await req.execute(SP_REPAIR_RCV_COBERTURAS);
+      const ok = Boolean(result.output['pSuccess']);
+      if (!ok) {
+        const errMsg = String(result.output['pErrorMessage'] ?? 'error desconocido');
+        this.logger.warn(`repairRcvCoberturas falló cnpoliza=${cnpoliza}: ${errMsg}`);
+      } else {
+        this.logger.log(`repairRcvCoberturas OK cnpoliza=${cnpoliza} plan=${plan}`);
+      }
+      return ok;
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : String(err);
+      if (/could not find stored procedure|invalid object name/i.test(msg)) {
+        this.logger.warn(
+          `repairRcvCoberturas SP no desplegado (${SP_REPAIR_RCV_COBERTURAS}); aplicar docs/sql/sp_repair_rcv_coberturas_nexus.sql y parche spGeneraCoberturasYRecibos`,
+        );
+        return false;
+      }
+      this.logger.warn(`repairRcvCoberturas error cnpoliza=${cnpoliza}: ${msg}`);
+      return false;
+    }
   }
 
   /** Fallback: última póliza/recibo por placa tras emisión RCV2. */
@@ -664,7 +756,7 @@ export class EmissionsService {
   ) {
     const T = this.db.types;
     const ptasamon = this.resolvePtasamon(b);
-    const { mprima, cmoneda: planMoneda } = await this.resolveMprimaForSp(b);
+    const { mprima, cmoneda: planMoneda, mprimaAnual } = await this.resolveMprimaForSp(b);
     const defaultRamo = parseInt(this.config.get<string>('LAMUNDIAL_RAMO', '18') ?? '18', 10);
     const femision =
       this.pick<string>(b, 'fecha_emision', 'femision') ??
@@ -866,7 +958,7 @@ export class EmissionsService {
     const xplaca = String(this.pick(b, 'xplaca', 'placa') ?? '').trim();
     const preEmisionSp = SP_PRE_EMISION_AUTO_RCV;
     this.logger.log(
-      `emitLocal: EXEC ${preEmisionSp} placa=${xplaca} plan=${b['cplan'] ?? b['plan']} mprima=${mprima} cmoneda=${planMoneda ?? 'null'} ifrecuencia=${this.pick(b, 'ifrecuencia', 'frecuencia') ?? 'A'} msumaaseg=${this.pick(b, 'msumaaseg', 'sumaaseg') ?? 'null'} fhasta=${b['fhasta'] ?? 'null'} ptasamon=${ptasamon}`,
+      `emitLocal: EXEC ${preEmisionSp} placa=${xplaca} plan=${b['cplan'] ?? b['plan']} mprimaAnual=${mprimaAnual} mprimaSp=${mprima} cmoneda=${planMoneda ?? 'null'} ifrecuencia=${this.pick(b, 'ifrecuencia', 'frecuencia') ?? 'A'} msumaaseg=${this.pick(b, 'msumaaseg', 'sumaaseg') ?? 'null'} fhasta=${b['fhasta'] ?? 'null'} ptasamon=${ptasamon}`,
     );
 
     await this.syncPolVehCounter(
@@ -920,6 +1012,9 @@ export class EmissionsService {
     const url_club_arys = await this.resolveClubArysPdfForEmission(cnpoliza, b);
 
     this.logger.log(`emitLocal OK cnpoliza=${cnpoliza} cnrecibo=${cnrecibo}`);
+
+    const emitPlan = String(this.pick(b, 'cplan', 'plan') ?? '').trim();
+    await this.repairRcvCoberturasIfEmpty(cnpoliza, emitPlan);
 
     if (this.extractBeneficiario(b)) {
       try {
