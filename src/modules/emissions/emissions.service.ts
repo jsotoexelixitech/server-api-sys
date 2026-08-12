@@ -878,6 +878,15 @@ export class EmissionsService {
     this.logger.log(
       `emitLocal: EXEC ${preEmisionSp} placa=${xplaca} plan=${b['cplan'] ?? b['plan']} mprima=${mprima} cmoneda=${planMoneda ?? 'null'} ifrecuencia=${this.pick(b, 'ifrecuencia', 'frecuencia') ?? 'A'} msumaaseg=${this.pick(b, 'msumaaseg', 'sumaaseg') ?? 'null'} fhasta=${b['fhasta'] ?? 'null'} ptasamon=${ptasamon}`,
     );
+    // TEMP debug: payload completo enviado al SP (quitar cuando ya no se necesite).
+    const spPayload = Object.fromEntries(
+      Object.entries(params).map(([key, field]) => {
+        const value = (field as { value: unknown }).value;
+        if (value instanceof Date) return [key, value.toISOString()];
+        return [key, value];
+      }),
+    );
+    this.logger.log(`emitLocal SP params ${preEmisionSp}: ${JSON.stringify(spPayload)}`);
 
     await this.syncPolVehCounter(
       this.intField(this.pick(b, 'cramo', 'ramo')) ?? defaultRamo,
