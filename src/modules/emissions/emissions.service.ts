@@ -59,24 +59,6 @@ export class EmissionsService {
     return prima != null ? Number(prima) : null;
   }
 
-  /** Cuotas por vigencia anual — paridad sp_genera_coberturas_recibos / adrecibos. */
-  private rcvCuotasByFrecuencia(code: unknown): number {
-    const c = String(code ?? 'A').trim().toUpperCase().charAt(0);
-    const map: Record<string, number> = { A: 1, E: 1, S: 2, T: 4, C: 3, M: 12 };
-    return map[c] ?? 1;
-  }
-
-  /**
-   * sp_genera_coberturas_recibos (QA) fracciona TMEMISION.mprima más de una vez cuando
-   * ifrecuencia ≠ A. Escalamos × cuotas para que cada recibo quede en anual ÷ cuotas.
-   * La cotización/API conserva la prima anual sin escalar.
-   */
-  private scaleMprimaForRcvSp(mprimaAnual: number, ifrecuencia: unknown): number {
-    const cuotas = this.rcvCuotasByFrecuencia(ifrecuencia);
-    if (cuotas <= 1 || mprimaAnual <= 0) return mprimaAnual;
-    return Math.round(mprimaAnual * cuotas * 100) / 100;
-  }
-
   /** Plan en USD/Dólares (maplanes.cmoneda). */
   private isUsdMoneda(cmoneda: string | null | undefined): boolean {
     const m = String(cmoneda ?? '').trim().toUpperCase();
@@ -104,9 +86,8 @@ export class EmissionsService {
    */
   private async resolveMprimaForSp(
     b: Record<string, unknown>,
-  ): Promise<{ mprima: number | null; cmoneda: string | null; mprimaAnual: number | null }> {
+  ): Promise<{ mprima: number | null; cmoneda: string | null }> {
     const cplan = String(this.pick(b, 'cplan', 'plan') ?? '').trim();
-    const ifrecuencia = this.pick(b, 'ifrecuencia', 'frecuencia') ?? 'A';
     let cmoneda = this.pick(b, 'cmoneda')
       ? String(this.pick(b, 'cmoneda')).trim().slice(0, 4)
       : null;
@@ -117,24 +98,11 @@ export class EmissionsService {
     if (this.isUsdMoneda(cmoneda)) {
       const ext = this.pick<number>(b, 'mprimaext', 'mprima_ext', 'prima');
       if (ext != null && Number(ext) > 0) {
-        const mprimaAnual = Number(ext);
-        return {
-          mprima: this.scaleMprimaForRcvSp(mprimaAnual, ifrecuencia),
-          cmoneda: '$',
-          mprimaAnual,
-        };
+        return { mprima: Number(ext), cmoneda: '$' };
       }
     }
 
-    const mprimaAnual = this.resolveMprima(b);
-    return {
-      mprima:
-        mprimaAnual != null && mprimaAnual > 0
-          ? this.scaleMprimaForRcvSp(mprimaAnual, ifrecuencia)
-          : mprimaAnual,
-      cmoneda,
-      mprimaAnual,
-    };
+    return { mprima: this.resolveMprima(b), cmoneda };
   }
 
   /** Tasa BCV: ptasa / tasa / ptasamon (alias La Mundial). */
@@ -698,7 +666,7 @@ export class EmissionsService {
   ) {
     const T = this.db.types;
     const ptasamon = this.resolvePtasamon(b);
-    const { mprima, cmoneda: planMoneda, mprimaAnual } = await this.resolveMprimaForSp(b);
+    const { mprima, cmoneda: planMoneda } = await this.resolveMprimaForSp(b);
     const defaultRamo = parseInt(this.config.get<string>('LAMUNDIAL_RAMO', '18') ?? '18', 10);
     const femision =
       this.pick<string>(b, 'fecha_emision', 'femision') ??
@@ -900,7 +868,7 @@ export class EmissionsService {
     const xplaca = String(this.pick(b, 'xplaca', 'placa') ?? '').trim();
     const preEmisionSp = SP_PRE_EMISION_AUTO_RCV;
     this.logger.log(
-      `emitLocal: EXEC ${preEmisionSp} placa=${xplaca} plan=${b['cplan'] ?? b['plan']} mprimaAnual=${mprimaAnual} mprimaSp=${mprima} cmoneda=${planMoneda ?? 'null'} ifrecuencia=${this.pick(b, 'ifrecuencia', 'frecuencia') ?? 'A'} msumaaseg=${this.pick(b, 'msumaaseg', 'sumaaseg') ?? 'null'} fhasta=${b['fhasta'] ?? 'null'} ptasamon=${ptasamon}`,
+      `emitLocal: EXEC ${preEmisionSp} placa=${xplaca} plan=${b['cplan'] ?? b['plan']} mprima=${mprima} cmoneda=${planMoneda ?? 'null'} ifrecuencia=${this.pick(b, 'ifrecuencia', 'frecuencia') ?? 'A'} msumaaseg=${this.pick(b, 'msumaaseg', 'sumaaseg') ?? 'null'} fhasta=${b['fhasta'] ?? 'null'} ptasamon=${ptasamon}`,
     );
 
     await this.syncPolVehCounter(
