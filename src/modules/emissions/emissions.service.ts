@@ -11,7 +11,6 @@ import { parseSPError, formatValidateAutoError } from '../../common/helpers/sp-e
 import { buildPolicyPdfUrl, resolveClubArysPdfUrl } from '../../common/helpers/policy-url.helper';
 import {
   SP_PRE_EMISION_AUTO_RCV,
-  SP_REPAIR_RCV_COBERTURAS,
   SP_SEARCH_AUTOMOBILE_PROPIETARY,
 } from '../../config/sis2000-sp.constants';
 
@@ -165,63 +164,6 @@ export class EmissionsService {
       return result.recordset[0];
     }
     return {};
-  }
-
-  /** Coberturas con prima > 0 en adpolcob (detecta PDF en cero). */
-  private async countAdpolcobPrima(cnpoliza: string): Promise<number> {
-    const T = this.db.types;
-    const req = this.db.request();
-    req.input('cnpoliza', T.VarChar(30), cnpoliza.trim());
-    const result = await req.query<{ n: number }>(`
-      SELECT COUNT(*) AS n
-      FROM adpolcob c
-      INNER JOIN adrecibos r ON r.crecibo = c.crecibo
-      WHERE RTRIM(r.cnpoliza) = @cnpoliza AND c.mprimabruta > 0
-    `);
-    return Number(result.recordset?.[0]?.n ?? 0);
-  }
-
-  /**
-   * Repara adpoltar/adpolcob vacíos en planes maplantar (AutoV).
-   * Requiere sp_repair_rcv_coberturas_nexus desplegado en Sis2000.
-   */
-  private async repairRcvCoberturasIfEmpty(
-    cnpoliza: string,
-    cplan: string,
-  ): Promise<boolean> {
-    const plan = cplan.trim();
-    if (!plan || plan === 'RCVBAS') return false;
-
-    const existing = await this.countAdpolcobPrima(cnpoliza);
-    if (existing > 0) return false;
-
-    const T = this.db.types;
-    const req = this.db.request();
-    req.input('cnpoliza', T.VarChar(30), cnpoliza.trim());
-    req.output('pSuccess', T.Bit, false);
-    req.output('pErrorMessage', T.NVarChar(4000), '');
-
-    try {
-      const result = await req.execute(SP_REPAIR_RCV_COBERTURAS);
-      const ok = Boolean(result.output['pSuccess']);
-      if (!ok) {
-        const errMsg = String(result.output['pErrorMessage'] ?? 'error desconocido');
-        this.logger.warn(`repairRcvCoberturas falló cnpoliza=${cnpoliza}: ${errMsg}`);
-      } else {
-        this.logger.log(`repairRcvCoberturas OK cnpoliza=${cnpoliza} plan=${plan}`);
-      }
-      return ok;
-    } catch (err) {
-      const msg = err instanceof Error ? err.message : String(err);
-      if (/could not find stored procedure|invalid object name/i.test(msg)) {
-        this.logger.warn(
-          `repairRcvCoberturas SP no desplegado (${SP_REPAIR_RCV_COBERTURAS}); aplicar docs/sql/sp_repair_rcv_coberturas_nexus.sql y parche spGeneraCoberturasYRecibos`,
-        );
-        return false;
-      }
-      this.logger.warn(`repairRcvCoberturas error cnpoliza=${cnpoliza}: ${msg}`);
-      return false;
-    }
   }
 
   /** Fallback: última póliza/recibo por placa tras emisión RCV2. */
@@ -1012,9 +954,6 @@ export class EmissionsService {
     const url_club_arys = await this.resolveClubArysPdfForEmission(cnpoliza, b);
 
     this.logger.log(`emitLocal OK cnpoliza=${cnpoliza} cnrecibo=${cnrecibo}`);
-
-    const emitPlan = String(this.pick(b, 'cplan', 'plan') ?? '').trim();
-    await this.repairRcvCoberturasIfEmpty(cnpoliza, emitPlan);
 
     if (this.extractBeneficiario(b)) {
       try {
