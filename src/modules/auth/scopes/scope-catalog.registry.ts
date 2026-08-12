@@ -21,6 +21,15 @@ export interface RouteCatalogEntry {
   description: string;
 }
 
+/** Prefijos /api/v1/* que no deben generar scope automático (auth público, docs, etc.). */
+const SCOPE_INFER_SKIP_SEGMENTS = new Set([
+  'auth',
+  'docs',
+  'app',
+  'health',
+  'admin',
+]);
+
 /** Scope inferido por prefijo de ruta (core, partner, admin). */
 export function inferScopeFromPath(normalizedPath: string): string | undefined {
   const path = normalizedPath.replace(/\/{2,}/g, '/');
@@ -54,6 +63,17 @@ export function inferScopeFromPath(normalizedPath: string): string | undefined {
   if (/\/api\/v1\/valrep\//i.test(path)) return 'catalog:read';
   if (/\/api\/v1\/inma\//i.test(path)) return 'catalog:read';
   if (/\/api\/(?:v1\/)?endosos\//i.test(path)) return 'endosos:write';
+  if (/\/api\/v1\/report\//i.test(path)) return 'report:write';
+
+  // Fallback: cualquier otro /api/v1/{segment}/... → {segment}:write
+  // (partners o módulos nuevos sin entrada fija; evita que queden fuera del admin)
+  const segmentMatch = path.match(/^\/api\/v1\/([^/]+)\//i);
+  if (segmentMatch) {
+    const segment = segmentMatch[1].toLowerCase();
+    if (!SCOPE_INFER_SKIP_SEGMENTS.has(segment)) {
+      return `${segment}:write`;
+    }
+  }
 
   return undefined;
 }
@@ -121,6 +141,13 @@ function defaultScopeMeta(
     return {
       label: 'Endosos',
       description: 'Endpoints bajo /api/endosos/ o /api/v1/endosos/',
+    };
+  }
+
+  if (scopeId === 'report:write') {
+    return {
+      label: 'Reportes',
+      description: 'Reportes partner bajo /api/v1/report/',
     };
   }
 

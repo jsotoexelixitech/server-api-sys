@@ -1,4 +1,5 @@
-import { DynamicModule, Logger } from '@nestjs/common';
+import { DynamicModule, Logger, Type } from '@nestjs/common';
+import { MODULE_METADATA } from '@nestjs/common/constants';
 import type {
   PartnerModuleFactory,
   PartnerPackageExports,
@@ -92,6 +93,53 @@ function resolvePartnerScopes(
   return scopes;
 }
 
+/** Controllers del DynamicModule + imports anidados (@Module / DynamicModule). */
+function collectControllersFromModuleRef(
+  mod: DynamicModule | Type<unknown>,
+  seen = new Set<unknown>(),
+): Function[] {
+  if (!mod || seen.has(mod)) return [];
+  seen.add(mod);
+
+  const out: Function[] = [];
+
+  if (typeof mod === 'function') {
+    const controllers =
+      (Reflect.getMetadata(MODULE_METADATA.CONTROLLERS, mod) as unknown[]) ?? [];
+    for (const c of controllers) {
+      if (typeof c === 'function') out.push(c);
+    }
+    const imports =
+      (Reflect.getMetadata(MODULE_METADATA.IMPORTS, mod) as unknown[]) ?? [];
+    for (const imp of imports) {
+      out.push(...collectControllersFromImport(imp, seen));
+    }
+    return out;
+  }
+
+  for (const c of mod.controllers ?? []) {
+    if (typeof c === 'function') out.push(c);
+  }
+  for (const imp of mod.imports ?? []) {
+    out.push(...collectControllersFromImport(imp, seen));
+  }
+  return out;
+}
+
+function collectControllersFromImport(
+  imp: unknown,
+  seen: Set<unknown>,
+): Function[] {
+  if (!imp) return [];
+  if (typeof imp === 'function') {
+    return collectControllersFromModuleRef(imp as Type<unknown>, seen);
+  }
+  if (typeof imp === 'object' && imp !== null && 'module' in imp) {
+    return collectControllersFromModuleRef(imp as DynamicModule, seen);
+  }
+  return [];
+}
+
 /** Carga síncrona de paquetes npm listados en PARTNER_PACKAGES. */
 export function loadPartnerDynamicModules(packageNames: string[]): DynamicModule[] {
   const modules: DynamicModule[] = [];
@@ -111,15 +159,19 @@ export function loadPartnerDynamicModules(packageNames: string[]): DynamicModule
       }
 
       const dynamicModule = register();
-      for (const controller of dynamicModule.controllers ?? []) {
-        if (typeof controller !== 'function') continue;
+      const controllers = collectControllersFromModuleRef(dynamicModule);
+      let routeCount = 0;
+      for (const controller of controllers) {
         const routes = discoverRoutesFromController(controller);
         if (routes.length > 0) {
           registerDiscoveredRoutes(routes);
-          loaderLog.log(
-            `Rutas partner indexadas (${routes.length}) desde ${pkgName}`,
-          );
+          routeCount += routes.length;
         }
+      }
+      if (routeCount > 0) {
+        loaderLog.log(
+          `Rutas partner indexadas (${routeCount}) desde ${pkgName}`,
+        );
       }
 
       modules.push(dynamicModule);

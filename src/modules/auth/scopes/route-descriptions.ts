@@ -78,6 +78,10 @@ const ROUTE_LABELS: Record<string, string> = {
   'GET /api/v1/partner/starter/ping': 'Ping módulo partner',
   // renovations
   'POST /api/v1/renovations/v2/create': 'Renovar póliza (integrador v2)',
+  // report:write (partner ESanchez)
+  'POST /api/v1/report/ReRecibosV2': 'Reporte de recibos V2',
+  'POST /api/v1/report/movimientosComisiones': 'Movimientos de comisiones',
+  'POST /api/v1/report/movimientosComisiones/definition': 'Definición del reporte de comisiones',
 };
 
 function normalizeRouteKey(routeId: string): string {

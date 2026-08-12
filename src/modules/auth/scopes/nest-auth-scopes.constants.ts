@@ -14,6 +14,8 @@ export const NEST_AUTH_SCOPES = {
   CATALOG_READ: 'catalog:read',
   /** Endosos bajo /api/endosos/ o /api/v1/endosos/. */
   ENDOSOS_WRITE: 'endosos:write',
+  /** Reportes partner bajo /api/v1/report/. */
+  REPORT_WRITE: 'report:write',
 } as const;
 
 export type NestAuthScopeId =
@@ -95,6 +97,12 @@ export const NEST_AUTH_SCOPE_CATALOG: NestAuthScopeMeta[] = [
     id: NEST_AUTH_SCOPES.ENDOSOS_WRITE,
     label: 'Endosos',
     description: 'Consultas y operaciones de endosos',
+    routes: [],
+  },
+  {
+    id: NEST_AUTH_SCOPES.REPORT_WRITE,
+    label: 'Reportes',
+    description: 'Reportes partner (recibos, comisiones, etc.)',
     routes: [],
   },
 ];
