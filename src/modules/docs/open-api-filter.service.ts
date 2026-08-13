@@ -6,6 +6,7 @@ import {
   inferScopeFromPath,
 } from '../auth/scopes/scope-catalog.registry';
 import { OpenApiDocumentStore } from './open-api-document.store';
+import { pruneOpenApiComponents } from './prune-openapi-components';
 
 const HTTP_METHODS = new Set([
   'get',
@@ -63,16 +64,21 @@ export class OpenApiFilterService {
     }
 
     const titleSuffix = keyName ? ` — ${keyName}` : '';
+    const components = pruneOpenApiComponents(source.components, [
+      filteredPaths,
+    ]);
+
     return {
       ...source,
       info: {
         ...source.info,
         title: `${source.info?.title ?? 'nest-api'}${titleSuffix}`,
         description:
-          'Documentación filtrada según los scopes de su token. Solo aparecen los endpoints autorizados.',
+          'Documentación filtrada según los scopes de su token. Solo aparecen los endpoints autorizados y sus schemas.',
       },
       paths: filteredPaths,
       tags: (source.tags ?? []).filter((tag) => visibleTags.has(tag.name)),
+      components,
     };
   }
 
