@@ -682,9 +682,10 @@ export class EmissionsService {
 
     const req = this.db.request();
     const params: Record<string, { type: unknown; value: unknown }> = {
+      // Emisión nueva RCV: cnpoliza_rel vacío; Sis2000 genera cnpoliza.
       cnpoliza_rel: {
         type: T.NVarChar(30),
-        value: this.nvarchar(this.pick(b, 'cnpoliza_rel', 'poliza')),
+        value: null,
       },
       cramo: {
         type: T.Int,
