@@ -82,7 +82,7 @@ export class EmissionsService {
 
   /**
    * Prima y moneda para el SP RCV2.
-   * Planes en USD (maplanes.cmoneda='$') reciben mprimaext — igual createEmissionAutoExternal.
+   * @mprima se envía siempre en 0; la prima cotizada no se reinyecta al SP.
    */
   private async resolveMprimaForSp(
     b: Record<string, unknown>,
@@ -96,13 +96,10 @@ export class EmissionsService {
     }
 
     if (this.isUsdMoneda(cmoneda)) {
-      const ext = this.pick<number>(b, 'mprimaext', 'mprima_ext', 'prima');
-      if (ext != null && Number(ext) > 0) {
-        return { mprima: Number(ext), cmoneda: '$' };
-      }
+      return { mprima: 0, cmoneda: '$' };
     }
 
-    return { mprima: this.resolveMprima(b), cmoneda };
+    return { mprima: 0, cmoneda };
   }
 
   /** Log de trazabilidad prima: body HTTP vs valor enviado al SP. */
