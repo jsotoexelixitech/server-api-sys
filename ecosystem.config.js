@@ -15,9 +15,10 @@ module.exports = {
       // ── Entorno ────────────────────────────────────────────────────────────
       // PUBLIC_* también en `env` base: pm2 restart sin --env production las conserva.
       // PARTNER_PACKAGES: leer solo de .env (no hardcodear aquí — PM2 pisa dotenv)
+      // srv001 (120) = QA Nexus por defecto. Prod cierrelmds → --env production
       env: {
         PUBLIC_API_PREFIX: '/nest-api-docs',
-        PUBLIC_API_ORIGIN: 'https://cierrelmds.exelixitech.com',
+        PUBLIC_API_ORIGIN: 'https://nexusqa.exelixitech.com',
         SWAGGER_SHOW_INTERNAL_SERVERS: 'true',
       },
       env_production: {

@@ -28,7 +28,7 @@ export function resolvePublicApiPaths(options: {
   publicApiOrigin?: string;
 }): PublicApiPaths {
   const prefix = normalizePublicPrefix(options.publicApiPrefix);
-  const origin = String(options.publicApiOrigin ?? 'https://cierrelmds.exelixitech.com').replace(
+  const origin = String(options.publicApiOrigin ?? 'https://nexusqa.exelixitech.com').replace(
     /\/+$/,
     '',
   );

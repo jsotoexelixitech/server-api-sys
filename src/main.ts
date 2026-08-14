@@ -146,15 +146,14 @@ async function bootstrap(): Promise<void> {
       .addBearerAuth();
 
     if (showInternalSwaggerServers) {
-      // Sin prefijo: en :3002 Nest expone /api/… directo (el prefijo lo aplica Apache en HTTPS).
       swaggerConfigBuilder
-        .addServer(`http://192.168.8.120:${port}`, 'srv001 — QA interno')
-        .addServer(`http://localhost:${port}`, 'Desarrollo local');
+        .addServer(`http://192.168.8.120:${port}`, 'srv001 — QA interno (120)')
+        .addServer(`http://localhost:${port}`, 'Desarrollo local (tu PC)');
     }
     if (publicPaths.prefix) {
       const serverLabel = publicPaths.origin.includes('nexusqa')
-        ? 'Nexus QA — HTTPS'
-        : 'La Mundial — QA (HTTPS)';
+        ? 'Nexus QA — HTTPS (nexusqa.exelixitech.com)'
+        : 'La Mundial — producción (cierrelmds)';
       swaggerConfigBuilder.addServer(publicPaths.publicBaseUrl, serverLabel);
     }
 
