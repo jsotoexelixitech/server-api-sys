@@ -148,7 +148,7 @@ export class CalculatePlanCoberturasDto {
 
   @ApiPropertyOptional({
     example: 'A',
-    description: 'Frecuencia de pago (requerido por sp_calculo_auto_nexus)',
+    description: 'Frecuencia de pago (requerido por el SP de cálculo de plan auto)',
     enum: ['A', 'S', 'M', 'T', 'C'],
   })
   @IsOptional()

@@ -19,7 +19,7 @@ export class AuthController {
     summary: 'Canjear apikey por access + refresh token',
     description:
       'Uso server-to-server (módulos Exélixi, integradores). ' +
-      'Funciona por HTTP local y HTTPS público (nexusqa en QA, cierrelmds en prod).',
+      'Funciona por HTTP local y HTTPS público (QA: nexusqa.exelixitech.com · desarrollo: cierrelmds.exelixitech.com).',
   })
   @ApiResponse({
     status: 200,

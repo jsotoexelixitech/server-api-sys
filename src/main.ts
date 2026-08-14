@@ -149,16 +149,16 @@ async function bootstrap(): Promise<void> {
       const isQaOrigin = publicPaths.origin.includes('nexusqa');
       const internalHost = isQaOrigin ? '192.168.8.121' : '192.168.8.120';
       const internalLabel = isQaOrigin
-        ? 'srv001qa — QA interno (121)'
-        : 'srv001 — desarrollo interno (120)';
+        ? 'La Mundial — QA interno (121)'
+        : 'La Mundial — desarrollo interno (120)';
       swaggerConfigBuilder
         .addServer(`http://${internalHost}:${port}`, internalLabel)
         .addServer(`http://localhost:${port}`, 'Desarrollo local (tu PC)');
     }
     if (publicPaths.prefix) {
       const serverLabel = publicPaths.origin.includes('nexusqa')
-        ? 'Nexus QA — HTTPS (nexusqa.exelixitech.com)'
-        : 'Desarrollo — HTTPS (cierrelmds.exelixitech.com)';
+        ? 'La Mundial — QA HTTPS (nexusqa.exelixitech.com)'
+        : 'La Mundial — Desarrollo HTTPS (cierrelmds.exelixitech.com)';
       swaggerConfigBuilder.addServer(publicPaths.publicBaseUrl, serverLabel);
       bootstrapLog.log(
         `Swagger server HTTPS: ${publicPaths.publicBaseUrl} (${serverLabel})`,
@@ -217,14 +217,14 @@ async function bootstrap(): Promise<void> {
      Usar rutas absolutas; fallback desde pathname si falta PUBLIC_API_PREFIX en el servidor. */
   var NEXUS_BRAND_LOGO = '${brandLogoUrl}';
   var NEXUS_BRAND_FAVICON = '${brandFaviconUrl}';
-  function nexusBrandAsset(rel) {
+  function lmBrandAsset(rel) {
     var path = window.location.pathname.replace(/\\/docs\\/?$/, '');
     if (path) return path + '/assets/' + rel;
     return '/assets/' + rel;
   }
   (function fixBrandAssets() {
     document.querySelectorAll('link[rel="icon"], link[rel="shortcut icon"]').forEach(function(link) {
-      link.href = nexusBrandAsset('brand/favicon-64.png');
+      link.href = lmBrandAsset('brand/favicon-64.png');
     });
   })();
 
@@ -300,7 +300,7 @@ async function bootstrap(): Promise<void> {
 
     nav.innerHTML =
       '<div class="sb-brand">'
-      + '<img class="sb-logo" src="' + nexusBrandAsset('brand/logo-lamundial-sidebar.png') + '" alt="${LA_MUNDIAL_BRAND.name}" />'
+      + '<img class="sb-logo" src="' + lmBrandAsset('brand/logo-lamundial-sidebar.png') + '" alt="${LA_MUNDIAL_BRAND.name}" />'
       + '<p class="sb-tagline">${LA_MUNDIAL_BRAND.tagline}</p>'
       + '</div>'
       + '<div class="sb-search-wrap">'

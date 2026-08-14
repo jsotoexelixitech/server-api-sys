@@ -337,7 +337,7 @@ export class ValrepController {
   @ApiOperation({
     summary: 'Calcular primas por cobertura (plan auto)',
     description:
-      'Equivalente Nexus de SysIP `calculatePlanSis`. Ejecuta `sp_calculo_auto_nexus` y devuelve ' +
+      'Equivalente de SysIP `calculatePlanSis`. Ejecuta el SP de cálculo por cobertura y devuelve ' +
       'detalle por cobertura (`mount`) más totales PA/CA/PT/AP/PP.\n\n' +
       '**Uso:** emisión y renovación cuando se necesita desglose de coberturas, no solo prima RCV total.',
     operationId: 'valrepCalculatePlanCoberturas',
