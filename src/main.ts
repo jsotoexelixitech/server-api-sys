@@ -146,14 +146,19 @@ async function bootstrap(): Promise<void> {
       .addBearerAuth();
 
     if (showInternalSwaggerServers) {
+      const isQaOrigin = publicPaths.origin.includes('nexusqa');
+      const internalHost = isQaOrigin ? '192.168.8.121' : '192.168.8.120';
+      const internalLabel = isQaOrigin
+        ? 'srv001qa — QA interno (121)'
+        : 'srv001 — desarrollo interno (120)';
       swaggerConfigBuilder
-        .addServer(`http://192.168.8.120:${port}`, 'srv001 — QA interno (120)')
+        .addServer(`http://${internalHost}:${port}`, internalLabel)
         .addServer(`http://localhost:${port}`, 'Desarrollo local (tu PC)');
     }
     if (publicPaths.prefix) {
       const serverLabel = publicPaths.origin.includes('nexusqa')
         ? 'Nexus QA — HTTPS (nexusqa.exelixitech.com)'
-        : 'La Mundial — producción (cierrelmds)';
+        : 'Desarrollo — HTTPS (cierrelmds.exelixitech.com)';
       swaggerConfigBuilder.addServer(publicPaths.publicBaseUrl, serverLabel);
       bootstrapLog.log(
         `Swagger server HTTPS: ${publicPaths.publicBaseUrl} (${serverLabel})`,
