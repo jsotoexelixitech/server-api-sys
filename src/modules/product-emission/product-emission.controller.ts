@@ -89,7 +89,7 @@ export class ProductEmissionController {
         primaTotal: 1250.5,
         moneda: 'USD',
         documentUrl:
-          'https://cierrelmds.exelixitech.com/nest-api-docs/api/v1/product-emission/documents/poliza_RCV-2026-00000001.pdf',
+          'https://nexusqa.exelixitech.com/nest-api-docs/api/v1/product-emission/documents/poliza_RCV-2026-00000001.pdf',
       },
     },
   })

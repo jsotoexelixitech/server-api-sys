@@ -155,6 +155,9 @@ async function bootstrap(): Promise<void> {
         ? 'Nexus QA — HTTPS (nexusqa.exelixitech.com)'
         : 'La Mundial — producción (cierrelmds)';
       swaggerConfigBuilder.addServer(publicPaths.publicBaseUrl, serverLabel);
+      bootstrapLog.log(
+        `Swagger server HTTPS: ${publicPaths.publicBaseUrl} (${serverLabel})`,
+      );
     }
 
     const swaggerConfig = swaggerConfigBuilder

@@ -58,7 +58,7 @@ export class DocumentsController {
       example: {
         success: true,
         message: 'PDF generado exitosamente',
-        url: 'https://cierrelmds.exelixitech.com/nest-api-docs/api/v1/documents/pdf/conductor_1234567890.pdf',
+        url: 'https://nexusqa.exelixitech.com/nest-api-docs/api/v1/documents/pdf/conductor_1234567890.pdf',
       },
     },
   })
