@@ -5,6 +5,7 @@ import {
   Logger,
 } from '@nestjs/common';
 import { MssqlService } from '../../database/mssql.service';
+import { SP_CALCULO_AUTO_NEXUS } from '../../config/sis2000-sp.constants';
 import { GetPlanesV2Dto } from './dto/get-planes-v2.dto';
 import { GetCotizacionAutoDto } from './dto/get-cotizacion-auto.dto';
 import { CalculatePlanCoberturasDto } from './dto/calculate-plan-coberturas.dto';
@@ -263,11 +264,25 @@ export class ValrepService {
 
   // ── Cotización automóvil ─────────────────────────────────────────────────
 
+  private spCalculoAutoNexusName(): string {
+    return process.env.MSSQL_SP_CALCULO_AUTO_NEXUS?.trim() || SP_CALCULO_AUTO_NEXUS;
+  }
+
+  private buildQuoteFhasta(fdesde: Date, ndias?: number | null): Date {
+    const fhasta = new Date(fdesde);
+    if (ndias != null && ndias > 0) {
+      fhasta.setDate(fhasta.getDate() + ndias);
+    } else if (ndias != null && ndias < 0) {
+      fhasta.setDate(fhasta.getDate() + Math.abs(ndias));
+    } else {
+      fhasta.setFullYear(fhasta.getFullYear() + 1);
+    }
+    return fhasta;
+  }
+
+  /** POST /valrep/cotizacion — usa sp_calculo_auto_nexus (flujo Nexus), no spCalculoAuto legacy. */
   async getCotizacionAuto(body: GetCotizacionAutoDto): Promise<CotizacionResult> {
     try {
-      const T = this.db.types;
-
-      // 1. Tasa de cambio del dólar
       const rateReq = this.db.request();
       const rateResult = await rateReq.query<{ ptasamon: number }>(
         `SELECT ptasamon FROM mamonedas WHERE TRIM(cmoneda) = '$'`,
@@ -281,107 +296,54 @@ export class ValrepService {
         body.cversion,
         body.fano,
       );
-      const tipoV = vinma.ctipo;
-      const puestos = vinma.npasajero;
       const mvalor = vinma.mvalor;
 
-      // 2b. Buscar tasas de casco en Sis2000
-      const targetSuma = body.sumaAsegurada ?? mvalor;
-      const rateQueryReq = this.db.request();
-      rateQueryReq.input('cmarca',   T.VarChar(4), body.cmarca);
-      rateQueryReq.input('cmodelo',  T.VarChar(4), body.cmodelo);
-      rateQueryReq.input('cversion', T.VarChar(4), body.cversion);
-      rateQueryReq.input('cano',     T.Int,        body.fano);
-      rateQueryReq.input('suma',     T.Numeric(18, 2), targetSuma);
-
-      const rateQueryRes = await rateQueryReq.query<{ tasaCA: number; tasaPT: number; tasaPP: number }>(
-        `SELECT 
-           dbo.fn_buscar_tasa_casco(@cmarca, @cmodelo, @cversion, @cano, '1', @suma) AS tasaCA,
-           dbo.fn_buscar_tasa_casco(@cmarca, @cmodelo, @cversion, @cano, '2', @suma) AS tasaPT,
-           dbo.fn_buscar_tasa_casco(@cmarca, @cmodelo, @cversion, @cano, '28', @suma) AS tasaPP`
-      );
-
-      const tasaCA = rateQueryRes.recordset[0]?.tasaCA ?? 9.32;
-      const tasaPT = rateQueryRes.recordset[0]?.tasaPT ?? 6.52;
-      const tasaPP = rateQueryRes.recordset[0]?.tasaPP ?? 3.50;
-
-      // 3. Fechas según frecuencia (paridad SysIP receipt-vehicle-form)
       const fdesde = new Date();
-      const fhasta = new Date(fdesde);
-      const ndias =
-        body.ndias != null && !Number.isNaN(Number(body.ndias))
-          ? Number(body.ndias)
-          : null;
-      if (ndias != null && ndias > 0) {
-        fhasta.setDate(fhasta.getDate() + ndias);
-      } else if (ndias != null && ndias < 0) {
-        fhasta.setDate(fhasta.getDate() + Math.abs(ndias));
-      } else {
-        fhasta.setFullYear(fhasta.getFullYear() + 1);
-      }
+      const fhasta = this.buildQuoteFhasta(fdesde, body.ndias);
+      const ifrecuencia = String(body.ifrecuencia ?? 'A')
+        .trim()
+        .toUpperCase()
+        .charAt(0) || 'A';
 
-      // 4. Ejecutar spCalculoAuto (replica exacta de externalChannelsModel.js)
-      const calcReq = this.db.request();
-      calcReq.input('cmarca',    T.VarChar(3),      body.cmarca);
-      calcReq.input('cmodelo',   T.VarChar(3),      body.cmodelo);
-      calcReq.input('cversion',  T.VarChar(3),      body.cversion);
-      calcReq.input('cano',      T.Int,             body.fano);
-      calcReq.input('cplan',     T.NVarChar(50),    body.cplan);
-      calcReq.input('sumaAseg',  T.Numeric(18, 2),  body.sumaAsegurada ?? null);
-      calcReq.input('sumaAsegBl',T.Numeric(18, 2),  0);
-      calcReq.input('sumaAsegAd',T.Numeric(18, 2),  0);
-      calcReq.input('iplaca',    T.Char(1),         body.iplaca ?? 'N');
-      calcReq.input('fdesde',    T.Date,            fdesde);
-      calcReq.input('fhasta',    T.Date,            fhasta);
-      calcReq.input('tasaPt',    T.Numeric(18, 2),  0);
-      calcReq.input('tasaCa',    T.Numeric(18, 2),  0);
-      calcReq.input('recargo',   T.Numeric(18, 0),  0);
-      calcReq.input('tipoV',     T.Numeric(4, 0),   tipoV);
-      calcReq.input('uso',       T.Numeric(4, 0),   body.ccategoria_uso);
-      calcReq.input('puestos',   T.Numeric(4, 0),   puestos);
-      calcReq.input('toneladas', T.Numeric(4, 0),   body.ntoneladas ?? 0);
-      calcReq.input('recargoRcv',T.Numeric(6, 4),   0);
-      calcReq.input('cramo',     T.Numeric(5, 0),   body.cramo ?? 18);
+      const calc = await this.calculatePlanCoberturas({
+        cmarca: body.cmarca,
+        cmodelo: body.cmodelo,
+        cversion: body.cversion,
+        cano: body.fano,
+        idPlan: body.cplan,
+        suma: body.sumaAsegurada ?? mvalor,
+        iplaca: body.iplaca ?? 'N',
+        fdesde: fdesde.toISOString().slice(0, 10),
+        fhasta: fhasta.toISOString().slice(0, 10),
+        uso: body.ccategoria_uso,
+        toneladas: body.ntoneladas ?? 0,
+        cramo: body.cramo ?? 18,
+        ifrecuencia,
+        coberAdicional: 'RC',
+      });
 
-      const result = await calcReq.execute('spCalculoAuto');
-      const rows: Record<string, unknown>[] = result.recordsets?.[0] ?? [];
-
-      // 5. Filtrar coberturas PA (excluye casco/PT/PP: 1,2,3,4,5,16)
-      const EXCLUDE_PA = new Set([1, 2, 3, 4, 5, 16]);
-      const pa = rows.filter(
-        (r) => !EXCLUDE_PA.has(parseInt(String(r['ccobertura']).trim())),
-      );
-      const totalPa = pa.reduce(
-        (acc, r) => acc + (Number(r['prima']) || 0),
-        0,
-      );
-
-      if (totalPa === 0) {
+      const mprimaext = calc.pa;
+      if (mprimaext <= 0) {
         this.logger.warn(
-          `getCotizacionAuto: prima=0 para plan=${body.cplan} cmarca=${body.cmarca} cmodelo=${body.cmodelo} cversion=${body.cversion} fano=${body.fano} uso=${body.ccategoria_uso}`,
+          `getCotizacionAuto: prima=0 plan=${body.cplan} cmarca=${body.cmarca} cmodelo=${body.cmodelo} fano=${body.fano}`,
         );
         throw new BadRequestException(
           'La cotización retornó prima cero. Verifique que el plan y el vehículo sean compatibles.',
         );
       }
 
-      const mprimaext = parseFloat(totalPa.toFixed(2));
-      const mprima    = parseFloat((totalPa * ptasa).toFixed(2));
+      const mprima = parseFloat((mprimaext * ptasa).toFixed(2));
 
       this.logger.log(
-        `getCotizacionAuto: plan=${body.cplan} fano=${body.fano} mprimaext=$${mprimaext} mprima=Bs${mprima} ptasa=${ptasa}`,
+        `getCotizacionAuto: sp=${this.spCalculoAutoNexusName()} plan=${body.cplan} fano=${body.fano} mprimaext=$${mprimaext} mprima=Bs${mprima} ptasa=${ptasa}`,
       );
 
-      return { 
-        mprimaext, 
-        mprima, 
-        ptasa, 
-        rates: {
-          CA: tasaCA,
-          PT: tasaPT,
-          PP: tasaPP
-        },
-        referenceSuma: mvalor
+      return {
+        mprimaext,
+        mprima,
+        ptasa,
+        rates: { CA: calc.ca, PT: calc.pt, PP: calc.pp },
+        referenceSuma: mvalor,
       };
     } catch (err) {
       if (err instanceof BadRequestException) throw err;
@@ -713,8 +675,7 @@ export class ValrepService {
   async calculatePlanCoberturas(
     body: CalculatePlanCoberturasDto,
   ): Promise<CalculatePlanCoberturasResponse> {
-    const spName =
-      process.env.MSSQL_SP_CALCULO_AUTO_NEXUS?.trim() || 'sp_calculo_auto_nexus';
+    const spName = this.spCalculoAutoNexusName();
     const cusuario =
       body.cusuario ??
       parseInt(process.env.LAMUNDIAL_CUSUARIO ?? '7', 10);

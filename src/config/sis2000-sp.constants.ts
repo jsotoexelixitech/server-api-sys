@@ -30,6 +30,12 @@ export const SP_SEARCH_VEHICLE_RCV = 'spSearchVehicleRcv';
 export const SP_SEARCH_AUTOMOBILE_PROPIETARY = 'sp_search_automobile_propietary_nexus';
 export const SP_APPLY_BENEFICIARIO_PREFERENCIAL_RCV = 'spApplyBeneficiarioPreferencialRcv';
 
+/** Repara adpoltar/adpolcob vacíos tras emisión premium (primas 0 en PDF). */
+export const SP_REPAIR_RCV_COBERTURAS = 'sp_repair_rcv_coberturas_nexus';
+
+/** Cotización RCV + desglose coberturas (flujo Nexus modular). */
+export const SP_CALCULO_AUTO_NEXUS = 'sp_calculo_auto_nexus';
+
 // ── Condominio ──────────────────────────────────────────────────────────────
 export const SP_BUSCA_PLANES_CONDOMINIO = 'sp_busca_planes_condominio_nexus';
 export const SP_CALCULO_COTIZACION_CONDOMINIO = 'sp_calculo_cotizacion_condominio_nexus';
