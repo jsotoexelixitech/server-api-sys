@@ -1,4 +1,4 @@
-/** Prefijo público HTTPS (cierrelmds): `/nest-api-docs`, `/pagos-api`, etc. Vacío en local. */
+/** Prefijo público HTTPS: `/nest-api-docs` (cierrelmds o nexusqa). Vacío en local. */
 export function normalizePublicPrefix(raw: string | undefined): string {
   const trimmed = String(raw ?? '').trim();
   if (!trimmed || trimmed === '/') return '';

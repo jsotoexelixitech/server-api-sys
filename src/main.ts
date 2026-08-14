@@ -152,7 +152,10 @@ async function bootstrap(): Promise<void> {
         .addServer(`http://localhost:${port}`, 'Desarrollo local');
     }
     if (publicPaths.prefix) {
-      swaggerConfigBuilder.addServer(publicPaths.publicBaseUrl, 'La Mundial — QA (HTTPS)');
+      const serverLabel = publicPaths.origin.includes('nexusqa')
+        ? 'Nexus QA — HTTPS'
+        : 'La Mundial — QA (HTTPS)';
+      swaggerConfigBuilder.addServer(publicPaths.publicBaseUrl, serverLabel);
     }
 
     const swaggerConfig = swaggerConfigBuilder

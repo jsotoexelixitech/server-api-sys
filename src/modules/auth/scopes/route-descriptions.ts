@@ -18,6 +18,7 @@ const ROUTE_LABELS: Record<string, string> = {
   'POST /api/v1/valrep/planesPer': 'Planes personas (legacy)',
   'POST /api/v1/valrep/frecuencia': 'Frecuencias de pago',
   'POST /api/v1/valrep/cotizacion': 'Cotización RCV',
+  'POST /api/v1/valrep/calculate-plan-coberturas': 'Primas por cobertura (sp_calculo_auto_nexus)',
   'POST /api/v1/valrep/macategtr': 'Categorías tarifarias (legacy)',
   'GET /api/v1/valrep/matipos': 'Tipos de vehículo (legacy)',
   // collection:write

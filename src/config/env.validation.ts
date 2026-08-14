@@ -21,6 +21,8 @@ export const envValidationSchema = Joi.object({
   MSSQL_ENCRYPT: Joi.boolean().default(false),
   MSSQL_TRUST_SERVER_CERTIFICATE: Joi.boolean().default(true),
   MSSQL_ENABLE_ARITH_ABORT: Joi.boolean().default(true),
+  /** SP Nexus: primas por cobertura (`POST /valrep/calculate-plan-coberturas`). */
+  MSSQL_SP_CALCULO_AUTO_NEXUS: Joi.string().default('sp_calculo_auto_nexus'),
 
   /** local = INSERT directo Sis2000 (default). external = HTTP La Mundial QA. */
   EMISSION_SOURCE: Joi.string().valid('local', 'external').default('local'),

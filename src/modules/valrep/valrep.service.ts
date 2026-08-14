@@ -7,6 +7,7 @@ import {
 import { MssqlService } from '../../database/mssql.service';
 import { GetPlanesV2Dto } from './dto/get-planes-v2.dto';
 import { GetCotizacionAutoDto } from './dto/get-cotizacion-auto.dto';
+import { CalculatePlanCoberturasDto } from './dto/calculate-plan-coberturas.dto';
 
 export interface CotizacionResult {
   mprimaext: number;
@@ -36,6 +37,40 @@ interface ParentescoPlan {
 interface CoberturaPlan {
   ccobertura: string;
   xcobertura: string;
+}
+
+export interface CalculatePlanCoberturasRow {
+  ccobertura?: number | string;
+  xdescripcion_l?: string;
+  prima?: number | null;
+  masegurada?: number | null;
+  cproducto?: string;
+  [key: string]: unknown;
+}
+
+export interface CalculatePlanCoberturasTotals {
+  totalPA?: number;
+  totalCA?: number;
+  totalPT?: number;
+  totalAP?: number;
+  totalPP?: number;
+}
+
+export interface CalculatePlanCoberturasResponse {
+  message: string;
+  status: true;
+  mount: CalculatePlanCoberturasRow[];
+  pa: number;
+  ca: number;
+  pt: number;
+  ap: number;
+  pp: number;
+  boolPT: boolean;
+  boolPP: boolean;
+  boolCA: boolean;
+  boolBl: boolean;
+  boolAd: boolean;
+  cproducto: string;
 }
 
 @Injectable()
@@ -640,5 +675,97 @@ export class ValrepService {
       }
     }
     return planes;
+  }
+
+  /**
+   * Réplica SysIP `calculatePlanSis` usando `sp_calculo_auto_nexus` (flujo Nexus).
+   */
+  async calculatePlanCoberturas(
+    body: CalculatePlanCoberturasDto,
+  ): Promise<CalculatePlanCoberturasResponse> {
+    const spName =
+      process.env.MSSQL_SP_CALCULO_AUTO_NEXUS?.trim() || 'sp_calculo_auto_nexus';
+    const cusuario =
+      body.cusuario ??
+      parseInt(process.env.LAMUNDIAL_CUSUARIO ?? '7', 10);
+
+    try {
+      const T = this.db.types;
+      const iplaca = body.iplaca ?? 'N';
+      const calcReq = this.db.request();
+
+      calcReq.input('cmarca', T.NVarChar(4), body.cmarca);
+      calcReq.input('cmodelo', T.NVarChar(4), body.cmodelo);
+      calcReq.input('cversion', T.NVarChar(4), body.cversion);
+      calcReq.input('cano', T.Int, body.cano);
+      calcReq.input('cplan', T.Char, body.idPlan);
+      calcReq.input('sumaAseg', T.Numeric(18, 2), body.suma ?? null);
+      calcReq.input('sumaAsegBl', T.Numeric(18, 2), body.sumaAsegBl ?? null);
+      calcReq.input('sumaAsegAd', T.Numeric(18, 2), body.sumaAsegAd ?? null);
+      calcReq.input('iplaca', T.Char(1), iplaca);
+      calcReq.input('fdesde', T.Date, new Date(body.fdesde));
+      calcReq.input('fhasta', T.Date, new Date(body.fhasta));
+      calcReq.input('tasaPt', T.Numeric(18, 2), body.tasaPt ?? null);
+      calcReq.input('tasaCa', T.Numeric(18, 2), body.tasaCa ?? null);
+      calcReq.input('tasaPp', T.Numeric(18, 2), body.tasaPp ?? null);
+      calcReq.input('recargo', T.Numeric(18, 2), body.recargo ?? null);
+      calcReq.input('tipoV', T.Numeric(4), body.tipo);
+      calcReq.input('uso', T.Numeric(4), body.uso);
+      calcReq.input('puestos', T.Numeric(4), body.puestos);
+      calcReq.input('toneladas', T.Numeric(4), body.toneladas ?? 0);
+      calcReq.input('recargoRcv', T.Numeric(6), body.recargoRcv ?? 0);
+      calcReq.input('cramo', T.Numeric(4), body.cramo ?? 18);
+      calcReq.input('cusuario', T.Numeric(20), cusuario);
+      calcReq.input('coberAdicional', T.VarChar(2), body.coberAdicional ?? 'RC');
+
+      const result = await calcReq.execute(spName);
+      const recordsets = (result.recordsets ?? []) as CalculatePlanCoberturasRow[][];
+
+      if (!recordsets.length) {
+        throw new BadRequestException(
+          'Error en cálculos, por favor validar información',
+        );
+      }
+
+      const detalle = recordsets[0] ?? [];
+      const precioRow = (recordsets[1]?.[0] ?? {}) as CalculatePlanCoberturasTotals;
+
+      const totalPA = Number(precioRow.totalPA ?? 0);
+      const totalCA = Number(precioRow.totalCA ?? 0);
+      const totalPT = Number(precioRow.totalPT ?? 0);
+      const totalAP = Number(precioRow.totalAP ?? 0);
+      const totalPP = Number(precioRow.totalPP ?? 0);
+
+      const firstDetalle = detalle[0] as CalculatePlanCoberturasRow | undefined;
+      const tipoPlan = String(firstDetalle?.cproducto ?? '').trim();
+
+      this.logger.log(
+        `calculatePlanCoberturas: plan=${body.idPlan} sp=${spName} pa=${totalPA} ca=${totalCA} pt=${totalPT}`,
+      );
+
+      return {
+        message: 'Calculo generado con exito',
+        status: true,
+        mount: detalle,
+        pa: totalPA,
+        ca: totalCA,
+        pt: totalPT,
+        ap: totalAP,
+        pp: totalPP,
+        boolPT: totalPT > 0,
+        boolPP: totalPP > 0,
+        boolCA: totalCA > 0,
+        boolBl: totalAP > 0,
+        boolAd: totalAP > 0,
+        cproducto: tipoPlan,
+      };
+    } catch (err) {
+      if (err instanceof BadRequestException) throw err;
+      const msg = err instanceof Error ? err.message : String(err);
+      this.logger.error(`calculatePlanCoberturas error: ${msg}`);
+      throw new BadRequestException(
+        'No fue posible calcular las coberturas del plan. Verifique marca, modelo, versión, año y plan.',
+      );
+    }
   }
 }

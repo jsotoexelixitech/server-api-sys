@@ -3,6 +3,7 @@ import { ApiBody, ApiExcludeEndpoint, ApiOperation, ApiQuery, ApiResponse, ApiTa
 import { GetPlanesV2Dto } from './dto/get-planes-v2.dto';
 import { GetCitiesDto } from './dto/get-cities.dto';
 import { GetCotizacionAutoDto } from './dto/get-cotizacion-auto.dto';
+import { CalculatePlanCoberturasDto } from './dto/calculate-plan-coberturas.dto';
 import { GetFrecuenciaDto } from './dto/get-frecuencia.dto';
 import { GetProductosPersonasDto } from './dto/get-productos-personas.dto';
 import { GetPlanesProductoDto } from './dto/get-planes-producto.dto';
@@ -327,5 +328,54 @@ export class ValrepController {
   async getCotizacionAuto(@Body() dto: GetCotizacionAutoDto) {
     const data = await this.valrepService.getCotizacionAuto(dto);
     return { status: true, data };
+  }
+
+  // ── POST /api/v1/valrep/calculate-plan-coberturas ───────────────────────
+
+  @Post('calculate-plan-coberturas')
+  @HttpCode(HttpStatus.OK)
+  @ApiOperation({
+    summary: 'Calcular primas por cobertura (plan auto)',
+    description:
+      'Equivalente Nexus de SysIP `calculatePlanSis`. Ejecuta `sp_calculo_auto_nexus` y devuelve ' +
+      'detalle por cobertura (`mount`) más totales PA/CA/PT/AP/PP.\n\n' +
+      '**Uso:** emisión y renovación cuando se necesita desglose de coberturas, no solo prima RCV total.',
+    operationId: 'valrepCalculatePlanCoberturas',
+  })
+  @ApiBody({ type: CalculatePlanCoberturasDto })
+  @ApiResponse({
+    status: 200,
+    description: 'Cálculo por cobertura generado.',
+    schema: {
+      example: {
+        status: true,
+        message: 'Calculo generado con exito',
+        mount: [
+          {
+            ccobertura: 15,
+            xdescripcion_l: 'RCV BASICO',
+            prima: 182.61,
+            masegurada: 0,
+            cproducto: 'E',
+          },
+        ],
+        pa: 182.61,
+        ca: 0,
+        pt: 0,
+        ap: 0,
+        pp: 0,
+        boolPT: false,
+        boolPP: false,
+        boolCA: false,
+        boolBl: false,
+        boolAd: false,
+        cproducto: 'E',
+      },
+    },
+  })
+  @ApiResponse({ status: 400, description: 'Datos inválidos o SP sin resultados.' })
+  @Api500()
+  async calculatePlanCoberturas(@Body() dto: CalculatePlanCoberturasDto) {
+    return this.valrepService.calculatePlanCoberturas(dto);
   }
 }

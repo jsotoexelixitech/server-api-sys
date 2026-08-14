@@ -27,6 +27,14 @@ module.exports = {
         PUBLIC_API_ORIGIN:  'https://cierrelmds.exelixitech.com',
         SWAGGER_SHOW_INTERNAL_SERVERS: 'true',
       },
+      /** QA Nexus — mismo prefijo /nest-api-docs, origen https://nexusqa.exelixitech.com */
+      env_qa: {
+        NODE_ENV:           'production',
+        SWAGGER_PATH:       'docs',
+        PUBLIC_API_PREFIX:  '/nest-api-docs',
+        PUBLIC_API_ORIGIN:  'https://nexusqa.exelixitech.com',
+        SWAGGER_SHOW_INTERNAL_SERVERS: 'true',
+      },
 
       // ── Comportamiento ante caídas ───────────────────────────────────────
       watch:              false,        // nunca watchear en prod
