@@ -268,16 +268,32 @@ export class ValrepService {
     return process.env.MSSQL_SP_CALCULO_AUTO_NEXUS?.trim() || SP_CALCULO_AUTO_NEXUS;
   }
 
-  private buildQuoteFhasta(fdesde: Date, ndias?: number | null): Date {
-    const fhasta = new Date(fdesde);
-    if (ndias != null && ndias > 0) {
-      fhasta.setDate(fhasta.getDate() + ndias);
-    } else if (ndias != null && ndias < 0) {
-      fhasta.setDate(fhasta.getDate() + Math.abs(ndias));
+  private formatLocalYmd(d: Date): string {
+    const y = d.getFullYear();
+    const m = String(d.getMonth() + 1).padStart(2, '0');
+    const day = String(d.getDate()).padStart(2, '0');
+    return `${y}-${m}-${day}`;
+  }
+
+  /** Vigencia cotización — misma lógica que emision policyMapper.resolveVigencia. */
+  private resolveQuoteVigenciaYmd(ndias?: number | null): { fdesde: string; fhasta: string } {
+    const fdesde = this.formatLocalYmd(new Date());
+    const fhastaDate = new Date(`${fdesde}T12:00:00`);
+    const n = ndias != null ? Number(ndias) : null;
+    if (n != null && !Number.isNaN(n) && n > 0) {
+      fhastaDate.setDate(fhastaDate.getDate() + n);
+    } else if (n != null && !Number.isNaN(n) && n < 0) {
+      fhastaDate.setDate(fhastaDate.getDate() + Math.abs(n));
     } else {
-      fhasta.setFullYear(fhasta.getFullYear() + 1);
+      fhastaDate.setFullYear(fhastaDate.getFullYear() + 1);
     }
-    return fhasta;
+    return { fdesde, fhasta: this.formatLocalYmd(fhastaDate) };
+  }
+
+  private resolveCusuarioSis2000(): number {
+    const raw = process.env.LAMUNDIAL_CUSUARIO ?? '4';
+    const n = parseInt(String(raw).trim(), 10);
+    return Number.isFinite(n) && n > 0 ? n : 4;
   }
 
   /** POST /valrep/cotizacion — usa sp_calculo_auto_nexus (flujo Nexus), no spCalculoAuto legacy. */
@@ -297,9 +313,7 @@ export class ValrepService {
         body.fano,
       );
       const mvalor = vinma.mvalor;
-
-      const fdesde = new Date();
-      const fhasta = this.buildQuoteFhasta(fdesde, body.ndias);
+      const { fdesde, fhasta } = this.resolveQuoteVigenciaYmd(body.ndias);
       const ifrecuencia = String(body.ifrecuencia ?? 'A')
         .trim()
         .toUpperCase()
@@ -313,13 +327,18 @@ export class ValrepService {
         idPlan: body.cplan,
         suma: body.sumaAsegurada ?? mvalor,
         iplaca: body.iplaca ?? 'N',
-        fdesde: fdesde.toISOString().slice(0, 10),
-        fhasta: fhasta.toISOString().slice(0, 10),
+        fdesde,
+        fhasta,
         uso: body.ccategoria_uso,
         toneladas: body.ntoneladas ?? 0,
         cramo: body.cramo ?? 18,
         ifrecuencia,
         coberAdicional: 'RC',
+        sumaAsegBl: 0,
+        sumaAsegAd: 0,
+        recargo: 0,
+        recargoRcv: 0,
+        cusuario: this.resolveCusuarioSis2000(),
       });
 
       const mprimaext = calc.pa;
@@ -677,8 +696,7 @@ export class ValrepService {
   ): Promise<CalculatePlanCoberturasResponse> {
     const spName = this.spCalculoAutoNexusName();
     const cusuario =
-      body.cusuario ??
-      parseInt(process.env.LAMUNDIAL_CUSUARIO ?? '7', 10);
+      body.cusuario ?? this.resolveCusuarioSis2000();
     const ifrecuencia = String(body.ifrecuencia ?? 'A')
       .trim()
       .toUpperCase()
@@ -703,7 +721,7 @@ export class ValrepService {
       calcReq.input('cmodelo', T.NVarChar(4), body.cmodelo);
       calcReq.input('cversion', T.NVarChar(4), body.cversion);
       calcReq.input('cano', T.Int, body.cano);
-      calcReq.input('cplan', T.Char, body.idPlan);
+      calcReq.input('cplan', T.VarChar(10), String(body.idPlan).trim());
       calcReq.input('sumaAseg', T.Numeric(18, 2), sumaAseg);
       calcReq.input('sumaAsegBl', T.Numeric(18, 2), body.sumaAsegBl ?? null);
       calcReq.input('sumaAsegAd', T.Numeric(18, 2), body.sumaAsegAd ?? null);
@@ -775,7 +793,9 @@ export class ValrepService {
       const msg = err instanceof Error ? err.message : String(err);
       this.logger.error(`calculatePlanCoberturas error: ${msg}`);
       throw new BadRequestException(
-        'No fue posible calcular las coberturas del plan. Verifique marca, modelo, versión, año y plan.',
+        msg.length > 0 && msg.length <= 180
+          ? msg
+          : 'No fue posible calcular las coberturas del plan. Verifique marca, modelo, versión, año y plan.',
       );
     }
   }
