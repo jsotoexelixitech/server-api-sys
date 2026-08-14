@@ -688,6 +688,10 @@ export class ValrepService {
     const cusuario =
       body.cusuario ??
       parseInt(process.env.LAMUNDIAL_CUSUARIO ?? '7', 10);
+    const ifrecuencia = String(body.ifrecuencia ?? 'A')
+      .trim()
+      .toUpperCase()
+      .charAt(0) || 'A';
 
     try {
       const T = this.db.types;
@@ -717,6 +721,7 @@ export class ValrepService {
       calcReq.input('cramo', T.Numeric(4), body.cramo ?? 18);
       calcReq.input('cusuario', T.Numeric(20), cusuario);
       calcReq.input('coberAdicional', T.VarChar(2), body.coberAdicional ?? 'RC');
+      calcReq.input('ifrecuencia', T.Char(1), ifrecuencia);
 
       const result = await calcReq.execute(spName);
       const recordsets = (result.recordsets ?? []) as CalculatePlanCoberturasRow[][];
@@ -740,7 +745,7 @@ export class ValrepService {
       const tipoPlan = String(firstDetalle?.cproducto ?? '').trim();
 
       this.logger.log(
-        `calculatePlanCoberturas: plan=${body.idPlan} sp=${spName} pa=${totalPA} ca=${totalCA} pt=${totalPT}`,
+        `calculatePlanCoberturas: plan=${body.idPlan} sp=${spName} ifrecuencia=${ifrecuencia} pa=${totalPA} ca=${totalCA} pt=${totalPT}`,
       );
 
       return {

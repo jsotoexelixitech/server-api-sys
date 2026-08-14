@@ -146,6 +146,15 @@ export class CalculatePlanCoberturasDto {
   @Min(1)
   cramo?: number;
 
+  @ApiPropertyOptional({
+    example: 'A',
+    description: 'Frecuencia de pago (requerido por sp_calculo_auto_nexus)',
+    enum: ['A', 'S', 'M', 'T', 'C'],
+  })
+  @IsOptional()
+  @IsIn(['A', 'S', 'M', 'T', 'C'])
+  ifrecuencia?: string;
+
   @ApiPropertyOptional({ example: 7, description: 'Usuario Sis2000 (default env LAMUNDIAL_CUSUARIO o 7)' })
   @IsOptional()
   @Type(() => Number)
