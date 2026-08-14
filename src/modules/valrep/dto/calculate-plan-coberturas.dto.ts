@@ -102,23 +102,31 @@ export class CalculatePlanCoberturasDto {
   @IsNumber()
   recargo?: number;
 
-  @ApiProperty({ example: 1, description: 'Tipo de vehículo (ntipoveh / ctipo)' })
+  @ApiPropertyOptional({
+    example: 4,
+    description: 'Tipo de vehículo (ctipo INMA). Si se omite, se resuelve desde VInma.',
+  })
+  @IsOptional()
   @Type(() => Number)
   @IsInt()
   @Min(0)
-  tipo: number;
+  tipo?: number;
 
-  @ApiProperty({ example: 2, description: 'Categoría de uso (grupo / ccategotr)' })
+  @ApiProperty({ example: 20, description: 'Categoría de uso (grupo / ccategotr)' })
   @Type(() => Number)
   @IsInt()
   @Min(0)
   uso: number;
 
-  @ApiProperty({ example: 5, description: 'Total puestos (INMA + adicionales)' })
+  @ApiPropertyOptional({
+    example: 2,
+    description: 'Total puestos (npasajero INMA). Si se omite, se resuelve desde VInma.',
+  })
+  @IsOptional()
   @Type(() => Number)
   @IsInt()
   @Min(0)
-  puestos: number;
+  puestos?: number;
 
   @ApiPropertyOptional({ example: 0, description: 'Toneladas de carga' })
   @IsOptional()

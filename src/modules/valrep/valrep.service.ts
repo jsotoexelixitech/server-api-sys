@@ -223,6 +223,44 @@ export class ValrepService {
     }
   }
 
+  /** ctipo, npasajero y suma de referencia desde VInma (paridad cotización). */
+  private async resolveVinmaMeta(
+    cmarca: string,
+    cmodelo: string,
+    cversion: string,
+    cano: number,
+  ): Promise<{ ctipo: number; npasajero: number; mvalor: number }> {
+    const T = this.db.types;
+    const vinmaReq = this.db.request();
+    vinmaReq.input('cmarca', T.VarChar(4), cmarca);
+    vinmaReq.input('cmodelo', T.VarChar(4), cmodelo);
+    vinmaReq.input('cversion', T.VarChar(4), cversion);
+    vinmaReq.input('cano', T.Int, cano);
+    const vinmaResult = await vinmaReq.query<{
+      ctipo: number;
+      npasajero: number;
+      mvalor?: number;
+    }>(
+      `SELECT ctipo, npasajero, mvalor
+           FROM VInma
+          WHERE cmarca   = @cmarca
+            AND cmodelo  = @cmodelo
+            AND cversion = @cversion
+            AND cano     = @cano`,
+    );
+    const row = vinmaResult.recordset[0];
+    if (!row) {
+      throw new BadRequestException(
+        'Vehículo no encontrado en catálogo INMA para la combinación marca/modelo/versión/año.',
+      );
+    }
+    return {
+      ctipo: Number(row.ctipo ?? 0),
+      npasajero: Number(row.npasajero ?? 0),
+      mvalor: Number(row.mvalor ?? 0) || 5000,
+    };
+  }
+
   // ── Cotización automóvil ─────────────────────────────────────────────────
 
   async getCotizacionAuto(body: GetCotizacionAutoDto): Promise<CotizacionResult> {
@@ -237,23 +275,15 @@ export class ValrepService {
       const ptasa: number = rateResult.recordset[0]?.ptasamon ?? 0;
       if (!ptasa) this.logger.warn('getCotizacionAuto: ptasa = 0 (verificar mamonedas)');
 
-      // 2. tipoV, puestos y mvalor desde VInma
-      const vinmaReq = this.db.request();
-      vinmaReq.input('cmarca',   T.VarChar(4), body.cmarca);
-      vinmaReq.input('cmodelo',  T.VarChar(4), body.cmodelo);
-      vinmaReq.input('cversion', T.VarChar(4), body.cversion);
-      vinmaReq.input('cano',     T.Int,        body.fano);
-      const vinmaResult = await vinmaReq.query<{ ctipo: number; npasajero: number; mvalor?: number }>(
-        `SELECT ctipo, npasajero, mvalor
-           FROM VInma
-          WHERE cmarca   = @cmarca
-            AND cmodelo  = @cmodelo
-            AND cversion = @cversion
-            AND cano     = @cano`,
+      const vinma = await this.resolveVinmaMeta(
+        body.cmarca,
+        body.cmodelo,
+        body.cversion,
+        body.fano,
       );
-      const tipoV   = vinmaResult.recordset[0]?.ctipo    ?? 0;
-      const puestos = vinmaResult.recordset[0]?.npasajero ?? 0;
-      const mvalor  = vinmaResult.recordset[0]?.mvalor    ?? 5000;
+      const tipoV = vinma.ctipo;
+      const puestos = vinma.npasajero;
+      const mvalor = vinma.mvalor;
 
       // 2b. Buscar tasas de casco en Sis2000
       const targetSuma = body.sumaAsegurada ?? mvalor;
@@ -695,6 +725,16 @@ export class ValrepService {
 
     try {
       const T = this.db.types;
+      const vinma = await this.resolveVinmaMeta(
+        body.cmarca,
+        body.cmodelo,
+        body.cversion,
+        body.cano,
+      );
+      const tipoV = body.tipo ?? vinma.ctipo;
+      const puestos = body.puestos ?? vinma.npasajero;
+      const sumaAseg =
+        body.suma != null && body.suma > 0 ? body.suma : vinma.mvalor || null;
       const iplaca = body.iplaca ?? 'N';
       const calcReq = this.db.request();
 
@@ -703,7 +743,7 @@ export class ValrepService {
       calcReq.input('cversion', T.NVarChar(4), body.cversion);
       calcReq.input('cano', T.Int, body.cano);
       calcReq.input('cplan', T.Char, body.idPlan);
-      calcReq.input('sumaAseg', T.Numeric(18, 2), body.suma ?? null);
+      calcReq.input('sumaAseg', T.Numeric(18, 2), sumaAseg);
       calcReq.input('sumaAsegBl', T.Numeric(18, 2), body.sumaAsegBl ?? null);
       calcReq.input('sumaAsegAd', T.Numeric(18, 2), body.sumaAsegAd ?? null);
       calcReq.input('iplaca', T.Char(1), iplaca);
@@ -713,9 +753,9 @@ export class ValrepService {
       calcReq.input('tasaCa', T.Numeric(18, 2), body.tasaCa ?? null);
       calcReq.input('tasaPp', T.Numeric(18, 2), body.tasaPp ?? null);
       calcReq.input('recargo', T.Numeric(18, 2), body.recargo ?? null);
-      calcReq.input('tipoV', T.Numeric(4), body.tipo);
+      calcReq.input('tipoV', T.Numeric(4), tipoV);
       calcReq.input('uso', T.Numeric(4), body.uso);
-      calcReq.input('puestos', T.Numeric(4), body.puestos);
+      calcReq.input('puestos', T.Numeric(4), puestos);
       calcReq.input('toneladas', T.Numeric(4), body.toneladas ?? 0);
       calcReq.input('recargoRcv', T.Numeric(6), body.recargoRcv ?? 0);
       calcReq.input('cramo', T.Numeric(4), body.cramo ?? 18);
@@ -733,6 +773,11 @@ export class ValrepService {
       }
 
       const detalle = recordsets[0] ?? [];
+      if (!detalle.length) {
+        throw new BadRequestException(
+          'Error en cálculos, por favor validar información',
+        );
+      }
       const precioRow = (recordsets[1]?.[0] ?? {}) as CalculatePlanCoberturasTotals;
 
       const totalPA = Number(precioRow.totalPA ?? 0);
