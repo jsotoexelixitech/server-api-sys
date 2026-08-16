@@ -9,7 +9,12 @@ Formato basado en [Keep a Changelog](https://keepachangelog.com/es/1.0.0/).
 
 ### Añadido
 
-- **`EmissionsModule`**: `POST /api/v1/emissions/automobile_new/propietary` — migración desde SysIP Express (`searchNewPropietary`). Busca propietario en `maclient` por `cid` (body `xrif_cliente` / `cid`).
+- **`EmissionsModule`**: `POST /api/v1/emissions/automobile_new/propietary` — migración desde SysIP Express (`searchNewPropietary`). Busca propietario en `maclient` por `cid` / `cci_rif`.
+
+### Cambiado
+
+- **`EmissionsModule`**: `POST /api/v1/emissions/automobile/vehicle` — alineado a SysIP Express (`validatePlaca` / `dbo.fn_validar_placa`) con body `xplaca`|`placa`, `fdesde` y `type`.
+- **`EmissionsModule`**: `POST /api/v1/emissions/automobile/serial` — alineado a SysIP Express (`validateSerial` / `dbo.fn_validar_serialCar`) con body `xsercar`|`xserialcarroceria`, `fdesde` y `type`.
 
 ---
 

@@ -80,8 +80,8 @@ Este servidor NestJS convive en **paralelo** con el Express original (puerto 300
 
 | Método | Ruta | Descripción |
 |--------|------|-------------|
-| `POST` | `/api/v1/emissions/automobile/vehicle` | Buscar vehículo por placa |
-| `POST` | `/api/v1/emissions/automobile/serial` | Buscar vehículo por serial de carrocería |
+| `POST` | `/api/v1/emissions/automobile/vehicle` | Validar placa activa (`fn_validar_placa`) |
+| `POST` | `/api/v1/emissions/automobile/serial` | Validar serial activo (`fn_validar_serialCar`) |
 | `POST` | `/api/v1/emissions/automobile_new/propietary` | Buscar propietario por `cid` (`xrif_cliente`) |
 | `POST` | `/api/v1/external/validateEmissionPerson` | Validar persona (`speeValidatePersonGeneral`) |
 | `POST` | `/api/v1/external/validateEmissionAuto` | Validar automóvil (`speeValidateAutomovilGeneral`) |

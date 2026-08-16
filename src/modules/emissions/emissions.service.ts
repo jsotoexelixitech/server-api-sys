@@ -11,6 +11,7 @@ import { parseSPError, formatValidateAutoError } from '../../common/helpers/sp-e
 import { buildPolicyPdfUrl } from '../../common/helpers/policy-url.helper';
 import { SP_PRE_EMISION_AUTO_RCV } from '../../config/sis2000-sp.constants';
 import { SearchProprietaryDto } from './dto/search-proprietary.dto';
+import { SearchVehicleByPlateDto, SearchVehicleBySerialDto } from './dto/search-vehicle.dto';
 
 @Injectable()
 export class EmissionsService {
@@ -107,55 +108,91 @@ export class EmissionsService {
     return (result.recordset?.[0] ?? {}) as Record<string, unknown>;
   }
 
-  private async searchVehicle(field: 'xplaca' | 'xsercar', value: string) {
-    const T = this.db.types;
-    const req = this.db.request();
-    req.input('value', T.VarChar(60), value.trim().toUpperCase());
-    const result = await req.query(`
-      SELECT TOP 1 *
-      FROM vhcerti
-      WHERE ${field} = @value
-        AND istatcer != 'A'
-    `);
-    const vehicle = result.recordset ?? [];
-    if (vehicle.length === 0) return { status: false };
-
-    const polReq = this.db.request();
-    polReq.input('cnpoliza', T.VarChar(20), String(vehicle[0]['cnpoliza'] ?? ''));
-    const polResult = await polReq.query(`
-      SELECT TOP 1 fhasta, cnpoliza
-      FROM adpoliza
-      WHERE cnpoliza = @cnpoliza
-        AND (iestado != 'N' OR istatpol != 'A')
-    `);
-    if (polResult.recordset.length > 0) {
-      vehicle[0] = { ...vehicle[0], fhasta: polResult.recordset[0]['fhasta'] };
-      return {
-        status: true,
-        message: `El vehículo ya tiene una póliza vigente (${field === 'xplaca' ? 'PLACA' : 'SERIAL DE CARROCERÍA'})`,
-        vehicle: vehicle[0],
-      };
+  /**
+   * Migración de SysIP Express `POST /api/v1/emissions/automobile/vehicle`.
+   * Usa `dbo.fn_validar_placa(@xplaca, @fdesde)` — no la búsqueda por vhcerti.
+   *
+   * Compat Express:
+   * - Placa activa → `{ status: true, message }` (`type === 'warning'` cambia el texto)
+   * - Placa libre  → `{ status: false }`
+   */
+  async searchByPlate(dto: SearchVehicleByPlateDto) {
+    const xplaca = String(dto.xplaca ?? dto.placa ?? '').trim();
+    if (!xplaca) {
+      throw new BadRequestException('Debe enviar `xplaca` o `placa`.');
     }
-    return { status: false, vehicle: vehicle[0] };
-  }
+    if (!dto.fdesde) {
+      throw new BadRequestException('Debe enviar `fdesde`.');
+    }
 
-  async searchByPlate(xplaca: string) {
     try {
-      return await this.searchVehicle('xplaca', xplaca);
+      const req = this.db.request();
+      const T = this.db.types;
+      req.input('xplaca', T.VarChar(15), xplaca);
+      req.input('fdesde', T.Date, new Date(dto.fdesde));
+      const result = await req.query(`
+        SELECT ISNULL(dbo.fn_validar_placa(@xplaca, @fdesde), 0) AS is_active
+      `);
+      const isActive = Boolean(result.recordset?.[0]?.['is_active']);
+
+      if (isActive) {
+        const message =
+          dto.type === 'warning'
+            ? 'ADVERTENCIA: el campo PLACA ya se encuentra registrado y activo en el sistema.'
+            : 'Lo sentimos, el campo PLACA ingresado ya se encuentra registrado y activo en el sistema';
+        return { status: true as const, message, is_active: true };
+      }
+
+      return { status: false as const, is_active: false };
     } catch (err) {
+      if (err instanceof BadRequestException) throw err;
       const msg = err instanceof Error ? err.message : String(err);
       this.logger.error(`searchByPlate: ${msg}`);
-      throw new InternalServerErrorException('Error al buscar vehículo por placa.');
+      throw new InternalServerErrorException('Error al validar placa.');
     }
   }
 
-  async searchBySerial(xsercar: string) {
+  /**
+   * Migración de SysIP Express `POST /api/v1/emissions/automobile/serial`.
+   * Usa `dbo.fn_validar_serialCar(@xsercar, @fdesde)`.
+   *
+   * Compat Express:
+   * - Serial activo → `{ status: true, message }` (`type === 'warning'` cambia el texto)
+   * - Serial libre  → `{ status: false }`
+   */
+  async searchBySerial(dto: SearchVehicleBySerialDto) {
+    const xsercar = String(dto.xsercar ?? dto.xserialcarroceria ?? '').trim();
+    if (!xsercar) {
+      throw new BadRequestException('Debe enviar `xsercar` o `xserialcarroceria`.');
+    }
+    if (!dto.fdesde) {
+      throw new BadRequestException('Debe enviar `fdesde`.');
+    }
+
     try {
-      return await this.searchVehicle('xsercar', xsercar);
+      const req = this.db.request();
+      const T = this.db.types;
+      req.input('xsercar', T.VarChar(60), xsercar);
+      req.input('fdesde', T.Date, new Date(dto.fdesde));
+      const result = await req.query(`
+        SELECT ISNULL(dbo.fn_validar_serialCar(@xsercar, @fdesde), 0) AS is_active
+      `);
+      const isActive = Boolean(result.recordset?.[0]?.['is_active']);
+
+      if (isActive) {
+        const message =
+          dto.type === 'warning'
+            ? 'ADVERTENCIA: el campo SERIAL DE CARROCERÍA ya se encuentra registrado y activo en el sistema.'
+            : 'Lo sentimos, el campo SERIAL DE CARROCERÍA ingresado ya se encuentra registrado y activo en el sistema';
+        return { status: true as const, message, is_active: true };
+      }
+
+      return { status: false as const, is_active: false };
     } catch (err) {
+      if (err instanceof BadRequestException) throw err;
       const msg = err instanceof Error ? err.message : String(err);
       this.logger.error(`searchBySerial: ${msg}`);
-      throw new InternalServerErrorException('Error al buscar vehículo por serial.');
+      throw new InternalServerErrorException('Error al validar serial de carrocería.');
     }
   }
 
