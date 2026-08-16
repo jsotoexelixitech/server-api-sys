@@ -82,6 +82,7 @@ Este servidor NestJS convive en **paralelo** con el Express original (puerto 300
 |--------|------|-------------|
 | `POST` | `/api/v1/emissions/automobile/vehicle` | Buscar vehículo por placa |
 | `POST` | `/api/v1/emissions/automobile/serial` | Buscar vehículo por serial de carrocería |
+| `POST` | `/api/v1/emissions/automobile_new/propietary` | Buscar propietario por `cid` (`xrif_cliente`) |
 | `POST` | `/api/v1/external/validateEmissionPerson` | Validar persona (`speeValidatePersonGeneral`) |
 | `POST` | `/api/v1/external/validateEmissionAuto` | Validar automóvil (`speeValidateAutomovilGeneral`) |
 | `POST` | `/api/v1/external/createEmissionAuto` | **Emitir póliza RCV** — requiere header `apikey` |

@@ -12,6 +12,7 @@ import { EmissionsService } from './emissions.service';
 import { CreateEmissionAutoDto } from './dto/create-emission-auto.dto';
 import { ValidateEmissionAutoDto } from './dto/validate-emission-auto.dto';
 import { SearchVehicleByPlateDto, SearchVehicleBySerialDto } from './dto/search-vehicle.dto';
+import { SearchProprietaryDto } from './dto/search-proprietary.dto';
 import { Api401, ApiCommonErrors } from '../../common/swagger/api-error-responses';
 import {
   APIKEY_HEADER,
@@ -85,6 +86,59 @@ export class EmissionsController {
   async searchBySerial(@Body() dto: SearchVehicleBySerialDto) {
     const serial = dto.xsercar ?? dto.xserialcarroceria ?? '';
     return await this.emissionsService.searchBySerial(serial);
+  }
+
+  @Post('emissions/automobile_new/propietary')
+  @HttpCode(HttpStatus.OK)
+  @ApiOperation({
+    summary: 'Buscar propietario/cliente por CID (flujo auto nuevo)',
+    description:
+      'Migración de SysIP Express `POST /api/v1/emissions/automobile_new/propietary`.\n\n' +
+      'Consulta `maclient` con joins de dirección, correo, teléfono, estado/ciudad y atributos ' +
+      '(profesión, ocupación, actividad).\n\n' +
+      '**Importante:** el body legacy `xrif_cliente` se filtra contra `maclient.cid` (no `cci_rif`). ' +
+      'Acepta alias `cid`.\n\n' +
+      'Respuesta: `data` (Nest) e `info` (compat Express).',
+    operationId: 'rcvSearchNewProprietary',
+  })
+  @ApiBody({ type: SearchProprietaryDto })
+  @ApiResponse({
+    status: 200,
+    description: 'Propietario encontrado.',
+    schema: {
+      example: {
+        status: true,
+        data: {
+          xnombre: 'JUAN',
+          xapellido: 'PEREZ',
+          fnacimiento: '1990-01-13',
+          isexo: 'M',
+          ipersona: 'V',
+          iestado_civil: 'S',
+          cestado: 1,
+          xestado: 'DISTRITO CAPITAL',
+          cciudad: 128,
+          cci_rif: '12345678',
+          cid: 'V12345678',
+          xciudad: 'CARACAS',
+          xavecalle: 'AV PRINCIPAL',
+          xcorreo: 'juan@email.com',
+          xtelefono: '04141234567',
+          cliente: 'JUAN PEREZ',
+          es_mayor_de_edad: 1,
+          xprofesion: '',
+          xocupacion: '',
+          xactividad: '',
+        },
+        info: { cid: 'V12345678', xnombre: 'JUAN' },
+      },
+    },
+  })
+  @ApiResponse({ status: 400, description: 'Falta `xrif_cliente` / `cid`.' })
+  @ApiResponse({ status: 404, description: 'Propietario no encontrado.' })
+  @ApiCommonErrors()
+  async searchNewProprietary(@Body() dto: SearchProprietaryDto) {
+    return await this.emissionsService.searchNewProprietary(dto);
   }
 
   @Post('external/validateEmissionAuto')

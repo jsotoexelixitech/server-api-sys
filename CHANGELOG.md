@@ -5,6 +5,14 @@ Formato basado en [Keep a Changelog](https://keepachangelog.com/es/1.0.0/).
 
 ---
 
+## [Unreleased]
+
+### Añadido
+
+- **`EmissionsModule`**: `POST /api/v1/emissions/automobile_new/propietary` — migración desde SysIP Express (`searchNewPropietary`). Busca propietario en `maclient` por `cid` (body `xrif_cliente` / `cid`).
+
+---
+
 ## [0.1.0] – 2026-05-14
 
 ### Inicial — migración desde Express a NestJS
