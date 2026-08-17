@@ -271,8 +271,6 @@ export class EmissionsService {
     }
   }
 
-  }
-
   /**
    * Migración de SysIP Express `POST /api/v1/emissions/automobile/vehicle`.
    * Usa `dbo.fn_validar_placa(@xplaca, @fdesde)` — no la búsqueda por vhcerti.
