@@ -1149,10 +1149,10 @@ export class EmissionsService {
       req.input('cnpoliza', T.NVarChar(30), poliza);
       req.output('pSuccess', T.Bit);
       req.output('pErrorMessage', T.NVarChar(4000));
-      await req.execute(SP_REPAIR_RCV_COBERTURAS);
-      const ok = req.parameters['pSuccess']?.value === true;
+      const result = await req.execute(SP_REPAIR_RCV_COBERTURAS);
+      const ok = result.output['pSuccess'] === true;
       if (!ok) {
-        const msg = String(req.parameters['pErrorMessage']?.value ?? 'repair falló');
+        const msg = String(result.output['pErrorMessage'] ?? 'repair falló');
         this.logger.warn(`repairRcvCoberturas cnpoliza=${poliza}: ${msg}`);
         return;
       }
