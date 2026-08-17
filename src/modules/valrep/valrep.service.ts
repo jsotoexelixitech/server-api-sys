@@ -228,12 +228,13 @@ export class ValrepService {
       rateQueryReq.input('cversion', T.VarChar(4), body.cversion);
       rateQueryReq.input('cano',     T.Int,        body.fano);
       rateQueryReq.input('suma',     T.Numeric(18, 2), targetSuma);
+      rateQueryReq.input('cplan',    T.NVarChar(50), body.cplan);
 
       const rateQueryRes = await rateQueryReq.query<{ tasaCA: number; tasaPT: number; tasaPP: number }>(
         `SELECT 
-           dbo.fn_buscar_tasa_casco(@cmarca, @cmodelo, @cversion, @cano, '1', @suma) AS tasaCA,
-           dbo.fn_buscar_tasa_casco(@cmarca, @cmodelo, @cversion, @cano, '2', @suma) AS tasaPT,
-           dbo.fn_buscar_tasa_casco(@cmarca, @cmodelo, @cversion, @cano, '28', @suma) AS tasaPP`
+           dbo.fn_buscar_tasa_casco(@cmarca, @cmodelo, @cversion, @cano, '1', @suma, @cplan) AS tasaCA,
+           dbo.fn_buscar_tasa_casco(@cmarca, @cmodelo, @cversion, @cano, '2', @suma, @cplan) AS tasaPT,
+           dbo.fn_buscar_tasa_casco(@cmarca, @cmodelo, @cversion, @cano, '28', @suma, @cplan) AS tasaPP`
       );
 
       const tasaCA = rateQueryRes.recordset[0]?.tasaCA ?? 9.32;
@@ -415,7 +416,12 @@ export class ValrepService {
           String(result.output['mensaje'] ?? 'No se encontraron frecuencias para el plan.'),
         );
       }
-      return rows;
+      // El SP puede devolver varias filas con el mismo cvalor (A, B, D…).
+      return rows.filter((row, index, all) => {
+        const code = String(row.cvalor ?? '').trim();
+        if (!code) return false;
+        return all.findIndex((r) => String(r.cvalor ?? '').trim() === code) === index;
+      });
     } catch (err) {
       if (err instanceof BadRequestException) throw err;
       const msg = err instanceof Error ? err.message : String(err);
