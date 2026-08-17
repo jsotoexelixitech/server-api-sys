@@ -353,6 +353,39 @@ export class ValrepService {
 
       const mprima = parseFloat((mprimaext * ptasa).toFixed(2));
 
+      let rates = { CA: calc.ca, PT: calc.pt, PP: calc.pp };
+      try {
+        const T = this.db.types;
+        const targetSuma = body.sumaAsegurada ?? mvalor;
+        const rateQueryReq = this.db.request();
+        rateQueryReq.input('cmarca', T.VarChar(4), body.cmarca);
+        rateQueryReq.input('cmodelo', T.VarChar(4), body.cmodelo);
+        rateQueryReq.input('cversion', T.VarChar(4), body.cversion);
+        rateQueryReq.input('cano', T.Int, body.fano);
+        rateQueryReq.input('suma', T.Numeric(18, 2), targetSuma);
+        rateQueryReq.input('cplan', T.NVarChar(50), body.cplan);
+
+        const rateQueryRes = await rateQueryReq.query<{
+          tasaCA: number;
+          tasaPT: number;
+          tasaPP: number;
+        }>(
+          `SELECT
+             dbo.fn_buscar_tasa_casco(@cmarca, @cmodelo, @cversion, @cano, '1', @suma, @cplan) AS tasaCA,
+             dbo.fn_buscar_tasa_casco(@cmarca, @cmodelo, @cversion, @cano, '2', @suma, @cplan) AS tasaPT,
+             dbo.fn_buscar_tasa_casco(@cmarca, @cmodelo, @cversion, @cano, '28', @suma, @cplan) AS tasaPP`,
+        );
+
+        rates = {
+          CA: rateQueryRes.recordset[0]?.tasaCA ?? calc.ca,
+          PT: rateQueryRes.recordset[0]?.tasaPT ?? calc.pt,
+          PP: rateQueryRes.recordset[0]?.tasaPP ?? calc.pp,
+        };
+      } catch (rateErr) {
+        const msg = rateErr instanceof Error ? rateErr.message : String(rateErr);
+        this.logger.warn(`getCotizacionAuto: fn_buscar_tasa_casco falló, se usan tasas del SP Nexus: ${msg}`);
+      }
+
       this.logger.log(
         `getCotizacionAuto: sp=${this.spCalculoAutoNexusName()} plan=${body.cplan} fano=${body.fano} mprimaext=$${mprimaext} mprima=Bs${mprima} ptasa=${ptasa}`,
       );
@@ -361,7 +394,7 @@ export class ValrepService {
         mprimaext,
         mprima,
         ptasa,
-        rates: { CA: calc.ca, PT: calc.pt, PP: calc.pp },
+        rates,
         referenceSuma: mvalor,
       };
     } catch (err) {
@@ -475,7 +508,12 @@ export class ValrepService {
           String(result.output['mensaje'] ?? 'No se encontraron frecuencias para el plan.'),
         );
       }
-      return rows;
+      // El SP puede devolver varias filas con el mismo cvalor (A, B, D…).
+      return rows.filter((row, index, all) => {
+        const code = String(row.cvalor ?? '').trim();
+        if (!code) return false;
+        return all.findIndex((r) => String(r.cvalor ?? '').trim() === code) === index;
+      });
     } catch (err) {
       if (err instanceof BadRequestException) throw err;
       const msg = err instanceof Error ? err.message : String(err);

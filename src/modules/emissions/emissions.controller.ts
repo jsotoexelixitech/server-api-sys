@@ -1,7 +1,6 @@
 import { Body, Controller, HttpCode, HttpStatus, Post } from '@nestjs/common';
 import {
   ApiBody,
-  ApiExcludeEndpoint,
   ApiHeader,
   ApiOperation,
   ApiResponse,
@@ -12,7 +11,7 @@ import { EmissionsService } from './emissions.service';
 import { CreateEmissionAutoDto } from './dto/create-emission-auto.dto';
 import { ValidateEmissionAutoDto } from './dto/validate-emission-auto.dto';
 import { SearchVehicleByPlateDto, SearchVehicleBySerialDto } from './dto/search-vehicle.dto';
-import { SearchAutomobilePropietaryDto } from './dto/search-propietary.dto';
+import { SearchProprietaryDto } from './dto/search-proprietary.dto';
 import { Api401, ApiCommonErrors } from '../../common/swagger/api-error-responses';
 import {
   APIKEY_HEADER,
@@ -39,17 +38,27 @@ export class EmissionsController {
   @ApiOperation({
     summary: 'Buscar propietario/tomador por documento',
     description:
-      'Consulta `maclient` por `cid` vía `sp_search_automobile_propietary_nexus`. ' +
       'Paridad con SysIP `POST /emissions/automobile_new/propietary`.\n\n' +
+      '1. `sp_search_automobile_propietary_nexus` por `cid`.\n' +
+      '2. Si no hay fila, consulta `maclient` (dirección, correo, teléfono, atributos) ' +
+      'aceptando `xrif_cliente` o alias `cid`.\n\n' +
+      'Respuesta: `data` (Nest) e `info` (compat Express).\n\n' +
       '**Seguridad**: requiere API Key o Bearer con scope `emissions:auto`.',
     operationId: 'searchAutomobilePropietary',
   })
-  @ApiBody({ type: SearchAutomobilePropietaryDto })
+  @ApiBody({ type: SearchProprietaryDto })
   @ApiResponse({
     status: 200,
+    description: 'Propietario encontrado.',
     schema: {
       example: {
         status: true,
+        data: {
+          xnombre: 'JUAN',
+          xapellido: 'PEREZ',
+          cid: 'V12345678',
+          es_mayor_de_edad: 1,
+        },
         info: {
           xnombre: 'JUAN',
           xapellido: 'PEREZ',
@@ -70,64 +79,110 @@ export class EmissionsController {
   })
   @Api401()
   @ApiCommonErrors()
-  async searchNewPropietary(@Body() dto: SearchAutomobilePropietaryDto) {
-    return await this.emissionsService.searchNewPropietary(dto.xrif_cliente);
+  async searchNewPropietary(@Body() dto: SearchProprietaryDto) {
+    return await this.emissionsService.searchAutomobileProprietary(dto);
   }
 
   @Post('emissions/automobile/vehicle')
-  @ApiExcludeEndpoint()
   @HttpCode(HttpStatus.OK)
   @ApiOperation({
-    summary: 'Paso 5a · Buscar vehículo por placa',
+    summary: 'Validar placa activa (fn_validar_placa)',
     description:
-      'Consulta `vhcerti` + `adpoliza`. Útil antes de emitir para detectar póliza vigente. ' +
-      'Complementa `validateEmissionAuto` (este endpoint es informativo; la validación formal es el paso 5b).',
+      'Migración de SysIP Express `POST /api/v1/emissions/automobile/vehicle`.\n\n' +
+      'Ejecuta `dbo.fn_validar_placa(@xplaca, @fdesde)`.\n\n' +
+      '- Placa con póliza/vigencia conflictiva → `{ status: true, message, is_active: true }`\n' +
+      '- Placa disponible → `{ status: false, is_active: false }`\n\n' +
+      'Si `type` es exactamente `warning`, el mensaje es de advertencia; en otro caso es el mensaje definitivo.\n\n' +
+      'Acepta alias `placa` ↔ `xplaca`.',
     operationId: 'rcvSearchVehicleByPlate',
   })
-  @ApiBody({ type: SearchVehicleByPlateDto })
+  @ApiBody({
+    type: SearchVehicleByPlateDto,
+    examples: {
+      warning: {
+        summary: 'Mensaje de advertencia',
+        value: { xplaca: 'AE218EG', fdesde: '2026-01-01', type: 'warning' },
+      },
+      final: {
+        summary: 'Mensaje definitivo',
+        value: { xplaca: 'AE218EG', fdesde: '2026-01-01' },
+      },
+    },
+  })
   @ApiResponse({
     status: 200,
-    description: 'Vehículo encontrado con o sin póliza vigente.',
+    description: 'Placa ya registrada/activa.',
     schema: {
       example: {
         status: true,
-        data: {
-          found: true,
-          message: 'El vehículo ya tiene una póliza vigente (PLACA)',
-          vehicle: { xplaca: 'AE886C20', xsercar: 'SC1S6ZMV3024320', cmarca: '074', fano: 2004 },
-        },
+        is_active: true,
+        message:
+          'Lo sentimos, el campo PLACA ingresado ya se encuentra registrado y activo en el sistema',
       },
     },
   })
+  @ApiResponse({
+    status: 200,
+    description: 'Placa disponible.',
+    schema: {
+      example: { status: false, is_active: false },
+    },
+  })
+  @ApiResponse({ status: 400, description: 'Falta `xplaca`/`placa` o `fdesde`.' })
   @ApiCommonErrors()
   async searchByPlate(@Body() dto: SearchVehicleByPlateDto) {
-    return await this.emissionsService.searchByPlate(dto.xplaca ?? '');
+    return await this.emissionsService.searchByPlate(dto);
   }
 
   @Post('emissions/automobile/serial')
-  @ApiExcludeEndpoint()
   @HttpCode(HttpStatus.OK)
   @ApiOperation({
-    summary: 'Paso 5a · Buscar vehículo por serial',
+    summary: 'Validar serial de carrocería activo (fn_validar_serialCar)',
     description:
-      'Igual que búsqueda por placa pero usando serial de carrocería. ' +
-      'Acepta `xsercar` o `xserialcarroceria`.',
+      'Migración de SysIP Express `POST /api/v1/emissions/automobile/serial`.\n\n' +
+      'Ejecuta `dbo.fn_validar_serialCar(@xsercar, @fdesde)`.\n\n' +
+      '- Serial con póliza/vigencia conflictiva → `{ status: true, message, is_active: true }`\n' +
+      '- Serial disponible → `{ status: false, is_active: false }`\n\n' +
+      'Si `type` es exactamente `warning`, el mensaje es de advertencia; en otro caso es el mensaje definitivo.\n\n' +
+      'Acepta alias `xserialcarroceria` ↔ `xsercar`.',
     operationId: 'rcvSearchVehicleBySerial',
   })
-  @ApiBody({ type: SearchVehicleBySerialDto })
-  @ApiResponse({
-    status: 200,
-    schema: {
-      example: {
-        status: false,
-        vehicle: { xplaca: 'AE886C20', xsercar: 'SC1S6ZMV3024320' },
+  @ApiBody({
+    type: SearchVehicleBySerialDto,
+    examples: {
+      warning: {
+        summary: 'Mensaje de advertencia',
+        value: { xsercar: 'KNAFC526365439484', fdesde: '2026-01-01', type: 'warning' },
+      },
+      alias: {
+        summary: 'Con alias xserialcarroceria',
+        value: { xserialcarroceria: 'KNAFC526365439484', fdesde: '2026-01-01' },
       },
     },
   })
+  @ApiResponse({
+    status: 200,
+    description: 'Serial ya registrado/activo.',
+    schema: {
+      example: {
+        status: true,
+        is_active: true,
+        message:
+          'Lo sentimos, el campo SERIAL DE CARROCERÍA ingresado ya se encuentra registrado y activo en el sistema',
+      },
+    },
+  })
+  @ApiResponse({
+    status: 200,
+    description: 'Serial disponible.',
+    schema: {
+      example: { status: false, is_active: false },
+    },
+  })
+  @ApiResponse({ status: 400, description: 'Falta `xsercar`/`xserialcarroceria` o `fdesde`.' })
   @ApiCommonErrors()
   async searchBySerial(@Body() dto: SearchVehicleBySerialDto) {
-    const serial = dto.xsercar ?? dto.xserialcarroceria ?? '';
-    return await this.emissionsService.searchBySerial(serial);
+    return await this.emissionsService.searchBySerial(dto);
   }
 
   @Post('external/validateEmissionAuto')

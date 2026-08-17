@@ -4,6 +4,7 @@ import { GetMarcasDto } from './dto/get-marcas.dto';
 import { GetModeloDto } from './dto/get-modelo.dto';
 import { GetVersionDto } from './dto/get-version.dto';
 import { GetCategoriasUsoDto } from './dto/get-categorias-uso.dto';
+import { isBinacionalFlag } from './dto/binacional-flag.dto';
 
 export interface ModeloItem {
   cmodelo: string;
@@ -32,19 +33,29 @@ export interface CategoriaUso {
   xcategoria_uso: string;
 }
 
+/**
+ * Catálogo vehicular.
+ * Fuente: vista `VInma` (maanomod + mamarcas + mamodelo + maversion + matipos).
+ * Binacional: mismo origen filtrando `ISNULL(ctarifabi, 0) > 0`.
+ */
 @Injectable()
 export class InmaService {
   private readonly logger = new Logger(InmaService.name);
 
   constructor(private readonly db: MssqlService) {}
 
+  private binacionalSql(flag: unknown): string {
+    return isBinacionalFlag(flag) ? ' AND ISNULL(ctarifabi, 0) > 0' : '';
+  }
+
   // ── GET /api/v1/inma/anios ────────────────────────────────────────────────
 
-  async getAnios(): Promise<{ min: number; max: number }> {
+  async getAnios(binacional = false): Promise<{ min: number; max: number }> {
     try {
       const req = this.db.request();
+      const where = binacional ? 'WHERE ISNULL(ctarifabi, 0) > 0' : '';
       const result = await req.query<{ max: number; min: number }>(
-        `SELECT MAX(cano) AS [max], MIN(cano) AS [min] FROM VInma`,
+        `SELECT MAX(cano) AS [max], MIN(cano) AS [min] FROM VInma ${where}`,
       );
       const row = result.recordset?.[0];
       return { min: row?.min ?? 2000, max: row?.max ?? new Date().getFullYear() + 1 };
@@ -69,6 +80,7 @@ export class InmaService {
           TRIM(xmarca) AS xmarca
         FROM VInma
         WHERE cano = @fano
+        ${this.binacionalSql(body.binacional)}
       `;
 
       if (ctipo !== undefined) {
@@ -88,7 +100,6 @@ export class InmaService {
   }
 
   // ── POST /api/v1/inma/modelo ──────────────────────────────────────────────
-  // Original: inmaDB.modeloBD — String interpolation corregida a parámetros
 
   async getModelo(body: GetModeloDto): Promise<ModeloItem[]> {
     try {
@@ -106,6 +117,7 @@ export class InmaService {
         FROM VInma
         WHERE cano   = @fano
           AND cmarca = @cmarca
+          ${this.binacionalSql(body.binacional)}
         ORDER BY xmodelo
       `);
 
@@ -118,7 +130,6 @@ export class InmaService {
   }
 
   // ── POST /api/v1/inma/version ─────────────────────────────────────────────
-  // Original: inmaDB.versionBD — String interpolation corregida a parámetros
 
   async getVersion(body: GetVersionDto): Promise<VersionItem[]> {
     try {
@@ -148,6 +159,7 @@ export class InmaService {
         WHERE cano    = @fano
           AND cmarca  = @cmarca
           AND cmodelo = @cmodelo
+          ${this.binacionalSql(body.binacional)}
         ORDER BY xversion
       `);
 
@@ -160,14 +172,11 @@ export class InmaService {
   }
 
   // ── POST /api/v1/inma/categorias-uso ─────────────────────────────────────
-  // Fuente: externalChannelsModel.getCategoriasUso (versión con VInma + macategtr)
-  // Fix: segunda query también parametrizada (original tenía string concat)
 
   async getCategoriasUso(body: GetCategoriasUsoDto): Promise<CategoriaUso[]> {
     try {
       const T = this.db.types;
 
-      // 1. Obtener ctipo del vehículo desde VInma
       const reqTipo = this.db.request();
       reqTipo.input('cmarca',   T.VarChar(3), body.cmarca.trim().toUpperCase());
       reqTipo.input('cmodelo',  T.VarChar(3), body.cmodelo.trim().toUpperCase());
@@ -181,6 +190,7 @@ export class InmaService {
           AND cmodelo  = @cmodelo
           AND cversion = @cversion
           AND cano     = @cano
+          ${this.binacionalSql(body.binacional)}
       `);
 
       const tipoRow = tipoResult.recordset?.[0];
@@ -190,7 +200,6 @@ export class InmaService {
 
       const ctipo = String(tipoRow.ctipo);
 
-      // 2. Obtener categorías de uso para ese tipo
       const reqCat = this.db.request();
       reqCat.input('ctipo', T.VarChar(10), ctipo);
 

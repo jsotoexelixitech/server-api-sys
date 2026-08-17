@@ -1,10 +1,11 @@
-import { Body, Controller, Get, HttpCode, HttpStatus, Param, Post } from '@nestjs/common';
-import { ApiBody, ApiExcludeEndpoint, ApiOperation, ApiParam, ApiResponse, ApiTags } from '@nestjs/swagger';
+import { Body, Controller, Get, HttpCode, HttpStatus, Param, Post, Query } from '@nestjs/common';
+import { ApiBody, ApiExcludeEndpoint, ApiOperation, ApiParam, ApiQuery, ApiResponse, ApiTags } from '@nestjs/swagger';
 import { InmaService } from './inma.service';
 import { GetMarcasDto } from './dto/get-marcas.dto';
 import { GetModeloDto } from './dto/get-modelo.dto';
 import { GetVersionDto } from './dto/get-version.dto';
 import { GetCategoriasUsoDto } from './dto/get-categorias-uso.dto';
+import { isBinacionalFlag } from './dto/binacional-flag.dto';
 import { Api404, Api500, ApiCommonErrors } from '../../common/swagger/api-error-responses';
 
 @ApiTags('1. Catálogo vehicular')
@@ -17,13 +18,20 @@ export class InmaController {
   @Get('anios')
   @ApiOperation({
     summary: 'Paso 1a · Rango de años',
-    description: 'Primer paso del catálogo vehicular. Devuelve el rango de años disponibles.',
+    description:
+      'Primer paso del catálogo vehicular. Devuelve el rango de años disponibles. ' +
+      'Con `binacional=true` filtra maanomod/VInma donde `ctarifabi > 0`.',
     operationId: 'inmaAnios',
+  })
+  @ApiQuery({
+    name: 'binacional',
+    required: false,
+    description: 'Si true, solo años con vehículos binacionales (ctarifabi > 0).',
   })
   @ApiResponse({ status: 200, schema: { example: { status: true, data: { min: 1950, max: 2028 } } } })
   @Api500()
-  async getAnios() {
-    const data = await this.inmaService.getAnios();
+  async getAnios(@Query('binacional') binacional?: string) {
+    const data = await this.inmaService.getAnios(isBinacionalFlag(binacional));
     return { status: true, data };
   }
 

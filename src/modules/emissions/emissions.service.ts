@@ -13,6 +13,8 @@ import {
   SP_PRE_EMISION_AUTO_RCV,
   SP_SEARCH_AUTOMOBILE_PROPIETARY,
 } from '../../config/sis2000-sp.constants';
+import { SearchProprietaryDto } from './dto/search-proprietary.dto';
+import { SearchVehicleByPlateDto, SearchVehicleBySerialDto } from './dto/search-vehicle.dto';
 
 @Injectable()
 export class EmissionsService {
@@ -269,36 +271,111 @@ export class EmissionsService {
     }
   }
 
-  private async searchVehicle(field: 'xplaca' | 'xsercar', value: string) {
-    const T = this.db.types;
-    const req = this.db.request();
-    req.input('value', T.VarChar(60), value.trim().toUpperCase());
-    const result = await req.query(`
-      SELECT TOP 1 *
-      FROM vhcerti
-      WHERE ${field} = @value
-        AND istatcer != 'A'
-    `);
-    const vehicle = result.recordset ?? [];
-    if (vehicle.length === 0) return { status: false };
+  }
 
-    const polReq = this.db.request();
-    polReq.input('cnpoliza', T.VarChar(20), String(vehicle[0]['cnpoliza'] ?? ''));
-    const polResult = await polReq.query(`
-      SELECT TOP 1 fhasta, cnpoliza
-      FROM adpoliza
-      WHERE cnpoliza = @cnpoliza
-        AND (iestado != 'N' OR istatpol != 'A')
-    `);
-    if (polResult.recordset.length > 0) {
-      vehicle[0] = { ...vehicle[0], fhasta: polResult.recordset[0]['fhasta'] };
-      return {
-        status: true,
-        message: `El vehículo ya tiene una póliza vigente (${field === 'xplaca' ? 'PLACA' : 'SERIAL DE CARROCERÍA'})`,
-        vehicle: vehicle[0],
-      };
+  /**
+   * Migración de SysIP Express `POST /api/v1/emissions/automobile/vehicle`.
+   * Usa `dbo.fn_validar_placa(@xplaca, @fdesde)` — no la búsqueda por vhcerti.
+   *
+   * Compat Express:
+   * - Placa activa → `{ status: true, message }` (`type === 'warning'` cambia el texto)
+   * - Placa libre  → `{ status: false }`
+   */
+  async searchByPlate(dto: SearchVehicleByPlateDto) {
+    const xplaca = String(dto.xplaca ?? dto.placa ?? '').trim();
+    if (!xplaca) {
+      throw new BadRequestException('Debe enviar `xplaca` o `placa`.');
     }
-    return { status: false, vehicle: vehicle[0] };
+    if (!dto.fdesde) {
+      throw new BadRequestException('Debe enviar `fdesde`.');
+    }
+
+    try {
+      const req = this.db.request();
+      const T = this.db.types;
+      req.input('xplaca', T.VarChar(15), xplaca);
+      req.input('fdesde', T.Date, new Date(dto.fdesde));
+      const result = await req.query(`
+        SELECT ISNULL(dbo.fn_validar_placa(@xplaca, @fdesde), 0) AS is_active
+      `);
+      const isActive = Boolean(result.recordset?.[0]?.['is_active']);
+
+      if (isActive) {
+        const message =
+          dto.type === 'warning'
+            ? 'ADVERTENCIA: el campo PLACA ya se encuentra registrado y activo en el sistema.'
+            : 'Lo sentimos, el campo PLACA ingresado ya se encuentra registrado y activo en el sistema';
+        return { status: true as const, message, is_active: true };
+      }
+
+      return { status: false as const, is_active: false };
+    } catch (err) {
+      if (err instanceof BadRequestException) throw err;
+      const msg = err instanceof Error ? err.message : String(err);
+      this.logger.error(`searchByPlate: ${msg}`);
+      throw new InternalServerErrorException('Error al validar placa.');
+    }
+  }
+
+  /**
+   * Migración de SysIP Express `POST /api/v1/emissions/automobile/serial`.
+   * Usa `dbo.fn_validar_serialCar(@xsercar, @fdesde)`.
+   *
+   * Compat Express:
+   * - Serial activo → `{ status: true, message }` (`type === 'warning'` cambia el texto)
+   * - Serial libre  → `{ status: false }`
+   */
+  async searchBySerial(dto: SearchVehicleBySerialDto) {
+    const xsercar = String(dto.xsercar ?? dto.xserialcarroceria ?? '').trim();
+    if (!xsercar) {
+      throw new BadRequestException('Debe enviar `xsercar` o `xserialcarroceria`.');
+    }
+    if (!dto.fdesde) {
+      throw new BadRequestException('Debe enviar `fdesde`.');
+    }
+
+    try {
+      const req = this.db.request();
+      const T = this.db.types;
+      req.input('xsercar', T.VarChar(60), xsercar);
+      req.input('fdesde', T.Date, new Date(dto.fdesde));
+      const result = await req.query(`
+        SELECT ISNULL(dbo.fn_validar_serialCar(@xsercar, @fdesde), 0) AS is_active
+      `);
+      const isActive = Boolean(result.recordset?.[0]?.['is_active']);
+
+      if (isActive) {
+        const message =
+          dto.type === 'warning'
+            ? 'ADVERTENCIA: el campo SERIAL DE CARROCERÍA ya se encuentra registrado y activo en el sistema.'
+            : 'Lo sentimos, el campo SERIAL DE CARROCERÍA ingresado ya se encuentra registrado y activo en el sistema';
+        return { status: true as const, message, is_active: true };
+      }
+
+      return { status: false as const, is_active: false };
+    } catch (err) {
+      if (err instanceof BadRequestException) throw err;
+      const msg = err instanceof Error ? err.message : String(err);
+      this.logger.error(`searchBySerial: ${msg}`);
+      throw new InternalServerErrorException('Error al validar serial de carrocería.');
+    }
+  }
+
+  /** SP Nexus primero; si no hay fila, consulta SQL a `maclient`. */
+  async searchAutomobileProprietary(dto: SearchProprietaryDto) {
+    const cid = String(dto.cid ?? dto.xrif_cliente ?? '').trim();
+    if (!cid) {
+      throw new BadRequestException('Debe enviar `xrif_cliente` o `cid`.');
+    }
+
+    try {
+      return await this.searchNewPropietary(cid);
+    } catch (err) {
+      if (err instanceof NotFoundException) {
+        return await this.searchNewProprietary(dto);
+      }
+      throw err;
+    }
   }
 
   async searchNewPropietary(xrif_cliente: string) {
@@ -333,23 +410,112 @@ export class EmissionsService {
     }
   }
 
-  async searchByPlate(xplaca: string) {
-    try {
-      return await this.searchVehicle('xplaca', xplaca);
-    } catch (err) {
-      const msg = err instanceof Error ? err.message : String(err);
-      this.logger.error(`searchByPlate: ${msg}`);
-      throw new InternalServerErrorException('Error al buscar vehículo por placa.');
+  /**
+   * Migración de SysIP Express `POST /api/v1/emissions/automobile_new/propietary`.
+   * Busca propietario/cliente en `maclient` (+ dirección, correo, teléfono, atributos).
+   *
+   * Acepta documento con o sin letra (`V22` / `22`). Coincide contra:
+   * - `maclient.cci_rif` (cédula numérica — lo habitual en formularios)
+   * - `maclient.cid` (documento completo o solo dígitos)
+   */
+  async searchNewProprietary(dto: SearchProprietaryDto) {
+    const raw = String(dto.cid ?? dto.xrif_cliente ?? '').trim();
+    if (!raw) {
+      throw new BadRequestException('Debe enviar `xrif_cliente` o `cid`.');
     }
-  }
 
-  async searchBySerial(xsercar: string) {
+    const digits = raw.replace(/\D/g, '');
+    const letterMatch = raw.match(/^([A-Za-z])/);
+    const letter = (letterMatch?.[1] ?? 'V').toUpperCase();
+    const cidWithLetter = digits ? `${letter}${digits}` : raw.toUpperCase();
+
     try {
-      return await this.searchVehicle('xsercar', xsercar);
+      const req = this.db.request();
+      const T = this.db.types;
+      req.input('cidRaw', T.VarChar(30), raw);
+      req.input('cidDigits', T.VarChar(30), digits || raw);
+      req.input('cidLetter', T.VarChar(30), cidWithLetter);
+      req.input('cciRif', T.VarChar(30), digits || raw);
+
+      const result = await req.query(`
+        SELECT TOP 1
+          RTRIM(LTRIM(maclient.xnombre_1))   AS xnombre,
+          RTRIM(LTRIM(maclient.xapellido_1)) AS xapellido,
+          CONVERT(DATE, maclient.fnacimiento) AS fnacimiento,
+          maclient.isexo,
+          maclient.npeso,
+          maclient.nestatura,
+          maclient.ipersona,
+          maclient.iestado_civil,
+          maclient_dir.cestado,
+          RTRIM(LTRIM(maestados.xdescripcion_c)) AS xestado,
+          maclient_dir.cciudad,
+          maclient.cci_rif,
+          maclient.cid,
+          TRIM(maciudades.xdescripcion_c) AS xciudad,
+          TRIM(maclient_dir.xavecalle)    AS xavecalle,
+          TRIM(maclient_correo.xcorreo)   AS xcorreo,
+          TRIM(maclient_tel.xtelefono)    AS xtelefono,
+          TRIM(maclient.xcliente)         AS cliente,
+          CASE
+            WHEN maclient.fnacimiento IS NOT NULL
+              AND DATEDIFF(YEAR, maclient.fnacimiento, GETDATE())
+                - CASE
+                    WHEN MONTH(maclient.fnacimiento) > MONTH(GETDATE())
+                      OR (
+                        MONTH(maclient.fnacimiento) = MONTH(GETDATE())
+                        AND DAY(maclient.fnacimiento) > DAY(GETDATE())
+                      )
+                    THEN 1
+                    ELSE 0
+                  END >= 18
+            THEN 1
+            ELSE 0
+          END AS es_mayor_de_edad,
+          COALESCE(maprofes.xprofesion, '') AS xprofesion,
+          COALESCE(maocupac.xocupacion, '') AS xocupacion,
+          COALESCE(maactivi.xactividad, '') AS xactividad
+        FROM maclient
+        LEFT JOIN maclient_dir
+          ON maclient.cci_rif = maclient_dir.cci_rif
+        LEFT JOIN maclient_correo
+          ON maclient.cci_rif = maclient_correo.cci_rif
+        LEFT JOIN maestados
+          ON maclient_dir.cestado = maestados.cestado
+         AND COALESCE(maclient_dir.cpais, 58) = maestados.cpais
+        LEFT JOIN maciudades
+          ON maclient_dir.cestado = maciudades.cestado
+         AND maclient_dir.cciudad = maciudades.cciudad
+        LEFT JOIN maclient_tel
+          ON maclient.cci_rif = maclient_tel.cci_rif
+        LEFT JOIN maclient_atr
+          ON maclient.cci_rif = maclient_atr.cci_rif
+        LEFT JOIN maprofes
+          ON maclient_atr.cprofesion = maprofes.cprofesion
+        LEFT JOIN maocupac
+          ON maclient_atr.cocupacion = maocupac.cocupacion
+        LEFT JOIN maactivi
+          ON maclient_atr.cactividad = maactivi.cactividad
+        WHERE
+          LTRIM(RTRIM(CONVERT(VARCHAR(30), maclient.cci_rif))) = @cciRif
+          OR LTRIM(RTRIM(CONVERT(VARCHAR(30), maclient.cid))) IN (@cidRaw, @cidDigits, @cidLetter)
+          OR LTRIM(RTRIM(CONVERT(VARCHAR(30), maclient.cid))) LIKE '[VEJPGvejpg]' + @cciRif
+      `);
+
+      const row = result.recordset?.[0] as Record<string, unknown> | undefined;
+      if (!row) {
+        throw new NotFoundException('Propietario no encontrado');
+      }
+
+      // `data` = envelope Nest; `info` = compat con respuesta Express SysIP
+      return { status: true as const, data: row, info: row };
     } catch (err) {
+      if (err instanceof BadRequestException || err instanceof NotFoundException) {
+        throw err;
+      }
       const msg = err instanceof Error ? err.message : String(err);
-      this.logger.error(`searchBySerial: ${msg}`);
-      throw new InternalServerErrorException('Error al buscar vehículo por serial.');
+      this.logger.error(`searchNewProprietary: ${msg}`);
+      throw new InternalServerErrorException('Error al buscar propietario.');
     }
   }
 
