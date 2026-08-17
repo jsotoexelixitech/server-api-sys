@@ -48,7 +48,7 @@ BEGIN
       AND p.cramo = @cramo
       AND (
           NOT EXISTS (SELECT 1 FROM #whitelist)
-          OR LTRIM(RTRIM(p.cplan)) COLLATE DATABASE_DEFAULT IN (SELECT cplan FROM #whitelist)
+          OR LTRIM(RTRIM(p.cplan)) COLLATE DATABASE_DEFAULT IN (SELECT cplan COLLATE DATABASE_DEFAULT FROM #whitelist)
       );
 
     SELECT cplan, xplan, cramo, cmoneda FROM #planes ORDER BY cplan;
@@ -62,12 +62,12 @@ BEGIN
     FROM #planes p
     INNER JOIN mapltarifas_per A
         ON A.cramo = p.cramo
-        AND LTRIM(RTRIM(A.cplan)) COLLATE DATABASE_DEFAULT = p.cplan
+        AND LTRIM(RTRIM(A.cplan)) COLLATE DATABASE_DEFAULT = p.cplan COLLATE DATABASE_DEFAULT
     INNER JOIN maparent B ON B.cparentesco = A.cparen
     INNER JOIN mapledades_per C
         ON C.cparen = A.cparen
         AND C.cramo = A.cramo
-        AND LTRIM(RTRIM(C.cplan)) COLLATE DATABASE_DEFAULT = p.cplan
+        AND LTRIM(RTRIM(C.cplan)) COLLATE DATABASE_DEFAULT = p.cplan COLLATE DATABASE_DEFAULT
     GROUP BY p.cplan, A.cparen, B.xparentesco, C.cemin_ase, C.cemax_ase
     ORDER BY p.cplan, A.cparen;
 END;
