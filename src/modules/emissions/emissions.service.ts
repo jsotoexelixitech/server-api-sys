@@ -11,6 +11,7 @@ import { parseSPError, formatValidateAutoError } from '../../common/helpers/sp-e
 import { buildPolicyPdfUrl, resolveClubArysPdfUrl } from '../../common/helpers/policy-url.helper';
 import {
   SP_PRE_EMISION_AUTO_RCV,
+  SP_REPAIR_RCV_COBERTURAS,
   SP_SEARCH_AUTOMOBILE_PROPIETARY,
 } from '../../config/sis2000-sp.constants';
 import { SearchProprietaryDto } from './dto/search-proprietary.dto';
@@ -1102,6 +1103,8 @@ export class EmissionsService {
 
     this.logger.log(`emitLocal OK cnpoliza=${cnpoliza} cnrecibo=${cnrecibo}`);
 
+    await this.repairRcvCoberturasIfEmpty(cnpoliza);
+
     if (this.extractBeneficiario(b)) {
       try {
         await this.applyBeneficiarioPreferencial(b, canal, cnpoliza, fanopol, fmespol);
@@ -1121,6 +1124,43 @@ export class EmissionsService {
       fanopol,
       fmespol,
     };
+  }
+
+  /** Si adpolcob quedó sin prima (plan premium Auto), re-ejecuta spCalculoAuto vía repair SP. */
+  private async repairRcvCoberturasIfEmpty(cnpoliza: string): Promise<void> {
+    const poliza = String(cnpoliza ?? '').trim();
+    if (!poliza) return;
+
+    const T = this.db.types;
+    const check = this.db.request();
+    check.input('cnpoliza', T.NVarChar(30), poliza);
+    const existing = await check.query(`
+      SELECT CASE WHEN EXISTS (
+        SELECT 1 FROM adpolcob c
+        INNER JOIN adrecibos r ON r.crecibo = c.crecibo
+        INNER JOIN adpoliza p ON p.cpoliza = r.cpoliza
+        WHERE RTRIM(p.cnpoliza) = RTRIM(@cnpoliza) AND c.mprimabruta > 0
+      ) THEN 1 ELSE 0 END AS hasPrima
+    `);
+    if (Number(existing.recordset?.[0]?.['hasPrima'] ?? 0) === 1) return;
+
+    try {
+      const req = this.db.request();
+      req.input('cnpoliza', T.NVarChar(30), poliza);
+      req.output('pSuccess', T.Bit);
+      req.output('pErrorMessage', T.NVarChar(4000));
+      await req.execute(SP_REPAIR_RCV_COBERTURAS);
+      const ok = req.parameters['pSuccess']?.value === true;
+      if (!ok) {
+        const msg = String(req.parameters['pErrorMessage']?.value ?? 'repair falló');
+        this.logger.warn(`repairRcvCoberturas cnpoliza=${poliza}: ${msg}`);
+        return;
+      }
+      this.logger.log(`repairRcvCoberturas OK cnpoliza=${poliza}`);
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : String(err);
+      this.logger.warn(`repairRcvCoberturas omitido cnpoliza=${poliza}: ${msg}`);
+    }
   }
 
   private async createEmissionAutoExternal(
