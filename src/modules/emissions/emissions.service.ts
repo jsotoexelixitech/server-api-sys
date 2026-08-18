@@ -518,13 +518,19 @@ export class EmissionsService {
     }
   }
 
-  /** cramo del plan vigente en maplanes (null si no existe). BINAC* prioriza ramo 28. */
+  /** Ramo externo BINAC* en maplanes (srv001: 26; SysIP legacy: 28). */
+  private resolveRamoBinacional(): number {
+    return parseInt(this.config.get<string>('LAMUNDIAL_RAMO_BINACIONAL', '28') ?? '28', 10);
+  }
+
+  /** cramo del plan vigente en maplanes (null si no existe). BINAC* prioriza LAMUNDIAL_RAMO_BINACIONAL. */
   private async resolvePlanCramo(cplan: string): Promise<number | null> {
     const T = this.db.types;
     const req = this.db.request();
     req.input('cplan', T.VarChar(10), cplan);
+    const ramoBinac = this.resolveRamoBinacional();
     const orderBinacFirst = /^BINAC/i.test(cplan)
-      ? 'ORDER BY CASE WHEN cramo = 28 THEN 0 WHEN cramo = 18 THEN 1 ELSE 2 END'
+      ? `ORDER BY CASE WHEN cramo = ${ramoBinac} THEN 0 WHEN cramo = 18 THEN 1 ELSE 2 END`
       : '';
     const result = await req.query(`
       SELECT TOP 1 cramo FROM maplanes WHERE cplan = @cplan AND iestado = 'V'
@@ -542,9 +548,31 @@ export class EmissionsService {
     return cramo === ramoNacional;
   }
 
+  private isBinacAutoEmission(b: Record<string, unknown>): boolean {
+    const cplan = String(this.pick(b, 'cplan', 'plan') ?? '').trim();
+    if (/^BINAC/i.test(cplan)) return true;
+    const iplaca = String(this.pick(b, 'iplaca', 'tipo_placa') ?? 'N').trim().toUpperCase();
+    if (iplaca === 'B') return true;
+    return this.intField(this.pick(b, 'cramo', 'ramo')) === this.resolveRamoBinacional();
+  }
+
+  /** speeValidateAutomovilGeneral (Sis2000) debe ser actualizado por La Mundial; nest-api no parchea SPs. */
+  private throwIfBinacEmissionBlockedBySis2000(
+    b: Record<string, unknown>,
+    spMessage: string,
+  ): void {
+    if (!this.isBinacAutoEmission(b)) return;
+    const lower = spMessage.toLowerCase();
+    if (!lower.includes('ramo no corresponde')) return;
+    throw new BadRequestException(
+      'Emisión binacional bloqueada por speeValidateAutomovilGeneral en Sis2000 (solo acepta ramo 18). ' +
+        'Solicitar a La Mundial actualizar el SP para ramo 28. Referencia: docs/sql/speeValidateAutomovilGeneral.sql',
+    );
+  }
+
   /**
-   * Misma lógica que speeValidateAutomovilGeneral para ramo RCV binacional (28).
-   * El SP en Sis2000 solo acepta cramo 18; BINAC* vive en ramo 28.
+   * Misma lógica que speeValidateAutomovilGeneral para BINAC* (ramo 28 en maplanes).
+   * Evita depender del SP legacy en validateEmissionAuto (nest-api no modifica Sis2000).
    */
   private async validateEmissionAutoInline(
     placa: unknown,
@@ -1148,6 +1176,16 @@ export class EmissionsService {
 
     const xplaca = String(this.pick(b, 'xplaca', 'placa') ?? '').trim();
     const preEmisionSp = SP_PRE_EMISION_AUTO_RCV;
+    if (this.isBinacAutoEmission(b)) {
+      const inline = await this.validateEmissionAutoInline(
+        this.pick(b, 'xplaca', 'placa'),
+        this.pick(b, 'xsercar', 'serial_carroceria'),
+      );
+      if (!inline.ok) {
+        const formatted = formatValidateAutoError(inline.raw);
+        throw new BadRequestException(formatted.message);
+      }
+    }
     this.logger.log(
       `emitLocal: EXEC ${preEmisionSp} placa=${xplaca} plan=${b['cplan'] ?? b['plan']} mprima=${mprima} cmoneda=${planMoneda ?? 'null'} ifrecuencia=${this.pick(b, 'ifrecuencia', 'frecuencia') ?? 'A'} msumaaseg=${this.pick(b, 'msumaaseg', 'sumaaseg') ?? 'null'} fhasta=${b['fhasta'] ?? 'null'} ptasamon=${ptasamon}`,
     );
@@ -1173,6 +1211,7 @@ export class EmissionsService {
       spResult = await req.execute(preEmisionSp);
     } catch (err) {
       const msg = parseSPError(err);
+      this.throwIfBinacEmissionBlockedBySis2000(b, msg);
       if (!this.isCounterCollisionMessage(msg)) throw err;
       this.logger.warn(`emitLocal: contador POL_VEH desfasado (${msg}); reintento tras sync`);
       await this.syncPolVehCounter(

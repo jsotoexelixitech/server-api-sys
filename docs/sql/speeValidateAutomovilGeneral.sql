@@ -1,4 +1,6 @@
 CREATE PROCEDURE [dbo].[speeValidateAutomovilGeneral]
+-- REFERENCIA La Mundial / DBA (NO ejecutar desde nest-api).
+-- sp_pre_emision_automovil_rcv_nexus invoca este SP; binacional requiere @cramo IN (18, 28).
 		@cplan VARCHAR(10),
 		@xplaca  VARCHAR(15),
     @xsercar  VARCHAR(60),
@@ -26,8 +28,8 @@ BEGIN
 				END
 		END
 			
-		-- RCV nacional (18) y binacional BINAC* (28): mismas reglas de placa/serial en vhcerti
-		IF (@cramo IN (18, 28)) BEGIN
+		-- RCV nacional (18) y binacional BINAC* (26 srv001 / 28 legacy)
+		IF (@cramo IN (18, 26, 28)) BEGIN
 		
 			-- VALIDACIÓN DATA VACÍA
 			IF (@xplaca = '' OR @xplaca IS NULL) BEGIN 

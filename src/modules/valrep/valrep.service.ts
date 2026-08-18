@@ -4,6 +4,7 @@ import {
   InternalServerErrorException,
   Logger,
 } from '@nestjs/common';
+import { ConfigService } from '@nestjs/config';
 import { MssqlService } from '../../database/mssql.service';
 import { parseSPError } from '../../common/helpers/sp-error.helper';
 import { SP_CALCULO_AUTO_NEXUS } from '../../config/sis2000-sp.constants';
@@ -79,7 +80,14 @@ export interface CalculatePlanCoberturasResponse {
 export class ValrepService {
   private readonly logger = new Logger(ValrepService.name);
 
-  constructor(private readonly db: MssqlService) {}
+  constructor(
+    private readonly db: MssqlService,
+    private readonly config: ConfigService,
+  ) {}
+
+  private resolveRamoBinacional(): number {
+    return parseInt(this.config.get<string>('LAMUNDIAL_RAMO_BINACIONAL', '28') ?? '28', 10);
+  }
 
   async getPlanesV2(body: GetPlanesV2Dto): Promise<PlanItem[]> {
     try {
@@ -361,9 +369,9 @@ export class ValrepService {
 
       const iplaca = body.iplaca ?? 'N';
       let cramo = body.cramo ?? 18;
-      // Planes BINAC* + placa binacional requieren ramo 28 (SysIP automobile_binac).
-      if (iplaca === 'B' && cramo !== 28) {
-        cramo = 28;
+      const ramoBinac = this.resolveRamoBinacional();
+      if (iplaca === 'B' && cramo !== ramoBinac) {
+        cramo = ramoBinac;
       }
 
       const calc = await this.calculatePlanCoberturas({
