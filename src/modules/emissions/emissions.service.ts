@@ -652,9 +652,14 @@ export class EmissionsService {
       };
     } catch (err) {
       const raw = parseSPError(err);
-      if (isMissingStoredProcedureError(raw)) {
+      const ramoBinac = this.resolveRamoBinacional();
+      const ramoBlocked = raw.toLowerCase().includes('ramo no corresponde');
+      const useInlineFallback =
+        isMissingStoredProcedureError(raw)
+        || (ramoBlocked && (/^BINAC/i.test(cplan) || cramo === ramoBinac));
+      if (useInlineFallback) {
         this.logger.warn(
-          `validateEmissionAuto: ${SP_VALIDATE_AUTOMOVIL_NEXUS} no desplegado en Sis2000; fallback inline`,
+          `validateEmissionAuto: fallback inline plan=${cplan} cramo=${cramo} spError=${raw}`,
         );
         try {
           const inline = await this.validateEmissionAutoInline(body.placa, body.serial_carroceria);
