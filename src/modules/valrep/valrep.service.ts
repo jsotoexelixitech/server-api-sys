@@ -5,6 +5,7 @@ import {
   Logger,
 } from '@nestjs/common';
 import { MssqlService } from '../../database/mssql.service';
+import { parseSPError } from '../../common/helpers/sp-error.helper';
 import { SP_CALCULO_AUTO_NEXUS } from '../../config/sis2000-sp.constants';
 import { GetPlanesV2Dto } from './dto/get-planes-v2.dto';
 import { GetCotizacionAutoDto } from './dto/get-cotizacion-auto.dto';
@@ -291,9 +292,30 @@ export class ValrepService {
   }
 
   private resolveCusuarioSis2000(): number {
-    const raw = process.env.LAMUNDIAL_CUSUARIO ?? '4';
+    const raw =
+      process.env.LAMUNDIAL_CUSUARIO_PLANES
+      ?? process.env.LAMUNDIAL_CUSUARIO_COBERTURAS
+      ?? process.env.LAMUNDIAL_CUSUARIO
+      ?? '6';
     const n = parseInt(String(raw).trim(), 10);
-    return Number.isFinite(n) && n > 0 ? n : 4;
+    return Number.isFinite(n) && n > 0 ? n : 6;
+  }
+
+  private describeSqlError(err: unknown): string {
+    const parsed = parseSPError(err).trim();
+    if (parsed) return parsed;
+    if (err && typeof err === 'object') {
+      const e = err as Record<string, unknown>;
+      const info = (e.originalError as Record<string, unknown> | undefined)?.info;
+      if (info && typeof info === 'object') {
+        const infoMsg = String((info as Record<string, unknown>).message ?? '').trim();
+        if (infoMsg) return infoMsg;
+      }
+      const number = e.number != null ? String(e.number) : '';
+      const code = e.code != null ? String(e.code) : '';
+      if (number || code) return `SQL error ${[code, number].filter(Boolean).join(' ')}`.trim();
+    }
+    return 'Error SQL sin mensaje (revisar sp_calculo_auto_nexus en Sis2000).';
   }
 
   /** POST /valrep/cotizacion — usa sp_calculo_auto_nexus (flujo Nexus), no spCalculoAuto legacy. */
@@ -319,6 +341,13 @@ export class ValrepService {
         .toUpperCase()
         .charAt(0) || 'A';
 
+      const iplaca = body.iplaca ?? 'N';
+      let cramo = body.cramo ?? 18;
+      // Planes BINAC* + placa binacional requieren ramo 28 (SysIP automobile_binac).
+      if (iplaca === 'B' && cramo !== 28) {
+        cramo = 28;
+      }
+
       const calc = await this.calculatePlanCoberturas({
         cmarca: body.cmarca,
         cmodelo: body.cmodelo,
@@ -326,12 +355,12 @@ export class ValrepService {
         cano: body.fano,
         idPlan: body.cplan,
         suma: body.sumaAsegurada ?? mvalor,
-        iplaca: body.iplaca ?? 'N',
+        iplaca,
         fdesde,
         fhasta,
         uso: body.ccategoria_uso,
         toneladas: body.ntoneladas ?? 0,
-        cramo: body.cramo ?? 18,
+        cramo,
         ifrecuencia,
         coberAdicional: 'RC',
         sumaAsegBl: 0,
@@ -344,7 +373,7 @@ export class ValrepService {
       const mprimaext = calc.pa;
       if (mprimaext <= 0) {
         this.logger.warn(
-          `getCotizacionAuto: prima=0 plan=${body.cplan} cmarca=${body.cmarca} cmodelo=${body.cmodelo} fano=${body.fano}`,
+          `getCotizacionAuto: prima=0 plan=${body.cplan} cmarca=${body.cmarca} cmodelo=${body.cmodelo} fano=${body.fano} iplaca=${iplaca} cramo=${cramo}`,
         );
         throw new BadRequestException(
           'La cotización retornó prima cero. Verifique que el plan y el vehículo sean compatibles.',
@@ -400,10 +429,12 @@ export class ValrepService {
     } catch (err) {
       if (err instanceof BadRequestException) throw err;
       if (err instanceof InternalServerErrorException) throw err;
-      const msg = err instanceof Error ? err.message : String(err);
+      const msg = this.describeSqlError(err);
       this.logger.error(`getCotizacionAuto error: ${msg}`);
       throw new BadRequestException(
-        'No fue posible calcular la cotización con los datos suministrados. Verifique marca, modelo, versión y año.',
+        msg.length > 0 && msg.length <= 180
+          ? msg
+          : 'No fue posible calcular la cotización con los datos suministrados. Verifique marca, modelo, versión y año.',
       );
     }
   }
@@ -828,8 +859,10 @@ export class ValrepService {
       };
     } catch (err) {
       if (err instanceof BadRequestException) throw err;
-      const msg = err instanceof Error ? err.message : String(err);
-      this.logger.error(`calculatePlanCoberturas error: ${msg}`);
+      const msg = this.describeSqlError(err);
+      this.logger.error(
+        `calculatePlanCoberturas error plan=${body.idPlan} cmarca=${body.cmarca} cmodelo=${body.cmodelo} cano=${body.cano} uso=${body.uso}: ${msg}`,
+      );
       throw new BadRequestException(
         msg.length > 0 && msg.length <= 180
           ? msg

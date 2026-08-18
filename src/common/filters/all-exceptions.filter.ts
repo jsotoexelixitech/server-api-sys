@@ -63,7 +63,8 @@ export class AllExceptionsFilter implements ExceptionFilter {
         exception instanceof Error ? exception.stack : String(exception),
       );
     } else {
-      this.logger.warn(`[${statusCode}] ${req.method} ${req.url}`);
+      const detail = Array.isArray(message) ? message.join('; ') : String(message ?? '');
+      this.logger.warn(`[${statusCode}] ${req.method} ${req.url} — ${detail}`);
     }
 
     // ── Respuesta al cliente — formato consistente en toda la API ────────────
