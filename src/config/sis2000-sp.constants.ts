@@ -4,8 +4,11 @@
 
 // ── RCV automóvil ───────────────────────────────────────────────────────────
 
-/** Validación placa/serial/plan antes de pre-emisión (RCV 18 + BINAC* 28). */
+/** Validación en cadena de pre-emisión/emisión (sp_pre_emision_automovil_rcv_nexus). */
 export const SP_VALIDATE_AUTOMOVIL_NEXUS = 'spee_validate_automovil_general_nexus';
+
+/** Validación pre-plan RCV nacional (validateEmissionAuto). */
+export const SP_VALIDATE_AUTOMOVIL_LEGACY = 'speeValidateAutomovilGeneral';
 
 export const SP_PRE_EMISION_AUTO_RCV = 'sp_pre_emision_automovil_rcv_nexus';
 

@@ -7,17 +7,13 @@ import {
 } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { MssqlService } from '../../database/mssql.service';
-import {
-  formatValidateAutoError,
-  isMissingStoredProcedureError,
-  parseSPError,
-} from '../../common/helpers/sp-error.helper';
+import { formatValidateAutoError, parseSPError } from '../../common/helpers/sp-error.helper';
 import { buildPolicyPdfUrl, resolveClubArysPdfUrl } from '../../common/helpers/policy-url.helper';
 import {
   SP_PRE_EMISION_AUTO_RCV,
   SP_REPAIR_RCV_COBERTURAS,
   SP_SEARCH_AUTOMOBILE_PROPIETARY,
-  SP_VALIDATE_AUTOMOVIL_NEXUS,
+  SP_VALIDATE_AUTOMOVIL_LEGACY,
 } from '../../config/sis2000-sp.constants';
 import { SearchProprietaryDto } from './dto/search-proprietary.dto';
 import { SearchVehicleByPlateDto, SearchVehicleBySerialDto } from './dto/search-vehicle.dto';
@@ -574,7 +570,13 @@ export class EmissionsService {
     return { status: false as const, error: formatted.message, code: formatted.code };
   }
 
-  /** Fallback si spee_validate_automovil_general_nexus aún no está en Sis2000. */
+  /** BINAC* (ramo 28): validar placa/serial sin depender del SP nexus hasta que DBA acepte ramo 28. */
+  private shouldValidateEmissionAutoViaLegacySp(cplan: string, cramo: number): boolean {
+    if (/^BINAC/i.test(cplan)) return false;
+    const ramoNacional = parseInt(this.config.get<string>('LAMUNDIAL_RAMO', '18') ?? '18', 10);
+    return cramo === ramoNacional;
+  }
+
   private async validateEmissionAutoInline(
     placa: unknown,
     serialCarroceria: unknown,
@@ -637,6 +639,22 @@ export class EmissionsService {
       return this.validateEmissionAutoFailure('Plan enviado no se encuentra registrado.');
     }
 
+    if (!this.shouldValidateEmissionAutoViaLegacySp(cplan, cramo)) {
+      try {
+        this.logger.log(`validateEmissionAuto inline plan=${cplan} cramo=${cramo}`);
+        const inline = await this.validateEmissionAutoInline(body.placa, body.serial_carroceria);
+        if (!inline.ok) return this.validateEmissionAutoFailure(inline.raw);
+        return {
+          status: true,
+          message: 'El vehículo puede asegurarse. No hay póliza vigente con esta placa ni serial.',
+        };
+      } catch (err) {
+        const msg = err instanceof Error ? err.message : String(err);
+        this.logger.error(`validateEmissionAuto inline plan=${cplan}: ${msg}`);
+        throw new InternalServerErrorException('Error al validar el vehículo para emisión.');
+      }
+    }
+
     const req = this.db.request();
     const T = this.db.types;
     req.input('cplan', T.VarChar(10), cplan);
@@ -644,36 +662,14 @@ export class EmissionsService {
     req.input('xsercar', T.VarChar(60), body.serial_carroceria);
     req.input('xsermot', T.VarChar(60), null);
     try {
-      this.logger.log(`validateEmissionAuto EXEC ${SP_VALIDATE_AUTOMOVIL_NEXUS} plan=${cplan} cramo=${cramo}`);
-      await req.execute(SP_VALIDATE_AUTOMOVIL_NEXUS);
+      this.logger.log(`validateEmissionAuto EXEC ${SP_VALIDATE_AUTOMOVIL_LEGACY} plan=${cplan} cramo=${cramo}`);
+      await req.execute(SP_VALIDATE_AUTOMOVIL_LEGACY);
       return {
         status: true,
         message: 'El vehículo puede asegurarse. No hay póliza vigente con esta placa ni serial.',
       };
     } catch (err) {
       const raw = parseSPError(err);
-      const ramoBinac = this.resolveRamoBinacional();
-      const ramoBlocked = raw.toLowerCase().includes('ramo no corresponde');
-      const useInlineFallback =
-        isMissingStoredProcedureError(raw)
-        || (ramoBlocked && (/^BINAC/i.test(cplan) || cramo === ramoBinac));
-      if (useInlineFallback) {
-        this.logger.warn(
-          `validateEmissionAuto: fallback inline plan=${cplan} cramo=${cramo} spError=${raw}`,
-        );
-        try {
-          const inline = await this.validateEmissionAutoInline(body.placa, body.serial_carroceria);
-          if (!inline.ok) return this.validateEmissionAutoFailure(inline.raw);
-          return {
-            status: true,
-            message: 'El vehículo puede asegurarse. No hay póliza vigente con esta placa ni serial.',
-          };
-        } catch (inlineErr) {
-          const inlineMsg = inlineErr instanceof Error ? inlineErr.message : String(inlineErr);
-          this.logger.error(`validateEmissionAuto inline fallback: ${inlineMsg}`);
-          throw new InternalServerErrorException('Error al validar el vehículo para emisión.');
-        }
-      }
       return this.validateEmissionAutoFailure(raw);
     }
   }
