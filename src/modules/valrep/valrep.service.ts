@@ -269,6 +269,24 @@ export class ValrepService {
     return process.env.MSSQL_SP_CALCULO_AUTO_NEXUS?.trim() || SP_CALCULO_AUTO_NEXUS;
   }
 
+  /** Coberturas casco/AP que spCalculoAuto excluye de totalPA (ramo RCV / binacional). */
+  private static readonly COBER_EXCLUIDAS_TOTAL_PA = new Set([
+    '1', '2', '3', '4', '5', '16', '28', '69',
+  ]);
+
+  /**
+   * sp_calculo_auto_nexus con iplaca=B devuelve detalle pero a menudo NO el 2.º recordset
+   * con totalPA (a diferencia de la rama nacional). Sumamos prima del detalle con la misma
+   * regla que spCalculoAuto: coberturas fuera de casco/PT/PP/AP.
+   */
+  private sumPaFromDetalleBinacional(detalle: CalculatePlanCoberturasRow[]): number {
+    return detalle.reduce((sum, row) => {
+      const cc = String(row.ccobertura ?? '').trim();
+      if (ValrepService.COBER_EXCLUIDAS_TOTAL_PA.has(cc)) return sum;
+      return sum + Number(row.prima ?? 0);
+    }, 0);
+  }
+
   private formatLocalYmd(d: Date): string {
     const y = d.getFullYear();
     const m = String(d.getMonth() + 1).padStart(2, '0');
@@ -828,17 +846,26 @@ export class ValrepService {
       }
       const precioRow = (recordsets[1]?.[0] ?? {}) as CalculatePlanCoberturasTotals;
 
-      const totalPA = Number(precioRow.totalPA ?? 0);
+      let totalPA = Number(precioRow.totalPA ?? 0);
       const totalCA = Number(precioRow.totalCA ?? 0);
       const totalPT = Number(precioRow.totalPT ?? 0);
       const totalAP = Number(precioRow.totalAP ?? 0);
       const totalPP = Number(precioRow.totalPP ?? 0);
 
+      if (totalPA <= 0 && iplaca === 'B') {
+        totalPA = this.sumPaFromDetalleBinacional(detalle);
+        if (totalPA > 0) {
+          this.logger.log(
+            `calculatePlanCoberturas: totalPA binacional derivado del detalle (${detalle.length} filas) = ${totalPA}`,
+          );
+        }
+      }
+
       const firstDetalle = detalle[0] as CalculatePlanCoberturasRow | undefined;
       const tipoPlan = String(firstDetalle?.cproducto ?? '').trim();
 
       this.logger.log(
-        `calculatePlanCoberturas: plan=${body.idPlan} sp=${spName} ifrecuencia=${ifrecuencia} pa=${totalPA} ca=${totalCA} pt=${totalPT}`,
+        `calculatePlanCoberturas: plan=${body.idPlan} sp=${spName} iplaca=${iplaca} ifrecuencia=${ifrecuencia} pa=${totalPA} ca=${totalCA} pt=${totalPT}`,
       );
 
       return {
