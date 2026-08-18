@@ -7,7 +7,11 @@ import {
 } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { MssqlService } from '../../database/mssql.service';
-import { parseSPError, formatValidateAutoError } from '../../common/helpers/sp-error.helper';
+import {
+  formatValidateAutoError,
+  isMissingStoredProcedureError,
+  parseSPError,
+} from '../../common/helpers/sp-error.helper';
 import { buildPolicyPdfUrl, resolveClubArysPdfUrl } from '../../common/helpers/policy-url.helper';
 import {
   SP_PRE_EMISION_AUTO_RCV,
@@ -570,6 +574,52 @@ export class EmissionsService {
     return { status: false as const, error: formatted.message, code: formatted.code };
   }
 
+  /** Fallback si spee_validate_automovil_general_nexus aún no está en Sis2000. */
+  private async validateEmissionAutoInline(
+    placa: unknown,
+    serialCarroceria: unknown,
+  ): Promise<{ ok: true } | { ok: false; raw: string }> {
+    const xplaca = String(placa ?? '').trim();
+    const xsercar = String(serialCarroceria ?? '').trim();
+
+    if (!xplaca) return { ok: false, raw: 'Placa no debe estar vacío' };
+    if (!xsercar) return { ok: false, raw: 'Serial de Carrocería no debe estar vacío' };
+
+    const T = this.db.types;
+
+    const placaReq = this.db.request();
+    placaReq.input('xplaca', T.VarChar(15), xplaca);
+    const placaResult = await placaReq.query(`
+      SELECT CASE WHEN EXISTS (
+        SELECT 1 FROM vhcerti
+        WHERE xplaca = @xplaca AND istatcer = 'V' AND fhasta >= GETDATE()
+      ) THEN 1 ELSE 0 END AS existsPlaca
+    `);
+    if (Number(placaResult.recordset?.[0]?.['existsPlaca'])) {
+      return {
+        ok: false,
+        raw: 'Se ha detectado la existencia de una póliza vigente la misma placa del vehículo.',
+      };
+    }
+
+    const serialReq = this.db.request();
+    serialReq.input('xsercar', T.VarChar(60), xsercar);
+    const serialResult = await serialReq.query(`
+      SELECT CASE WHEN EXISTS (
+        SELECT 1 FROM vhcerti
+        WHERE xsercar = @xsercar AND istatcer = 'V' AND fhasta >= GETDATE()
+      ) THEN 1 ELSE 0 END AS existsSerial
+    `);
+    if (Number(serialResult.recordset?.[0]?.['existsSerial'])) {
+      return {
+        ok: false,
+        raw: 'Se ha detectado la existencia de una póliza vigente con el mismo Serial Carrocería del Vehículo.',
+      };
+    }
+
+    return { ok: true };
+  }
+
   async validateEmissionAuto(body: Record<string, unknown>) {
     const defaultPlan = this.config.get<string>('LAMUNDIAL_PLAN_DEFAULT', 'RCVBAS');
     const cplan = String(body.plan ?? defaultPlan).trim() || defaultPlan;
@@ -602,6 +652,23 @@ export class EmissionsService {
       };
     } catch (err) {
       const raw = parseSPError(err);
+      if (isMissingStoredProcedureError(raw)) {
+        this.logger.warn(
+          `validateEmissionAuto: ${SP_VALIDATE_AUTOMOVIL_NEXUS} no desplegado en Sis2000; fallback inline`,
+        );
+        try {
+          const inline = await this.validateEmissionAutoInline(body.placa, body.serial_carroceria);
+          if (!inline.ok) return this.validateEmissionAutoFailure(inline.raw);
+          return {
+            status: true,
+            message: 'El vehículo puede asegurarse. No hay póliza vigente con esta placa ni serial.',
+          };
+        } catch (inlineErr) {
+          const inlineMsg = inlineErr instanceof Error ? inlineErr.message : String(inlineErr);
+          this.logger.error(`validateEmissionAuto inline fallback: ${inlineMsg}`);
+          throw new InternalServerErrorException('Error al validar el vehículo para emisión.');
+        }
+      }
       return this.validateEmissionAutoFailure(raw);
     }
   }

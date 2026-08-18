@@ -1,3 +1,12 @@
+export function isMissingStoredProcedureError(message: string): boolean {
+  const lower = message.toLowerCase();
+  return (
+    lower.includes('could not find stored procedure')
+    || (lower.includes('no se encontr') && lower.includes('procedimiento'))
+    || lower.includes('invalid object name')
+  );
+}
+
 export function parseSPError(err: unknown): string {
   const msg = err instanceof Error ? err.message : String(err);
 
@@ -56,6 +65,15 @@ export function formatValidateAutoError(rawMessage: string): FormattedValidateAu
     return {
       code: 'VEHICLE_ALREADY_INSURED',
       message: 'Este vehículo ya cuenta con una póliza vigente y no puede asegurarse nuevamente.',
+    };
+  }
+
+  if (isMissingStoredProcedureError(normalized)) {
+    return {
+      code: 'VALIDATE_EMISSION_ERROR',
+      message:
+        'Falta desplegar spee_validate_automovil_general_nexus en Sis2000. ' +
+        'Referencia: docs/sql/spee_validate_automovil_general_nexus.sql',
     };
   }
 
