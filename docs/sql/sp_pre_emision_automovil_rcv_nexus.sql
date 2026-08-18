@@ -1,5 +1,5 @@
 -- Pre-emisión RCV auto (Nexus). Mismo contrato de parámetros que sp_pre_emision_Automovil_RCV2.
--- Cadena: speeValidateAutomovilGeneral → spCreateInmaItem → sp_contador_nexus → TMEMISION → sp_emision_automovil_rcv_nexus
+-- Cadena: spee_validate_automovil_general_nexus → spCreateInmaItem → sp_contador_nexus → TMEMISION → sp_emision_automovil_rcv_nexus
 -- Referencia: nest-api POST /external/createEmissionAuto (emitLocalAutomobile).
 
 CREATE PROCEDURE [dbo].[sp_pre_emision_automovil_rcv_nexus]
@@ -112,7 +112,7 @@ BEGIN
         THROW 99001, @xerror, 1;
     END CATCH;
 
-    EXEC speeValidateAutomovilGeneral @cplan, @xplaca, @xsercar;
+    EXEC spee_validate_automovil_general_nexus @cplan, @xplaca, @xsercar;
 
     EXEC spCreateInmaItem
         @xmarca = @xmarca,

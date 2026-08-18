@@ -23,7 +23,7 @@ export interface FormattedValidateAutoError {
   code: ValidateAutoErrorCode;
 }
 
-/** Mensajes legibles para respuestas de speeValidateAutomovilGeneral (Sis2000). */
+/** Mensajes legibles para respuestas de spee_validate_automovil_general_nexus (Sis2000). */
 export function formatValidateAutoError(rawMessage: string): FormattedValidateAutoError {
   const normalized = rawMessage.replace(/\s+/g, ' ').trim();
   const lower = normalized.toLowerCase();

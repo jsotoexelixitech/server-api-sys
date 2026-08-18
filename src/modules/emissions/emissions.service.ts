@@ -13,6 +13,7 @@ import {
   SP_PRE_EMISION_AUTO_RCV,
   SP_REPAIR_RCV_COBERTURAS,
   SP_SEARCH_AUTOMOBILE_PROPIETARY,
+  SP_VALIDATE_AUTOMOVIL_NEXUS,
 } from '../../config/sis2000-sp.constants';
 import { SearchProprietaryDto } from './dto/search-proprietary.dto';
 import { SearchVehicleByPlateDto, SearchVehicleBySerialDto } from './dto/search-vehicle.dto';
@@ -541,13 +542,6 @@ export class EmissionsService {
     return Number(row.cramo);
   }
 
-  /** speeValidateAutomovilGeneral en Sis2000 solo cubre RCV nacional (ramo 18). */
-  private shouldValidateEmissionAutoViaSp(cplan: string, cramo: number): boolean {
-    if (/^BINAC/i.test(cplan)) return false;
-    const ramoNacional = parseInt(this.config.get<string>('LAMUNDIAL_RAMO', '18') ?? '18', 10);
-    return cramo === ramoNacional;
-  }
-
   private isBinacAutoEmission(b: Record<string, unknown>): boolean {
     const cplan = String(this.pick(b, 'cplan', 'plan') ?? '').trim();
     if (/^BINAC/i.test(cplan)) return true;
@@ -556,7 +550,7 @@ export class EmissionsService {
     return this.intField(this.pick(b, 'cramo', 'ramo')) === this.resolveRamoBinacional();
   }
 
-  /** speeValidateAutomovilGeneral (Sis2000) debe ser actualizado por La Mundial; nest-api no parchea SPs. */
+  /** spee_validate_automovil_general_nexus en Sis2000 debe aceptar ramo 28 (BINAC*). */
   private throwIfBinacEmissionBlockedBySis2000(
     b: Record<string, unknown>,
     spMessage: string,
@@ -565,58 +559,9 @@ export class EmissionsService {
     const lower = spMessage.toLowerCase();
     if (!lower.includes('ramo no corresponde')) return;
     throw new BadRequestException(
-      'Emisión binacional bloqueada por speeValidateAutomovilGeneral en Sis2000 (solo acepta ramo 18). ' +
-        'Solicitar a La Mundial actualizar el SP para ramo 28. Referencia: docs/sql/speeValidateAutomovilGeneral.sql',
+      'Emisión binacional bloqueada por spee_validate_automovil_general_nexus en Sis2000 (debe aceptar ramo 28). ' +
+        'Referencia: docs/sql/spee_validate_automovil_general_nexus.sql',
     );
-  }
-
-  /**
-   * Misma lógica que speeValidateAutomovilGeneral para BINAC* (ramo 28 en maplanes).
-   * Evita depender del SP legacy en validateEmissionAuto (nest-api no modifica Sis2000).
-   */
-  private async validateEmissionAutoInline(
-    placa: unknown,
-    serialCarroceria: unknown,
-  ): Promise<{ ok: true } | { ok: false; raw: string }> {
-    const xplaca = String(placa ?? '').trim();
-    const xsercar = String(serialCarroceria ?? '').trim();
-
-    if (!xplaca) return { ok: false, raw: 'Placa no debe estar vacío' };
-    if (!xsercar) return { ok: false, raw: 'Serial de Carrocería no debe estar vacío' };
-
-    const T = this.db.types;
-
-    const placaReq = this.db.request();
-    placaReq.input('xplaca', T.VarChar(15), xplaca);
-    const placaResult = await placaReq.query(`
-      SELECT CASE WHEN EXISTS (
-        SELECT 1 FROM vhcerti
-        WHERE xplaca = @xplaca AND istatcer = 'V' AND fhasta >= GETDATE()
-      ) THEN 1 ELSE 0 END AS existsPlaca
-    `);
-    if (Number(placaResult.recordset?.[0]?.['existsPlaca'])) {
-      return {
-        ok: false,
-        raw: 'Se ha detectado la existencia de una póliza vigente la misma placa del vehículo.',
-      };
-    }
-
-    const serialReq = this.db.request();
-    serialReq.input('xsercar', T.VarChar(60), xsercar);
-    const serialResult = await serialReq.query(`
-      SELECT CASE WHEN EXISTS (
-        SELECT 1 FROM vhcerti
-        WHERE xsercar = @xsercar AND istatcer = 'V' AND fhasta >= GETDATE()
-      ) THEN 1 ELSE 0 END AS existsSerial
-    `);
-    if (Number(serialResult.recordset?.[0]?.['existsSerial'])) {
-      return {
-        ok: false,
-        raw: 'Se ha detectado la existencia de una póliza vigente con el mismo Serial Carrocería del Vehículo.',
-      };
-    }
-
-    return { ok: true };
   }
 
   private validateEmissionAutoFailure(raw: string) {
@@ -642,22 +587,6 @@ export class EmissionsService {
       return this.validateEmissionAutoFailure('Plan enviado no se encuentra registrado.');
     }
 
-    if (!this.shouldValidateEmissionAutoViaSp(cplan, cramo)) {
-      try {
-        this.logger.log(`validateEmissionAuto inline plan=${cplan} cramo=${cramo}`);
-        const inline = await this.validateEmissionAutoInline(body.placa, body.serial_carroceria);
-        if (!inline.ok) return this.validateEmissionAutoFailure(inline.raw);
-        return {
-          status: true,
-          message: 'El vehículo puede asegurarse. No hay póliza vigente con esta placa ni serial.',
-        };
-      } catch (err) {
-        const msg = err instanceof Error ? err.message : String(err);
-        this.logger.error(`validateEmissionAuto (ramo ${cramo}): ${msg}`);
-        throw new InternalServerErrorException('Error al validar el vehículo para emisión.');
-      }
-    }
-
     const req = this.db.request();
     const T = this.db.types;
     req.input('cplan', T.VarChar(10), cplan);
@@ -665,7 +594,8 @@ export class EmissionsService {
     req.input('xsercar', T.VarChar(60), body.serial_carroceria);
     req.input('xsermot', T.VarChar(60), null);
     try {
-      await req.execute('speeValidateAutomovilGeneral');
+      this.logger.log(`validateEmissionAuto EXEC ${SP_VALIDATE_AUTOMOVIL_NEXUS} plan=${cplan} cramo=${cramo}`);
+      await req.execute(SP_VALIDATE_AUTOMOVIL_NEXUS);
       return {
         status: true,
         message: 'El vehículo puede asegurarse. No hay póliza vigente con esta placa ni serial.',
@@ -1176,16 +1106,6 @@ export class EmissionsService {
 
     const xplaca = String(this.pick(b, 'xplaca', 'placa') ?? '').trim();
     const preEmisionSp = SP_PRE_EMISION_AUTO_RCV;
-    if (this.isBinacAutoEmission(b)) {
-      const inline = await this.validateEmissionAutoInline(
-        this.pick(b, 'xplaca', 'placa'),
-        this.pick(b, 'xsercar', 'serial_carroceria'),
-      );
-      if (!inline.ok) {
-        const formatted = formatValidateAutoError(inline.raw);
-        throw new BadRequestException(formatted.message);
-      }
-    }
     this.logger.log(
       `emitLocal: EXEC ${preEmisionSp} placa=${xplaca} plan=${b['cplan'] ?? b['plan']} mprima=${mprima} cmoneda=${planMoneda ?? 'null'} ifrecuencia=${this.pick(b, 'ifrecuencia', 'frecuencia') ?? 'A'} msumaaseg=${this.pick(b, 'msumaaseg', 'sumaaseg') ?? 'null'} fhasta=${b['fhasta'] ?? 'null'} ptasamon=${ptasamon}`,
     );

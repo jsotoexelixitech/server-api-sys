@@ -1,6 +1,6 @@
 CREATE PROCEDURE [dbo].[speeValidateAutomovilGeneral]
--- REFERENCIA La Mundial / DBA (NO ejecutar desde nest-api).
--- sp_pre_emision_automovil_rcv_nexus invoca este SP; binacional requiere @cramo IN (18, 28).
+-- LEGACY La Mundial (SysIP / triggers). NO usar en flujo Nexus.
+-- Flujo Exelixi: spee_validate_automovil_general_nexus (ver spee_validate_automovil_general_nexus.sql).
 		@cplan VARCHAR(10),
 		@xplaca  VARCHAR(15),
     @xsercar  VARCHAR(60),

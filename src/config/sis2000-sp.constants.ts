@@ -4,6 +4,9 @@
 
 // ── RCV automóvil ───────────────────────────────────────────────────────────
 
+/** Validación placa/serial/plan antes de pre-emisión (RCV 18 + BINAC* 28). */
+export const SP_VALIDATE_AUTOMOVIL_NEXUS = 'spee_validate_automovil_general_nexus';
+
 export const SP_PRE_EMISION_AUTO_RCV = 'sp_pre_emision_automovil_rcv_nexus';
 
 /** Invocado al final del pre-SP (no desde nest-api directamente). */
