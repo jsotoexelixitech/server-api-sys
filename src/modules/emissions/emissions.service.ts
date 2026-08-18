@@ -518,23 +518,125 @@ export class EmissionsService {
     }
   }
 
-  async validateEmissionAuto(body: Record<string, unknown>) {
-    const req = this.db.request();
+  /** cramo del plan vigente en maplanes (null si no existe). */
+  private async resolvePlanCramo(cplan: string): Promise<number | null> {
     const T = this.db.types;
+    const req = this.db.request();
+    req.input('cplan', T.VarChar(10), cplan);
+    const result = await req.query(`
+      SELECT TOP 1 cramo FROM maplanes WHERE cplan = @cplan AND iestado = 'V'
+    `);
+    const row = result.recordset?.[0] as { cramo?: number } | undefined;
+    if (row?.cramo == null) return null;
+    return Number(row.cramo);
+  }
+
+  /**
+   * Misma lógica que speeValidateAutomovilGeneral para ramo RCV binacional (28).
+   * El SP en Sis2000 solo acepta cramo 18; BINAC* vive en ramo 28.
+   */
+  private async validateEmissionAutoInline(
+    placa: unknown,
+    serialCarroceria: unknown,
+  ): Promise<{ ok: true } | { ok: false; raw: string }> {
+    const xplaca = String(placa ?? '').trim();
+    const xsercar = String(serialCarroceria ?? '').trim();
+
+    if (!xplaca) return { ok: false, raw: 'Placa no debe estar vacío' };
+    if (!xsercar) return { ok: false, raw: 'Serial de Carrocería no debe estar vacío' };
+
+    const T = this.db.types;
+
+    const placaReq = this.db.request();
+    placaReq.input('xplaca', T.VarChar(15), xplaca);
+    const placaResult = await placaReq.query(`
+      SELECT CASE WHEN EXISTS (
+        SELECT 1 FROM vhcerti
+        WHERE xplaca = @xplaca AND istatcer = 'V' AND fhasta >= GETDATE()
+      ) THEN 1 ELSE 0 END AS existsPlaca
+    `);
+    if (Number(placaResult.recordset?.[0]?.['existsPlaca'])) {
+      return {
+        ok: false,
+        raw: 'Se ha detectado la existencia de una póliza vigente la misma placa del vehículo.',
+      };
+    }
+
+    const serialReq = this.db.request();
+    serialReq.input('xsercar', T.VarChar(60), xsercar);
+    const serialResult = await serialReq.query(`
+      SELECT CASE WHEN EXISTS (
+        SELECT 1 FROM vhcerti
+        WHERE xsercar = @xsercar AND istatcer = 'V' AND fhasta >= GETDATE()
+      ) THEN 1 ELSE 0 END AS existsSerial
+    `);
+    if (Number(serialResult.recordset?.[0]?.['existsSerial'])) {
+      return {
+        ok: false,
+        raw: 'Se ha detectado la existencia de una póliza vigente con el mismo Serial Carrocería del Vehículo.',
+      };
+    }
+
+    return { ok: true };
+  }
+
+  private validateEmissionAutoFailure(raw: string) {
+    const formatted = formatValidateAutoError(raw);
+    this.logger.warn(`validateEmissionAuto: ${raw} → ${formatted.code}`);
+    return { status: false as const, error: formatted.message, code: formatted.code };
+  }
+
+  async validateEmissionAuto(body: Record<string, unknown>) {
     const defaultPlan = this.config.get<string>('LAMUNDIAL_PLAN_DEFAULT', 'RCVBAS');
     const cplan = String(body.plan ?? defaultPlan).trim() || defaultPlan;
+    const ramoBinac = parseInt(
+      this.config.get<string>('LAMUNDIAL_RAMO_BINACIONAL', '28') ?? '28',
+      10,
+    );
+
+    let cramo: number | null;
+    try {
+      cramo = await this.resolvePlanCramo(cplan);
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : String(err);
+      this.logger.error(`validateEmissionAuto resolvePlanCramo: ${msg}`);
+      throw new InternalServerErrorException('Error al validar el plan del vehículo.');
+    }
+
+    if (cramo == null) {
+      return this.validateEmissionAutoFailure('Plan enviado no se encuentra registrado.');
+    }
+
+    if (cramo === ramoBinac) {
+      try {
+        const inline = await this.validateEmissionAutoInline(body.placa, body.serial_carroceria);
+        if (!inline.ok) return this.validateEmissionAutoFailure(inline.raw);
+        return {
+          status: true,
+          message: 'El vehículo puede asegurarse. No hay póliza vigente con esta placa ni serial.',
+        };
+      } catch (err) {
+        const msg = err instanceof Error ? err.message : String(err);
+        this.logger.error(`validateEmissionAuto (ramo ${cramo}): ${msg}`);
+        throw new InternalServerErrorException('Error al validar el vehículo para emisión.');
+      }
+    }
+
+    const req = this.db.request();
+    const T = this.db.types;
     req.input('cplan', T.VarChar(10), cplan);
     req.input('xplaca', T.VarChar(15), body.placa);
     req.input('xsercar', T.VarChar(60), body.serial_carroceria);
     req.input('xsermot', T.VarChar(60), null);
     try {
       await req.execute('speeValidateAutomovilGeneral');
-      return { status: true, message: 'El vehículo puede asegurarse. No hay póliza vigente con esta placa ni serial.' };
+      return {
+        status: true,
+        message: 'El vehículo puede asegurarse. No hay póliza vigente con esta placa ni serial.',
+      };
     } catch (err) {
       const raw = parseSPError(err);
-      const formatted = formatValidateAutoError(raw);
-      this.logger.warn(`validateEmissionAuto (SP): ${raw} → ${formatted.code}`);
-      return { status: false, error: formatted.message, code: formatted.code };
+      return this.validateEmissionAutoFailure(raw);
     }
   }
 

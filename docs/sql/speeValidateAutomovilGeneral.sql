@@ -26,7 +26,8 @@ BEGIN
 				END
 		END
 			
-		IF (@cramo = 18) BEGIN
+		-- RCV nacional (18) y binacional BINAC* (28): mismas reglas de placa/serial en vhcerti
+		IF (@cramo IN (18, 28)) BEGIN
 		
 			-- VALIDACIÓN DATA VACÍA
 			IF (@xplaca = '' OR @xplaca IS NULL) BEGIN 
