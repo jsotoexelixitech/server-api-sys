@@ -518,17 +518,28 @@ export class EmissionsService {
     }
   }
 
-  /** cramo del plan vigente en maplanes (null si no existe). */
+  /** cramo del plan vigente en maplanes (null si no existe). BINAC* prioriza ramo 28. */
   private async resolvePlanCramo(cplan: string): Promise<number | null> {
     const T = this.db.types;
     const req = this.db.request();
     req.input('cplan', T.VarChar(10), cplan);
+    const orderBinacFirst = /^BINAC/i.test(cplan)
+      ? 'ORDER BY CASE WHEN cramo = 28 THEN 0 WHEN cramo = 18 THEN 1 ELSE 2 END'
+      : '';
     const result = await req.query(`
       SELECT TOP 1 cramo FROM maplanes WHERE cplan = @cplan AND iestado = 'V'
+      ${orderBinacFirst}
     `);
     const row = result.recordset?.[0] as { cramo?: number } | undefined;
     if (row?.cramo == null) return null;
     return Number(row.cramo);
+  }
+
+  /** speeValidateAutomovilGeneral en Sis2000 solo cubre RCV nacional (ramo 18). */
+  private shouldValidateEmissionAutoViaSp(cplan: string, cramo: number): boolean {
+    if (/^BINAC/i.test(cplan)) return false;
+    const ramoNacional = parseInt(this.config.get<string>('LAMUNDIAL_RAMO', '18') ?? '18', 10);
+    return cramo === ramoNacional;
   }
 
   /**
@@ -589,10 +600,6 @@ export class EmissionsService {
   async validateEmissionAuto(body: Record<string, unknown>) {
     const defaultPlan = this.config.get<string>('LAMUNDIAL_PLAN_DEFAULT', 'RCVBAS');
     const cplan = String(body.plan ?? defaultPlan).trim() || defaultPlan;
-    const ramoBinac = parseInt(
-      this.config.get<string>('LAMUNDIAL_RAMO_BINACIONAL', '28') ?? '28',
-      10,
-    );
 
     let cramo: number | null;
     try {
@@ -607,8 +614,9 @@ export class EmissionsService {
       return this.validateEmissionAutoFailure('Plan enviado no se encuentra registrado.');
     }
 
-    if (cramo === ramoBinac) {
+    if (!this.shouldValidateEmissionAutoViaSp(cplan, cramo)) {
       try {
+        this.logger.log(`validateEmissionAuto inline plan=${cplan} cramo=${cramo}`);
         const inline = await this.validateEmissionAutoInline(body.placa, body.serial_carroceria);
         if (!inline.ok) return this.validateEmissionAutoFailure(inline.raw);
         return {
