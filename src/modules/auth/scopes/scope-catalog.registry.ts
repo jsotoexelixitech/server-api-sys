@@ -1,5 +1,6 @@
 import type { PartnerScopeMeta } from '@jsotoexelixitech/nest-api-sdk';
 import {
+  canonicalizePathTemplate,
   NEST_AUTH_SCOPE_CATALOG,
   NestAuthScopeMeta,
 } from './nest-auth-scopes.constants';
@@ -244,15 +245,28 @@ export function buildRouteCatalog(): RouteCatalogEntry[] {
 /** Expande scopes legacy (`emissions:person`) a rutas; conserva grants por ruta. */
 export function expandGrantsToRoutes(grants: string[]): string[] {
   const scopeById = new Map(buildScopeCatalog().map((entry) => [String(entry.id), entry]));
-  const knownRoutes = new Set(buildRouteCatalog().map((entry) => entry.routeId));
+  const routeByCanon = new Map<string, string>();
+  for (const entry of buildRouteCatalog()) {
+    const space = entry.routeId.indexOf(' ');
+    if (space <= 0) continue;
+    const method = entry.routeId.slice(0, space).toUpperCase();
+    const path = canonicalizePathTemplate(entry.routeId.slice(space + 1));
+    routeByCanon.set(`${method} ${path}`, entry.routeId);
+  }
   const expanded = new Set<string>();
 
   for (const raw of grants ?? []) {
     const grant = String(raw ?? '').trim();
     if (!grant) continue;
-    if (knownRoutes.has(grant)) {
-      expanded.add(grant);
-      continue;
+    if (grant.includes(' ')) {
+      const space = grant.indexOf(' ');
+      const method = grant.slice(0, space).toUpperCase();
+      const path = canonicalizePathTemplate(grant.slice(space + 1));
+      const known = routeByCanon.get(`${method} ${path}`);
+      if (known) {
+        expanded.add(known);
+        continue;
+      }
     }
     const scope = scopeById.get(grant);
     if (scope) {

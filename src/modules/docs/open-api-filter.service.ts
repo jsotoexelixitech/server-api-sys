@@ -1,6 +1,9 @@
 import { Injectable, NotFoundException } from '@nestjs/common';
 import { OpenAPIObject } from '@nestjs/swagger/dist/interfaces';
-import { grantMatchesRoute } from '../auth/scopes/nest-auth-scopes.constants';
+import {
+  canonicalizePathTemplate,
+  grantMatchesRoute,
+} from '../auth/scopes/nest-auth-scopes.constants';
 import {
   buildScopeCatalog,
   inferScopeFromPath,
@@ -8,6 +11,7 @@ import {
 import { OpenApiDocumentStore } from './open-api-document.store';
 import { pruneOpenApiComponents } from './prune-openapi-components';
 
+/** Todos los verbos OpenAPI — no omitir put/patch (Swagger individual). */
 const HTTP_METHODS = new Set([
   'get',
   'post',
@@ -89,7 +93,7 @@ export class OpenApiFilterService {
         const space = route.indexOf(' ');
         if (space <= 0) continue;
         const method = route.slice(0, space).toUpperCase();
-        const path = this.normalizePath(route.slice(space + 1));
+        const path = canonicalizePathTemplate(route.slice(space + 1));
         index.set(`${method} ${path}`, String(entry.id));
       }
     }
@@ -103,7 +107,7 @@ export class OpenApiFilterService {
     scopeIndex: Map<string, string>,
   ): boolean {
     const normalizedPath = this.normalizePath(pathKey);
-    const lookupKey = `${method.toUpperCase()} ${normalizedPath}`;
+    const lookupKey = `${method.toUpperCase()} ${canonicalizePathTemplate(normalizedPath)}`;
     const requiredScope =
       scopeIndex.get(lookupKey) ?? inferScopeFromPath(normalizedPath);
 

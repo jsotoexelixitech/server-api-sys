@@ -13,6 +13,10 @@ describe('grantMatchesRoute', () => {
     'POST',
     '/api/v1/external/createEmissionAuto',
   );
+  const putProduct = toRouteGrantLine(
+    'PUT',
+    '/api/v1/partner/products/update/:cproducto',
+  );
 
   it('acepta scope legacy completo', () => {
     expect(
@@ -58,6 +62,36 @@ describe('grantMatchesRoute', () => {
         'emissions:auto',
       ),
     ).toBe(false);
+  });
+
+  it('iguala Nest :param con OpenAPI {param} (Swagger filtrado)', () => {
+    expect(
+      grantMatchesRoute(
+        [putProduct],
+        'put',
+        '/api/v1/partner/products/update/{cproducto}',
+        'partner:products',
+      ),
+    ).toBe(true);
+    expect(
+      grantMatchesRoute(
+        ['PUT /api/v1/partner/products/update/{cproducto}'],
+        'PUT',
+        '/api/v1/partner/products/update/:cproducto',
+        'partner:products',
+      ),
+    ).toBe(true);
+  });
+
+  it('match PUT grant plantilla vs URL concreta en runtime', () => {
+    expect(
+      grantMatchesRoute(
+        [putProduct],
+        'PUT',
+        '/api/v1/partner/products/update/ABC-99',
+        'partner:products',
+      ),
+    ).toBe(true);
   });
 
   it('deniega sin grants en ruta protegida', () => {

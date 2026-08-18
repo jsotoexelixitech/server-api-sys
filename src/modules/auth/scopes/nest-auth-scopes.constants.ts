@@ -135,6 +135,42 @@ export function normalizeHttpPath(path: string): string {
     : cleaned;
 }
 
+/**
+ * Unifica plantillas Nest (`:id`) y OpenAPI (`{id}`) para comparar grants.
+ * También sirve para match runtime: grant con `:id` vs URL concreta `/123`.
+ */
+export function canonicalizePathTemplate(path: string): string {
+  return normalizeHttpPath(path)
+    .replace(/\{[^}]+\}/gi, ':param')
+    .replace(/:[^/\s]+/g, ':param');
+}
+
+/** true si grantPath (plantilla o concreta) describe requestPath (plantilla o concreta). */
+export function pathMatchesRouteTemplate(
+  grantPath: string,
+  requestPath: string,
+): boolean {
+  const gCanon = canonicalizePathTemplate(grantPath);
+  const rCanon = canonicalizePathTemplate(requestPath);
+  if (gCanon === rCanon) return true;
+
+  const gParts = normalizeHttpPath(grantPath).split('/');
+  const rParts = normalizeHttpPath(requestPath).split('/');
+  if (gParts.length !== rParts.length) return false;
+
+  for (let i = 0; i < gParts.length; i++) {
+    const gp = gParts[i];
+    const rp = rParts[i];
+    const gIsParam =
+      gp.startsWith(':') || (gp.startsWith('{') && gp.endsWith('}'));
+    const rIsParam =
+      rp.startsWith(':') || (rp.startsWith('{') && rp.endsWith('}'));
+    if (gIsParam || rIsParam) continue;
+    if (gp !== rp) return false;
+  }
+  return true;
+}
+
 /** Línea canónica: `POST /api/v1/...` */
 export function toRouteGrantLine(method: string, path: string): string {
   return `${String(method).toUpperCase()} ${normalizeHttpPath(path)}`;
@@ -151,14 +187,15 @@ export function grantMatchesRoute(
   if (!granted?.length) return false;
   if (scopeMatches(granted, requiredScope)) return true;
 
-  const routeLine = toRouteGrantLine(method, path);
+  const methodUpper = String(method).toUpperCase();
   for (const grant of granted) {
     const normalized = String(grant ?? '').trim();
     if (!normalized.includes(' ')) continue;
     const space = normalized.indexOf(' ');
     const grantMethod = normalized.slice(0, space).toUpperCase();
-    const grantPath = normalizeHttpPath(normalized.slice(space + 1));
-    if (`${grantMethod} ${grantPath}` === routeLine) return true;
+    if (grantMethod !== methodUpper) continue;
+    const grantPath = normalized.slice(space + 1);
+    if (pathMatchesRouteTemplate(grantPath, path)) return true;
   }
   return false;
 }
