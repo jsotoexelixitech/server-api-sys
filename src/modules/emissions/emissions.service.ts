@@ -1164,6 +1164,26 @@ export class EmissionsService {
         type: T.Numeric(18, 2),
         value: this.pick(b, 'tasaPp') ?? 0,
       },
+      itipo_diligencia: {
+        type: T.Char(1),
+        value: this.pick(b, 'itipo_diligencia', 'itipoDiligencia') ?? null,
+      },
+      cprofesion_tomador: {
+        type: T.Int,
+        value: this.intField(this.pick(b, 'cprofesion_tomador')) ?? null,
+      },
+      cactividad_tomador: {
+        type: T.Int,
+        value: this.intField(this.pick(b, 'cactividad_tomador')) ?? null,
+      },
+      cprofesion_titular: {
+        type: T.Int,
+        value: this.intField(this.pick(b, 'cprofesion_titular')) ?? null,
+      },
+      cactividad_titular: {
+        type: T.Int,
+        value: this.intField(this.pick(b, 'cactividad_titular')) ?? null,
+      },
       fdesde: { type: T.Date, value: b['fdesde'] },
       fhasta: { type: T.Date, value: b['fhasta'] },
     };
