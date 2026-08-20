@@ -504,6 +504,65 @@ export class ValrepService {
 
   private static readonly ALLOWED_DOMAINS = ['SEXO', 'EDOCIVIL', 'PARENTESCOS', 'FRECUENCIAS', 'MATIPCANAL'];
 
+  private mapCatalogRows(
+    rows: Record<string, unknown>[],
+    codeKeys: string[],
+    labelKeys: string[],
+  ): { cvalor: string; xdescripcion: string }[] {
+    return rows
+      .map((row) => {
+        const codeRaw = codeKeys.map((k) => row[k]).find((v) => v != null && String(v).trim() !== '');
+        const labelRaw = labelKeys.map((k) => row[k]).find((v) => v != null && String(v).trim() !== '');
+        return {
+          cvalor: String(codeRaw ?? '').trim(),
+          xdescripcion: String(labelRaw ?? '').trim(),
+        };
+      })
+      .filter((item) => item.cvalor !== '' && item.xdescripcion !== '');
+  }
+
+  /** Profesiones / ocupaciones — sp_get_ocupaciones_nexus (campo cprofesion). */
+  async getOcupacionesNexus(): Promise<{ cvalor: string; xdescripcion: string }[]> {
+    try {
+      const result = await this.db.request().execute('sp_get_ocupaciones_nexus');
+      const rows = (result.recordset ?? []) as Record<string, unknown>[];
+      const mapped = this.mapCatalogRows(rows, ['cprofesion', 'cocupacion', 'cvalor'], [
+        'xprofesion',
+        'xocupacion',
+        'xdescripcion',
+      ]);
+      if (!mapped.length) {
+        throw new BadRequestException('No se encontraron ocupaciones/profesiones.');
+      }
+      this.logger.log(`getOcupacionesNexus: ${mapped.length} items vía SP`);
+      return mapped;
+    } catch (err) {
+      if (err instanceof BadRequestException) throw err;
+      const msg = err instanceof Error ? err.message : String(err);
+      this.logger.error(`getOcupacionesNexus: ${msg}`);
+      throw new InternalServerErrorException('No se pudo obtener la lista de profesiones.');
+    }
+  }
+
+  /** Actividades económicas — sp_get_actividades_nexus (campo cactividad). */
+  async getActividadesNexus(): Promise<{ cvalor: string; xdescripcion: string }[]> {
+    try {
+      const result = await this.db.request().execute('sp_get_actividades_nexus');
+      const rows = (result.recordset ?? []) as Record<string, unknown>[];
+      const mapped = this.mapCatalogRows(rows, ['cactividad', 'cvalor'], ['xactividad', 'xdescripcion']);
+      if (!mapped.length) {
+        throw new BadRequestException('No se encontraron actividades económicas.');
+      }
+      this.logger.log(`getActividadesNexus: ${mapped.length} items vía SP`);
+      return mapped;
+    } catch (err) {
+      if (err instanceof BadRequestException) throw err;
+      const msg = err instanceof Error ? err.message : String(err);
+      this.logger.error(`getActividadesNexus: ${msg}`);
+      throw new InternalServerErrorException('No se pudo obtener la lista de actividades económicas.');
+    }
+  }
+
   async getLists(cdominio: string): Promise<{ cvalor: string; xdescripcion: string }[]> {
     const domain = cdominio.toUpperCase().trim();
 

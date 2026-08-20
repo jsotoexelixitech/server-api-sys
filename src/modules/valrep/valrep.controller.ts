@@ -149,6 +149,56 @@ export class ValrepController {
     return { status: true, data: { listas } };
   }
 
+  // ── GET /api/v1/valrep/ocupaciones ────────────────────────────────────────
+
+  @Get('ocupaciones')
+  @ApiOperation({
+    summary: 'Profesiones / ocupaciones (diligencia debida RCV)',
+    description: 'Ejecuta `sp_get_ocupaciones_nexus` — catálogo para el campo Profesión (`cprofesion`).',
+    operationId: 'valrepOcupaciones',
+  })
+  @ApiResponse({
+    status: 200,
+    schema: {
+      example: {
+        status: true,
+        data: {
+          listas: [{ cvalor: '1', xdescripcion: 'Empleado' }],
+        },
+      },
+    },
+  })
+  @Api500()
+  async getOcupaciones() {
+    const listas = await this.valrepService.getOcupacionesNexus();
+    return { status: true, data: { listas } };
+  }
+
+  // ── GET /api/v1/valrep/actividades ──────────────────────────────────────
+
+  @Get('actividades')
+  @ApiOperation({
+    summary: 'Actividades económicas (diligencia debida RCV)',
+    description: 'Ejecuta `sp_get_actividades_nexus` — catálogo para el campo Actividad económica (`cactividad`).',
+    operationId: 'valrepActividades',
+  })
+  @ApiResponse({
+    status: 200,
+    schema: {
+      example: {
+        status: true,
+        data: {
+          listas: [{ cvalor: '1', xdescripcion: 'Comercio' }],
+        },
+      },
+    },
+  })
+  @Api500()
+  async getActividades() {
+    const listas = await this.valrepService.getActividadesNexus();
+    return { status: true, data: { listas } };
+  }
+
   // ── Funerario: pasos 1–3 (catálogo valrep, fb_organizacion_swagger) ───────
 
   @Post('productos')
