@@ -7,7 +7,7 @@ import {
 import { ConfigService } from '@nestjs/config';
 import { MssqlService } from '../../database/mssql.service';
 import { parseSPError } from '../../common/helpers/sp-error.helper';
-import { SP_CALCULO_AUTO_NEXUS } from '../../config/sis2000-sp.constants';
+import { SP_CALCULO_AUTO_NEXUS, SP_GET_RECARGOS_RCV_NEXUS } from '../../config/sis2000-sp.constants';
 import { GetPlanesV2Dto } from './dto/get-planes-v2.dto';
 import { GetCotizacionAutoDto } from './dto/get-cotizacion-auto.dto';
 import { CalculatePlanCoberturasDto } from './dto/calculate-plan-coberturas.dto';
@@ -275,6 +275,10 @@ export class ValrepService {
 
   private spCalculoAutoNexusName(): string {
     return process.env.MSSQL_SP_CALCULO_AUTO_NEXUS?.trim() || SP_CALCULO_AUTO_NEXUS;
+  }
+
+  private spGetRecargosRcvNexusName(): string {
+    return process.env.MSSQL_SP_GET_RECARGOS_RCV_NEXUS?.trim() || SP_GET_RECARGOS_RCV_NEXUS;
   }
 
   /** Coberturas casco/AP que spCalculoAuto excluye de totalPA (ramo RCV / binacional). */
@@ -965,24 +969,37 @@ export class ValrepService {
     }
   }
 
-  /** Catálogo recargo RCV — masustac (ramo 18). Paridad SysIP GET /valrep/recargosRCV. */
+  /** Catálogo recargo RCV — sp_get_recargos_rcv_nexus → masustac (ramo 18). */
   async getRecargosRcv(cramo = 18): Promise<
     Array<{ csustanc: string; xsustanc: string; porcenta: number }>
   > {
-    const T = this.db.types;
-    const res = await this.db
-      .request()
-      .input('cramo', T.Int, cramo)
-      .query<{ csustanc: string; xsustanc: string; porcenta: number }>(`
-        SELECT csustanc, LTRIM(RTRIM(xsustanc)) AS xsustanc, porcenta
-        FROM masustac
-        WHERE cramo = @cramo
-        ORDER BY porcenta, xsustanc
-      `);
-    return (res.recordset ?? []).map((row) => ({
-      csustanc: String(row.csustanc ?? '').trim(),
-      xsustanc: String(row.xsustanc ?? '').trim(),
-      porcenta: Number(row.porcenta ?? 0),
-    }));
+    const spName = this.spGetRecargosRcvNexusName();
+    try {
+      const T = this.db.types;
+      const result = await this.db
+        .request()
+        .input('cramo', T.Int, cramo)
+        .execute(spName);
+      const rows = (result.recordset ?? []) as Array<{
+        csustanc: string | number;
+        xsustanc: string;
+        porcenta: number;
+      }>;
+      const recargos = rows.map((row) => ({
+        csustanc: String(row.csustanc ?? '').trim(),
+        xsustanc: String(row.xsustanc ?? '').trim(),
+        porcenta: Number(row.porcenta ?? 0),
+      }));
+      if (!recargos.length) {
+        this.logger.warn(`getRecargosRcv: SP ${spName} cramo=${cramo} sin filas`);
+      }
+      return recargos;
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : String(err);
+      this.logger.error(`getRecargosRcv sp=${this.spGetRecargosRcvNexusName()} cramo=${cramo}: ${msg}`);
+      throw new InternalServerErrorException(
+        'No se pudo obtener el catálogo de recargos RCV. Verifique sp_get_recargos_rcv_nexus en Sis2000.',
+      );
+    }
   }
 }

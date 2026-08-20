@@ -42,6 +42,9 @@ export const SP_REPAIR_RCV_COBERTURAS = 'sp_repair_rcv_coberturas_nexus';
 /** Cotización RCV + desglose coberturas (flujo Nexus modular). */
 export const SP_CALCULO_AUTO_NEXUS = 'sp_calculo_auto_nexus';
 
+/** Catálogo recargo RCV / actividades asociadas (masustac). GET /valrep/recargosRCV. */
+export const SP_GET_RECARGOS_RCV_NEXUS = 'sp_get_recargos_rcv_nexus';
+
 // ── Condominio ──────────────────────────────────────────────────────────────
 export const SP_BUSCA_PLANES_CONDOMINIO = 'sp_busca_planes_condominio_nexus';
 export const SP_CALCULO_COTIZACION_CONDOMINIO = 'sp_calculo_cotizacion_condominio_nexus';

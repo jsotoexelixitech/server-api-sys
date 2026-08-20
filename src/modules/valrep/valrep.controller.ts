@@ -362,7 +362,7 @@ export class ValrepController {
   @ApiExcludeEndpoint()
   @ApiOperation({
     summary: 'Recargos RCV (actividades asociadas)',
-    description: 'Catálogo masustac ramo 18 — porcentaje adicional sobre prima RCV.',
+    description: 'Ejecuta sp_get_recargos_rcv_nexus (masustac) — porcentaje adicional sobre prima RCV.',
   })
   @ApiResponse({
     status: 200,
