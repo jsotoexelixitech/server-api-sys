@@ -7,7 +7,7 @@ import {
 import { ConfigService } from '@nestjs/config';
 import { MssqlService } from '../../database/mssql.service';
 import { parseSPError } from '../../common/helpers/sp-error.helper';
-import { SP_CALCULO_AUTO_NEXUS, SP_GET_RECARGOS_RCV_NEXUS } from '../../config/sis2000-sp.constants';
+import { SP_CALCULO_AUTO_NEXUS, SP_GET_SUSTANCIAS_NEXUS } from '../../config/sis2000-sp.constants';
 import { GetPlanesV2Dto } from './dto/get-planes-v2.dto';
 import { GetCotizacionAutoDto } from './dto/get-cotizacion-auto.dto';
 import { CalculatePlanCoberturasDto } from './dto/calculate-plan-coberturas.dto';
@@ -277,8 +277,8 @@ export class ValrepService {
     return process.env.MSSQL_SP_CALCULO_AUTO_NEXUS?.trim() || SP_CALCULO_AUTO_NEXUS;
   }
 
-  private spGetRecargosRcvNexusName(): string {
-    return process.env.MSSQL_SP_GET_RECARGOS_RCV_NEXUS?.trim() || SP_GET_RECARGOS_RCV_NEXUS;
+  private spGetSustanciasNexusName(): string {
+    return process.env.MSSQL_SP_GET_SUSTANCIAS_NEXUS?.trim() || SP_GET_SUSTANCIAS_NEXUS;
   }
 
   /** Coberturas casco/AP que spCalculoAuto excluye de totalPA (ramo RCV / binacional). */
@@ -969,11 +969,11 @@ export class ValrepService {
     }
   }
 
-  /** Catálogo recargo RCV — sp_get_recargos_rcv_nexus → masustac (ramo 18). */
+  /** Catálogo recargo RCV — sp_get_sustancias_nexus @cramo → masustac (18 = RCV). */
   async getRecargosRcv(cramo = 18): Promise<
     Array<{ csustanc: string; xsustanc: string; porcenta: number }>
   > {
-    const spName = this.spGetRecargosRcvNexusName();
+    const spName = this.spGetSustanciasNexusName();
     try {
       const T = this.db.types;
       const result = await this.db
@@ -996,9 +996,9 @@ export class ValrepService {
       return recargos;
     } catch (err) {
       const msg = err instanceof Error ? err.message : String(err);
-      this.logger.error(`getRecargosRcv sp=${this.spGetRecargosRcvNexusName()} cramo=${cramo}: ${msg}`);
+      this.logger.error(`getRecargosRcv sp=${this.spGetSustanciasNexusName()} cramo=${cramo}: ${msg}`);
       throw new InternalServerErrorException(
-        'No se pudo obtener el catálogo de recargos RCV. Verifique sp_get_recargos_rcv_nexus en Sis2000.',
+        'No se pudo obtener el catálogo de recargos RCV. Verifique sp_get_sustancias_nexus en Sis2000.',
       );
     }
   }

@@ -362,7 +362,7 @@ export class ValrepController {
   @ApiExcludeEndpoint()
   @ApiOperation({
     summary: 'Recargos RCV (actividades asociadas)',
-    description: 'Ejecuta sp_get_recargos_rcv_nexus (masustac) — porcentaje adicional sobre prima RCV.',
+    description: 'Ejecuta sp_get_sustancias_nexus @cramo (masustac) — recargos RCV / actividades asociadas.',
   })
   @ApiResponse({
     status: 200,

@@ -43,7 +43,7 @@ export const SP_REPAIR_RCV_COBERTURAS = 'sp_repair_rcv_coberturas_nexus';
 export const SP_CALCULO_AUTO_NEXUS = 'sp_calculo_auto_nexus';
 
 /** Catálogo recargo RCV / actividades asociadas (masustac). GET /valrep/recargosRCV. */
-export const SP_GET_RECARGOS_RCV_NEXUS = 'sp_get_recargos_rcv_nexus';
+export const SP_GET_SUSTANCIAS_NEXUS = 'sp_get_sustancias_nexus';
 
 // ── Condominio ──────────────────────────────────────────────────────────────
 export const SP_BUSCA_PLANES_CONDOMINIO = 'sp_busca_planes_condominio_nexus';
