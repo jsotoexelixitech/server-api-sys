@@ -356,6 +356,30 @@ export class ValrepController {
     return { status: true, data: { frecuencias } };
   }
 
+  // ── GET /api/v1/valrep/recargosRCV ─────────────────────────────────────
+
+  @Get('recargosRCV')
+  @ApiExcludeEndpoint()
+  @ApiOperation({
+    summary: 'Recargos RCV (actividades asociadas)',
+    description: 'Catálogo masustac ramo 18 — porcentaje adicional sobre prima RCV.',
+  })
+  @ApiResponse({
+    status: 200,
+    schema: {
+      example: {
+        status: true,
+        recargos: [{ csustanc: 4, xsustanc: 'No Aplica', porcenta: 0 }],
+      },
+    },
+  })
+  @Api500()
+  async getRecargosRcv() {
+    const recargos = await this.valrepService.getRecargosRcv(18);
+    // Paridad SysIP / qaapisys2000: { status, recargos } (sin wrapper data).
+    return { status: true, recargos };
+  }
+
   // ── POST /api/v1/valrep/cotizacion ─────────────────────────────────────
 
   @Post('cotizacion')

@@ -392,7 +392,7 @@ export class ValrepService {
         sumaAsegBl: 0,
         sumaAsegAd: 0,
         recargo: 0,
-        recargoRcv: 0,
+        recargoRcv: body.precargorcv ?? 0,
         cusuario: this.resolveCusuarioSis2000(),
       });
 
@@ -963,5 +963,26 @@ export class ValrepService {
           : 'No fue posible calcular las coberturas del plan. Verifique marca, modelo, versión, año y plan.',
       );
     }
+  }
+
+  /** Catálogo recargo RCV — masustac (ramo 18). Paridad SysIP GET /valrep/recargosRCV. */
+  async getRecargosRcv(cramo = 18): Promise<
+    Array<{ csustanc: string; xsustanc: string; porcenta: number }>
+  > {
+    const T = this.db.types;
+    const res = await this.db
+      .request()
+      .input('cramo', T.Int, cramo)
+      .query<{ csustanc: string; xsustanc: string; porcenta: number }>(`
+        SELECT csustanc, LTRIM(RTRIM(xsustanc)) AS xsustanc, porcenta
+        FROM masustac
+        WHERE cramo = @cramo
+        ORDER BY porcenta, xsustanc
+      `);
+    return (res.recordset ?? []).map((row) => ({
+      csustanc: String(row.csustanc ?? '').trim(),
+      xsustanc: String(row.xsustanc ?? '').trim(),
+      porcenta: Number(row.porcenta ?? 0),
+    }));
   }
 }

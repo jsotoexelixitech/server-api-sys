@@ -62,6 +62,15 @@ export class GetCotizacionAutoDto {
   @Min(0)
   ntoneladas?: number;
 
+  @ApiPropertyOptional({
+    example: 0,
+    description: 'Porcentaje recargo RCV (masustac.porcenta). 0 = No aplica.',
+  })
+  @IsOptional()
+  @Type(() => Number)
+  @Min(0)
+  precargorcv?: number;
+
   @ApiPropertyOptional({ example: 18, description: 'Código de ramo (default 18 = RCV)' })
   @IsOptional()
   @Type(() => Number)
