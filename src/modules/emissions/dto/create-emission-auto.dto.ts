@@ -9,6 +9,7 @@ import {
   IsString,
   Min,
 } from 'class-validator';
+import { AUTO_IFRECUENCIA_VALUES } from '../../valrep/constants/auto-ifrecuencia.constants';
 
 export class CreateEmissionAutoDto {
   // ── Póliza ────────────────────────────────────────────────────────────────
@@ -250,8 +251,8 @@ export class CreateEmissionAutoDto {
   @IsNumber()
   productor?: number;
 
-  @ApiProperty({ example: 'A', description: 'Frecuencia de pago', enum: ['A', 'S', 'C', 'T', 'M'] })
-  @IsIn(['A', 'S', 'C', 'T', 'M'])
+  @ApiProperty({ example: 'A', description: 'Frecuencia de pago', enum: AUTO_IFRECUENCIA_VALUES })
+  @IsIn([...AUTO_IFRECUENCIA_VALUES])
   frecuencia: string;
 
   @ApiProperty({ example: '2025-06-30', description: 'Fecha de emisión (YYYY-MM-DD)' })

@@ -1,6 +1,7 @@
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
 import { Type } from 'class-transformer';
 import { IsIn, IsInt, IsNotEmpty, IsOptional, IsString, Max, MaxLength, Min, MinLength } from 'class-validator';
+import { AUTO_IFRECUENCIA_VALUES } from '../constants/auto-ifrecuencia.constants';
 
 export class GetCotizacionAutoDto {
   @ApiProperty({ example: '083', description: 'Código de marca del catálogo vehicular' })
@@ -87,9 +88,10 @@ export class GetCotizacionAutoDto {
   @ApiPropertyOptional({
     example: 'A',
     description: 'Frecuencia de pago (ifrecuencia) — de spBuscaFrecuenciaPlan',
+    enum: AUTO_IFRECUENCIA_VALUES,
   })
   @IsOptional()
-  @IsIn(['A', 'S', 'M', 'T', 'C'])
+  @IsIn([...AUTO_IFRECUENCIA_VALUES])
   ifrecuencia?: string;
 
   @ApiPropertyOptional({

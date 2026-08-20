@@ -13,6 +13,7 @@ import {
   Min,
   MinLength,
 } from 'class-validator';
+import { AUTO_IFRECUENCIA_VALUES } from '../constants/auto-ifrecuencia.constants';
 
 /** Body compatible con SysIP `POST /emissions/calculatePlanSis`. */
 export class CalculatePlanCoberturasDto {
@@ -157,10 +158,10 @@ export class CalculatePlanCoberturasDto {
   @ApiPropertyOptional({
     example: 'A',
     description: 'Frecuencia de pago (requerido por el SP de cálculo de plan auto)',
-    enum: ['A', 'S', 'M', 'T', 'C'],
+    enum: AUTO_IFRECUENCIA_VALUES,
   })
   @IsOptional()
-  @IsIn(['A', 'S', 'M', 'T', 'C'])
+  @IsIn([...AUTO_IFRECUENCIA_VALUES])
   ifrecuencia?: string;
 
   @ApiPropertyOptional({ example: 7, description: 'Usuario Sis2000 (default env LAMUNDIAL_CUSUARIO o 7)' })
