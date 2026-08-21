@@ -706,6 +706,9 @@ export class EmissionsService {
         delete b['cpoliza'];
       }
 
+      this.flattenConductorBeneficiario(b);
+      this.normalizeEmissionBodyAliases(b);
+
       if (
         (canal['ctipocanal'] === 'T' ||
           canal['ctipocanal'] === 'A' ||
@@ -859,10 +862,60 @@ export class EmissionsService {
     return lower.includes('póliza rel ya existente') || lower.includes('poliza rel ya existente');
   }
 
+  /**
+   * Emision-Plan envía conductor/beneficiario anidados; el SP espera columnas planas
+   * (@icedula_conductor, @xrif_beneficiario, …). Sin esto TMEMISION queda en NULL.
+   */
+  private flattenConductorBeneficiario(b: Record<string, unknown>): void {
+    for (const key of ['conductor', 'beneficiario'] as const) {
+      const raw = b[key];
+      if (!raw || typeof raw !== 'object' || Array.isArray(raw)) continue;
+      for (const [field, value] of Object.entries(raw as Record<string, unknown>)) {
+        if (b[field] == null && value != null && String(value).trim() !== '') {
+          b[field] = value;
+        }
+      }
+    }
+  }
+
+  /** Alias Emision-Plan / SSO → nombres que lee el SP. */
+  private normalizeEmissionBodyAliases(b: Record<string, unknown>): void {
+    if (b['productor'] != null && b['cproductor'] == null) {
+      b['cproductor'] = b['productor'];
+    }
+    if (b['ccanalalt_in'] != null && b['ccanalalt'] == null) {
+      b['ccanalalt'] = b['ccanalalt_in'];
+    }
+    if (b['cscanalalt_in'] != null && b['cscanalalt'] == null) {
+      b['cscanalalt'] = b['cscanalalt_in'];
+    }
+    if (b['frecuencia'] != null && b['ifrecuencia'] == null) {
+      b['ifrecuencia'] = b['frecuencia'];
+    }
+    if (b['tasa_ca'] != null && b['tasaCa'] == null) b['tasaCa'] = b['tasa_ca'];
+    if (b['tasa_pt'] != null && b['tasaPt'] == null) b['tasaPt'] = b['tasa_pt'];
+    if (b['tasa_pp'] != null && b['tasaPp'] == null) b['tasaPp'] = b['tasa_pp'];
+  }
+
+  private char1(value: unknown): string | null {
+    if (value == null || String(value).trim() === '') return null;
+    return String(value).trim().charAt(0).toUpperCase();
+  }
+
+  private rifNumeric(value: unknown): number | null {
+    if (value == null || String(value).trim() === '') return null;
+    const n = Number(String(value).replace(/\D/g, ''));
+    return Number.isFinite(n) && n > 0 ? n : null;
+  }
+
   /** Beneficiario preferencial anidado (createEmissionAuto / policyMapper). */
   private extractBeneficiario(b: Record<string, unknown>): Record<string, unknown> | null {
     const raw = b['beneficiario'];
-    if (!raw || typeof raw !== 'object' || Array.isArray(raw)) return null;
+    if (!raw || typeof raw !== 'object' || Array.isArray(raw)) {
+      const rif = b['xrif_beneficiario'] ?? b['rif_beneficiario'];
+      if (rif == null || String(rif).replace(/\D/g, '') === '') return null;
+      return b;
+    }
     const ben = raw as Record<string, unknown>;
     const rif = ben['xrif_beneficiario'] ?? ben['rif_beneficiario'] ?? ben['identificacion'];
     if (rif == null || String(rif).replace(/\D/g, '') === '') return null;
@@ -927,7 +980,7 @@ export class EmissionsService {
       xtelefono != null ? String(xtelefono).replace(/\D/g, '').slice(0, 20) : null,
     );
     macReq.input('ifuente', T.Char(10), ifuente);
-    await macReq.execute('spCreateMaclient');
+    await macReq.execute('sp_create_maclient_nexus');
 
     const polReq = this.db.request();
     polReq.input('cnpoliza', T.NVarChar(30), cnpoliza);
@@ -969,6 +1022,8 @@ export class EmissionsService {
     b: Record<string, unknown>,
     canal: Record<string, unknown>,
   ) {
+    this.flattenConductorBeneficiario(b);
+    this.normalizeEmissionBodyAliases(b);
     const T = this.db.types;
     const ptasamon = this.resolvePtasamon(b);
     const { mprima, cmoneda: planMoneda } = await this.resolveMprimaForSp(b);
@@ -995,7 +1050,7 @@ export class EmissionsService {
         type: T.Char(1),
         value: this.pick(b, 'icedula_tomador', 'tipo_cedula_tomador', 'cedula_tomador'),
       },
-      xrif_tomador: { type: T.Numeric(13, 0), value: this.pick(b, 'xrif_tomador', 'rif_tomador') },
+      xrif_tomador: { type: T.Numeric(9), value: this.pick(b, 'xrif_tomador', 'rif_tomador') },
       xnombre_tomador: { type: T.NVarChar(250), value: this.pick(b, 'xnombre_tomador', 'nombre_tomador') },
       xapellido_tomador: { type: T.NVarChar(250), value: this.pick(b, 'xapellido_tomador', 'apellido_tomador') },
       isexo_tomador: { type: T.Char(1), value: this.pick(b, 'isexo_tomador', 'sexo_tomador') },
@@ -1028,7 +1083,7 @@ export class EmissionsService {
         type: T.Char(1),
         value: this.pick(b, 'icedula_titular', 'tipo_cedula_titular', 'cedula_titular'),
       },
-      xrif_titular: { type: T.Numeric(13, 0), value: this.pick(b, 'xrif_titular', 'rif_titular') },
+      xrif_titular: { type: T.Numeric(9), value: this.pick(b, 'xrif_titular', 'rif_titular') },
       xnombre_titular: { type: T.NVarChar(250), value: this.pick(b, 'xnombre_titular', 'nombre_titular') },
       xapellido_titular: { type: T.NVarChar(250), value: this.pick(b, 'xapellido_titular', 'apellido_titular') },
       isexo_titular: { type: T.Char(1), value: this.pick(b, 'isexo_titular', 'sexo_titular') },
@@ -1056,6 +1111,104 @@ export class EmissionsService {
       xcorreo_titular: {
         type: T.NVarChar(250),
         value: this.pick(b, 'xcorreo_titular', 'correo_titular'),
+      },
+      icedula_conductor: {
+        type: T.Char(1),
+        value: this.char1(this.pick(b, 'icedula_conductor')),
+      },
+      xrif_conductor: {
+        type: T.Numeric(13, 0),
+        value: this.rifNumeric(this.pick(b, 'xrif_conductor', 'rif_conductor')),
+      },
+      xnombre_conductor: {
+        type: T.NVarChar(250),
+        value: this.pick(b, 'xnombre_conductor', 'nombre_conductor') ?? null,
+      },
+      xapellido_conductor: {
+        type: T.NVarChar(250),
+        value: this.pick(b, 'xapellido_conductor', 'apellido_conductor') ?? null,
+      },
+      isexo_conductor: {
+        type: T.Char(1),
+        value: this.char1(this.pick(b, 'isexo_conductor', 'sexo_conductor')),
+      },
+      iestado_civil_conductor: {
+        type: T.Char(1),
+        value: this.char1(this.pick(b, 'iestado_civil_conductor', 'estado_civil_conductor')),
+      },
+      fnac_conductor: {
+        type: T.Date,
+        value: this.pick(b, 'fnac_conductor') ?? null,
+      },
+      cestado_conductor: {
+        type: T.VarChar(100),
+        value: String(this.pick(b, 'cestado_conductor', 'estado_conductor') ?? ''),
+      },
+      cciudad_conductor: {
+        type: T.VarChar(100),
+        value: String(this.pick(b, 'cciudad_conductor', 'ciudad_conductor') ?? ''),
+      },
+      xdireccion_conductor: {
+        type: T.NVarChar(1000),
+        value: this.pick(b, 'xdireccion_conductor', 'direccion_conductor') ?? null,
+      },
+      xtelefono_conductor: {
+        type: T.NVarChar(250),
+        value: this.pick(b, 'xtelefono_conductor', 'telefono_conductor') ?? null,
+      },
+      xcorreo_conductor: {
+        type: T.NVarChar(250),
+        value: this.pick(b, 'xcorreo_conductor', 'correo_conductor') ?? null,
+      },
+      icedula_beneficiario: {
+        type: T.Char(1),
+        value: this.char1(this.pick(b, 'icedula_beneficiario')),
+      },
+      xrif_beneficiario: {
+        type: T.Numeric(13, 0),
+        value: this.rifNumeric(this.pick(b, 'xrif_beneficiario', 'rif_beneficiario')),
+      },
+      xnombre_beneficiario: {
+        type: T.NVarChar(250),
+        value: this.pick(b, 'xnombre_beneficiario', 'nombre_beneficiario') ?? null,
+      },
+      xapellido_beneficiario: {
+        type: T.NVarChar(250),
+        value: this.pick(b, 'xapellido_beneficiario', 'apellido_beneficiario') ?? null,
+      },
+      isexo_beneficiario: {
+        type: T.Char(1),
+        value: this.char1(this.pick(b, 'isexo_beneficiario', 'sexo_beneficiario')),
+      },
+      iestado_civil_beneficiario: {
+        type: T.Char(1),
+        value: this.char1(
+          this.pick(b, 'iestado_civil_beneficiario', 'estado_civil_beneficiario'),
+        ),
+      },
+      fnac_beneficiario: {
+        type: T.Date,
+        value: this.pick(b, 'fnac_beneficiario') ?? null,
+      },
+      cestado_beneficiario: {
+        type: T.VarChar(100),
+        value: String(this.pick(b, 'cestado_beneficiario', 'estado_beneficiario') ?? ''),
+      },
+      cciudad_beneficiario: {
+        type: T.VarChar(100),
+        value: String(this.pick(b, 'cciudad_beneficiario', 'ciudad_beneficiario') ?? ''),
+      },
+      xdireccion_beneficiario: {
+        type: T.NVarChar(1000),
+        value: this.pick(b, 'xdireccion_beneficiario', 'direccion_beneficiario') ?? null,
+      },
+      xtelefono_beneficiario: {
+        type: T.NVarChar(250),
+        value: this.pick(b, 'xtelefono_beneficiario', 'telefono_beneficiario') ?? null,
+      },
+      xcorreo_beneficiario: {
+        type: T.NVarChar(250),
+        value: this.pick(b, 'xcorreo_beneficiario', 'correo_beneficiario') ?? null,
       },
       cmarca: { type: T.VarChar(3), value: this.pick(b, 'cmarca', 'marca') },
       cmodelo: { type: T.VarChar(3), value: this.pick(b, 'cmodelo', 'modelo') },
@@ -1102,11 +1255,11 @@ export class EmissionsService {
       },
       ccanalalt: {
         type: T.Int,
-        value: b['ccanalalt'] != null ? this.intField(b['ccanalalt']) : null,
+        value: this.intField(this.pick(b, 'ccanalalt', 'ccanalalt_in')),
       },
       cscanalalt: {
         type: T.Int,
-        value: b['cscanalalt'] != null ? this.intField(b['cscanalalt']) : null,
+        value: this.intField(this.pick(b, 'cscanalalt', 'cscanalalt_in')),
       },
       cusuario: {
         type: T.Numeric(13, 0),
@@ -1150,19 +1303,19 @@ export class EmissionsService {
       },
       coberAdicional: {
         type: T.VarChar(2),
-        value: this.pick(b, 'coberAdicional') ?? 'RC',
+        value: this.pick(b, 'coberAdicional', 'cober_adicional') ?? 'RC',
       },
       tasaPt: {
         type: T.Numeric(18, 2),
-        value: this.pick(b, 'tasaPt') ?? 0,
+        value: this.pick(b, 'tasaPt', 'tasa_pt') ?? 0,
       },
       tasaCa: {
         type: T.Numeric(18, 2),
-        value: this.pick(b, 'tasaCa') ?? 0,
+        value: this.pick(b, 'tasaCa', 'tasa_ca') ?? 0,
       },
       tasaPp: {
         type: T.Numeric(18, 2),
-        value: this.pick(b, 'tasaPp') ?? 0,
+        value: this.pick(b, 'tasaPp', 'tasa_pp') ?? 0,
       },
       itipo_diligencia: {
         type: T.Char(1),
