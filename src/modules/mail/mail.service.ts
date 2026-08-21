@@ -4,6 +4,8 @@ import nodemailer from 'nodemailer';
 import type Transporter from 'nodemailer/lib/mailer';
 import { renderPolicyWelcomeHtml } from './templates/policy-welcome.template';
 import type { SendPolicyEmailDto } from './dto/send-policy-email.dto';
+import type { SendFuneralPaymentLinkDto } from './dto/send-funeral-payment-link.dto';
+import { renderFuneralPaymentLinkHtml } from './templates/funeral-payment-link.template';
 
 export type PolicyEmissionMailResult = {
   sent: boolean;
@@ -50,6 +52,56 @@ export class MailService {
       return this.sendViaSisipApi(dto);
     }
     return this.sendViaSmtp(dto);
+  }
+
+  async sendFuneralPaymentLinkEmail(
+    dto: SendFuneralPaymentLinkDto,
+  ): Promise<PolicyEmissionMailResult> {
+    if (!this.isEnabled()) {
+      return { sent: false, mode: 'disabled', error: 'MAIL_ENABLED=false' };
+    }
+
+    const fromEmail = this.config.get<string>('SMTP_FROM', 'info@lamundialdeseguros.com');
+    const fromName = this.config.get<string>('SMTP_FROM_NAME', 'La Mundial de Seguros');
+    const replyTo = this.config.get<string>('SMTP_REPLY_TO', fromEmail);
+    const name = dto.name?.trim() || 'Cliente';
+    const planName = dto.planName?.trim() || 'Funerario';
+    const subject = `Pago de póliza funerario — ${planName}`;
+
+    let expiresLabel: string | undefined;
+    if (dto.expiresAt) {
+      try {
+        expiresLabel = new Date(dto.expiresAt).toLocaleString('es-VE', {
+          dateStyle: 'medium',
+          timeStyle: 'short',
+        });
+      } catch {
+        expiresLabel = dto.expiresAt;
+      }
+    }
+
+    const html = renderFuneralPaymentLinkHtml({
+      nombre: name,
+      planName,
+      paymentUrl: dto.paymentUrl,
+      expiresLabel,
+    });
+
+    try {
+      const info = await this.getTransporter().sendMail({
+        from: `"${fromName}" <${fromEmail}>`,
+        replyTo,
+        to: { name, address: dto.to },
+        subject,
+        html,
+      });
+      this.logger.log(`Correo link pago funerario enviado a ${dto.to}`);
+      return { sent: true, mode: 'smtp', messageId: info.messageId };
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : String(err);
+      this.logger.error(`Fallo correo link pago funerario: ${msg}`);
+      return { sent: false, mode: 'smtp', error: msg };
+    }
   }
 
   private getTransporter(): Transporter {

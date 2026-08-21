@@ -2,6 +2,7 @@ import { Body, Controller, HttpCode, HttpStatus, Post } from '@nestjs/common';
 import { ApiBody, ApiHeader, ApiOperation, ApiResponse, ApiTags } from '@nestjs/swagger';
 import { MailService } from './mail.service';
 import { SendPolicyEmailDto } from './dto/send-policy-email.dto';
+import { SendFuneralPaymentLinkDto } from './dto/send-funeral-payment-link.dto';
 import { NestProtected } from '../auth/decorators/nest-protected.decorator';
 import { NEST_AUTH_SCOPES } from '../auth/scopes/nest-auth-scopes.constants';
 import { APIKEY_HEADER } from '../../common/swagger/api-docs.constants';
@@ -36,5 +37,19 @@ export class MailController {
       success: result.sent,
       ...result,
     };
+  }
+
+  @Post('funeral-payment-link')
+  @NestProtected(NEST_AUTH_SCOPES.EMISSIONS_AUTO)
+  @HttpCode(HttpStatus.OK)
+  @ApiHeader(APIKEY_HEADER)
+  @ApiOperation({
+    summary: 'Enviar enlace de pago funerario tras aprobación técnica',
+    operationId: 'sendFuneralPaymentLinkEmail',
+  })
+  @ApiBody({ type: SendFuneralPaymentLinkDto })
+  async sendFuneralPaymentLink(@Body() dto: SendFuneralPaymentLinkDto) {
+    const result = await this.mailService.sendFuneralPaymentLinkEmail(dto);
+    return { success: result.sent, ...result };
   }
 }
