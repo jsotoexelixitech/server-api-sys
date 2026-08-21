@@ -85,6 +85,12 @@ export class ValrepService {
     private readonly config: ConfigService,
   ) {}
 
+  /** Placeholder Sis2000 en catálogos geo — no es estado/ciudad válido. */
+  static isGeoCatalogPlaceholder(label: string): boolean {
+    const t = String(label ?? '').trim().toUpperCase();
+    return t === 'TODO' || t === 'TODOS' || t === 'TODAS';
+  }
+
   private resolveRamoBinacional(): number {
     return parseInt(this.config.get<string>('LAMUNDIAL_RAMO_BINACIONAL', '28') ?? '28', 10);
   }
@@ -194,10 +200,12 @@ export class ValrepService {
 
       const result = await req.execute('sp_ma_obtener_estados');
       const rows = (result.recordset ?? []) as { cvalor: number; xdescripcion: string }[];
-      return rows.map((r) => ({
-        cestado: Number(r.cvalor),
-        xdescripcion_l: String(r.xdescripcion ?? '').trim(),
-      }));
+      return rows
+        .map((r) => ({
+          cestado: Number(r.cvalor),
+          xdescripcion_l: String(r.xdescripcion ?? '').trim(),
+        }))
+        .filter((r) => r.xdescripcion_l && !ValrepService.isGeoCatalogPlaceholder(r.xdescripcion_l));
     } catch (err) {
       const msg = err instanceof Error ? err.message : String(err);
       this.logger.error(`getStates: ${msg}`);
@@ -222,10 +230,12 @@ export class ValrepService {
 
       const result = await req.execute('sp_ma_obtener_ciudades');
       const rows = (result.recordset ?? []) as { cvalor: number; xdescripcion: string }[];
-      return rows.map((r) => ({
-        cciudad: Number(r.cvalor),
-        xdescripcion_l: String(r.xdescripcion ?? '').trim(),
-      }));
+      return rows
+        .map((r) => ({
+          cciudad: Number(r.cvalor),
+          xdescripcion_l: String(r.xdescripcion ?? '').trim(),
+        }))
+        .filter((r) => r.xdescripcion_l && !ValrepService.isGeoCatalogPlaceholder(r.xdescripcion_l));
     } catch (err) {
       const msg = err instanceof Error ? err.message : String(err);
       this.logger.error(`getCities: ${msg}`);
