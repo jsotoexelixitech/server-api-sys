@@ -3,6 +3,7 @@ import { ConfigService } from '@nestjs/config';
 import { EXELIXI_PARTNER_HOST, ExelixiPartnerHost } from '@jsotoexelixitech/nest-api-sdk';
 import { PrismaService } from '../database/prisma/prisma.service';
 import { queryMaclientApi } from '../modules/auth/api-key-db.support';
+import { getCurrentNestAuth } from '../modules/auth/nest-request-auth.context';
 
 /** Claves de entorno que un partner puede leer vía host (sin secretos de BD). */
 const PARTNER_CONFIG_WHITELIST = new Set([
@@ -10,6 +11,8 @@ const PARTNER_CONFIG_WHITELIST = new Set([
   'PUBLIC_API_ORIGIN',
   'LAMUNDIAL_PRODUCTOR',
   'LAMUNDIAL_CUSUARIO',
+  /** Preferido: canal de la API key del request; env solo como fallback. */
+  'CANAL_VENTA',
 ]);
 
 @Injectable()
@@ -22,6 +25,15 @@ export class PartnerHostService implements ExelixiPartnerHost {
   ) { }
 
   getConfig(key: string): string | undefined {
+    if (key === 'CANAL_VENTA' || key === 'XCANAL_VENTA') {
+      const fromKey = getCurrentNestAuth()?.xcanalVenta?.trim();
+      if (fromKey) return fromKey;
+      const fromEnv =
+        this.config.get<string>('CANAL_VENTA') ?? process.env.CANAL_VENTA;
+      const trimmed = fromEnv?.trim();
+      return trimmed || undefined;
+    }
+
     if (!PARTNER_CONFIG_WHITELIST.has(key)) {
       this.logger.warn(`Partner solicitó config no permitida: ${key}`);
       return undefined;

@@ -11,6 +11,7 @@ import { IS_PUBLIC_KEY } from './decorators/public.decorator';
 import { NEST_SCOPE_KEY } from './decorators/nest-scope.decorator';
 import { NestAuthService } from './nest-auth.service';
 import { grantMatchesRoute } from './scopes/nest-auth-scopes.constants';
+import { bindNestRequestAuth } from './nest-request-auth.context';
 
 function extractBearer(req: Request): string | null {
   const auth = req.headers.authorization;
@@ -43,6 +44,7 @@ export class NestAuthGuard implements CanActivate {
     if (!this.auth.isEnabled()) {
       const apikey = String(req.headers['apikey'] ?? '').trim();
       req.nestAuth = { apikey, scopes: ['*'], via: apikey ? 'apikey' : 'none' };
+      bindNestRequestAuth(req.nestAuth);
       return true;
     }
 
@@ -57,6 +59,7 @@ export class NestAuthGuard implements CanActivate {
         apikey: session.apikey,
         apiKeyId: session.apiKeyId,
         scopes: session.scopes,
+        xcanalVenta: session.xcanalVenta ?? null,
         sessionId: session.id,
         via: 'bearer',
       };
@@ -65,6 +68,7 @@ export class NestAuthGuard implements CanActivate {
         req.nestAuth.refreshedAccessToken =
           this.auth.issueAccessTokenForSession(session);
       }
+      bindNestRequestAuth(req.nestAuth);
       this.assertScope(req, req.nestAuth.scopes, requiredScope);
       return true;
     }
@@ -76,8 +80,10 @@ export class NestAuthGuard implements CanActivate {
         apikey,
         apiKeyId: resolved.apiKeyId,
         scopes: resolved.scopes,
+        xcanalVenta: resolved.xcanalVenta ?? null,
         via: 'apikey',
       };
+      bindNestRequestAuth(req.nestAuth);
       this.assertScope(req, resolved.scopes, requiredScope);
       return true;
     }
