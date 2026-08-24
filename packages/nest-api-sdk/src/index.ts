@@ -11,7 +11,9 @@ export const EXELIXI_PARTNER_HOST = Symbol('EXELIXI_PARTNER_HOST');
 export interface ExelixiPartnerHost {
   getConfig(key: string): string | undefined;
   log(level: 'log' | 'warn' | 'error', message: string, context?: string): void;
+  queryMaclientApi?(canal_venta: string): Promise<Record<string, any> | null>;
 }
+
 
 export interface PartnerModuleRegisterOptions {
   host?: ExelixiPartnerHost;
