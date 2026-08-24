@@ -1,4 +1,4 @@
-import { Global, Module } from '@nestjs/common';
+import { Global, MiddlewareConsumer, Module, NestModule } from '@nestjs/common';
 import { APP_GUARD, APP_INTERCEPTOR } from '@nestjs/core';
 import { JwtModule } from '@nestjs/jwt';
 import { ConfigModule, ConfigService } from '@nestjs/config';
@@ -11,6 +11,7 @@ import { ApiKeyService } from './api-key.service';
 import { ApiChannelService } from './api-channel.service';
 import { NestTokenRefreshInterceptor } from './nest-token-refresh.interceptor';
 import { ScopeCatalogBootstrapService } from './scopes/scope-catalog.bootstrap';
+import { NestRequestAuthMiddleware } from './nest-request-auth.middleware';
 
 @Global()
 @Module({
@@ -37,6 +38,7 @@ import { ScopeCatalogBootstrapService } from './scopes/scope-catalog.bootstrap';
     RefreshTokenStore,
     ApiChannelService,
     ScopeCatalogBootstrapService,
+    NestRequestAuthMiddleware,
     {
       provide: APP_GUARD,
       useClass: NestAuthGuard,
@@ -48,4 +50,8 @@ import { ScopeCatalogBootstrapService } from './scopes/scope-catalog.bootstrap';
   ],
   exports: [NestAuthService, NestAuthGuard, ApiChannelService, ApiKeyService],
 })
-export class AuthModule {}
+export class AuthModule implements NestModule {
+  configure(consumer: MiddlewareConsumer): void {
+    consumer.apply(NestRequestAuthMiddleware).forRoutes('*');
+  }
+}
