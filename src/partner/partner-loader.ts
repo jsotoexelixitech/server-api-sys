@@ -11,6 +11,7 @@ import {
 } from '../modules/auth/scopes/scope-catalog.registry';
 import { discoverRoutesFromController } from '../modules/auth/scopes/scope-route-discovery';
 import { requirePartnerPackage } from './partner-package-require';
+import { partnerHostBridge } from './partner-host-bridge';
 
 const loaderLog = new Logger('PartnerLoader');
 
@@ -158,7 +159,7 @@ export function loadPartnerDynamicModules(packageNames: string[]): DynamicModule
         );
       }
 
-      const dynamicModule = register();
+      const dynamicModule = register({ host: partnerHostBridge });
       const controllers = collectControllersFromModuleRef(dynamicModule);
       let routeCount = 0;
       for (const controller of controllers) {
