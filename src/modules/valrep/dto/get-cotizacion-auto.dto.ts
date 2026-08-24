@@ -102,4 +102,14 @@ export class GetCotizacionAutoDto {
   @Type(() => Number)
   @IsInt()
   ndias?: number;
+
+  @ApiPropertyOptional({
+    example: 7,
+    description: 'Usuario Sis2000 (sso-delegate metadata.cusuario). Si omitido, usa env LAMUNDIAL_CUSUARIO_*.',
+  })
+  @IsOptional()
+  @Type(() => Number)
+  @IsInt()
+  @Min(1)
+  cusuario?: number;
 }
