@@ -29,8 +29,9 @@ export class PartnerHostService implements ExelixiPartnerHost {
       const auth = getCurrentNestAuth();
       const fromKey = auth?.xcanalVenta?.trim();
       if (fromKey) return fromKey;
-      this.logger.warn(
-        `CANAL_VENTA vacío (apiKeyId=${auth?.apiKeyId ?? 'n/a'} via=${auth?.via ?? 'n/a'} xcanal=${auth?.xcanalVenta ?? 'null'})`,
+      // eslint-disable-next-line no-console -- diagnóstico visible en pm2 logs
+      console.warn(
+        `[PartnerHost] CANAL_VENTA vacío apiKeyId=${auth?.apiKeyId ?? 'n/a'} via=${auth?.via ?? 'n/a'} xcanal=${JSON.stringify(auth?.xcanalVenta ?? null)}`,
       );
       const fromEnv =
         this.config.get<string>('CANAL_VENTA') ?? process.env.CANAL_VENTA;
