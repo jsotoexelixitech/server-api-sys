@@ -407,7 +407,7 @@ export class ValrepService {
         sumaAsegAd: 0,
         recargo: 0,
         recargoRcv: body.precargorcv ?? 0,
-        cusuario: this.resolveCusuarioSis2000(),
+        cusuario: body.cusuario ?? this.resolveCusuarioSis2000(),
       });
 
       const mprimaext = calc.pa;
