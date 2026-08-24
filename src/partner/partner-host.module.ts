@@ -26,8 +26,12 @@ export class PartnerHostService implements ExelixiPartnerHost {
 
   getConfig(key: string): string | undefined {
     if (key === 'CANAL_VENTA' || key === 'XCANAL_VENTA') {
-      const fromKey = getCurrentNestAuth()?.xcanalVenta?.trim();
+      const auth = getCurrentNestAuth();
+      const fromKey = auth?.xcanalVenta?.trim();
       if (fromKey) return fromKey;
+      this.logger.warn(
+        `CANAL_VENTA vacío (apiKeyId=${auth?.apiKeyId ?? 'n/a'} via=${auth?.via ?? 'n/a'} xcanal=${auth?.xcanalVenta ?? 'null'})`,
+      );
       const fromEnv =
         this.config.get<string>('CANAL_VENTA') ?? process.env.CANAL_VENTA;
       const trimmed = fromEnv?.trim();

@@ -32,6 +32,7 @@ import {
 import { readPartnerPackagesConfig } from './partner/partner-env';
 import { OpenApiDocumentStore } from './modules/docs/open-api-document.store';
 import { joinPublicPath } from './common/config/public-path';
+import { nestRequestAuthAls } from './modules/auth/nest-request-auth.context';
 
 function resolveBrandAssetsDir(): string {
   const candidates = [
@@ -99,6 +100,12 @@ async function bootstrap(): Promise<void> {
 
   app.set('trust proxy', 1);
   app.setGlobalPrefix('api');
+
+  // ALS global: PartnerHost.getConfig('CANAL_VENTA') lee el canal de la API key del request.
+  // Debe ir en Express (app.use), no solo en AuthModule.middleware (no cubre partners).
+  app.use((_req: any, _res: any, next: any) => {
+    nestRequestAuthAls.run({}, () => next());
+  });
 
   // Permitir acceso a la red privada (Private Network Access / LNA) para evitar bloqueos del navegador
   app.use((req: any, res: any, next: any) => {
