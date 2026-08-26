@@ -18,13 +18,13 @@ export function renderFuneralPaymentLinkHtml(params: {
       <table width="100%" style="max-width:520px;background:#fff;border-radius:16px;overflow:hidden;box-shadow:0 4px 24px rgba(15,23,42,.08)">
         <tr><td style="background:linear-gradient(135deg,#4f46e5,#7c3aed);padding:28px 32px">
           <p style="margin:0;color:rgba(255,255,255,.85);font-size:12px;font-weight:700;letter-spacing:.12em;text-transform:uppercase">Seguro funerario</p>
-          <h1 style="margin:8px 0 0;color:#fff;font-size:22px;font-weight:800">Tu solicitud fue aprobada</h1>
+          <h1 style="margin:8px 0 0;color:#fff;font-size:22px;font-weight:800">Completa el pago de tu póliza</h1>
         </td></tr>
         <tr><td style="padding:32px">
           <p style="margin:0 0 16px;color:#0f172a;font-size:16px;line-height:1.6">Hola <strong>${nombre}</strong>,</p>
           <p style="margin:0 0 16px;color:#475569;font-size:15px;line-height:1.6">
-            Un técnico autorizó tu póliza <strong>${planName}</strong>. Ya puedes completar el pago en línea.
-            Los datos de tu solicitud están precargados y no podrás modificarlos en este paso.
+            Tu póliza <strong>${planName}</strong> está lista para contratarse. Usa el botón para ingresar al pago seguro en línea.
+            Tus datos ya están precargados en el formulario.
           </p>
           <p style="margin:24px 0;text-align:center">
             <a href="${paymentUrl}" style="display:inline-block;background:#4f46e5;color:#fff;text-decoration:none;font-weight:700;font-size:15px;padding:14px 28px;border-radius:12px">Ir a pagar mi póliza</a>
