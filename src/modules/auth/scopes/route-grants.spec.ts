@@ -31,7 +31,7 @@ describe('grantMatchesRoute', () => {
       grantMatchesRoute(
         ['emissions:person'],
         'POST',
-        '/api/v1/external/createEmissionPerson',
+        '/api/v1/emision-personas/createEmissionPerson',
         'emissions:person',
       ),
     ).toBe(true);
@@ -50,7 +50,7 @@ describe('grantMatchesRoute', () => {
       grantMatchesRoute(
         [personEmision],
         'POST',
-        '/api/v1/external/createEmissionPerson',
+        '/api/v1/emision-personas/createEmissionPerson',
         'emissions:person',
       ),
     ).toBe(false);

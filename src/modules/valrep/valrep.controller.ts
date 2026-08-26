@@ -262,7 +262,7 @@ export class ValrepController {
     summary: 'Funerario paso 3 · Detalle del plan',
     description:
       'Detalle del plan: coberturas, parentescos y condiciones operativas.\n\n' +
-      '**Siguiente paso:** `POST /external/getCotizacionPer` o `POST /personas/cotizacion`.',
+      '**Siguiente paso:** `POST /emision-personas/getCotizacionPer` o `POST /personas/cotizacion` (partner: `POST /external/getCotizacionPer`).',
     operationId: 'funerarioValrepPlanesDetalle',
   })
   @ApiBody({ type: GetPlanesDetallePersonasDto })

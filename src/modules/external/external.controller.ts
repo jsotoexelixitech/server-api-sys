@@ -17,8 +17,13 @@ import { NestProtected } from '../auth/decorators/nest-protected.decorator';
 import { NEST_AUTH_SCOPES } from '../auth/scopes/nest-auth-scopes.constants';
 import { NestApiKey } from '../auth/decorators/nest-api-key.decorator';
 
+/**
+ * Core · Sección 6 — emisión personas.
+ * Prefijo `/emision-personas` (antes `/external`) para no colisionar con el partner
+ * Gestacio, que conserva `POST /api/v1/external/{getCotizacionPer|validateEmissionPerson|createEmissionPerson}`.
+ */
 @ApiTags('6. Emisión personas')
-@Controller('v1/external')
+@Controller('v1/emision-personas')
 export class ExternalController {
   constructor(private readonly personasService: PersonasService) {}
 
@@ -29,8 +34,9 @@ export class ExternalController {
     summary: 'Funerario paso 4 · Cotización de personas',
     description:
       'Cotización de personas con desglose por asegurado y totales de extensión.\n\n' +
-      '**Flujo recomendado:** productos → planes/producto → planes/detalle → cotización → validación → emisión.',
-    operationId: 'funerarioExternalGetCotizacionPer',
+      '**Flujo recomendado:** productos → planes/producto → planes/detalle → cotización → validación → emisión.\n\n' +
+      '**Nota:** el alias legacy `/api/v1/external/getCotizacionPer` lo expone el partner Gestacio (sección 8).',
+    operationId: 'funerarioCoreGetCotizacionPer',
   })
   @ApiHeader(APIKEY_HEADER)
   @ApiBody({ type: CotizacionPerDto })
@@ -58,8 +64,10 @@ export class ExternalController {
   @HttpCode(HttpStatus.OK)
   @ApiOperation({
     summary: 'Funerario paso 5 · Validar emisión de personas',
-    description: 'Valida reglas de negocio antes de emitir. Paso previo a `POST /external/createEmissionPerson`.',
-    operationId: 'funerarioExternalValidateEmissionPerson',
+    description:
+      'Valida reglas de negocio antes de emitir. Paso previo a `POST /emision-personas/createEmissionPerson`.\n\n' +
+      '**Nota:** el alias legacy `/api/v1/external/validateEmissionPerson` lo expone el partner Gestacio (sección 8).',
+    operationId: 'funerarioCoreValidateEmissionPerson',
   })
   @ApiBody({ type: ValidateEmissionPersonDto })
   @ApiResponse({
@@ -82,8 +90,10 @@ export class ExternalController {
   @NestProtected(NEST_AUTH_SCOPES.EMISSIONS_PERSON)
   @ApiOperation({
     summary: 'Funerario paso 6 · Emitir póliza de personas',
-    description: 'Emite la póliza de personas. Requiere clave de API en entornos públicos.',
-    operationId: 'funerarioExternalCreateEmissionPerson',
+    description:
+      'Emite la póliza de personas. Requiere clave de API en entornos públicos.\n\n' +
+      '**Nota:** el alias legacy `/api/v1/external/createEmissionPerson` lo expone el partner Gestacio (sección 8).',
+    operationId: 'funerarioCoreCreateEmissionPerson',
   })
   @ApiHeader(APIKEY_HEADER)
   @ApiBody({ type: CreateEmissionPersonDto })
