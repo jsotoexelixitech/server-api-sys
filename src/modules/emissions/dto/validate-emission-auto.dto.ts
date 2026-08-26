@@ -16,7 +16,7 @@ export class ValidateEmissionAutoDto {
   @ApiProperty({ example: 'AE886C', description: 'Placa del vehículo' })
   @IsString({ message: 'La placa debe ser texto.' })
   @IsNotEmpty({ message: 'La placa es requerida.' })
-  @MaxLength(7, { message: 'La placa no debe exceder 7 caracteres.' })
+  @MaxLength(8, { message: 'La placa no debe exceder 8 caracteres.' })
   placa: string;
 
   @ApiProperty({
