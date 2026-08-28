@@ -20,6 +20,7 @@ import {
 } from './common/swagger/swagger-tags.constants';
 import { normalizeSwaggerDocumentTags } from './common/swagger/normalize-swagger-tags';
 import { sanitizeSwaggerDocForNestUi } from './common/swagger/sanitize-swagger-for-ui';
+import { stripPasoLabelsFromExternalPersonasDoc } from './common/swagger/strip-external-personas-paso';
 import {
   LA_MUNDIAL_BRAND,
   SWAGGER_BRAND_META,
@@ -192,6 +193,7 @@ async function bootstrap(): Promise<void> {
 
     const document = SwaggerModule.createDocument(app, swaggerConfig);
     normalizeSwaggerDocumentTags(document);
+    stripPasoLabelsFromExternalPersonasDoc(document);
     document.security = [{ bearer: [] }, { apikey: [] }];
     for (const pathKey of Object.keys(document.paths ?? {})) {
       if (pathKey.includes('/auth/token') || pathKey.includes('/auth/refresh')) {
