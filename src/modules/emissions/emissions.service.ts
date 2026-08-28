@@ -85,8 +85,11 @@ export class EmissionsService {
   }
 
   /**
-   * Prima y moneda para el SP RCV2.
-   * @mprima se envía siempre en 0; la prima cotizada no se reinyecta al SP.
+   * Prima para el SP de pre-emisión.
+   * Debe reinyectarse la prima cotizada (igual que SysIP-backend): si va en 0 el SP
+   * recalcula y los recibos del cuadro no coinciden con la cuota mostrada en UI.
+   * - Planes en $: @mprima = mprimaext (USD)
+   * - Planes en Bs: @mprima = mprima o mprimaext × ptasa
    */
   private async resolveMprimaForSp(
     b: Record<string, unknown>,
@@ -100,10 +103,18 @@ export class EmissionsService {
     }
 
     if (this.isUsdMoneda(cmoneda)) {
-      return { mprima: 0, cmoneda: '$' };
+      const ext = Number(this.pick(b, 'mprimaext', 'mprima_ext') ?? 0);
+      return {
+        mprima: Number.isFinite(ext) && ext > 0 ? ext : 0,
+        cmoneda: '$',
+      };
     }
 
-    return { mprima: 0, cmoneda };
+    const mprima = this.resolveMprima(b);
+    return {
+      mprima: mprima != null && Number(mprima) > 0 ? Number(mprima) : 0,
+      cmoneda,
+    };
   }
 
   /** Log de trazabilidad prima: body HTTP vs valor enviado al SP. */
@@ -912,6 +923,7 @@ export class EmissionsService {
   private extractBeneficiario(b: Record<string, unknown>): Record<string, unknown> | null {
     const raw = b['beneficiario'];
     if (!raw || typeof raw !== 'object' || Array.isArray(raw)) {
+      // También aceptar campos ya aplanados en el body
       const rif = b['xrif_beneficiario'] ?? b['rif_beneficiario'];
       if (rif == null || String(rif).replace(/\D/g, '') === '') return null;
       return b;
@@ -1112,6 +1124,7 @@ export class EmissionsService {
         type: T.NVarChar(250),
         value: this.pick(b, 'xcorreo_titular', 'correo_titular'),
       },
+      // Conductor / beneficiario (payload anidado ya aplanado en createEmissionAuto)
       icedula_conductor: {
         type: T.Char(1),
         value: this.char1(this.pick(b, 'icedula_conductor')),

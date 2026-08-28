@@ -39,8 +39,8 @@ export class CondominioController {
             id: 'vecinos',
             nombre: 'Responsabilidad Civil General (Vecinos)',
             cramo: 28,
-            cplan_defecto: 'BINAC',
-            descripcion: 'Cobertura de responsabilidad civil para cubrir daños corporales o materiales causados a terceros o vecinos.'
+            cplan_defecto: 'IGEMA',
+            descripcion: 'Responsabilidad Civil General (predio y operaciones): cobertura básica predio/operaciones, contratista independiente y afines. Plan IGEMA — no usar BINAC (binacional vehicular).'
           },
           {
             id: 'condominio',
@@ -68,8 +68,8 @@ export class CondominioController {
           id: 'vecinos',
           nombre: 'Responsabilidad Civil General (Vecinos)',
           cramo: 28,
-          cplan_defecto: 'BINAC',
-          descripcion: 'Cobertura de responsabilidad civil para cubrir daños corporales o materiales causados a terceros o vecinos.'
+          cplan_defecto: 'IGEMA',
+          descripcion: 'Responsabilidad Civil General (predio y operaciones): cobertura básica predio/operaciones, contratista independiente y afines. Plan IGEMA — no usar BINAC (binacional vehicular).'
         },
         {
           id: 'condominio',
@@ -89,7 +89,7 @@ export class CondominioController {
     description: `Obtiene los planes activos, las coberturas configuradas (agrupadas dentro de cada plan), los dispositivos de seguridad y las sustancias peligrosas asociadas al ramo. 
     
 *   **Hogar**: cramo 38 (plan por defecto: RESIDE)
-*   **Vecinos**: cramo 28 (plan por defecto: BINAC)
+*   **Vecinos**: cramo 28 (plan por defecto: IGEMA)
 *   **Condominio**: cramo 16 (plan por defecto: CONDOM)
     
 *Nota: Si se envía el campo 'cplan', se filtrará únicamente ese plan. Si se omite, se retornarán todos los planes del ramo con sus coberturas para poder compararlos.*`,
