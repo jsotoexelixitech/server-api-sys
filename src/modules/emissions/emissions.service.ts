@@ -83,8 +83,11 @@ export class EmissionsService {
   }
 
   /**
-   * Prima y moneda para el SP RCV2.
-   * @mprima se envía siempre en 0; la prima cotizada no se reinyecta al SP.
+   * Prima para el SP de pre-emisión.
+   * Debe reinyectarse la prima cotizada (igual que SysIP-backend): si va en 0 el SP
+   * recalcula y los recibos del cuadro no coinciden con la cuota mostrada en UI.
+   * - Planes en $: @mprima = mprimaext (USD)
+   * - Planes en Bs: @mprima = mprima o mprimaext × ptasa
    */
   private async resolveMprimaForSp(
     b: Record<string, unknown>,
@@ -98,10 +101,18 @@ export class EmissionsService {
     }
 
     if (this.isUsdMoneda(cmoneda)) {
-      return { mprima: 0, cmoneda: '$' };
+      const ext = Number(this.pick(b, 'mprimaext', 'mprima_ext') ?? 0);
+      return {
+        mprima: Number.isFinite(ext) && ext > 0 ? ext : 0,
+        cmoneda: '$',
+      };
     }
 
-    return { mprima: 0, cmoneda };
+    const mprima = this.resolveMprima(b);
+    return {
+      mprima: mprima != null && Number(mprima) > 0 ? Number(mprima) : 0,
+      cmoneda,
+    };
   }
 
   /** Log de trazabilidad prima: body HTTP vs valor enviado al SP. */
@@ -569,6 +580,8 @@ export class EmissionsService {
         delete b['cpoliza'];
       }
 
+      this.flattenConductorBeneficiario(b);
+
       if (
         (canal['ctipocanal'] === 'T' ||
           canal['ctipocanal'] === 'A' ||
@@ -722,10 +735,42 @@ export class EmissionsService {
     return lower.includes('póliza rel ya existente') || lower.includes('poliza rel ya existente');
   }
 
+  /**
+   * Emision-Plan envía conductor/beneficiario anidados; el SP espera columnas planas
+   * (@icedula_conductor, @xrif_beneficiario, …). Sin esto TMEMISION queda en NULL.
+   */
+  private flattenConductorBeneficiario(b: Record<string, unknown>): void {
+    for (const key of ['conductor', 'beneficiario'] as const) {
+      const raw = b[key];
+      if (!raw || typeof raw !== 'object' || Array.isArray(raw)) continue;
+      for (const [field, value] of Object.entries(raw as Record<string, unknown>)) {
+        if (b[field] == null && value != null && String(value).trim() !== '') {
+          b[field] = value;
+        }
+      }
+    }
+  }
+
+  private char1(value: unknown): string | null {
+    if (value == null || String(value).trim() === '') return null;
+    return String(value).trim().charAt(0).toUpperCase();
+  }
+
+  private rifNumeric(value: unknown): number | null {
+    if (value == null || String(value).trim() === '') return null;
+    const n = Number(String(value).replace(/\D/g, ''));
+    return Number.isFinite(n) && n > 0 ? n : null;
+  }
+
   /** Beneficiario preferencial anidado (createEmissionAuto / policyMapper). */
   private extractBeneficiario(b: Record<string, unknown>): Record<string, unknown> | null {
     const raw = b['beneficiario'];
-    if (!raw || typeof raw !== 'object' || Array.isArray(raw)) return null;
+    if (!raw || typeof raw !== 'object' || Array.isArray(raw)) {
+      // También aceptar campos ya aplanados en el body
+      const rif = b['xrif_beneficiario'] ?? b['rif_beneficiario'];
+      if (rif == null || String(rif).replace(/\D/g, '') === '') return null;
+      return b;
+    }
     const ben = raw as Record<string, unknown>;
     const rif = ben['xrif_beneficiario'] ?? ben['rif_beneficiario'] ?? ben['identificacion'];
     if (rif == null || String(rif).replace(/\D/g, '') === '') return null;
@@ -790,7 +835,7 @@ export class EmissionsService {
       xtelefono != null ? String(xtelefono).replace(/\D/g, '').slice(0, 20) : null,
     );
     macReq.input('ifuente', T.Char(10), ifuente);
-    await macReq.execute('spCreateMaclient');
+    await macReq.execute('sp_create_maclient_nexus');
 
     const polReq = this.db.request();
     polReq.input('cnpoliza', T.NVarChar(30), cnpoliza);
@@ -832,6 +877,7 @@ export class EmissionsService {
     b: Record<string, unknown>,
     canal: Record<string, unknown>,
   ) {
+    this.flattenConductorBeneficiario(b);
     const T = this.db.types;
     const ptasamon = this.resolvePtasamon(b);
     const { mprima, cmoneda: planMoneda } = await this.resolveMprimaForSp(b);
@@ -919,6 +965,105 @@ export class EmissionsService {
       xcorreo_titular: {
         type: T.NVarChar(250),
         value: this.pick(b, 'xcorreo_titular', 'correo_titular'),
+      },
+      // Conductor / beneficiario (payload anidado ya aplanado en createEmissionAuto)
+      icedula_conductor: {
+        type: T.Char(1),
+        value: this.char1(this.pick(b, 'icedula_conductor')),
+      },
+      xrif_conductor: {
+        type: T.Numeric(13, 0),
+        value: this.rifNumeric(this.pick(b, 'xrif_conductor', 'rif_conductor')),
+      },
+      xnombre_conductor: {
+        type: T.NVarChar(250),
+        value: this.pick(b, 'xnombre_conductor', 'nombre_conductor') ?? null,
+      },
+      xapellido_conductor: {
+        type: T.NVarChar(250),
+        value: this.pick(b, 'xapellido_conductor', 'apellido_conductor') ?? null,
+      },
+      isexo_conductor: {
+        type: T.Char(1),
+        value: this.char1(this.pick(b, 'isexo_conductor', 'sexo_conductor')),
+      },
+      iestado_civil_conductor: {
+        type: T.Char(1),
+        value: this.char1(this.pick(b, 'iestado_civil_conductor', 'estado_civil_conductor')),
+      },
+      fnac_conductor: {
+        type: T.Date,
+        value: this.pick(b, 'fnac_conductor') ?? null,
+      },
+      cestado_conductor: {
+        type: T.VarChar(100),
+        value: String(this.pick(b, 'cestado_conductor', 'estado_conductor') ?? ''),
+      },
+      cciudad_conductor: {
+        type: T.VarChar(100),
+        value: String(this.pick(b, 'cciudad_conductor', 'ciudad_conductor') ?? ''),
+      },
+      xdireccion_conductor: {
+        type: T.NVarChar(1000),
+        value: this.pick(b, 'xdireccion_conductor', 'direccion_conductor') ?? null,
+      },
+      xtelefono_conductor: {
+        type: T.NVarChar(250),
+        value: this.pick(b, 'xtelefono_conductor', 'telefono_conductor') ?? null,
+      },
+      xcorreo_conductor: {
+        type: T.NVarChar(250),
+        value: this.pick(b, 'xcorreo_conductor', 'correo_conductor') ?? null,
+      },
+      icedula_beneficiario: {
+        type: T.Char(1),
+        value: this.char1(this.pick(b, 'icedula_beneficiario')),
+      },
+      xrif_beneficiario: {
+        type: T.Numeric(13, 0),
+        value: this.rifNumeric(this.pick(b, 'xrif_beneficiario', 'rif_beneficiario')),
+      },
+      xnombre_beneficiario: {
+        type: T.NVarChar(250),
+        value: this.pick(b, 'xnombre_beneficiario', 'nombre_beneficiario') ?? null,
+      },
+      xapellido_beneficiario: {
+        type: T.NVarChar(250),
+        value: this.pick(b, 'xapellido_beneficiario', 'apellido_beneficiario') ?? null,
+      },
+      isexo_beneficiario: {
+        type: T.Char(1),
+        value: this.char1(this.pick(b, 'isexo_beneficiario', 'sexo_beneficiario')),
+      },
+      iestado_civil_beneficiario: {
+        type: T.Char(1),
+        value: this.char1(
+          this.pick(b, 'iestado_civil_beneficiario', 'estado_civil_beneficiario'),
+        ),
+      },
+      fnac_beneficiario: {
+        type: T.Date,
+        value: this.pick(b, 'fnac_beneficiario') ?? null,
+      },
+      cestado_beneficiario: {
+        type: T.VarChar(100),
+        value: String(this.pick(b, 'cestado_beneficiario', 'estado_beneficiario') ?? ''),
+      },
+      cciudad_beneficiario: {
+        type: T.VarChar(100),
+        value: String(this.pick(b, 'cciudad_beneficiario', 'ciudad_beneficiario') ?? ''),
+      },
+      xdireccion_beneficiario: {
+        type: T.NVarChar(1000),
+        value: this.pick(b, 'xdireccion_beneficiario', 'direccion_beneficiario') ?? null,
+      },
+      xtelefono_beneficiario: {
+        type: T.NVarChar(250),
+        value: this.pick(b, 'xtelefono_beneficiario', 'telefono_beneficiario') ?? null,
+      },
+      xcorreo_beneficiario: {
+        type: T.NVarChar(250),
+        value: this.pick(b, 'xcorreo_beneficiario', 'correo_beneficiario') ?? null,
       },
       cmarca: { type: T.VarChar(3), value: this.pick(b, 'cmarca', 'marca') },
       cmodelo: { type: T.VarChar(3), value: this.pick(b, 'cmodelo', 'modelo') },

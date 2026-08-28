@@ -27,7 +27,7 @@ BEGIN
     DECLARE @fano SMALLINT;
     DECLARE @fmes TINYINT;
 
-    EXEC spCreateMaclient
+    EXEC sp_create_maclient_nexus
         @icedula = @icedula,
         @cci_rif = @rif,
         @xnombre = @xnombre,
