@@ -896,9 +896,7 @@ export class ValrepService {
       calcReq.input('iplaca', T.Char(1), iplaca);
       calcReq.input('fdesde', T.Date, new Date(body.fdesde));
       calcReq.input('fhasta', T.Date, new Date(body.fhasta));
-      calcReq.input('tasaPt', T.Numeric(18, 2), body.tasaPt ?? null);
-      calcReq.input('tasaCa', T.Numeric(18, 2), body.tasaCa ?? null);
-      calcReq.input('tasaPp', T.Numeric(18, 2), body.tasaPp ?? null);
+      // sp_calculo_auto_nexus (QA 2026-08): ya no recibe tasaPt/tasaCa/tasaPp — las resuelve internamente.
       calcReq.input('recargo', T.Numeric(18, 2), body.recargo ?? null);
       calcReq.input('tipoV', T.Numeric(4), tipoV);
       calcReq.input('uso', T.Numeric(4), body.uso);
