@@ -25,8 +25,9 @@ export const envValidationSchema = Joi.object({
   /** SP Nexus: primas por cobertura (`POST /valrep/calculate-plan-coberturas`). */
   MSSQL_SP_CALCULO_AUTO_NEXUS: Joi.string().default('sp_calculo_auto_nexus'),
   /**
-   * QA Sis2000 (ago-2026): SP sin @tasaPt/@tasaCa/@tasaPp → true.
-   * GCIA prod / srv001: SP aún los exige → false (default).
+   * QA Sis2000: SP sin @tasaPt/@tasaCa/@tasaPp → true (no enviar nunca).
+   * false (default): solo se envían si el body trae número (casco); RCV las omite.
+   * El SP debe declarar defaults NULL cuando el cliente no las manda.
    */
   MSSQL_SP_CALCULO_AUTO_NEXUS_OMIT_TASA_PARAMS: Joi.boolean().default(false),
   MSSQL_SP_GET_SUSTANCIAS_NEXUS: Joi.string().default('sp_get_sustancias_nexus'),

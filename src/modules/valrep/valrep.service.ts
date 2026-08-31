@@ -287,7 +287,11 @@ export class ValrepService {
     return process.env.MSSQL_SP_CALCULO_AUTO_NEXUS?.trim() || SP_CALCULO_AUTO_NEXUS;
   }
 
-  /** QA removió @tasaPt/@tasaCa/@tasaPp del SP; GCIA/srv001 aún los requieren. */
+  /**
+   * QA: SP sin @tasaPt/@tasaCa/@tasaPp → true (no enviar nunca).
+   * Con false: solo se bindean si el cliente las manda (casco);
+   * RCV las omite y el SP debe tener default NULL.
+   */
   private spCalculoAutoNexusOmitsTasaParams(): boolean {
     return process.env.MSSQL_SP_CALCULO_AUTO_NEXUS_OMIT_TASA_PARAMS === 'true';
   }
@@ -298,9 +302,19 @@ export class ValrepService {
     body: Pick<CalculatePlanCoberturasDto, 'tasaPt' | 'tasaCa' | 'tasaPp'>,
   ): void {
     if (this.spCalculoAutoNexusOmitsTasaParams()) return;
-    calcReq.input('tasaPt', T.Numeric(18, 2), body.tasaPt ?? null);
-    calcReq.input('tasaCa', T.Numeric(18, 2), body.tasaCa ?? null);
-    calcReq.input('tasaPp', T.Numeric(18, 2), body.tasaPp ?? null);
+
+    const bindIfNumber = (
+      name: 'tasaPt' | 'tasaCa' | 'tasaPp',
+      value: number | null | undefined,
+    ): void => {
+      if (value === undefined || value === null) return;
+      if (typeof value !== 'number' || Number.isNaN(value)) return;
+      calcReq.input(name, T.Numeric(18, 2), value);
+    };
+
+    bindIfNumber('tasaPt', body.tasaPt);
+    bindIfNumber('tasaCa', body.tasaCa);
+    bindIfNumber('tasaPp', body.tasaPp);
   }
 
   private spGetSustanciasNexusName(): string {
