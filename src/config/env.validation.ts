@@ -24,6 +24,11 @@ export const envValidationSchema = Joi.object({
   MSSQL_ENABLE_ARITH_ABORT: Joi.boolean().default(true),
   /** SP Nexus: primas por cobertura (`POST /valrep/calculate-plan-coberturas`). */
   MSSQL_SP_CALCULO_AUTO_NEXUS: Joi.string().default('sp_calculo_auto_nexus'),
+  /**
+   * QA Sis2000 (ago-2026): SP sin @tasaPt/@tasaCa/@tasaPp → true.
+   * GCIA prod / srv001: SP aún los exige → false (default).
+   */
+  MSSQL_SP_CALCULO_AUTO_NEXUS_OMIT_TASA_PARAMS: Joi.boolean().default(false),
   MSSQL_SP_GET_SUSTANCIAS_NEXUS: Joi.string().default('sp_get_sustancias_nexus'),
 
   /** local = INSERT directo Sis2000 (default). external = HTTP La Mundial QA. */

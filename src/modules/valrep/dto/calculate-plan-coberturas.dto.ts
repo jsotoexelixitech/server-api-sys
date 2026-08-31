@@ -82,17 +82,17 @@ export class CalculatePlanCoberturasDto {
   @IsDateString()
   fhasta: string;
 
-  @ApiPropertyOptional({ example: null, description: 'Tasa casco (nullable). Ignorado por sp_calculo_auto_nexus — el SP resuelve tasas internamente.' })
+  @ApiPropertyOptional({ example: null, description: 'Tasa PT. Omitida en EXEC si MSSQL_SP_CALCULO_AUTO_NEXUS_OMIT_TASA_PARAMS=true (QA).' })
   @IsOptional()
   @Type(() => Number)
   tasaPt?: number | null;
 
-  @ApiPropertyOptional({ example: null, description: 'Tasa casco CA (nullable). Ignorado por sp_calculo_auto_nexus.' })
+  @ApiPropertyOptional({ example: null, description: 'Tasa CA. Omitida en EXEC si MSSQL_SP_CALCULO_AUTO_NEXUS_OMIT_TASA_PARAMS=true (QA).' })
   @IsOptional()
   @Type(() => Number)
   tasaCa?: number | null;
 
-  @ApiPropertyOptional({ example: null, description: 'Tasa pérdida parcial PP (nullable). Ignorado por sp_calculo_auto_nexus.' })
+  @ApiPropertyOptional({ example: null, description: 'Tasa PP. Omitida en EXEC si MSSQL_SP_CALCULO_AUTO_NEXUS_OMIT_TASA_PARAMS=true (QA).' })
   @IsOptional()
   @Type(() => Number)
   tasaPp?: number | null;

@@ -287,6 +287,22 @@ export class ValrepService {
     return process.env.MSSQL_SP_CALCULO_AUTO_NEXUS?.trim() || SP_CALCULO_AUTO_NEXUS;
   }
 
+  /** QA removió @tasaPt/@tasaCa/@tasaPp del SP; GCIA/srv001 aún los requieren. */
+  private spCalculoAutoNexusOmitsTasaParams(): boolean {
+    return process.env.MSSQL_SP_CALCULO_AUTO_NEXUS_OMIT_TASA_PARAMS === 'true';
+  }
+
+  private bindSpCalculoAutoNexusTasaParams(
+    calcReq: { input: (name: string, type: unknown, value: unknown) => void },
+    T: MssqlService['types'],
+    body: Pick<CalculatePlanCoberturasDto, 'tasaPt' | 'tasaCa' | 'tasaPp'>,
+  ): void {
+    if (this.spCalculoAutoNexusOmitsTasaParams()) return;
+    calcReq.input('tasaPt', T.Numeric(18, 2), body.tasaPt ?? null);
+    calcReq.input('tasaCa', T.Numeric(18, 2), body.tasaCa ?? null);
+    calcReq.input('tasaPp', T.Numeric(18, 2), body.tasaPp ?? null);
+  }
+
   private spGetSustanciasNexusName(): string {
     return process.env.MSSQL_SP_GET_SUSTANCIAS_NEXUS?.trim() || SP_GET_SUSTANCIAS_NEXUS;
   }
@@ -896,7 +912,7 @@ export class ValrepService {
       calcReq.input('iplaca', T.Char(1), iplaca);
       calcReq.input('fdesde', T.Date, new Date(body.fdesde));
       calcReq.input('fhasta', T.Date, new Date(body.fhasta));
-      // sp_calculo_auto_nexus (QA 2026-08): ya no recibe tasaPt/tasaCa/tasaPp — las resuelve internamente.
+      this.bindSpCalculoAutoNexusTasaParams(calcReq, T, body);
       calcReq.input('recargo', T.Numeric(18, 2), body.recargo ?? null);
       calcReq.input('tipoV', T.Numeric(4), tipoV);
       calcReq.input('uso', T.Numeric(4), body.uso);
