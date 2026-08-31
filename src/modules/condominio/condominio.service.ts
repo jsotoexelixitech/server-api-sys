@@ -67,7 +67,7 @@ export class CondominioService {
 
   /**
    * Equipos en el formato que espera OPENJSON del SP
-   * (xdescrip/anofab/msumasetot*/cantidad). Descarta shapes inválidos
+   * (xdescrip, anofab, msumasetot, cantidad). Descarta shapes inválidos
    * (p.ej. {nombre,marca,serial}) que no aportan y pueden romper CAST.
    */
   private toEquiposJson(equipos: unknown): string {
