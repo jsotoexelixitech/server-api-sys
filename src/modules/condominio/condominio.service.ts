@@ -12,6 +12,11 @@ import {
   SP_PRE_EMISION_CONDOMINIO,
 } from '../../config/sis2000-sp.constants';
 
+/** Numeric(12,0) del SP: máximo 12 dígitos enteros. */
+const RIF_MAX_DIGITS = 12;
+/** Numeric(18,2): máximo ~1e16 antes de overflow. */
+const MONEY_MAX_ABS = 1e16 - 1;
+
 @Injectable()
 export class CondominioService {
   private readonly logger = new Logger(CondominioService.name);
@@ -20,6 +25,83 @@ export class CondominioService {
     private readonly db: MssqlService,
     private readonly config: ConfigService,
   ) {}
+
+  /** RIF/cédula limpio para @xrif_* NUMERIC(12,0). Evita overflow nvarchar→numeric. */
+  private toRifNumeric(raw: unknown): number {
+    const digits = String(raw ?? '').replace(/\D/g, '');
+    if (!digits) return 0;
+    const clipped = digits.length > RIF_MAX_DIGITS ? digits.slice(0, RIF_MAX_DIGITS) : digits;
+    const n = Number(clipped);
+    return Number.isFinite(n) ? n : 0;
+  }
+
+  /** Código estado/ciudad para spCreateMaclient (@cestado/@cciudad SMALLINT). */
+  private toGeoCode(raw: unknown, fallback = 1): number {
+    const n = Number(String(raw ?? '').trim().replace(/\D/g, '') || fallback);
+    if (!Number.isFinite(n) || n < 0 || n > 32767) return fallback;
+    return Math.trunc(n);
+  }
+
+  /** Arrays JSON de IDs (dispositivos/sustancias): solo enteros 1..32767. */
+  private toIdArray(arr: unknown, objectKey: 'cdisseg' | 'csustanc'): number[] {
+    if (!Array.isArray(arr)) return [];
+    return arr
+      .map((item) => {
+        if (typeof item === 'number') return item;
+        if (item && typeof item === 'object') {
+          return Number((item as Record<string, unknown>)[objectKey] ?? (item as Record<string, unknown>).id);
+        }
+        return Number(item);
+      })
+      .filter((n) => Number.isFinite(n) && n > 0 && n <= 32767)
+      .map((n) => Math.trunc(n));
+  }
+
+  /** Montos seguros para Numeric(18,2). */
+  private toMoney(raw: unknown, fallback = 0): number {
+    const n = Number(raw);
+    if (!Number.isFinite(n)) return fallback;
+    if (Math.abs(n) >= MONEY_MAX_ABS) return fallback;
+    return Math.round(n * 100) / 100;
+  }
+
+  /**
+   * Equipos en el formato que espera OPENJSON del SP
+   * (xdescrip/anofab/msumasetot*/cantidad). Descarta shapes inválidos
+   * (p.ej. {nombre,marca,serial}) que no aportan y pueden romper CAST.
+   */
+  private toEquiposJson(equipos: unknown): string {
+    if (!Array.isArray(equipos) || !equipos.length) return '[]';
+    const mapped = equipos
+      .map((e) => {
+        if (!e || typeof e !== 'object') return null;
+        const row = e as Record<string, unknown>;
+        const xdescrip = String(row.xdescrip ?? row.xDescrip ?? row.nombre ?? '').trim();
+        const anofab = Number(row.anofab ?? row.anoFab);
+        const msumasetotloc = Number(row.msumasetotloc ?? row.msumaSetotLoc);
+        const msumasetot = Number(row.msumasetot ?? row.msumaSetot);
+        const cantidad = Number(row.cantidad);
+        const hasMoney =
+          (Number.isFinite(msumasetotloc) && msumasetotloc > 0 && Math.abs(msumasetotloc) < MONEY_MAX_ABS) ||
+          (Number.isFinite(msumasetot) && msumasetot > 0 && Math.abs(msumasetot) < MONEY_MAX_ABS);
+        if (!xdescrip && !hasMoney) return null;
+        return {
+          xdescrip: xdescrip || 'Equipo',
+          ...(Number.isFinite(anofab) && anofab > 1900 && anofab < 2100 ? { anofab: Math.trunc(anofab) } : {}),
+          ...(Number.isFinite(msumasetotloc) && msumasetotloc > 0 && Math.abs(msumasetotloc) < MONEY_MAX_ABS
+            ? { msumasetotloc: this.toMoney(msumasetotloc) }
+            : {}),
+          ...(Number.isFinite(msumasetot) && msumasetot > 0 && Math.abs(msumasetot) < MONEY_MAX_ABS
+            ? { msumasetot: this.toMoney(msumasetot) }
+            : {}),
+          ...(Number.isFinite(cantidad) && cantidad > 0 && cantidad <= 32767
+            ? { cantidad: Math.trunc(cantidad) }
+            : { cantidad: 1 }),
+        };
+      })
+      .filter(Boolean);
+    return JSON.stringify(mapped);
+  }
 
   async getPlanes(dto: GetPlanesCondominioDto) {
     try {
@@ -74,14 +156,16 @@ export class CondominioService {
   async cotizar(dto: CotizacionCondominioDto) {
     try {
       const T = this.db.types;
+      const dispositivos = this.toIdArray(dto.dispositivos, 'cdisseg');
+      const sustancias = this.toIdArray(dto.sustancias, 'csustanc');
       const req = this.db.request();
       req.input('cramo', T.Int, dto.cramo ?? 38);
       req.input('cplan', T.VarChar(10), dto.cplan);
       req.input('msumaasegext', T.Numeric(18, 2), null);
       req.input('ifrecuencia', T.Char(1), dto.ifrecuencia);
       req.input('ptasamon', T.Numeric(18, 6), null);
-      req.input('dispositivos', T.NVarChar(T.MAX), dto.dispositivos ? JSON.stringify(dto.dispositivos) : '[]');
-      req.input('sustancias', T.NVarChar(T.MAX), dto.sustancias ? JSON.stringify(dto.sustancias) : '[]');
+      req.input('dispositivos', T.NVarChar(T.MAX), JSON.stringify(dispositivos));
+      req.input('sustancias', T.NVarChar(T.MAX), JSON.stringify(sustancias));
       req.input('is_emision', T.Bit, false);
 
       const result = await req.execute(SP_CALCULO_COTIZACION_CONDOMINIO);
@@ -119,17 +203,32 @@ export class CondominioService {
         .query('SELECT cmoneda FROM maplanes WHERE cramo = @cramo AND cplan = @cplan');
       const cmoneda = dto.cmoneda ?? planRes.recordset?.[0]?.cmoneda?.trim() ?? '$';
 
-      // 3. Resolver tasa de cambio
-      let tasa: number = dto.tasa ?? 0;
-      if (!tasa) {
-        if (cmoneda === 'Bs' || cmoneda === 'BS') {
+      // 3. Resolver tasa de cambio.
+      // El portal suele mandar tasa=1 como placeholder: para planes en $ se ignora y se usa BCV.
+      const monedaNorm = String(cmoneda).trim();
+      let tasa: number = Number(dto.tasa ?? 0);
+      const tasaEsPlaceholder =
+        !Number.isFinite(tasa) || tasa <= 0 || (monedaNorm === '$' && tasa === 1);
+      if (tasaEsPlaceholder) {
+        if (monedaNorm === 'Bs' || monedaNorm === 'BS') {
           tasa = 1.0;
         } else {
           const tasaRes = await this.db.request()
             .input('cmoneda', T.Char(4), cmoneda)
             .query('SELECT ptasamon FROM mamonedas WHERE cmoneda = @cmoneda');
-          tasa = tasaRes.recordset?.[0]?.ptasamon ?? 1.0;
+          tasa = Number(tasaRes.recordset?.[0]?.ptasamon ?? 0) || 1.0;
         }
+      }
+
+      const dispositivos = this.toIdArray(dto.dispositivos, 'cdisseg');
+      const sustancias = this.toIdArray(dto.sustancias, 'csustanc');
+      const equiposJson = this.toEquiposJson(dto.equipos);
+      const rifTomador = this.toRifNumeric(dto.rif_tomador);
+      const rifAsegurado = this.toRifNumeric(dto.rif_asegurado);
+      if (!rifTomador || !rifAsegurado) {
+        throw new BadRequestException(
+          'El RIF/Cédula del tomador y del asegurado son obligatorios (solo dígitos, máx. 12).',
+        );
       }
 
       // 4. Cotización interna si faltan campos calculados
@@ -145,8 +244,8 @@ export class CondominioService {
           cramo: dto.cramo,
           cplan: dto.plan,
           ifrecuencia: dto.frecuencia,
-          dispositivos: dto.dispositivos,
-          sustancias: dto.sustancias,
+          dispositivos,
+          sustancias,
         });
         const totals = cotResult.totales;
         if (totals) {
@@ -162,12 +261,29 @@ export class CondominioService {
       }
 
       // Valores por defecto finales si no se pudo cotizar ni resolver
-      prima = prima ?? 0.00;
-      msumaasegext = msumaasegext ?? 0.00;
-      msumaaseg = msumaaseg ?? (msumaasegext * tasa);
-      pcomision = pcomision ?? 0.00;
-      mcomision = mcomision ?? 0.00;
-      mcomisionext = mcomisionext ?? 0.00;
+      prima = this.toMoney(prima, 0);
+      msumaasegext = this.toMoney(msumaasegext, 0);
+      // Si msumaaseg vino igual a msumaasegext (portal en USD), convertir con tasa real.
+      if (
+        msumaaseg == null ||
+        !Number.isFinite(Number(msumaaseg)) ||
+        (msumaasegext > 0 && Number(msumaaseg) === msumaasegext && tasa > 1)
+      ) {
+        msumaaseg = this.toMoney(msumaasegext * tasa, 0);
+      } else {
+        msumaaseg = this.toMoney(msumaaseg, this.toMoney(msumaasegext * tasa, 0));
+      }
+      pcomision = this.toMoney(pcomision, 0);
+      mcomision = this.toMoney(mcomision, 0);
+      mcomisionext = this.toMoney(mcomisionext, 0);
+      const mprima = this.toMoney(prima * tasa, 0);
+
+      const cestadoTomador = String(this.toGeoCode(dto.estado_tomador));
+      const cciudadTomador = String(this.toGeoCode(dto.ciudad_tomador));
+      const cestadoAsegurado = String(this.toGeoCode(dto.estado_asegurado));
+      const cciudadAsegurado = String(this.toGeoCode(dto.ciudad_asegurado));
+      const telTomador = String(dto.telefono_tomador ?? '').replace(/\D/g, '').slice(0, 20);
+      const telAsegurado = String(dto.telefono_asegurado ?? '').replace(/\D/g, '').slice(0, 20);
 
       const req = this.db.request();
 
@@ -179,7 +295,7 @@ export class CondominioService {
       req.input('fdesde', T.Date, fdesde);
       req.input('fhasta', T.Date, fhasta);
       req.input('mprimaext', T.Numeric(18, 2), prima);
-      req.input('mprima', T.Numeric(18, 2), (prima * tasa));
+      req.input('mprima', T.Numeric(18, 2), mprima);
       req.input('ptasamon', T.Numeric(18, 6), tasa);
       req.input('msumaaseg', T.Numeric(18, 2), msumaaseg);
       req.input('msumaasegext', T.Numeric(18, 2), msumaasegext);
@@ -188,44 +304,44 @@ export class CondominioService {
       req.input('mcomisionext', T.Numeric(18, 2), mcomisionext);
 
       // Staging / Certificados
-      req.input('xdirecob', T.VarChar(250), dto.xdirecob);
-      req.input('xdireccion', T.VarChar(250), dto.xdireccion);
-      req.input('xdescrip1', T.VarChar(250), dto.xdescrip1);
-      req.input('xdescrip2', T.VarChar(250), dto.xdescrip2);
-      req.input('xdescrip3', T.VarChar(250), dto.xdescrip3 ?? null);
-      req.input('xdescrip4', T.VarChar(250), dto.xdescrip4 ?? null);
+      req.input('xdirecob', T.VarChar(250), String(dto.xdirecob ?? '').slice(0, 250));
+      req.input('xdireccion', T.VarChar(250), String(dto.xdireccion ?? '').slice(0, 250));
+      req.input('xdescrip1', T.VarChar(250), String(dto.xdescrip1 ?? '').slice(0, 250));
+      req.input('xdescrip2', T.VarChar(250), String(dto.xdescrip2 ?? '').slice(0, 250));
+      req.input('xdescrip3', T.VarChar(250), dto.xdescrip3 != null ? String(dto.xdescrip3).slice(0, 250) : null);
+      req.input('xdescrip4', T.VarChar(250), dto.xdescrip4 != null ? String(dto.xdescrip4).slice(0, 250) : null);
 
-      // Arrays JSON
-      req.input('dispositivos', T.NVarChar(T.MAX), dto.dispositivos ? JSON.stringify(dto.dispositivos) : '[]');
-      req.input('sustancias', T.NVarChar(T.MAX), dto.sustancias ? JSON.stringify(dto.sustancias) : '[]');
-      req.input('equipos', T.NVarChar(T.MAX), dto.equipos ? JSON.stringify(dto.equipos) : '[]');
+      // Arrays JSON (IDs escalares — el SP hace OPENJSON … SMALLINT '$')
+      req.input('dispositivos', T.NVarChar(T.MAX), JSON.stringify(dispositivos));
+      req.input('sustancias', T.NVarChar(T.MAX), JSON.stringify(sustancias));
+      req.input('equipos', T.NVarChar(T.MAX), equiposJson);
 
       // Tomador
       req.input('icedula_tomador', T.Char(1), dto.tipo_cedula_tomador ?? 'V');
-      req.input('xrif_tomador', T.Numeric(12, 0), Number(String(dto.rif_tomador).replace(/\D/g, '')));
+      req.input('xrif_tomador', T.Numeric(12, 0), rifTomador);
       req.input('xnombre_tomador', T.VarChar(250), dto.nombre_tomador ?? '');
       req.input('xapellido_tomador', T.VarChar(250), dto.apellido_tomador ?? '');
       req.input('isexo_tomador', T.Char(1), dto.sexo_tomador ?? 'M');
       req.input('iestado_civil_tomador', T.Char(1), dto.estado_civil_tomador ?? 'S');
       req.input('fnac_tomador', T.Date, dto.fnac_tomador ?? '1990-01-01');
-      req.input('cestado_tomador', T.VarChar(100), String(dto.estado_tomador ?? '1'));
-      req.input('cciudad_tomador', T.VarChar(100), String(dto.ciudad_tomador ?? '1'));
+      req.input('cestado_tomador', T.VarChar(100), cestadoTomador);
+      req.input('cciudad_tomador', T.VarChar(100), cciudadTomador);
       req.input('xdireccion_tomador', T.VarChar(1000), dto.direccion_tomador ?? '');
-      req.input('xtelefono_tomador', T.VarChar(250), dto.telefono_tomador ?? '');
+      req.input('xtelefono_tomador', T.VarChar(250), telTomador);
       req.input('xcorreo_tomador', T.VarChar(250), dto.correo_tomador ?? '');
 
       // Asegurado
       req.input('icedula_asegurado', T.Char(1), dto.tipo_cedula_asegurado ?? 'V');
-      req.input('xrif_asegurado', T.Numeric(12, 0), Number(String(dto.rif_asegurado).replace(/\D/g, '')));
+      req.input('xrif_asegurado', T.Numeric(12, 0), rifAsegurado);
       req.input('xnombre_asegurado', T.VarChar(250), dto.nombre_asegurado ?? '');
       req.input('xapellido_asegurado', T.VarChar(250), dto.apellido_asegurado ?? '');
       req.input('isexo_asegurado', T.Char(1), dto.sexo_asegurado ?? 'M');
       req.input('iestado_civil_asegurado', T.Char(1), dto.estado_civil_asegurado ?? 'S');
       req.input('fnac_asegurado', T.Date, dto.fnac_asegurado ?? '1990-01-01');
-      req.input('cestado_asegurado', T.VarChar(100), String(dto.estado_asegurado ?? '1'));
-      req.input('cciudad_asegurado', T.VarChar(100), String(dto.ciudad_asegurado ?? '1'));
+      req.input('cestado_asegurado', T.VarChar(100), cestadoAsegurado);
+      req.input('cciudad_asegurado', T.VarChar(100), cciudadAsegurado);
       req.input('xdireccion_asegurado', T.VarChar(1000), dto.direccion_asegurado ?? '');
-      req.input('xtelefono_asegurado', T.VarChar(250), dto.telefono_asegurado ?? '');
+      req.input('xtelefono_asegurado', T.VarChar(250), telAsegurado);
       req.input('xcorreo_asegurado', T.VarChar(250), dto.correo_asegurado ?? '');
 
       // Canal
@@ -239,7 +355,9 @@ export class CondominioService {
       req.input('method', T.VarChar(50), 'POST');
       req.input('cusuario', T.Int, 20364172);
 
-      this.logger.log(`emitir (condominio): EXEC ${SP_PRE_EMISION_CONDOMINIO} plan=${dto.plan} RIF=${dto.rif_asegurado}`);
+      this.logger.log(
+        `emitir (condominio): EXEC ${SP_PRE_EMISION_CONDOMINIO} plan=${dto.plan} RIF=${rifAsegurado} tasa=${tasa} prima=${prima} msumaext=${msumaasegext}`,
+      );
       const result = await req.execute(SP_PRE_EMISION_CONDOMINIO);
       const row = result.recordset?.[0] ?? {};
       
