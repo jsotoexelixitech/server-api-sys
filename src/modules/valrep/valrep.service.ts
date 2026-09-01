@@ -361,6 +361,20 @@ export class ValrepService {
     return Number.isFinite(n) && n > 0 ? n : 6;
   }
 
+  /**
+   * Usuario para `sp_calculo_auto_nexus` en cotización.
+   * Debe coincidir con `sp_genera_coberturas_recibos_auto_rcv_nexus`, que cotiza con cusuario 1422
+   * (no el cusuario de la póliza / TMEMISION).
+   */
+  private resolveCusuarioSpCalculoAuto(): number {
+    const raw =
+      process.env.LAMUNDIAL_CUSUARIO_SP_CALCULO
+      ?? process.env.LAMUNDIAL_CUSUARIO_COBERTURAS
+      ?? '1422';
+    const n = parseInt(String(raw).trim(), 10);
+    return Number.isFinite(n) && n > 0 ? n : 1422;
+  }
+
   private describeSqlError(err: unknown): string {
     const parsed = parseSPError(err).trim();
     if (parsed) return parsed;
@@ -408,13 +422,14 @@ export class ValrepService {
         cramo = ramoBinac;
       }
 
+      const sumaRef = body.sumaAsegurada ?? mvalor;
       const calc = await this.calculatePlanCoberturas({
         cmarca: body.cmarca,
         cmodelo: body.cmodelo,
         cversion: body.cversion,
         cano: body.fano,
         idPlan: body.cplan,
-        suma: body.sumaAsegurada ?? mvalor,
+        suma: sumaRef,
         iplaca,
         fdesde,
         fhasta,
@@ -423,11 +438,10 @@ export class ValrepService {
         cramo,
         ifrecuencia,
         coberAdicional: 'RC',
-        sumaAsegBl: 0,
+        sumaAsegBl: sumaRef,
         sumaAsegAd: 0,
         recargo: 0,
         recargoRcv: body.precargorcv ?? 0,
-        cusuario: body.cusuario ?? this.resolveCusuarioSis2000(),
       });
 
       const mprimaext = calc.pa;
@@ -883,12 +897,18 @@ export class ValrepService {
     body: CalculatePlanCoberturasDto,
   ): Promise<CalculatePlanCoberturasResponse> {
     const spName = this.spCalculoAutoNexusName();
-    const cusuario =
-      body.cusuario ?? this.resolveCusuarioSis2000();
-    const ifrecuencia = String(body.ifrecuencia ?? 'A')
+    const cusuario = this.resolveCusuarioSpCalculoAuto();
+    const ifrecuenciaReq = String(body.ifrecuencia ?? 'A')
       .trim()
       .toUpperCase()
       .charAt(0) || 'A';
+    // sp_genera_coberturas_nexus cotiza siempre en anual; fracciona al generar recibos.
+    const ifrecuencia = 'A';
+    if (ifrecuenciaReq !== 'A') {
+      this.logger.log(
+        `calculatePlanCoberturas: ifrecuencia=${ifrecuenciaReq} ignorada; se usa A (alineado sp_genera_nexus)`,
+      );
+    }
 
     try {
       const T = this.db.types;
@@ -902,6 +922,13 @@ export class ValrepService {
       const puestos = body.puestos ?? vinma.npasajero;
       const sumaAseg =
         body.suma != null && body.suma > 0 ? body.suma : vinma.mvalor || null;
+      const sumaAsegBl =
+        body.sumaAsegBl != null
+          ? body.sumaAsegBl
+          : sumaAseg != null && sumaAseg > 0
+            ? sumaAseg
+            : null;
+      const sumaAsegAd = body.sumaAsegAd ?? 0;
       const iplaca = body.iplaca ?? 'N';
       const calcReq = this.db.request();
 
@@ -911,13 +938,13 @@ export class ValrepService {
       calcReq.input('cano', T.Int, body.cano);
       calcReq.input('cplan', T.VarChar(10), String(body.idPlan).trim());
       calcReq.input('sumaAseg', T.Numeric(18, 2), sumaAseg);
-      calcReq.input('sumaAsegBl', T.Numeric(18, 2), body.sumaAsegBl ?? null);
-      calcReq.input('sumaAsegAd', T.Numeric(18, 2), body.sumaAsegAd ?? null);
+      calcReq.input('sumaAsegBl', T.Numeric(18, 2), sumaAsegBl);
+      calcReq.input('sumaAsegAd', T.Numeric(18, 2), sumaAsegAd);
       calcReq.input('iplaca', T.Char(1), iplaca);
       calcReq.input('fdesde', T.Date, new Date(body.fdesde));
       calcReq.input('fhasta', T.Date, new Date(body.fhasta));
       this.bindSpCalculoAutoNexusTasaParams(calcReq, T, body);
-      calcReq.input('recargo', T.Numeric(18, 2), body.recargo ?? null);
+      calcReq.input('recargo', T.Numeric(18, 2), body.recargo ?? 0);
       calcReq.input('tipoV', T.Numeric(4), tipoV);
       calcReq.input('uso', T.Numeric(4), body.uso);
       calcReq.input('puestos', T.Numeric(4), puestos);
@@ -964,7 +991,7 @@ export class ValrepService {
       const tipoPlan = String(firstDetalle?.cproducto ?? '').trim();
 
       this.logger.log(
-        `calculatePlanCoberturas: plan=${body.idPlan} sp=${spName} iplaca=${iplaca} ifrecuencia=${ifrecuencia} pa=${totalPA} ca=${totalCA} pt=${totalPT}`,
+        `calculatePlanCoberturas: plan=${body.idPlan} sp=${spName} iplaca=${iplaca} cusuario=${cusuario} sumaAsegBl=${sumaAsegBl ?? 'null'} ifrecuencia=${ifrecuencia} pa=${totalPA} ca=${totalCA} pt=${totalPT}`,
       );
 
       return {
