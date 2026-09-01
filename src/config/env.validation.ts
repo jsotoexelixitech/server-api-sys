@@ -35,6 +35,8 @@ export const envValidationSchema = Joi.object({
   EMISSION_SOURCE: Joi.string().valid('local', 'external').default('local'),
   LAMUNDIAL_PRODUCTOR: Joi.string().optional(),
   LAMUNDIAL_CUSUARIO: Joi.string().optional(),
+  /** cusuario en sp_calculo_auto_nexus (debe coincidir con sp_genera_coberturas_nexus, default 1422). */
+  LAMUNDIAL_CUSUARIO_SP_CALCULO: Joi.string().optional(),
   /** Plan por defecto en validateEmissionAuto cuando el cliente aún no eligió plan (Formulario Exélixi). */
   LAMUNDIAL_PLAN_DEFAULT: Joi.string().default('RCVBAS'),
   POLICY_PDF_URL: Joi.string().optional(),
