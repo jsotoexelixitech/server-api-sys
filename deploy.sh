@@ -40,16 +40,23 @@ echo ""
 # 1. Crear carpeta de logs si no existe
 mkdir -p "$LOG_DIR"
 
-# 2. Instalar dependencias (devDeps necesarios para compilar)
-echo "▶ npm install..."
-npm install --prefer-offline
+# 2. Instalar dependencias.
+# NODE_ENV=production (PM2 / shell) hace que npm omita devDeps → nest/tsc: not found
+# y puede borrar cientos de paquetes (el install anterior en QA quitó 569).
+unset NODE_ENV
+export npm_config_production=false
+echo "▶ npm install --include=dev..."
+npm install --include=dev --prefer-offline
 
 echo "▶ prisma generate..."
 npm run prisma:generate
 
-# 3. Compilar SDK partner + TypeScript → dist/
-echo "▶ npm run build:all..."
-npm run build:all
+# 3. Compilar la API primero. El SDK de partners no debe bloquear el restart.
+echo "▶ npx nest build..."
+npx nest build
+
+echo "▶ npm run build:partners (no bloquea si tsc falta en el SDK)..."
+npm run build:partners || echo "⚠ SDK partners no compiló — sysip-nest-api sí se actualiza"
 
 # 4. Iniciar o reiniciar con PM2
 echo "▶ pm2..."
