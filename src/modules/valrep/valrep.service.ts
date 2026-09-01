@@ -288,9 +288,8 @@ export class ValrepService {
   }
 
   /**
-   * QA: SP sin @tasaPt/@tasaCa/@tasaPp → true (no enviar nunca).
-   * Con false: solo se bindean si el cliente las manda (casco);
-   * RCV las omite y el SP debe tener default NULL.
+   * HTTP: tasaPt/tasaCa/tasaPp opcionales (RCV no las manda; casco sí o null).
+   * SP: siempre se bindean (null si omitidas) salvo OMIT=true cuando el SP no las declara.
    */
   private spCalculoAutoNexusOmitsTasaParams(): boolean {
     return process.env.MSSQL_SP_CALCULO_AUTO_NEXUS_OMIT_TASA_PARAMS === 'true';
@@ -302,19 +301,10 @@ export class ValrepService {
     body: Pick<CalculatePlanCoberturasDto, 'tasaPt' | 'tasaCa' | 'tasaPp'>,
   ): void {
     if (this.spCalculoAutoNexusOmitsTasaParams()) return;
-
-    const bindIfNumber = (
-      name: 'tasaPt' | 'tasaCa' | 'tasaPp',
-      value: number | null | undefined,
-    ): void => {
-      if (value === undefined || value === null) return;
-      if (typeof value !== 'number' || Number.isNaN(value)) return;
-      calcReq.input(name, T.Numeric(18, 2), value);
-    };
-
-    bindIfNumber('tasaPt', body.tasaPt);
-    bindIfNumber('tasaCa', body.tasaCa);
-    bindIfNumber('tasaPp', body.tasaPp);
+    // Siempre enviar: si se omiten del EXEC, SQL Server falla con "expects @tasaPt".
+    calcReq.input('tasaPt', T.Numeric(18, 2), body.tasaPt ?? null);
+    calcReq.input('tasaCa', T.Numeric(18, 2), body.tasaCa ?? null);
+    calcReq.input('tasaPp', T.Numeric(18, 2), body.tasaPp ?? null);
   }
 
   private spGetSustanciasNexusName(): string {
