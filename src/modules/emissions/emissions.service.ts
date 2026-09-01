@@ -27,6 +27,13 @@ export class EmissionsService {
     private readonly config: ConfigService,
   ) {}
 
+  /** Fecha SQL: null si viene vacía; evita "Invalid date" del driver mssql con ''. */
+  private dateField(value: unknown): string | null {
+    if (value == null) return null;
+    const s = String(value).trim();
+    return s === '' ? null : s;
+  }
+
   private nvarchar(value: unknown): string | null {
     if (value == null || String(value).trim() === '') return null;
     return String(value);
@@ -720,6 +727,15 @@ export class EmissionsService {
       this.flattenConductorBeneficiario(b);
       this.normalizeEmissionBodyAliases(b);
 
+      for (const dateKey of [
+        'fnac_tomador',
+        'fnac_titular',
+        'fnac_conductor',
+        'fnac_beneficiario',
+      ]) {
+        if (dateKey in b) b[dateKey] = this.dateField(b[dateKey]);
+      }
+
       if (
         (canal['ctipocanal'] === 'T' ||
           canal['ctipocanal'] === 'A' ||
@@ -777,6 +793,7 @@ export class EmissionsService {
         ['fdesde', b['fdesde']],
         ['fhasta', b['fhasta']],
         ['fnac_tomador', b['fnac_tomador']],
+        ['fnac_titular', b['fnac_titular']],
         ['cestado_tomador', b['estado_tomador'] ?? b['cestado_tomador']],
         ['cciudad_tomador', b['ciudad_tomador'] ?? b['cciudad_tomador']],
         ['xplaca', b['xplaca'] ?? b['placa']],
@@ -797,6 +814,7 @@ export class EmissionsService {
         ['fdesde', b['fdesde']],
         ['fhasta', b['fhasta']],
         ['fnac_tomador', b['fnac_tomador']],
+        ['fnac_titular', b['fnac_titular']],
       ]
         .filter(([, value]) => typeof value !== 'string' || !isoDate.test(value))
         .map(([name]) => name);
@@ -1070,7 +1088,7 @@ export class EmissionsService {
         type: T.Char(1),
         value: this.pick(b, 'iestado_civil_tomador', 'estado_civil_tomador'),
       },
-      fnac_tomador: { type: T.Date, value: b['fnac_tomador'] },
+      fnac_tomador: { type: T.Date, value: this.dateField(b['fnac_tomador']) },
       cestado_tomador: {
         type: T.VarChar(100),
         value: String(this.pick(b, 'cestado_tomador', 'estado_tomador') ?? ''),
@@ -1103,7 +1121,7 @@ export class EmissionsService {
         type: T.Char(1),
         value: this.pick(b, 'iestado_civil_titular', 'estado_civil_titular'),
       },
-      fnac_titular: { type: T.Date, value: b['fnac_titular'] ?? null },
+      fnac_titular: { type: T.Date, value: this.dateField(b['fnac_titular']) },
       cestado_titular: {
         type: T.VarChar(100),
         value: String(this.pick(b, 'cestado_titular', 'estado_titular') ?? ''),
@@ -1151,7 +1169,7 @@ export class EmissionsService {
       },
       fnac_conductor: {
         type: T.Date,
-        value: this.pick(b, 'fnac_conductor') ?? null,
+        value: this.dateField(this.pick(b, 'fnac_conductor')),
       },
       cestado_conductor: {
         type: T.VarChar(100),
@@ -1201,7 +1219,7 @@ export class EmissionsService {
       },
       fnac_beneficiario: {
         type: T.Date,
-        value: this.pick(b, 'fnac_beneficiario') ?? null,
+        value: this.dateField(this.pick(b, 'fnac_beneficiario')),
       },
       cestado_beneficiario: {
         type: T.VarChar(100),
