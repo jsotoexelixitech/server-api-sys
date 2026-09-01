@@ -56,6 +56,7 @@ const ROUTE_LABELS: Record<string, string> = {
   'POST /api/v1/personas/planes': 'Planes disponibles (personas/viajero)',
   'POST /api/v1/personas/cotizacion': 'Cotización personas / viajero',
   'POST /api/v1/personas/validacion': 'Validación pre-emisión personas',
+  'POST /api/v1/personas/poliza-vigente': 'Consultar póliza funeraria vigente por cédula',
   'POST /api/v1/personas/emision': 'Emitir póliza personas / viajero',
   'POST /api/v1/emision-personas/getCotizacionPer': 'Cotización personas (core · sección 6)',
   'POST /api/v1/emision-personas/validateEmissionPerson': 'Pre-validación emisión personas (core)',

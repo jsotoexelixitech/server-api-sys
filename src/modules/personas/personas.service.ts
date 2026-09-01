@@ -565,6 +565,55 @@ export class PersonasService {
     };
   }
 
+  /**
+   * ¿Hay póliza funeraria vigente para esta cédula? (adpoliza casegurado + ramo + iestado V).
+   * No requiere plan: se usa al capturar la cédula, antes de avanzar.
+   */
+  async findPolizaVigenteByCedula(rifRaw: string | number, cramo?: number) {
+    const digits = String(rifRaw ?? '').replace(/\D/g, '');
+    if (digits.length < 6) {
+      throw new BadRequestException('La cédula debe ser numérica (mínimo 6 dígitos).');
+    }
+    const ramo = cramo ?? this.defaultRamo;
+    try {
+      const req = this.db.request();
+      const T = this.db.types;
+      req.input('rif', T.Numeric(12, 0), Number(digits));
+      req.input('cramo', T.Int, ramo);
+      const result = await req.query(`
+        SELECT TOP 1
+          LTRIM(RTRIM(cnpoliza)) AS cnpoliza,
+          cramo,
+          LTRIM(RTRIM(cplan)) AS cplan,
+          CONVERT(varchar(10), fhasta, 23) AS fhasta
+        FROM adpoliza
+        WHERE casegurado = @rif
+          AND cramo = @cramo
+          AND iestado = 'V'
+          AND fhasta > GETDATE()
+        ORDER BY fhasta DESC
+      `);
+      const row = result.recordset?.[0] as
+        | { cnpoliza?: string; cramo?: number; cplan?: string; fhasta?: string }
+        | undefined;
+      if (!row?.cnpoliza) {
+        return { hasVigente: false as const };
+      }
+      return {
+        hasVigente: true as const,
+        cnpoliza: String(row.cnpoliza).trim(),
+        cramo: Number(row.cramo ?? ramo),
+        cplan: String(row.cplan ?? '').trim(),
+        fhasta: String(row.fhasta ?? '').trim(),
+      };
+    } catch (err) {
+      if (err instanceof BadRequestException) throw err;
+      const msg = err instanceof Error ? err.message : String(err);
+      this.logger.error(`findPolizaVigenteByCedula: ${msg}`);
+      throw new InternalServerErrorException('Error al consultar póliza vigente.');
+    }
+  }
+
   // ── Validación de persona (speeValidatePersonGeneral) ──────────────────────
   async validateEmissionPerson(body: Record<string, unknown>) {
     const req = this.db.request();
