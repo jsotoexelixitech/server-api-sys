@@ -85,7 +85,7 @@ export class CalculatePlanCoberturasDto {
   @ApiPropertyOptional({
     example: 1.5,
     description:
-      'Tasa casco PT. Opcional: casco la envía; RCV la omite. Solo se pasa al SP si viene numérica.',
+      'Tasa casco PT. Opcional en el body (RCV puede omitirla). Nest la envía al SP como null si no viene.',
   })
   @IsOptional()
   @Type(() => Number)
@@ -94,7 +94,7 @@ export class CalculatePlanCoberturasDto {
   @ApiPropertyOptional({
     example: 1.5,
     description:
-      'Tasa casco CA. Opcional: casco la envía; RCV la omite. Solo se pasa al SP si viene numérica.',
+      'Tasa casco CA. Opcional en el body (RCV puede omitirla). Nest la envía al SP como null si no viene.',
   })
   @IsOptional()
   @Type(() => Number)
@@ -103,7 +103,7 @@ export class CalculatePlanCoberturasDto {
   @ApiPropertyOptional({
     example: 1.5,
     description:
-      'Tasa pérdida parcial PP. Opcional: casco la envía; RCV la omite. Solo se pasa al SP si viene numérica.',
+      'Tasa pérdida parcial PP. Opcional en el body (RCV puede omitirla). Nest la envía al SP como null si no viene.',
   })
   @IsOptional()
   @Type(() => Number)
