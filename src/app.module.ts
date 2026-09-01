@@ -23,6 +23,7 @@ import { DocsModule } from './modules/docs/docs.module';
 import { PrismaModule } from './database/prisma/prisma.module';
 import { ProductEmissionModule } from './modules/product-emission/product-emission.module';
 import { MailModule } from './modules/mail/mail.module';
+import { CanalModule } from './modules/canal/canal.module';
 
 @Module({
   imports: [
@@ -56,6 +57,7 @@ import { MailModule } from './modules/mail/mail.module';
     PartnerIntegrationModule,
     ProductEmissionModule,
     MailModule,
+    CanalModule,
   ],
 })
 export class AppModule {}
