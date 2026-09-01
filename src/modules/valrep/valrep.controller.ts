@@ -7,6 +7,8 @@ import { CalculatePlanCoberturasDto } from './dto/calculate-plan-coberturas.dto'
 import { GetFrecuenciaDto } from './dto/get-frecuencia.dto';
 import { GetProductosPersonasDto } from './dto/get-productos-personas.dto';
 import { GetPlanesProductoDto } from './dto/get-planes-producto.dto';
+import { GetMatipoemisionDto } from './dto/get-matipoemision.dto';
+import { GetMatipopagoEntidadesDto } from './dto/get-matipopago-entidades.dto';
 import { GetPlanesDetallePersonasDto } from './dto/get-planes-detalle-personas.dto';
 import { ValrepService } from './valrep.service';
 import { Api500, ApiCommonErrors } from '../../common/swagger/api-error-responses';
@@ -451,5 +453,60 @@ export class ValrepController {
   @Api500()
   async calculatePlanCoberturas(@Body() dto: CalculatePlanCoberturasDto) {
     return this.valrepService.calculatePlanCoberturas(dto);
+  }
+
+  // ── POST /api/v1/valrep/matipoemision ───────────────────────────────────
+
+  @Post('matipoemision')
+  @HttpCode(HttpStatus.OK)
+  @ApiOperation({
+    summary: 'Tipo de emisión por canal o productor',
+    description:
+      'Consulta `matipoemision` en Sis2000. Paridad con SysIP-backend `POST /valrep/matipoemision`.',
+    operationId: 'valrepMatipoemision',
+  })
+  @ApiBody({ type: GetMatipoemisionDto })
+  @ApiResponse({
+    status: 200,
+    schema: {
+      example: {
+        status: true,
+        data: [{ centidad: 'C', citem: '1', xtipo: 'emit_pay', cproducto: null }],
+      },
+    },
+  })
+  @ApiCommonErrors()
+  async getMatipoemision(@Body() dto: GetMatipoemisionDto) {
+    const data = await this.valrepService.getMatipoemision(dto);
+    return { status: true, data };
+  }
+
+  // ── POST /api/v1/valrep/matipopago-entidades ────────────────────────────
+
+  @Post('matipopago-entidades')
+  @HttpCode(HttpStatus.OK)
+  @ApiOperation({
+    summary: 'Métodos de pago por canal o productor',
+    description:
+      'Consulta `matipopago_entidades` en Sis2000. Paridad con SysIP-backend `POST /valrep/matipopago-entidades`.',
+    operationId: 'valrepMatipopagoEntidades',
+  })
+  @ApiBody({ type: GetMatipopagoEntidadesDto })
+  @ApiResponse({
+    status: 200,
+    schema: {
+      example: {
+        status: true,
+        data: [
+          { centidad: 'C', citem: '1', xpago: 'sypago' },
+          { centidad: 'C', citem: '1', xpago: 'meritop' },
+        ],
+      },
+    },
+  })
+  @ApiCommonErrors()
+  async getMatipopagoEntidades(@Body() dto: GetMatipopagoEntidadesDto) {
+    const data = await this.valrepService.getMatipopagoEntidades(dto);
+    return { status: true, data };
   }
 }

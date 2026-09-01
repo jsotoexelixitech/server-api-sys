@@ -64,6 +64,7 @@ export function inferScopeFromPath(normalizedPath: string): string | undefined {
   }
   if (/\/api\/v1\/emissions\//i.test(path)) return 'emissions:auto';
   if (/\/api\/v1\/valrep\//i.test(path)) return 'catalog:read';
+  if (/\/api\/v1\/canal\//i.test(path)) return 'catalog:read';
   if (/\/api\/v1\/inma\//i.test(path)) return 'catalog:read';
   if (/\/api\/(?:v1\/)?endosos\//i.test(path)) return 'endosos:write';
   if (/\/api\/v1\/report\//i.test(path)) return 'report:write';
