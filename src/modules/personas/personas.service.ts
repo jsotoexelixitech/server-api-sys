@@ -146,6 +146,9 @@ export class PersonasService {
       estado_civil_beneficiario: String(b.iestado_civil_beneficiario ?? 'S').charAt(0),
       fnac_beneficiario: b.fnac_beneficiario ?? b.fechaNac ?? null,
       nparentesco_beneficiario: getPar(b.nparentesco_beneficiario ?? b.parentesco),
+      telefono_beneficiario: b.xtelefono_beneficiario ?? b.telefono ?? null,
+      correo_beneficiario: b.xcorreo_beneficiario ?? b.email ?? null,
+      pporce_beneficiario: Number(b.pporce_beneficiario ?? b.pporcen ?? b.pporce) || 0,
     }));
     return JSON.stringify(mapped);
   }
@@ -844,7 +847,10 @@ export class PersonasService {
             xapellido_beneficiario: String(a.xapellido_beneficiario ?? a.apellido),
             fnac_beneficiario: a.fnac_beneficiario ? String(a.fnac_beneficiario) : (a.fechaNac ? String(a.fechaNac) : null),
             isexo_beneficiario: String(a.isexo_beneficiario ?? (a.sexo ? String(a.sexo)[0].toUpperCase() : 'M')),
-            nparentesco_beneficiario: Number(getPar(a.nparentesco_beneficiario ?? a.parentesco))
+            nparentesco_beneficiario: Number(getPar(a.nparentesco_beneficiario ?? a.parentesco)),
+            pporce_beneficiario: Number(a.pporce_beneficiario ?? a.pporcen ?? a.pporce) || 0,
+            xtelefono_beneficiario: a.xtelefono_beneficiario ?? a.telefono ?? null,
+            xcorreo_beneficiario: a.xcorreo_beneficiario ?? a.email ?? null,
           }))
         };
 
