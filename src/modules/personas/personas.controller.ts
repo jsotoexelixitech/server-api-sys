@@ -68,12 +68,14 @@ export class PersonasController {
 
   @Post('poliza-vigente')
   @HttpCode(HttpStatus.OK)
+  @NestProtected(NEST_AUTH_SCOPES.EMISSIONS_PERSON)
   @ApiOperation({
     summary: 'Consultar póliza funeraria vigente por cédula',
     description:
       'Busca en Sis2000 si el asegurado ya tiene una póliza vigente del ramo (funerario por defecto). ' +
       'Se usa al capturar la cédula, antes de avanzar al técnico o al pago.',
   })
+  @ApiHeader(APIKEY_HEADER)
   @ApiBody({ type: CheckPolizaVigenteDto })
   @ApiResponse({
     status: 200,
@@ -84,6 +86,7 @@ export class PersonasController {
       },
     },
   })
+  @Api401()
   @ApiCommonErrors()
   async polizaVigente(@Body() dto: CheckPolizaVigenteDto) {
     const data = await this.personasService.findPolizaVigenteByCedula(dto.rif, dto.cramo);

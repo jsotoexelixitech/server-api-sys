@@ -39,7 +39,10 @@ export const NEST_AUTH_SCOPE_CATALOG: NestAuthScopeMeta[] = [
     id: NEST_AUTH_SCOPES.EMISSIONS_PERSON,
     label: 'Emisión personas / viajero',
     description: 'Emitir pólizas de personas',
-    routes: [],
+    routes: [
+      'POST /api/v1/personas/poliza-vigente',
+      'POST /api/v1/personas/emision',
+    ],
   },
   {
     id: NEST_AUTH_SCOPES.EMISSIONS_CONDOMINIO,
