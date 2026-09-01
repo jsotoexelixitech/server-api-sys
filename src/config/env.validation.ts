@@ -25,8 +25,8 @@ export const envValidationSchema = Joi.object({
   /** SP Nexus: primas por cobertura (`POST /valrep/calculate-plan-coberturas`). */
   MSSQL_SP_CALCULO_AUTO_NEXUS: Joi.string().default('sp_calculo_auto_nexus'),
   /**
-   * QA Sis2000 (ago-2026): SP sin @tasaPt/@tasaCa/@tasaPp → true.
-   * GCIA prod / srv001: SP aún los exige → false (default).
+   * HTTP: tasas opcionales. SP: se envían siempre como null si faltan, salvo:
+   * true = SP sin @tasaPt/@tasaCa/@tasaPp (no enviar nunca).
    */
   MSSQL_SP_CALCULO_AUTO_NEXUS_OMIT_TASA_PARAMS: Joi.boolean().default(false),
   MSSQL_SP_GET_SUSTANCIAS_NEXUS: Joi.string().default('sp_get_sustancias_nexus'),
@@ -35,6 +35,8 @@ export const envValidationSchema = Joi.object({
   EMISSION_SOURCE: Joi.string().valid('local', 'external').default('local'),
   LAMUNDIAL_PRODUCTOR: Joi.string().optional(),
   LAMUNDIAL_CUSUARIO: Joi.string().optional(),
+  /** cusuario en sp_calculo_auto_nexus (debe coincidir con sp_genera_coberturas_nexus, default 1422). */
+  LAMUNDIAL_CUSUARIO_SP_CALCULO: Joi.string().optional(),
   /** Plan por defecto en validateEmissionAuto cuando el cliente aún no eligió plan (Formulario Exélixi). */
   LAMUNDIAL_PLAN_DEFAULT: Joi.string().default('RCVBAS'),
   POLICY_PDF_URL: Joi.string().optional(),
