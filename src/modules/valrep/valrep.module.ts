@@ -8,5 +8,6 @@ import { PersonasModule } from '../personas/personas.module';
   imports: [PersonasModule],
   controllers: [ValrepController],
   providers: [ValrepService],
+  exports: [ValrepService],
 })
 export class ValrepModule {}

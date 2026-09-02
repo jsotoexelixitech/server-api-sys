@@ -1057,4 +1057,90 @@ export class ValrepService {
       );
     }
   }
+
+  /** Tipo de emisión por entidad/canal — tabla matipoemision (migrado desde SysIP-backend). */
+  async getMatipoemision(body: {
+    centidad: string;
+    citem: string;
+    cproducto?: string;
+  }): Promise<Record<string, unknown>[]> {
+    const centidad = String(body.centidad).trim();
+    const citem = String(body.citem).trim();
+    const cproducto = body.cproducto?.trim() || null;
+
+    try {
+      const T = this.db.types;
+      const req = this.db.request();
+      req.input('centidad', T.Char(1), centidad);
+      req.input('citem', T.NVarChar(20), citem);
+      req.input('cproducto', T.NVarChar(10), cproducto);
+
+      const result = await req.query(`
+        SELECT *
+        FROM matipoemision
+        WHERE centidad = @centidad
+          AND (citem = @citem OR citem IS NULL)
+          AND (@cproducto IS NULL OR cproducto = @cproducto OR cproducto IS NULL)
+      `);
+
+      return (result.recordset ?? []) as Record<string, unknown>[];
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : String(err);
+      this.logger.error(
+        `getMatipoemision centidad=${centidad} citem=${citem} cproducto=${cproducto}: ${msg}`,
+      );
+      throw new InternalServerErrorException(
+        'Error al obtener el tipo de emisión del canal.',
+      );
+    }
+  }
+
+  /** Métodos de pago por entidad/canal — tabla matipopago_entidades (migrado desde SysIP-backend). */
+  async getMatipopagoEntidades(body: {
+    centidad: string;
+    citem: string;
+    cproducto?: string;
+  }): Promise<Record<string, unknown>[]> {
+    const centidad = String(body.centidad).trim();
+    const citem = String(body.citem).trim();
+    const cproducto = body.cproducto?.trim() || null;
+
+    try {
+      const T = this.db.types;
+      const req = this.db.request();
+      req.input('centidad', T.Char(1), centidad);
+      req.input('citem', T.NVarChar(20), citem);
+      req.input('cproducto', T.NVarChar(10), cproducto);
+
+      const result = await req.query(`
+        SELECT *
+        FROM matipopago_entidades
+        WHERE centidad = @centidad
+          AND (@cproducto IS NULL OR cproducto = @cproducto OR cproducto IS NULL)
+          AND (
+            citem = @citem
+            OR (
+              citem IS NULL
+              AND NOT EXISTS (
+                SELECT 1
+                FROM matipopago_entidades AS specific
+                WHERE specific.centidad = @centidad
+                  AND specific.citem = @citem
+                  AND (@cproducto IS NULL OR specific.cproducto = @cproducto OR specific.cproducto IS NULL)
+              )
+            )
+          )
+      `);
+
+      return (result.recordset ?? []) as Record<string, unknown>[];
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : String(err);
+      this.logger.error(
+        `getMatipopagoEntidades centidad=${centidad} citem=${citem} cproducto=${cproducto}: ${msg}`,
+      );
+      throw new InternalServerErrorException(
+        'Error al obtener los métodos de pago del canal.',
+      );
+    }
+  }
 }
