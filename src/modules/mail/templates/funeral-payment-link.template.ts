@@ -93,7 +93,7 @@ export function buildFuneralPaymentLinkEmail(
       0% { background-position: 0% 50%; }
       100% { background-position: 200% 50%; }
     }
-    .lm-pass { animation: lm-fade 0.75s ease-out; }
+    .lm-pass { animation: lm-fade 0.75s ease-out; box-shadow: 0 18px 40px rgba(15,26,90,0.10); }
     .lm-cta { animation: lm-pulse 2.1s ease-out infinite; }
     .lm-sheen {
       background-image: linear-gradient(90deg,#0F1A5A 0%,#2E6DBF 35%,#E84F51 68%,#0F1A5A 100%);
@@ -106,15 +106,15 @@ export function buildFuneralPaymentLinkEmail(
     }
   </style>
 </head>
-<body style="margin:0;padding:0;background:#091133;">
-  <table role="presentation" width="100%" cellspacing="0" cellpadding="0" bgcolor="#091133" style="background:#091133;">
+<body style="margin:0;padding:0;background:#F4F6FB;">
+  <table role="presentation" width="100%" cellspacing="0" cellpadding="0" bgcolor="#F4F6FB" style="background:#F4F6FB;">
     <tr>
       <td align="center" style="padding:28px 12px 36px;">
         <table role="presentation" width="600" cellspacing="0" cellpadding="0" class="lm-pass" style="max-width:600px;width:100%;">
           <tr>
-            <td align="center" style="padding:4px 0 20px;">
-              <p style="margin:0 0 10px;font-family:Georgia,Times New Roman,serif;font-size:11px;letter-spacing:0.28em;text-transform:uppercase;color:#8AA0C8;">Pase digital · pago</p>
-              <img src="https://lamundialdeseguros.com/wp-content/uploads/2023/02/Logotipo-La-Mundial-01.jpg" width="188" alt="La Mundial de Seguros" style="display:block;width:188px;max-width:62%;height:auto;border:0;border-radius:4px;background:#ffffff;padding:10px 14px;">
+            <td align="center" style="padding:4px 0 18px;">
+              <p style="margin:0 0 10px;font-family:Georgia,Times New Roman,serif;font-size:11px;letter-spacing:0.28em;text-transform:uppercase;color:#6B7280;">Pase digital · pago</p>
+              <img src="https://lamundialdeseguros.com/wp-content/uploads/2023/02/Logotipo-La-Mundial-01.jpg" width="200" alt="La Mundial de Seguros" style="display:block;width:200px;max-width:64%;height:auto;border:0;">
             </td>
           </tr>
           <tr>
@@ -148,9 +148,9 @@ export function buildFuneralPaymentLinkEmail(
             <td bgcolor="#0F1A5A" style="background:#0F1A5A;padding:0 16px;">
               <table role="presentation" width="100%" cellspacing="0" cellpadding="0">
                 <tr>
-                  <td width="14" height="14" bgcolor="#091133" style="width:14px;height:14px;background:#091133;border-radius:14px;font-size:0;line-height:0;">&nbsp;</td>
+                  <td width="14" height="14" bgcolor="#F4F6FB" style="width:14px;height:14px;background:#F4F6FB;border-radius:14px;font-size:0;line-height:0;">&nbsp;</td>
                   <td style="border-bottom:1px dashed #3A4A8A;font-size:0;line-height:0;">&nbsp;</td>
-                  <td width="14" height="14" bgcolor="#091133" style="width:14px;height:14px;background:#091133;border-radius:14px;font-size:0;line-height:0;">&nbsp;</td>
+                  <td width="14" height="14" bgcolor="#F4F6FB" style="width:14px;height:14px;background:#F4F6FB;border-radius:14px;font-size:0;line-height:0;">&nbsp;</td>
                 </tr>
               </table>
             </td>
@@ -202,13 +202,13 @@ export function buildFuneralPaymentLinkEmail(
             </td>
           </tr>
           <tr>
-            <td align="center" style="padding:22px 16px 4px;font-family:Arial,Helvetica,sans-serif;font-size:12px;line-height:1.7;color:#8AA0C8;">
+            <td align="center" style="padding:22px 16px 4px;font-family:Arial,Helvetica,sans-serif;font-size:12px;line-height:1.7;color:#6B7280;">
               La Mundial de Seguros, C.A. · Call Center ${escapeHtml(callCenterPhone)}<br>
-              <a href="https://lamundialdeseguros.com/" style="color:#4A8DD5;text-decoration:none;">lamundialdeseguros.com</a>
+              <a href="https://lamundialdeseguros.com/" style="color:#2E6DBF;text-decoration:none;">lamundialdeseguros.com</a>
             </td>
           </tr>
           <tr>
-            <td align="center" style="padding:2px 16px 8px;font-family:Arial,Helvetica,sans-serif;font-size:11px;color:#5B6B8C;">
+            <td align="center" style="padding:2px 16px 8px;font-family:Arial,Helvetica,sans-serif;font-size:11px;color:#9CA3AF;">
               Mensaje automático. No respondas a este correo.
             </td>
           </tr>
