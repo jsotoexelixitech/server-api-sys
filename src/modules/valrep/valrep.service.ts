@@ -1087,8 +1087,8 @@ export class ValrepService {
       const result = await req.query(`
         SELECT TOP 1 ccanalalt
         FROM magestor
-        WHERE CAST(cproductor AS NVARCHAR(20)) = @citem
-           OR CAST(cgestor AS NVARCHAR(20)) = @citem
+        WHERE cgestor = @citem
+           OR cgestor LIKE @citem + '-%'
         ORDER BY
           CASE WHEN @cscanalalt IS NOT NULL AND cscanalalt = @cscanalalt THEN 0 ELSE 1 END,
           CASE WHEN cscanalalt IS NULL THEN 0 ELSE 1 END

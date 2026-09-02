@@ -55,6 +55,13 @@ export class EmissionsService {
     return Number.isNaN(n) ? null : n;
   }
 
+  /** cproductor derivado de cgestor (magestor no tiene columna cproductor). */
+  private static readonly MAGESTOR_CPRODUCTOR_SQL = `
+    CASE WHEN CHARINDEX('-', g.cgestor) > 0
+      THEN LEFT(g.cgestor, CHARINDEX('-', g.cgestor) - 1)
+      ELSE g.cgestor
+    END`;
+
   /** Contexto marketplace resuelto desde Sis2000 (gestor / canal / productor). */
   private mergeMarketplaceContext(
     b: Record<string, unknown>,
@@ -88,7 +95,7 @@ export class EmissionsService {
     const result = await req.query(`
       SELECT TOP 1
         g.cgestor,
-        g.cproductor,
+        ${EmissionsService.MAGESTOR_CPRODUCTOR_SQL} AS cproductor,
         g.ccanalalt,
         g.cscanalalt,
         g.ctipocanal,
@@ -126,7 +133,7 @@ export class EmissionsService {
     const gestorResult = await gestorReq.query(`
       SELECT TOP 1
         g.cgestor,
-        g.cproductor,
+        ${EmissionsService.MAGESTOR_CPRODUCTOR_SQL} AS cproductor,
         g.ccanalalt,
         g.cscanalalt,
         g.ctipocanal,
@@ -179,32 +186,6 @@ export class EmissionsService {
     `);
     const productor = result.recordset?.[0] as Record<string, unknown> | undefined;
     if (!productor) return null;
-
-    const gestorReq = this.db.request();
-    gestorReq.input('cproductor', T.Int, cproductor);
-    gestorReq.input('cproductorKey', T.VarChar(20), String(cproductor));
-    const gestorResult = await gestorReq.query(`
-      SELECT TOP 1
-        g.cgestor,
-        g.cproductor,
-        g.ccanalalt,
-        g.cscanalalt,
-        g.ctipocanal,
-        u.cusuario
-      FROM magestor g
-      LEFT JOIN seusuariosweb u ON RTRIM(u.xcorreo) = RTRIM(g.xcorreo)
-      WHERE CAST(g.cproductor AS NVARCHAR(20)) = @cproductorKey
-         OR g.cgestor LIKE @cproductorKey + '-%'
-      ORDER BY CASE WHEN g.cgestor LIKE @cproductorKey + '-%' THEN 0 ELSE 1 END
-    `);
-    const gestor = gestorResult.recordset?.[0] as Record<string, unknown> | undefined;
-
-    if (gestor) {
-      if (gestor['cusuario'] == null && productor['cusuario_productor'] != null) {
-        gestor['cusuario'] = productor['cusuario_productor'];
-      }
-      return gestor;
-    }
 
     return {
       cproductor: productor['cproductor'],
