@@ -18,6 +18,8 @@ export function normalizeTipoEmision(raw: unknown): TipoEmisionCanal | null {
 
   if (
     value === 'emit_pay' ||
+    value.includes('emision paga') ||
+    value.includes('emisión paga') ||
     value.includes('solo emision paga') ||
     value.includes('solo emisión paga')
   ) {
@@ -28,8 +30,7 @@ export function normalizeTipoEmision(raw: unknown): TipoEmisionCanal | null {
     value.includes('emision regular') ||
     value.includes('emisión regular') ||
     value.includes('emision pendiente') ||
-    value.includes('emisión pendiente') ||
-    value.includes('pendiente')
+    value.includes('emisión pendiente')
   ) {
     return 'emit';
   }
@@ -104,12 +105,13 @@ export function resolveTipoEmision(
   tipoPago: TipoPagoCanal[],
 ): TipoEmisionCanal | null {
   const fromDb = normalizeTipoEmision(
-    emisionRow?.['xtipo']
+    emisionRow?.['id']
     ?? emisionRow?.['ctipoemision']
-    ?? emisionRow?.['tipoEmision']
-    ?? emisionRow?.['id'],
+    ?? emisionRow?.['xtipo']
+    ?? emisionRow?.['tipoEmision'],
   );
   if (fromDb) return fromDb;
+  // Sin fila matipoemision: paridad SysIP automobile-new (emit + métodos de pago).
   if (tipoPago.length > 0) return 'emit';
   return null;
 }
