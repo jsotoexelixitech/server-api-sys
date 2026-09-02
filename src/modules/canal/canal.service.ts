@@ -47,14 +47,14 @@ export class CanalService {
       cscanalalt,
     });
 
-    let emisionRows = await this.valrepService.getMatipoemision({ centidad, citem, cproducto });
+    // matipoemision es por canal/gestor (centidad+citem), no por producto — paridad Canal.js / SysIP.
+    let emisionRows = await this.valrepService.getMatipoemision({ centidad, citem });
 
     // matipoemision suele vivir en canal C; gestor P hereda del canal vinculado (magestor).
     if (!emisionRows.length && resolvedCanalAlt != null && centidad !== 'C') {
       emisionRows = await this.valrepService.getMatipoemision({
         centidad: 'C',
         citem: String(resolvedCanalAlt),
-        cproducto,
       });
     }
 

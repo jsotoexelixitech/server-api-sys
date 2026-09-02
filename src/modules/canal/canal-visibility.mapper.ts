@@ -106,7 +106,7 @@ export function resolveTipoEmision(
   centidad?: string,
 ): TipoEmisionCanal | null {
   const fromDb = normalizeTipoEmision(
-    readRowField(emisionRow, 'id', 'ctipoemision', 'xtipo', 'tipoEmision'),
+    readRowField(emisionRow, 'xtipo', 'ctipoemision', 'tipoEmision'),
   );
   if (fromDb) return fromDb;
   if (tipoPago.length > 0) {
@@ -150,12 +150,8 @@ export function mapCanalVisibility(input: {
   pagoRows: Record<string, unknown>[];
   planes: PlanItem[];
 }): CanalVisibilityResult {
-  const scopedEmisionRows = filterEmisionRowsForEntity(
-    input.emisionRows,
-    input.citem,
-    input.cproducto,
-  );
-  const emisionRow = pickMostSpecificRow(scopedEmisionRows, input.citem, input.cproducto);
+  const scopedEmisionRows = filterEmisionRowsForEntity(input.emisionRows, input.citem);
+  const emisionRow = pickEmisionRow(scopedEmisionRows, input.citem);
 
   const tipoPago = [...new Set(
     input.pagoRows
@@ -204,11 +200,10 @@ function readRowField(
   return undefined;
 }
 
-/** Prioriza filas con citem/cproducto exactos (evita heredar fila genérica emit). */
+/** Prioriza fila con citem exacto; si no hay, fila genérica (citem null). */
 function filterEmisionRowsForEntity(
   rows: Record<string, unknown>[],
   citem: string,
-  cproducto?: string,
 ): Record<string, unknown>[] {
   if (!rows.length) return rows;
 
@@ -216,44 +211,24 @@ function filterEmisionRowsForEntity(
     const raw = readRowField(row, 'citem');
     return raw != null && String(raw).trim() === citem;
   });
-  const scoped = itemMatches.length > 0 ? itemMatches : rows;
+  if (itemMatches.length > 0) return itemMatches;
 
-  if (!cproducto) return scoped;
-
-  const prodMatches = scoped.filter((row) => {
-    const raw = readRowField(row, 'cproducto');
-    return raw != null && String(raw).trim() === cproducto;
-  });
-  return prodMatches.length > 0 ? prodMatches : scoped;
+  return rows.filter((row) => readRowField(row, 'citem') == null);
 }
 
-function pickMostSpecificRow(
+/** Entre filas del mismo citem, prioriza xtipo a nivel canal (cproducto null). */
+function pickEmisionRow(
   rows: Record<string, unknown>[],
   citem: string,
-  cproducto?: string,
 ): Record<string, unknown> | undefined {
   if (!rows.length) return undefined;
 
-  const scored = rows.map((row) => {
-    let score = 0;
-    const rowItemRaw = readRowField(row, 'citem');
-    const rowItem = rowItemRaw != null ? String(rowItemRaw).trim() : null;
-    const rowProdRaw = readRowField(row, 'cproducto');
-    const rowProd = rowProdRaw != null ? String(rowProdRaw).trim() : null;
-
-    if (rowItem === citem) score += 4;
-    else if (rowItem == null) score += 2;
-    else score -= 4;
-
-    if (cproducto) {
-      if (rowProd === cproducto) score += 4;
-      else if (rowProd == null) score += 2;
-      else score -= 4;
-    }
-
-    return { row, score };
+  const exactItem = rows.filter((row) => {
+    const raw = readRowField(row, 'citem');
+    return raw != null && String(raw).trim() === citem;
   });
+  const pool = exactItem.length > 0 ? exactItem : rows;
 
-  scored.sort((a, b) => b.score - a.score);
-  return scored[0]?.score > 0 ? scored[0].row : scored[0]?.row;
+  const canalLevel = pool.filter((row) => readRowField(row, 'cproducto') == null);
+  return (canalLevel.length > 0 ? canalLevel : pool)[0];
 }
