@@ -1,4 +1,4 @@
-/** Plantilla funerario: layout de `aprobacion-tecnica.js` (solo cascarón visual + CTA). */
+/** Correo funerario: enlace de pago. No usar en RCV ni otros ramos. */
 
 export type FuneralPaymentLinkEmail = {
   subject: string;
@@ -25,11 +25,11 @@ function escapeHtml(value: string): string {
 function ctaButtonHtml(url: string, label: string): string {
   const href = url.trim();
   if (!href) return '';
-  return `<table role="presentation" width="100%" cellspacing="0" cellpadding="0" style="margin:0 0 8px;">
+  return `<table role="presentation" cellspacing="0" cellpadding="0" align="center" style="margin:0 auto 24px;">
                 <tr>
-                  <td align="center" style="padding:4px 0 8px;">
+                  <td align="center" bgcolor="#E84F51" style="border-radius:8px;background:#E84F51;">
                     <a href="${escapeHtml(href)}" target="_blank" rel="noopener noreferrer"
-                      style="display:inline-block;background:#05c6df;color:#0c133a;text-decoration:none;font-weight:800;font-size:15px;padding:14px 28px;border-radius:14px;">
+                      style="display:inline-block;padding:14px 32px;font-family:Arial,Helvetica,sans-serif;font-size:16px;font-weight:700;line-height:1.2;color:#ffffff;text-decoration:none;">
                       ${escapeHtml(label)}
                     </a>
                   </td>
@@ -47,31 +47,26 @@ export function buildFuneralPaymentLinkEmail(
   const planName = params.planName.trim() || 'Funerario';
   const paymentUrl = params.paymentUrl.trim();
   const expiresLabel = params.expiresLabel?.trim() || '';
-  const fecha = new Date().toLocaleDateString('es-VE', {
-    weekday: 'long',
-    year: 'numeric',
-    month: 'long',
-    day: 'numeric',
-  });
 
-  const subject = `La Mundial · Completa el pago de tu póliza funerario`;
+  const subject = 'La Mundial · Completa el pago de tu póliza funerario';
 
   const text = [
     'La Mundial de Seguros',
     '',
     `Hola ${nombre},`,
     '',
-    `Tu plan ${planName} está listo para contratarse. Usa el enlace para continuar con el pago.`,
+    `Tu plan ${planName} está listo. Abre el enlace para continuar con el pago. Tus datos ya están cargados.`,
     paymentUrl ? `Enlace: ${paymentUrl}` : '',
     expiresLabel ? `Vigencia del enlace: ${expiresLabel}` : '',
     '',
-    'Equipo La Mundial de Seguros',
+    'La Mundial de Seguros',
+    callCenterPhone,
   ]
     .filter(Boolean)
     .join('\n');
 
   const vigenciaBlock = expiresLabel
-    ? `<div style="font-size:13px;margin-top:8px;line-height:1.55;opacity:0.92;">Este enlace estará disponible hasta <strong>${escapeHtml(expiresLabel)}</strong>.</div>`
+    ? `<p style="margin:0 0 20px;font-family:Arial,Helvetica,sans-serif;font-size:13px;line-height:1.5;color:#6B7280;text-align:center;">El enlace vence el ${escapeHtml(expiresLabel)}.</p>`
     : '';
 
   const html = `<!DOCTYPE html>
@@ -79,77 +74,71 @@ export function buildFuneralPaymentLinkEmail(
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta http-equiv="x-ua-compatible" content="ie=edge">
   <title>${escapeHtml(subject)}</title>
 </head>
-<body style="margin:0;padding:0;background:#eef3fb;font-family:Segoe UI,Roboto,Helvetica,Arial,sans-serif;color:#0c133a;">
-  <table role="presentation" width="100%" cellspacing="0" cellpadding="0" style="background:#eef3fb;padding:32px 16px;">
+<body style="margin:0;padding:0;background:#F3F4F8;">
+  <table role="presentation" width="100%" cellspacing="0" cellpadding="0" bgcolor="#F3F4F8" style="background:#F3F4F8;">
     <tr>
-      <td align="center">
-        <table role="presentation" width="600" cellspacing="0" cellpadding="0" style="max-width:600px;width:100%;background:#ffffff;border-radius:24px;overflow:hidden;box-shadow:0 18px 48px rgba(8,38,92,0.12);">
+      <td align="center" style="padding:28px 12px;">
+        <table role="presentation" width="560" cellspacing="0" cellpadding="0" style="max-width:560px;width:100%;">
           <tr>
-            <td style="background:linear-gradient(135deg,#0c133a 0%,#08265c 55%,#05c6df 100%);padding:28px 32px;">
-              <table role="presentation" width="100%" cellspacing="0" cellpadding="0">
-                <tr>
-                  <td>
-                    <img src="https://lmportal.lamundialdeseguros.com/lamundialcms/dist/img/logo.png" height="40" alt="La Mundial" style="display:block;margin-bottom:12px;border:0;">
-                    <div style="font-size:26px;font-weight:800;color:#ffffff;margin-top:6px;line-height:1.2;">Completa el pago de tu póliza</div>
-                    <div style="font-size:14px;color:#d9e8ff;margin-top:8px;line-height:1.5;">Seguro funerario · La Mundial de Seguros</div>
-                  </td>
-                </tr>
-              </table>
+            <td align="center" style="padding:0 0 16px;">
+              <img src="https://lamundialdeseguros.com/wp-content/uploads/2023/02/Logotipo-La-Mundial-01.jpg" width="220" alt="La Mundial de Seguros" style="display:block;width:220px;max-width:70%;height:auto;border:0;">
             </td>
           </tr>
           <tr>
-            <td style="padding:28px 32px 12px;">
-              <p style="margin:0 0 16px;font-size:16px;line-height:1.6;">Hola <strong>${escapeHtml(nombre)}</strong>,</p>
-              <p style="margin:0 0 20px;font-size:15px;line-height:1.65;color:#4a5f7a;">
-                Tu plan <strong style="color:#08265c;">${escapeHtml(planName)}</strong>
-                está listo. Usa el botón para ingresar al pago seguro. Tus datos ya están precargados.
-              </p>
-              <table role="presentation" width="100%" cellspacing="0" cellpadding="0" style="margin:0 0 22px;">
+            <td bgcolor="#ffffff" style="background:#ffffff;border:1px solid #E5E7EB;">
+              <table role="presentation" width="100%" cellspacing="0" cellpadding="0">
                 <tr>
-                  <td style="border:1px solid #dbe7f3;border-radius:18px;padding:18px 20px;background:#fbfdff;">
-                    <div style="font-size:12px;font-weight:700;color:#64748b;text-transform:uppercase;letter-spacing:0.08em;margin-bottom:12px;">Resumen</div>
+                  <td>
                     <table role="presentation" width="100%" cellspacing="0" cellpadding="0">
                       <tr>
-                        <td style="padding:8px 0;font-size:14px;color:#64748b;width:42%;">Producto</td>
-                        <td style="padding:8px 0;font-size:14px;font-weight:700;color:#08265c;">Funerario</td>
-                      </tr>
-                      <tr>
-                        <td style="padding:8px 0;font-size:14px;color:#64748b;">Plan</td>
-                        <td style="padding:8px 0;font-size:14px;font-weight:700;color:#0c133a;">${escapeHtml(planName)}</td>
-                      </tr>
-                      <tr>
-                        <td style="padding:8px 0;font-size:14px;color:#64748b;">Fecha</td>
-                        <td style="padding:8px 0;font-size:14px;color:#0c133a;">${escapeHtml(fecha)}</td>
+                        <td width="70%" height="4" bgcolor="#0F1A5A" style="font-size:0;line-height:0;">&nbsp;</td>
+                        <td width="18%" height="4" bgcolor="#2E6DBF" style="font-size:0;line-height:0;">&nbsp;</td>
+                        <td width="12%" height="4" bgcolor="#E84F51" style="font-size:0;line-height:0;">&nbsp;</td>
                       </tr>
                     </table>
                   </td>
                 </tr>
-              </table>
-              <table role="presentation" width="100%" cellspacing="0" cellpadding="0" style="margin:0 0 24px;">
                 <tr>
-                  <td style="border-radius:16px;background:#08265c;padding:16px 18px;color:#ffffff;">
-                    <div style="font-size:12px;font-weight:700;letter-spacing:0.08em;text-transform:uppercase;opacity:0.85;">Siguiente paso</div>
-                    <div style="font-size:15px;font-weight:700;margin-top:6px;line-height:1.5;">Pagar en línea</div>
-                    <div style="font-size:13px;margin-top:8px;line-height:1.55;opacity:0.92;">El enlace abre el módulo de pagos con tus datos precargados.</div>
+                  <td style="padding:32px 36px 8px;">
+                    <p style="margin:0 0 6px;font-family:Arial,Helvetica,sans-serif;font-size:12px;font-weight:700;letter-spacing:0.12em;text-transform:uppercase;color:#E84F51;">Seguro funerario</p>
+                    <h1 style="margin:0 0 20px;font-family:Arial,Helvetica,sans-serif;font-size:24px;line-height:1.3;font-weight:700;color:#0F1A5A;">Tu plan está listo para el pago</h1>
+                    <p style="margin:0 0 16px;font-family:Arial,Helvetica,sans-serif;font-size:16px;line-height:1.6;color:#111827;">Hola ${escapeHtml(nombre)},</p>
+                    <p style="margin:0 0 8px;font-family:Arial,Helvetica,sans-serif;font-size:15px;line-height:1.65;color:#4B5563;">
+                      El plan <strong style="color:#0F1A5A;">${escapeHtml(planName)}</strong> ya puede contratarse.
+                      Pulsa el botón para pagar en línea. Tus datos van precargados.
+                    </p>
+                  </td>
+                </tr>
+                <tr>
+                  <td style="padding:20px 36px 0;">
+                    ${ctaButtonHtml(paymentUrl, 'Pagar ahora')}
                     ${vigenciaBlock}
                   </td>
                 </tr>
+                <tr>
+                  <td style="padding:0 36px 28px;">
+                    <p style="margin:0;font-family:Arial,Helvetica,sans-serif;font-size:12px;line-height:1.55;color:#9CA3AF;word-break:break-all;">
+                      Si el botón no abre, copia este enlace en el navegador:<br>
+                      <a href="${escapeHtml(paymentUrl)}" style="color:#2E6DBF;text-decoration:underline;">${escapeHtml(paymentUrl)}</a>
+                    </p>
+                  </td>
+                </tr>
               </table>
-              ${ctaButtonHtml(paymentUrl, 'Ir a pagar mi póliza')}
-              <p style="margin:12px 0 0;font-size:12px;line-height:1.55;color:#8aa0bd;word-break:break-all;">
-                Si el botón no funciona, copia este enlace:<br>${escapeHtml(paymentUrl)}
-              </p>
             </td>
           </tr>
           <tr>
-            <td style="padding:0 32px 28px;">
-              <div style="border-top:1px solid #e7eef8;padding-top:18px;font-size:12px;line-height:1.6;color:#8aa0bd;text-align:center;">
-                La Mundial de Seguros<br>
-                Call Center: ${escapeHtml(callCenterPhone)} · 0800LaMundial<br>
-                Este correo fue generado automáticamente. No respondas a este mensaje.
-              </div>
+            <td align="center" style="padding:20px 16px 8px;font-family:Arial,Helvetica,sans-serif;font-size:12px;line-height:1.6;color:#6B7280;">
+              La Mundial de Seguros, C.A.<br>
+              Call Center ${escapeHtml(callCenterPhone)}<br>
+              <a href="https://lamundialdeseguros.com/" style="color:#2E6DBF;text-decoration:none;">lamundialdeseguros.com</a>
+            </td>
+          </tr>
+          <tr>
+            <td align="center" style="padding:0 16px 12px;font-family:Arial,Helvetica,sans-serif;font-size:11px;line-height:1.5;color:#9CA3AF;">
+              Este mensaje se generó de forma automática. No respondas a este correo.
             </td>
           </tr>
         </table>
