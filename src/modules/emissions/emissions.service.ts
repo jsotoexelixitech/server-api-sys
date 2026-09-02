@@ -64,17 +64,18 @@ export class EmissionsService {
       ELSE g.cgestor
     END`;
 
-  /** 215-28 gana sobre 215 (citem/productor). */
-  private preferGestorCode(a: unknown, b: unknown): string {
-    const sa = a != null ? String(a).trim() : '';
-    const sb = b != null ? String(b).trim() : '';
-    if (!sa) return sb;
-    if (!sb) return sa;
-    if (sb.startsWith(`${sa}-`)) return sb;
-    if (sa.startsWith(`${sb}-`)) return sa;
-    if (sa.includes('-') && !sb.includes('-')) return sa;
-    if (sb.includes('-') && !sa.includes('-')) return sb;
-    return sa;
+  /** Código con guion (gestor) gana sobre el productor suelto. */
+  private preferGestorCode(...vals: unknown[]): string {
+    return vals.reduce<string>((best, raw) => {
+      const next = raw != null ? String(raw).trim() : '';
+      if (!next) return best;
+      if (!best) return next;
+      if (next.startsWith(`${best}-`)) return next;
+      if (best.startsWith(`${next}-`)) return best;
+      if (best.includes('-') && !next.includes('-')) return best;
+      if (next.includes('-') && !best.includes('-')) return next;
+      return best;
+    }, '');
   }
 
   /** Contexto marketplace resuelto desde Sis2000 (gestor / canal / productor). */
