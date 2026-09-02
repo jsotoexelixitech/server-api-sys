@@ -55,6 +55,217 @@ export class EmissionsService {
     return Number.isNaN(n) ? null : n;
   }
 
+  /** Contexto marketplace resuelto desde Sis2000 (gestor / canal / productor). */
+  private mergeMarketplaceContext(
+    b: Record<string, unknown>,
+    ctx: Record<string, unknown>,
+    source: string,
+  ): void {
+    if (ctx['cgestor'] != null) b['cgestor'] = ctx['cgestor'];
+    if (ctx['ccanalalt'] != null) b['ccanalalt'] = ctx['ccanalalt'];
+    if (ctx['cscanalalt'] != null) b['cscanalalt'] = ctx['cscanalalt'];
+    else if ('cscanalalt' in ctx) b['cscanalalt'] = null;
+    if (ctx['ctipocanal'] != null && String(ctx['ctipocanal']).trim() !== '') {
+      b['ctipocanal'] = ctx['ctipocanal'];
+    }
+    if (ctx['cproductor'] != null && (b['cproductor'] == null || String(b['cproductor']).trim() === '')) {
+      b['cproductor'] = ctx['cproductor'];
+    }
+    if (ctx['cusuario'] != null) b['cusuario'] = ctx['cusuario'];
+
+    this.logger.log(
+      `applyMarketplaceActor [${source}]: cgestor=${ctx['cgestor'] ?? 'null'} ccanalalt=${ctx['ccanalalt'] ?? 'null'} cscanalalt=${ctx['cscanalalt'] ?? 'null'} cproductor=${ctx['cproductor'] ?? 'null'} cusuario=${ctx['cusuario'] ?? 'sin cambio'}`,
+    );
+  }
+
+  /** Gestor por código (215-28) o correo (cgestor_in). */
+  private async resolveGestorContext(
+    gestorKey: string,
+  ): Promise<Record<string, unknown> | null> {
+    const T = this.db.types;
+    const req = this.db.request();
+    req.input('gestorKey', T.VarChar(120), gestorKey);
+    const result = await req.query(`
+      SELECT TOP 1
+        g.cgestor,
+        g.cproductor,
+        g.ccanalalt,
+        g.cscanalalt,
+        g.ctipocanal,
+        u.cusuario
+      FROM magestor g
+      LEFT JOIN seusuariosweb u ON RTRIM(u.xcorreo) = RTRIM(g.xcorreo)
+      WHERE g.cgestor = @gestorKey
+         OR RTRIM(g.xcorreo) = RTRIM(@gestorKey)
+    `);
+    return (result.recordset?.[0] as Record<string, unknown> | undefined) ?? null;
+  }
+
+  /** Canal / subcanal: gestor + usuario (paridad PolizaFix.updatePolizaAltChannel). */
+  private async resolveCanalContext(
+    ccanalalt: number | null,
+    cscanalalt: number | null,
+  ): Promise<Record<string, unknown> | null> {
+    if (ccanalalt == null) return null;
+
+    const T = this.db.types;
+    const req = this.db.request();
+    req.input('ccanalalt', T.Int, ccanalalt);
+    req.input('cscanalalt', T.Int, cscanalalt);
+
+    const canalResult = await req.query(`
+      SELECT TOP 1 ccanalalt, ctipocanal, xcorreo
+      FROM macanalalt
+      WHERE ccanalalt = @ccanalalt
+    `);
+    const canal = canalResult.recordset?.[0] as Record<string, unknown> | undefined;
+
+    const gestorReq = this.db.request();
+    gestorReq.input('ccanalalt', T.Int, ccanalalt);
+    gestorReq.input('cscanalalt', T.Int, cscanalalt);
+    const gestorResult = await gestorReq.query(`
+      SELECT TOP 1
+        g.cgestor,
+        g.cproductor,
+        g.ccanalalt,
+        g.cscanalalt,
+        g.ctipocanal,
+        u.cusuario
+      FROM magestor g
+      LEFT JOIN seusuariosweb u ON RTRIM(u.xcorreo) = RTRIM(g.xcorreo)
+      WHERE g.ccanalalt = @ccanalalt
+        AND (
+          (@cscanalalt IS NULL AND g.cscanalalt IS NULL)
+          OR g.cscanalalt = @cscanalalt
+        )
+    `);
+    const gestor = gestorResult.recordset?.[0] as Record<string, unknown> | undefined;
+
+    if (gestor) return gestor;
+
+    if (!canal) return null;
+
+    const userReq = this.db.request();
+    userReq.input('xcorreo', T.VarChar(120), String(canal['xcorreo'] ?? '').trim());
+    const userResult = await userReq.query(`
+      SELECT TOP 1 cusuario FROM seusuariosweb WHERE RTRIM(xcorreo) = RTRIM(@xcorreo)
+    `);
+    const cusuario = userResult.recordset?.[0]?.['cusuario'];
+
+    return {
+      ccanalalt: canal['ccanalalt'],
+      cscanalalt: cscanalalt,
+      ctipocanal: canal['ctipocanal'],
+      cusuario: cusuario ?? null,
+    };
+  }
+
+  /** Productor: usuario web del corredor y gestor asociado si existe. */
+  private async resolveProductorContext(
+    cproductor: number | null,
+  ): Promise<Record<string, unknown> | null> {
+    if (cproductor == null) return null;
+
+    const T = this.db.types;
+    const req = this.db.request();
+    req.input('cproductor', T.Int, cproductor);
+    const result = await req.query(`
+      SELECT TOP 1
+        p.cproductor,
+        u.cusuario AS cusuario_productor
+      FROM maproduc p
+      LEFT JOIN seusuariosweb u ON RTRIM(u.xcorreo) = RTRIM(p.xcorreo)
+      WHERE p.cproductor = @cproductor
+    `);
+    const productor = result.recordset?.[0] as Record<string, unknown> | undefined;
+    if (!productor) return null;
+
+    const gestorReq = this.db.request();
+    gestorReq.input('cproductor', T.Int, cproductor);
+    gestorReq.input('cproductorKey', T.VarChar(20), String(cproductor));
+    const gestorResult = await gestorReq.query(`
+      SELECT TOP 1
+        g.cgestor,
+        g.cproductor,
+        g.ccanalalt,
+        g.cscanalalt,
+        g.ctipocanal,
+        u.cusuario
+      FROM magestor g
+      LEFT JOIN seusuariosweb u ON RTRIM(u.xcorreo) = RTRIM(g.xcorreo)
+      WHERE CAST(g.cproductor AS NVARCHAR(20)) = @cproductorKey
+         OR g.cgestor LIKE @cproductorKey + '-%'
+      ORDER BY CASE WHEN g.cgestor LIKE @cproductorKey + '-%' THEN 0 ELSE 1 END
+    `);
+    const gestor = gestorResult.recordset?.[0] as Record<string, unknown> | undefined;
+
+    if (gestor) {
+      if (gestor['cusuario'] == null && productor['cusuario_productor'] != null) {
+        gestor['cusuario'] = productor['cusuario_productor'];
+      }
+      return gestor;
+    }
+
+    return {
+      cproductor: productor['cproductor'],
+      cusuario: productor['cusuario_productor'] ?? null,
+    };
+  }
+
+  /**
+   * Marketplace: JWT trae centidad/citem/cgestor pero cusuario suele ser Generico.
+   * Resuelve gestor, canal, subcanal o productor antes del SP (sin update post-emisión).
+   */
+  private async applyMarketplaceActorContext(b: Record<string, unknown>): Promise<void> {
+    try {
+      const cgestorRaw = this.pick<string>(b, 'cgestor', 'cgestor_in');
+      if (cgestorRaw) {
+        const gestorKey = String(cgestorRaw).trim();
+        if (gestorKey) {
+          const ctx = await this.resolveGestorContext(gestorKey);
+          if (ctx) {
+            this.mergeMarketplaceContext(b, ctx, 'gestor');
+            return;
+          }
+          this.logger.warn(`applyMarketplaceActor: gestor ${gestorKey} no encontrado en magestor`);
+        }
+      }
+
+      const centidad = String(this.pick(b, 'centidad') ?? '').trim().toUpperCase();
+      const citem = this.pick<string>(b, 'citem');
+      const ccanalalt =
+        this.intField(this.pick(b, 'ccanalalt', 'ccanalalt_in')) ??
+        (centidad === 'C' && citem ? parseInt(String(citem), 10) : null);
+      const cscanalalt = this.intField(this.pick(b, 'cscanalalt', 'cscanalalt_in'));
+      const cproductor =
+        this.intField(this.pick(b, 'cproductor', 'productor')) ??
+        (centidad === 'P' && citem ? parseInt(String(citem), 10) : null);
+
+      if (centidad === 'C' || ccanalalt != null) {
+        const ctx = await this.resolveCanalContext(
+          Number.isFinite(ccanalalt as number) ? (ccanalalt as number) : null,
+          cscanalalt,
+        );
+        if (ctx) {
+          this.mergeMarketplaceContext(b, ctx, 'canal');
+          return;
+        }
+      }
+
+      if (centidad === 'P' || (cproductor != null && cproductor !== 80080)) {
+        const ctx = await this.resolveProductorContext(
+          Number.isFinite(cproductor as number) ? (cproductor as number) : null,
+        );
+        if (ctx) {
+          this.mergeMarketplaceContext(b, ctx, 'productor');
+        }
+      }
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : String(err);
+      this.logger.warn(`applyMarketplaceActor: error resolviendo actor marketplace: ${msg}`);
+    }
+  }
+
   /** Prima Bs: mprima explícita, o mprimaext × tasa (curl QA), o prima legacy. */
   private resolveMprima(b: Record<string, unknown>): number | null {
     const mprimaDirect = this.pick<number>(b, 'mprima');
@@ -747,6 +958,8 @@ export class EmissionsService {
         b['cscanalalt'] = canal['cscanalalt'];
         b['cproductor'] = canal['cproductor'];
       }
+
+      await this.applyMarketplaceActorContext(b);
 
       if (!b['fecha_emision'] && b['femision']) {
         b['fecha_emision'] = b['femision'];
