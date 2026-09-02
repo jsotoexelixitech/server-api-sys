@@ -98,21 +98,20 @@ export function mapTipoPagoToMetodos(tipos: TipoPagoCanal[]): MetodoPagoExelixi[
 
 /**
  * Resuelve tipo de emisión Sis2000 (matipoemision).
- * Si no hay fila pero sí métodos de pago, usa `emit` — paridad SysIP automobile-new.
+ * Si no hay fila pero sí métodos de pago: canal C → emit_pay; gestor P → emit (SysIP).
  */
 export function resolveTipoEmision(
   emisionRow: Record<string, unknown> | undefined,
   tipoPago: TipoPagoCanal[],
+  centidad?: string,
 ): TipoEmisionCanal | null {
   const fromDb = normalizeTipoEmision(
-    emisionRow?.['id']
-    ?? emisionRow?.['ctipoemision']
-    ?? emisionRow?.['xtipo']
-    ?? emisionRow?.['tipoEmision'],
+    readRowField(emisionRow, 'id', 'ctipoemision', 'xtipo', 'tipoEmision'),
   );
   if (fromDb) return fromDb;
-  // Sin fila matipoemision: paridad SysIP automobile-new (emit + métodos de pago).
-  if (tipoPago.length > 0) return 'emit';
+  if (tipoPago.length > 0) {
+    return String(centidad ?? '').trim().toUpperCase() === 'C' ? 'emit_pay' : 'emit';
+  }
   return null;
 }
 
@@ -151,15 +150,20 @@ export function mapCanalVisibility(input: {
   pagoRows: Record<string, unknown>[];
   planes: PlanItem[];
 }): CanalVisibilityResult {
-  const emisionRow = pickMostSpecificRow(input.emisionRows, input.citem, input.cproducto);
+  const scopedEmisionRows = filterEmisionRowsForEntity(
+    input.emisionRows,
+    input.citem,
+    input.cproducto,
+  );
+  const emisionRow = pickMostSpecificRow(scopedEmisionRows, input.citem, input.cproducto);
 
   const tipoPago = [...new Set(
     input.pagoRows
-      .map((row) => normalizeTipoPago(row['xpago'] ?? row['ctipopago'] ?? row['tipoPago']))
+      .map((row) => normalizeTipoPago(readRowField(row, 'xpago', 'ctipopago', 'tipoPago')))
       .filter((value): value is TipoPagoCanal => value != null),
   )];
 
-  const tipoEmision = resolveTipoEmision(emisionRow, tipoPago);
+  const tipoEmision = resolveTipoEmision(emisionRow, tipoPago, input.centidad);
 
   const planes = input.planes.map((plan) => ({
     cplan: String(plan['cplan'] ?? '').trim(),
@@ -184,6 +188,45 @@ export function mapCanalVisibility(input: {
   };
 }
 
+function readRowField(
+  row: Record<string, unknown> | undefined,
+  ...keys: string[]
+): unknown {
+  if (!row) return undefined;
+  const entries = Object.entries(row);
+  for (const key of keys) {
+    const target = key.toLowerCase();
+    const hit = entries.find(([k]) => k.toLowerCase() === target);
+    if (hit && hit[1] != null && String(hit[1]).trim() !== '') {
+      return hit[1];
+    }
+  }
+  return undefined;
+}
+
+/** Prioriza filas con citem/cproducto exactos (evita heredar fila genérica emit). */
+function filterEmisionRowsForEntity(
+  rows: Record<string, unknown>[],
+  citem: string,
+  cproducto?: string,
+): Record<string, unknown>[] {
+  if (!rows.length) return rows;
+
+  const itemMatches = rows.filter((row) => {
+    const raw = readRowField(row, 'citem');
+    return raw != null && String(raw).trim() === citem;
+  });
+  const scoped = itemMatches.length > 0 ? itemMatches : rows;
+
+  if (!cproducto) return scoped;
+
+  const prodMatches = scoped.filter((row) => {
+    const raw = readRowField(row, 'cproducto');
+    return raw != null && String(raw).trim() === cproducto;
+  });
+  return prodMatches.length > 0 ? prodMatches : scoped;
+}
+
 function pickMostSpecificRow(
   rows: Record<string, unknown>[],
   citem: string,
@@ -193,20 +236,24 @@ function pickMostSpecificRow(
 
   const scored = rows.map((row) => {
     let score = 0;
-    const rowItem = row['citem'] != null ? String(row['citem']).trim() : null;
-    const rowProd = row['cproducto'] != null ? String(row['cproducto']).trim() : null;
+    const rowItemRaw = readRowField(row, 'citem');
+    const rowItem = rowItemRaw != null ? String(rowItemRaw).trim() : null;
+    const rowProdRaw = readRowField(row, 'cproducto');
+    const rowProd = rowProdRaw != null ? String(rowProdRaw).trim() : null;
 
     if (rowItem === citem) score += 4;
     else if (rowItem == null) score += 2;
+    else score -= 4;
 
     if (cproducto) {
       if (rowProd === cproducto) score += 4;
       else if (rowProd == null) score += 2;
+      else score -= 4;
     }
 
     return { row, score };
   });
 
   scored.sort((a, b) => b.score - a.score);
-  return scored[0]?.row;
+  return scored[0]?.score > 0 ? scored[0].row : scored[0]?.row;
 }
