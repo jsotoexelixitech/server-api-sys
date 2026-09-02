@@ -27,7 +27,9 @@ export interface CanalVisibilityUi {
 }
 
 export interface CanalVisibilityResult {
-  ccanalalt: number;
+  centidad: string;
+  citem: string;
+  ccanalalt?: number | null;
   cscanalalt?: number | null;
   cproducto?: string;
   cramo?: number;

@@ -111,7 +111,9 @@ export function buildCanalVisibilityUi(
 }
 
 export function mapCanalVisibility(input: {
-  ccanalalt: number;
+  centidad: string;
+  citem: string;
+  ccanalalt?: number | null;
   cscanalalt?: number | null;
   cproducto?: string;
   cramo?: number;
@@ -119,7 +121,7 @@ export function mapCanalVisibility(input: {
   pagoRows: Record<string, unknown>[];
   planes: PlanItem[];
 }): CanalVisibilityResult {
-  const emisionRow = pickMostSpecificRow(input.emisionRows, String(input.ccanalalt), input.cproducto);
+  const emisionRow = pickMostSpecificRow(input.emisionRows, input.citem, input.cproducto);
   const tipoEmision = normalizeTipoEmision(
     emisionRow?.['xtipo'] ?? emisionRow?.['ctipoemision'] ?? emisionRow?.['tipoEmision'],
   );
@@ -140,7 +142,9 @@ export function mapCanalVisibility(input: {
   const ui = buildCanalVisibilityUi(tipoEmision, tipoPago, input.planes);
 
   return {
-    ccanalalt: input.ccanalalt,
+    centidad: input.centidad,
+    citem: input.citem,
+    ccanalalt: input.ccanalalt ?? (input.centidad === 'C' ? Number(input.citem) : null),
     cscanalalt: input.cscanalalt ?? null,
     cproducto: input.cproducto,
     cramo: input.cramo,
