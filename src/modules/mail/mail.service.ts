@@ -5,7 +5,7 @@ import type Transporter from 'nodemailer/lib/mailer';
 import { renderPolicyWelcomeHtml } from './templates/policy-welcome.template';
 import type { SendPolicyEmailDto } from './dto/send-policy-email.dto';
 import type { SendFuneralPaymentLinkDto } from './dto/send-funeral-payment-link.dto';
-import { renderFuneralPaymentLinkHtml } from './templates/funeral-payment-link.template';
+import { buildFuneralPaymentLinkEmail } from './templates/funeral-payment-link.template';
 
 export type PolicyEmissionMailResult = {
   sent: boolean;
@@ -66,7 +66,6 @@ export class MailService {
     const replyTo = this.config.get<string>('SMTP_REPLY_TO', fromEmail);
     const name = dto.name?.trim() || 'Cliente';
     const planName = dto.planName?.trim() || 'Funerario';
-    const subject = `Pago de póliza funerario — ${planName}`;
 
     let expiresLabel: string | undefined;
     if (dto.expiresAt) {
@@ -80,11 +79,12 @@ export class MailService {
       }
     }
 
-    const html = renderFuneralPaymentLinkHtml({
+    const { subject, html, text } = buildFuneralPaymentLinkEmail({
       nombre: name,
       planName,
       paymentUrl: dto.paymentUrl,
       expiresLabel,
+      callCenterPhone: this.config.get<string>('CALL_CENTER_PHONE'),
     });
 
     try {
@@ -94,6 +94,7 @@ export class MailService {
         to: { name, address: dto.to },
         subject,
         html,
+        text,
       });
       this.logger.log(`Correo link pago funerario enviado a ${dto.to}`);
       return { sent: true, mode: 'smtp', messageId: info.messageId };
