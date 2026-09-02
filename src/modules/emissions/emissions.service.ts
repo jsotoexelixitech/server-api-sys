@@ -446,10 +446,11 @@ export class EmissionsService {
     const poliza = String(cnpoliza ?? '').trim();
     if (!poliza) return;
 
+    const cacheKeys = this.actorCacheKeys(b);
     let cgestor = this.preferGestorCode(
       this.pick(b, 'cgestor'),
       this.pick(b, 'cgestor_in'),
-      this.marketplaceActor.lookup(...this.actorCacheKeys(b)),
+      this.marketplaceActor.lookup(...cacheKeys),
     );
     if (cgestor && !cgestor.includes('-')) {
       const ctx = await this.resolveGestorContext(cgestor);
@@ -458,7 +459,12 @@ export class EmissionsService {
     }
 
     if (!cgestor) {
-      this.logger.warn(`stampMarketplaceActor omitido cnpoliza=${poliza} sin cgestor`);
+      this.logger.warn(
+        `stampMarketplaceActor omitido cnpoliza=${poliza} sin cgestor ` +
+          `keys=${cacheKeys.join(',') || 'none'} ` +
+          `body.cgestor=${this.pick(b, 'cgestor') ?? 'none'} ` +
+          `citem=${this.pick(b, 'citem') ?? 'none'} cproductor=${this.pick(b, 'cproductor') ?? 'none'}`,
+      );
       return;
     }
 

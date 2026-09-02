@@ -52,6 +52,7 @@ export class CanalService {
         gestorKey,
         `gestor:${gestorKey}`,
         query.citem ? `item:${query.citem}` : '',
+        query.citem ? `prod:${query.citem}` : '',
         query.centidad && query.citem ? `${query.centidad}:${query.citem}` : '',
       );
     }
@@ -99,7 +100,10 @@ export class CanalService {
       this.marketplaceActor.remember(
         gestorKey,
         `item:${citem}`,
+        `prod:${citem}`,
         `${centidad}:${citem}`,
+        query.citem ? `item:${query.citem}` : '',
+        query.citem ? `prod:${query.citem}` : '',
         resolvedCanalAlt != null ? `canal:${resolvedCanalAlt}` : '',
       );
     }
