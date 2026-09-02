@@ -17,6 +17,7 @@ import {
 } from '../../config/sis2000-sp.constants';
 import { SearchProprietaryDto } from './dto/search-proprietary.dto';
 import { SearchVehicleByPlateDto, SearchVehicleBySerialDto } from './dto/search-vehicle.dto';
+import { MarketplaceActorStore } from '../../common/marketplace-actor.store';
 
 @Injectable()
 export class EmissionsService {
@@ -25,6 +26,7 @@ export class EmissionsService {
   constructor(
     private readonly db: MssqlService,
     private readonly config: ConfigService,
+    private readonly marketplaceActor: MarketplaceActorStore,
   ) {}
 
   /** Fecha SQL: null si viene vacía; evita "Invalid date" del driver mssql con ''. */
@@ -331,8 +333,31 @@ export class EmissionsService {
    * Marketplace: JWT trae centidad/citem/cgestor pero cusuario suele ser Generico.
    * Resuelve gestor, canal, subcanal o productor antes del SP (sin update post-emisión).
    */
+  private actorCacheKeys(b: Record<string, unknown>): string[] {
+    const placa = String(this.pick(b, 'xplaca', 'placa') ?? '').trim().toUpperCase();
+    const rif = String(this.pick(b, 'xrif_tomador', 'rif_tomador') ?? '').replace(/\D/g, '');
+    const citem = this.pick(b, 'citem');
+    const centidad = this.pick(b, 'centidad');
+    const cproductor = this.pick(b, 'cproductor', 'productor');
+    const sid = this.pick(b, 'sid');
+    return [
+      sid ? `sid:${sid}` : '',
+      placa ? `placa:${placa}` : '',
+      rif ? `rif:${rif}` : '',
+      citem ? `item:${citem}` : '',
+      centidad && citem ? `${centidad}:${citem}` : '',
+      cproductor ? `item:${cproductor}` : '',
+      cproductor ? `prod:${cproductor}` : '',
+    ].filter(Boolean);
+  }
+
   private async applyMarketplaceActorContext(b: Record<string, unknown>): Promise<void> {
     try {
+      const cached = this.marketplaceActor.lookup(...this.actorCacheKeys(b));
+      if (cached) {
+        b['cgestor'] = this.preferGestorCode(b['cgestor'], cached);
+      }
+
       const nested = b['metadataCanal'];
       if (nested && typeof nested === 'object' && !Array.isArray(nested)) {
         const meta = nested as Record<string, unknown>;
@@ -346,6 +371,10 @@ export class EmissionsService {
             b[key] = meta[key];
           }
         }
+      }
+
+      if (this.pick(b, 'cgestor')) {
+        this.marketplaceActor.remember(this.pick(b, 'cgestor'), ...this.actorCacheKeys(b));
       }
 
       const cgestorCode = this.pick<string>(b, 'cgestor');
@@ -419,6 +448,7 @@ export class EmissionsService {
     let cgestor = this.preferGestorCode(
       this.pick(b, 'cgestor'),
       this.pick(b, 'cgestor_in'),
+      this.marketplaceActor.lookup(...this.actorCacheKeys(b)),
     );
     if (cgestor && !cgestor.includes('-')) {
       const ctx = await this.resolveGestorContext(cgestor);

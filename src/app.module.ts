@@ -24,6 +24,7 @@ import { PrismaModule } from './database/prisma/prisma.module';
 import { ProductEmissionModule } from './modules/product-emission/product-emission.module';
 import { MailModule } from './modules/mail/mail.module';
 import { CanalModule } from './modules/canal/canal.module';
+import { MarketplaceActorModule } from './common/marketplace-actor.module';
 
 @Module({
   imports: [
@@ -37,6 +38,7 @@ import { CanalModule } from './modules/canal/canal.module';
       },
     }),
     DatabaseModule,
+    MarketplaceActorModule,
     PrismaModule,
     AuthModule,
     ValrepModule,

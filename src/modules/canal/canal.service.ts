@@ -3,6 +3,7 @@ import { ValrepService } from '../valrep/valrep.service';
 import { GetCanalVisibilityDto } from './dto/get-canal-visibility.dto';
 import { mapCanalVisibility } from './canal-visibility.mapper';
 import type { CanalVisibilityResult } from './types/canal-visibility.types';
+import { MarketplaceActorStore } from '../../common/marketplace-actor.store';
 
 function resolveEntityContext(query: GetCanalVisibilityDto): {
   centidad: string;
@@ -35,7 +36,10 @@ function resolveEntityContext(query: GetCanalVisibilityDto): {
 export class CanalService {
   private readonly logger = new Logger(CanalService.name);
 
-  constructor(private readonly valrepService: ValrepService) {}
+  constructor(
+    private readonly valrepService: ValrepService,
+    private readonly marketplaceActor: MarketplaceActorStore,
+  ) {}
 
   async getVisibility(query: GetCanalVisibilityDto): Promise<CanalVisibilityResult> {
     const fallback = resolveEntityContext(query);
@@ -43,6 +47,14 @@ export class CanalService {
     const cscanalalt = query.cscanalalt ?? null;
 
     const gestorKey = query.cgestor?.trim() || '';
+    if (gestorKey) {
+      this.marketplaceActor.remember(
+        gestorKey,
+        `gestor:${gestorKey}`,
+        query.citem ? `item:${query.citem}` : '',
+        query.centidad && query.citem ? `${query.centidad}:${query.citem}` : '',
+      );
+    }
     const gestorEntity = gestorKey
       ? await this.valrepService.resolveGestorVisibilityEntity(gestorKey)
       : null;
@@ -82,6 +94,15 @@ export class CanalService {
             .catch(() => ({ planes: [], mensaje: '' }))
         : Promise.resolve({ planes: [], mensaje: '' }),
     ]);
+
+    if (gestorKey) {
+      this.marketplaceActor.remember(
+        gestorKey,
+        `item:${citem}`,
+        `${centidad}:${citem}`,
+        resolvedCanalAlt != null ? `canal:${resolvedCanalAlt}` : '',
+      );
+    }
 
     const mapped = mapCanalVisibility({
       centidad,
