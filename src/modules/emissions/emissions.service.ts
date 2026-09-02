@@ -93,6 +93,42 @@ export class EmissionsService {
     LEFT JOIN seusuariosweb u_login ON RTRIM(u_login.xlogin) = RTRIM(g.cgestor)
     LEFT JOIN seusuariosweb u_email ON RTRIM(u_email.xcorreo) = RTRIM(g.xcorreo)`;
 
+  /** cusuario=7 es Generico (SSO del iframe marketplace). No es el gestor. */
+  private isIframeGenericUser(cusuario: unknown): boolean {
+    if (cusuario == null || String(cusuario).trim() === '') return true;
+    return parseInt(String(cusuario), 10) === 7;
+  }
+
+  /**
+   * SysIP autentica gestores en seVlogin (getOneUser), no solo seusuariosweb.
+   * Cada lookup va en try/catch: si la vista no existe, se sigue.
+   */
+  private async lookupUsuarioByLogin(login: string): Promise<number | null> {
+    const key = String(login ?? '').trim();
+    if (!key) return null;
+    const T = this.db.types;
+    const lookups = [
+      'SELECT TOP 1 cusuario FROM seusuariosweb WHERE RTRIM(xlogin) = RTRIM(@login)',
+      'SELECT TOP 1 cusuario FROM seVlogin WHERE RTRIM(xlogin) = RTRIM(@login)',
+      'SELECT TOP 1 cusuario FROM seusuarios WHERE RTRIM(xuserid) = RTRIM(@login)',
+    ];
+    for (const sql of lookups) {
+      try {
+        const req = this.db.request();
+        req.input('login', T.VarChar(120), key);
+        const result = await req.query(sql);
+        const raw = result.recordset?.[0]?.['cusuario'];
+        if (raw == null || String(raw).trim() === '') continue;
+        const n = parseInt(String(raw), 10);
+        if (Number.isFinite(n) && n > 0 && n !== 7) return n;
+      } catch (err) {
+        const msg = err instanceof Error ? err.message : String(err);
+        this.logger.warn(`lookupUsuarioByLogin skip (${sql.split(' FROM ')[1]}): ${msg}`);
+      }
+    }
+    return null;
+  }
+
   /** Gestor por código (215-28) o correo (cgestor_in). */
   private async resolveGestorContext(
     gestorKey: string,
@@ -107,6 +143,7 @@ export class EmissionsService {
         g.ccanalalt,
         g.cscanalalt,
         g.ctipocanal,
+        g.xcorreo,
         ${EmissionsService.GESTOR_USUARIO_SQL} AS cusuario
       FROM magestor g
       ${EmissionsService.GESTOR_USUARIO_JOINS}
@@ -114,21 +151,17 @@ export class EmissionsService {
          OR RTRIM(g.xcorreo) = RTRIM(@gestorKey)
     `);
     const row = (result.recordset?.[0] as Record<string, unknown> | undefined) ?? null;
-    if (row?.['cusuario'] != null) return row;
 
-    const loginReq = this.db.request();
-    loginReq.input('gestorKey', T.VarChar(120), gestorKey);
-    const loginResult = await loginReq.query(`
-      SELECT TOP 1 cusuario
-      FROM seusuariosweb
-      WHERE RTRIM(xlogin) = RTRIM(@gestorKey)
-    `);
-    const cusuario = loginResult.recordset?.[0]?.['cusuario'];
-    if (row && cusuario != null) {
-      return { ...row, cusuario };
+    let cusuario = row?.['cusuario'] != null ? parseInt(String(row['cusuario']), 10) : NaN;
+    if (!Number.isFinite(cusuario) || cusuario === 7) {
+      cusuario = (await this.lookupUsuarioByLogin(gestorKey)) ?? NaN;
     }
-    if (cusuario != null) {
-      return { cgestor: gestorKey, cusuario };
+    if ((!Number.isFinite(cusuario) || cusuario === 7) && row?.['xcorreo']) {
+      cusuario = (await this.lookupUsuarioByLogin(String(row['xcorreo']))) ?? NaN;
+    }
+
+    if (Number.isFinite(cusuario) && cusuario > 0 && cusuario !== 7) {
+      return { ...(row || { cgestor: gestorKey }), cusuario };
     }
     return row;
   }
@@ -234,12 +267,33 @@ export class EmissionsService {
         const ctx = await this.resolveGestorContext(gestorKey);
         if (ctx) {
           this.mergeMarketplaceContext(b, ctx, 'gestor');
+          if (ctx['cusuario'] == null || this.isIframeGenericUser(b['cusuario'])) {
+            const cusuario = await this.lookupUsuarioByLogin(gestorKey);
+            if (cusuario != null) {
+              b['cusuario'] = cusuario;
+              this.logger.log(
+                `applyMarketplaceActor [gestor]: cusuario ${cusuario} via seVlogin/xlogin=${gestorKey}`,
+              );
+            } else {
+              this.logger.warn(
+                `applyMarketplaceActor: gestor ${gestorKey} sin cusuario (seusuariosweb/seVlogin); queda ${b['cusuario'] ?? 'vacio'}`,
+              );
+            }
+          }
           return;
         }
         if (gestorExplicit) {
           b['cgestor'] = String(cgestorCode).trim();
+          const cusuario = await this.lookupUsuarioByLogin(gestorKey);
+          if (cusuario != null) {
+            b['cusuario'] = cusuario;
+            this.logger.log(
+              `applyMarketplaceActor [gestor-login]: cgestor=${gestorKey} cusuario=${cusuario}`,
+            );
+            return;
+          }
           this.logger.warn(
-            `applyMarketplaceActor: gestor ${gestorKey} sin usuario en magestor/seusuariosweb; no se usa productor genérico`,
+            `applyMarketplaceActor: gestor ${gestorKey} sin usuario en magestor/seVlogin; no se usa productor genérico`,
           );
           return;
         }
