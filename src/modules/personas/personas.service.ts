@@ -722,6 +722,13 @@ export class PersonasService {
         fhasta = d.toISOString().slice(0, 10);
       }
 
+      if (b['ccanalalt_in'] != null && b['ccanalalt'] == null) {
+        b['ccanalalt'] = b['ccanalalt_in'];
+      }
+      if (b['cscanalalt_in'] != null && b['cscanalalt'] == null) {
+        b['cscanalalt'] = b['cscanalalt_in'];
+      }
+
       const canalCtipo = canal['ctipocanal'] as string | null | undefined;
       const ctipocanal = (b['ctipocanal'] ??
         ((canalCtipo === 'T' || canalCtipo === 'A' || canalCtipo === 'D') ? canalCtipo : null)) as string | null;
