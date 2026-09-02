@@ -1167,9 +1167,6 @@ export class EmissionsService {
       }
 
       await this.applyMarketplaceActorContext(b);
-      if (this.pick(b, 'cgestor')) {
-        b['cusuario'] = 7;
-      }
       this.logger.log(
         `createEmissionAuto actor out cgestor=${this.pick(b, 'cgestor') ?? 'none'} ` +
           `cusuario=${this.pick(b, 'cusuario') ?? 'none'} ccanalalt=${this.pick(b, 'ccanalalt') ?? 'none'}`,
