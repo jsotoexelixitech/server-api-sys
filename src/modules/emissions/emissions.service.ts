@@ -85,6 +85,14 @@ export class EmissionsService {
     );
   }
 
+  /** Usuario web del gestor: xlogin=cgestor (215-28) o xcorreo en magestor. */
+  private static readonly GESTOR_USUARIO_SQL = `
+    COALESCE(u_login.cusuario, u_email.cusuario)`;
+
+  private static readonly GESTOR_USUARIO_JOINS = `
+    LEFT JOIN seusuariosweb u_login ON RTRIM(u_login.xlogin) = RTRIM(g.cgestor)
+    LEFT JOIN seusuariosweb u_email ON RTRIM(u_email.xcorreo) = RTRIM(g.xcorreo)`;
+
   /** Gestor por código (215-28) o correo (cgestor_in). */
   private async resolveGestorContext(
     gestorKey: string,
@@ -99,13 +107,30 @@ export class EmissionsService {
         g.ccanalalt,
         g.cscanalalt,
         g.ctipocanal,
-        u.cusuario
+        ${EmissionsService.GESTOR_USUARIO_SQL} AS cusuario
       FROM magestor g
-      LEFT JOIN seusuariosweb u ON RTRIM(u.xcorreo) = RTRIM(g.xcorreo)
+      ${EmissionsService.GESTOR_USUARIO_JOINS}
       WHERE g.cgestor = @gestorKey
          OR RTRIM(g.xcorreo) = RTRIM(@gestorKey)
     `);
-    return (result.recordset?.[0] as Record<string, unknown> | undefined) ?? null;
+    const row = (result.recordset?.[0] as Record<string, unknown> | undefined) ?? null;
+    if (row?.['cusuario'] != null) return row;
+
+    const loginReq = this.db.request();
+    loginReq.input('gestorKey', T.VarChar(120), gestorKey);
+    const loginResult = await loginReq.query(`
+      SELECT TOP 1 cusuario
+      FROM seusuariosweb
+      WHERE RTRIM(xlogin) = RTRIM(@gestorKey)
+    `);
+    const cusuario = loginResult.recordset?.[0]?.['cusuario'];
+    if (row && cusuario != null) {
+      return { ...row, cusuario };
+    }
+    if (cusuario != null) {
+      return { cgestor: gestorKey, cusuario };
+    }
+    return row;
   }
 
   /** Canal / subcanal: gestor + usuario (paridad PolizaFix.updatePolizaAltChannel). */
@@ -137,9 +162,9 @@ export class EmissionsService {
         g.ccanalalt,
         g.cscanalalt,
         g.ctipocanal,
-        u.cusuario
+        ${EmissionsService.GESTOR_USUARIO_SQL} AS cusuario
       FROM magestor g
-      LEFT JOIN seusuariosweb u ON RTRIM(u.xcorreo) = RTRIM(g.xcorreo)
+      ${EmissionsService.GESTOR_USUARIO_JOINS}
       WHERE g.ccanalalt = @ccanalalt
         AND (
           (@cscanalalt IS NULL AND g.cscanalalt IS NULL)
@@ -199,17 +224,26 @@ export class EmissionsService {
    */
   private async applyMarketplaceActorContext(b: Record<string, unknown>): Promise<void> {
     try {
-      const cgestorRaw = this.pick<string>(b, 'cgestor', 'cgestor_in');
-      if (cgestorRaw) {
-        const gestorKey = String(cgestorRaw).trim();
-        if (gestorKey) {
-          const ctx = await this.resolveGestorContext(gestorKey);
-          if (ctx) {
-            this.mergeMarketplaceContext(b, ctx, 'gestor');
-            return;
-          }
-          this.logger.warn(`applyMarketplaceActor: gestor ${gestorKey} no encontrado en magestor`);
+      const cgestorCode = this.pick<string>(b, 'cgestor');
+      const cgestorIn = this.pick<string>(b, 'cgestor_in');
+      const gestorKeyRaw = cgestorCode ?? cgestorIn;
+      const gestorKey = gestorKeyRaw ? String(gestorKeyRaw).trim() : '';
+      const gestorExplicit = cgestorCode != null && String(cgestorCode).trim() !== '';
+
+      if (gestorKey) {
+        const ctx = await this.resolveGestorContext(gestorKey);
+        if (ctx) {
+          this.mergeMarketplaceContext(b, ctx, 'gestor');
+          return;
         }
+        if (gestorExplicit) {
+          b['cgestor'] = String(cgestorCode).trim();
+          this.logger.warn(
+            `applyMarketplaceActor: gestor ${gestorKey} sin usuario en magestor/seusuariosweb; no se usa productor genérico`,
+          );
+          return;
+        }
+        this.logger.warn(`applyMarketplaceActor: cgestor_in ${gestorKey} no resuelto en magestor`);
       }
 
       const centidad = String(this.pick(b, 'centidad') ?? '').trim().toUpperCase();
