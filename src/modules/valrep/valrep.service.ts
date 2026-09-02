@@ -1058,6 +1058,53 @@ export class ValrepService {
     }
   }
 
+  /**
+   * Resuelve ccanalalt vinculado a un productor/gestor (centidad P).
+   * Usado cuando matipoemision está configurado en el canal C y no en el gestor P.
+   */
+  async resolveCanalAltForEntity(body: {
+    centidad: string;
+    citem: string;
+    ccanalalt?: number | null;
+    cscanalalt?: number | null;
+  }): Promise<number | null> {
+    if (body.ccanalalt != null && Number.isFinite(body.ccanalalt)) {
+      return body.ccanalalt;
+    }
+
+    const centidad = String(body.centidad).trim().toUpperCase();
+    if (centidad === 'C') {
+      const n = parseInt(String(body.citem).trim(), 10);
+      return Number.isFinite(n) ? n : null;
+    }
+
+    try {
+      const T = this.db.types;
+      const req = this.db.request();
+      req.input('citem', T.NVarChar(20), String(body.citem).trim());
+      req.input('cscanalalt', T.Int, body.cscanalalt ?? null);
+
+      const result = await req.query(`
+        SELECT TOP 1 ccanalalt
+        FROM magestor
+        WHERE CAST(cproductor AS NVARCHAR(20)) = @citem
+           OR CAST(cgestor AS NVARCHAR(20)) = @citem
+        ORDER BY
+          CASE WHEN @cscanalalt IS NOT NULL AND cscanalalt = @cscanalalt THEN 0 ELSE 1 END,
+          CASE WHEN cscanalalt IS NULL THEN 0 ELSE 1 END
+      `);
+
+      const raw = result.recordset?.[0]?.['ccanalalt'];
+      if (raw == null) return null;
+      const n = Number(raw);
+      return Number.isFinite(n) ? n : null;
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : String(err);
+      this.logger.warn(`resolveCanalAltForEntity centidad=${centidad} citem=${body.citem}: ${msg}`);
+      return null;
+    }
+  }
+
   /** Tipo de emisión por entidad/canal — tabla matipoemision (migrado desde SysIP-backend). */
   async getMatipoemision(body: {
     centidad: string;

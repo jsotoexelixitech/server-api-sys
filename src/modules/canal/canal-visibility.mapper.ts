@@ -23,7 +23,14 @@ export function normalizeTipoEmision(raw: unknown): TipoEmisionCanal | null {
   ) {
     return 'emit_pay';
   }
-  if (value === 'emit' || value.includes('emision regular') || value.includes('emisión regular')) {
+  if (
+    value === 'emit' ||
+    value.includes('emision regular') ||
+    value.includes('emisión regular') ||
+    value.includes('emision pendiente') ||
+    value.includes('emisión pendiente') ||
+    value.includes('pendiente')
+  ) {
     return 'emit';
   }
   if (value === 'emit_libre_pago' || value.includes('libre pago')) {
@@ -51,7 +58,9 @@ export function normalizeTipoPago(raw: unknown): TipoPagoCanal | null {
   if (!value) return null;
 
   if (value.includes('sypago')) return 'sypago';
-  if (value.includes('meritop')) return 'meritop';
+  if (value.includes('meritop') || value.includes('activo') || value.includes('banco activo')) {
+    return 'meritop';
+  }
   if (value.includes('bancamiga')) return 'bancamiga';
   if (value.includes('ubii')) return 'ubii';
   if (value.includes('libre_pago') || value.includes('libre pago')) return 'libre_pago';
@@ -84,6 +93,25 @@ export function mapTipoPagoToMetodos(tipos: TipoPagoCanal[]): MetodoPagoExelixi[
   }
 
   return [...metodos];
+}
+
+/**
+ * Resuelve tipo de emisión Sis2000 (matipoemision).
+ * Si no hay fila pero sí métodos de pago, usa `emit` — paridad SysIP automobile-new.
+ */
+export function resolveTipoEmision(
+  emisionRow: Record<string, unknown> | undefined,
+  tipoPago: TipoPagoCanal[],
+): TipoEmisionCanal | null {
+  const fromDb = normalizeTipoEmision(
+    emisionRow?.['xtipo']
+    ?? emisionRow?.['ctipoemision']
+    ?? emisionRow?.['tipoEmision']
+    ?? emisionRow?.['id'],
+  );
+  if (fromDb) return fromDb;
+  if (tipoPago.length > 0) return 'emit';
+  return null;
 }
 
 export function buildCanalVisibilityUi(
@@ -122,15 +150,14 @@ export function mapCanalVisibility(input: {
   planes: PlanItem[];
 }): CanalVisibilityResult {
   const emisionRow = pickMostSpecificRow(input.emisionRows, input.citem, input.cproducto);
-  const tipoEmision = normalizeTipoEmision(
-    emisionRow?.['xtipo'] ?? emisionRow?.['ctipoemision'] ?? emisionRow?.['tipoEmision'],
-  );
 
   const tipoPago = [...new Set(
     input.pagoRows
       .map((row) => normalizeTipoPago(row['xpago'] ?? row['ctipopago'] ?? row['tipoPago']))
       .filter((value): value is TipoPagoCanal => value != null),
   )];
+
+  const tipoEmision = resolveTipoEmision(emisionRow, tipoPago);
 
   const planes = input.planes.map((plan) => ({
     cplan: String(plan['cplan'] ?? '').trim(),

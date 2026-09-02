@@ -38,9 +38,27 @@ export class CanalService {
   async getVisibility(query: GetCanalVisibilityDto): Promise<CanalVisibilityResult> {
     const { centidad, citem, ccanalalt } = resolveEntityContext(query);
     const cproducto = query.cproducto?.trim() || undefined;
+    const cscanalalt = query.cscanalalt ?? null;
 
-    const [emisionRows, pagoRows, planesResult] = await Promise.all([
-      this.valrepService.getMatipoemision({ centidad, citem, cproducto }),
+    const resolvedCanalAlt = await this.valrepService.resolveCanalAltForEntity({
+      centidad,
+      citem,
+      ccanalalt: ccanalalt ?? null,
+      cscanalalt,
+    });
+
+    let emisionRows = await this.valrepService.getMatipoemision({ centidad, citem, cproducto });
+
+    // matipoemision suele vivir en canal C; gestor P hereda del canal vinculado (magestor).
+    if (!emisionRows.length && resolvedCanalAlt != null && centidad !== 'C') {
+      emisionRows = await this.valrepService.getMatipoemision({
+        centidad: 'C',
+        citem: String(resolvedCanalAlt),
+        cproducto,
+      });
+    }
+
+    const [pagoRows, planesResult] = await Promise.all([
       this.valrepService.getMatipopagoEntidades({ centidad, citem, cproducto }),
       cproducto
         ? this.valrepService
@@ -52,8 +70,8 @@ export class CanalService {
     return mapCanalVisibility({
       centidad,
       citem,
-      ccanalalt: ccanalalt ?? null,
-      cscanalalt: query.cscanalalt ?? null,
+      ccanalalt: resolvedCanalAlt ?? ccanalalt ?? null,
+      cscanalalt,
       cproducto,
       cramo: query.cramo,
       emisionRows,
