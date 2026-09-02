@@ -257,6 +257,16 @@ export class EmissionsService {
    */
   private async applyMarketplaceActorContext(b: Record<string, unknown>): Promise<void> {
     try {
+      const nested = b['metadataCanal'];
+      if (nested && typeof nested === 'object' && !Array.isArray(nested)) {
+        const meta = nested as Record<string, unknown>;
+        for (const key of ['cgestor', 'cgestor_in', 'centidad', 'citem', 'cproductor', 'ccanalalt', 'ccanalalt_in', 'cscanalalt', 'cscanalalt_in']) {
+          if ((b[key] == null || String(b[key]).trim() === '') && meta[key] != null && String(meta[key]).trim() !== '') {
+            b[key] = meta[key];
+          }
+        }
+      }
+
       const cgestorCode = this.pick<string>(b, 'cgestor');
       const cgestorIn = this.pick<string>(b, 'cgestor_in');
       const gestorKeyRaw = cgestorCode ?? cgestorIn;
@@ -333,6 +343,68 @@ export class EmissionsService {
       const msg = err instanceof Error ? err.message : String(err);
       this.logger.warn(`applyMarketplaceActor: error resolviendo actor marketplace: ${msg}`);
     }
+  }
+
+  /**
+   * Paridad SysIP updatePolizaAltChannel: el SP suele dejar cusuario=Generico.
+   * Tras emitir, sella adpoliza/adrecibos con el usuario del gestor.
+   */
+  private async stampMarketplaceActorOnPolicy(
+    cnpoliza: string,
+    b: Record<string, unknown>,
+  ): Promise<void> {
+    const poliza = String(cnpoliza ?? '').trim();
+    if (!poliza) return;
+
+    const cgestorRaw = this.pick<string>(b, 'cgestor');
+    const cgestor = cgestorRaw ? String(cgestorRaw).trim() : '';
+    let cusuario = this.intField(this.pick(b, 'cusuario'));
+    if (cgestor && (cusuario == null || cusuario === 7)) {
+      cusuario = await this.lookupUsuarioByLogin(cgestor);
+    }
+    if (cusuario == null || cusuario === 7) {
+      this.logger.warn(
+        `stampMarketplaceActor omitido cnpoliza=${poliza} cgestor=${cgestor || 'none'} cusuario=${cusuario ?? 'none'}`,
+      );
+      return;
+    }
+
+    const T = this.db.types;
+    const req = this.db.request();
+    req.input('cnpoliza', T.NVarChar(30), poliza);
+    req.input('cusuario', T.Int, cusuario);
+    req.input('cgestor', T.VarChar(50), cgestor || null);
+    req.input('ccanalalt', T.Int, this.intField(this.pick(b, 'ccanalalt', 'ccanalalt_in')));
+    req.input('cscanalalt', T.Int, this.intField(this.pick(b, 'cscanalalt', 'cscanalalt_in')));
+    req.input(
+      'ctipocanal',
+      T.Char(1),
+      this.pick(b, 'ctipocanal') != null ? String(this.pick(b, 'ctipocanal')).trim().charAt(0) : null,
+    );
+
+    await req.query(`
+      UPDATE adpoliza
+      SET cusuario = @cusuario,
+          cgestor = COALESCE(@cgestor, cgestor),
+          ccanalalt = COALESCE(@ccanalalt, ccanalalt),
+          cscanalalt = COALESCE(@cscanalalt, cscanalalt),
+          ctipocanal = COALESCE(@ctipocanal, ctipocanal)
+      WHERE RTRIM(cnpoliza) = RTRIM(@cnpoliza);
+
+      UPDATE adrecibos
+      SET cusuario = @cusuario,
+          cgestor = COALESCE(@cgestor, cgestor),
+          ccanalalt = COALESCE(@ccanalalt, ccanalalt),
+          cscanalalt = COALESCE(@cscanalalt, cscanalalt),
+          ctipocanal = COALESCE(@ctipocanal, ctipocanal)
+      WHERE cpoliza IN (
+        SELECT cpoliza FROM adpoliza WHERE RTRIM(cnpoliza) = RTRIM(@cnpoliza)
+      );
+    `);
+
+    this.logger.log(
+      `stampMarketplaceActor OK cnpoliza=${poliza} cusuario=${cusuario} cgestor=${cgestor || 'none'}`,
+    );
   }
 
   /** Prima Bs: mprima explícita, o mprimaext × tasa (curl QA), o prima legacy. */
@@ -995,6 +1067,12 @@ export class EmissionsService {
           };
 
       const b: Record<string, unknown> = { ...body };
+      this.logger.log(
+        `createEmissionAuto actor in cgestor=${this.pick(b, 'cgestor') ?? 'none'} ` +
+          `cgestor_in=${this.pick(b, 'cgestor_in') ?? 'none'} ` +
+          `cusuario=${this.pick(b, 'cusuario') ?? 'none'} ` +
+          `centidad=${this.pick(b, 'centidad') ?? '?'} citem=${this.pick(b, 'citem') ?? '?'}`,
+      );
 
       // cnpoliza lo genera Sis2000; string vacío bloquea el SP (no entra a IF @cnpoliza IS NULL)
       if (b['cnpoliza'] == null || String(b['cnpoliza']).trim() === '') {
@@ -1029,6 +1107,10 @@ export class EmissionsService {
       }
 
       await this.applyMarketplaceActorContext(b);
+      this.logger.log(
+        `createEmissionAuto actor out cgestor=${this.pick(b, 'cgestor') ?? 'none'} ` +
+          `cusuario=${this.pick(b, 'cusuario') ?? 'none'} ccanalalt=${this.pick(b, 'ccanalalt') ?? 'none'}`,
+      );
 
       if (!b['fecha_emision'] && b['femision']) {
         b['fecha_emision'] = b['femision'];
@@ -1725,6 +1807,13 @@ export class EmissionsService {
     const url_club_arys = await this.resolveClubArysPdfForEmission(cnpoliza, b);
 
     this.logger.log(`emitLocal OK cnpoliza=${cnpoliza} cnrecibo=${cnrecibo}`);
+
+    try {
+      await this.stampMarketplaceActorOnPolicy(cnpoliza, b);
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : String(err);
+      this.logger.warn(`stampMarketplaceActor cnpoliza=${cnpoliza}: ${msg}`);
+    }
 
     await this.repairRcvCoberturasIfEmpty(cnpoliza);
 
