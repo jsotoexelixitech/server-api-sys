@@ -25,16 +25,16 @@ function escapeHtml(value: string): string {
 function ctaButtonHtml(url: string, label: string): string {
   const href = url.trim();
   if (!href) return '';
-  return `<table role="presentation" width="100%" cellspacing="0" cellpadding="0">
-                            <tr>
-                              <td align="center" bgcolor="#E84F51" class="lm-cta" style="background:#E84F51;border-radius:28px;">
-                                <a href="${escapeHtml(href)}" target="_blank" rel="noopener noreferrer"
-                                  style="display:block;padding:16px 22px;font-family:Georgia,Times New Roman,serif;font-size:16px;font-weight:700;line-height:1.2;color:#ffffff;text-decoration:none;text-align:center;letter-spacing:0.04em;">
-                                  ${escapeHtml(label)} →
-                                </a>
-                              </td>
-                            </tr>
-                          </table>`;
+  return `<table role="presentation" cellspacing="0" cellpadding="0">
+                      <tr>
+                        <td bgcolor="#E84F51" class="lm-cta" style="background:#E84F51;border-radius:6px;">
+                          <a href="${escapeHtml(href)}" target="_blank" rel="noopener noreferrer"
+                            style="display:inline-block;padding:14px 28px;font-family:Arial,Helvetica,sans-serif;font-size:15px;font-weight:700;line-height:1.2;color:#ffffff;text-decoration:none;">
+                            ${escapeHtml(label)}
+                          </a>
+                        </td>
+                      </tr>
+                    </table>`;
 }
 
 export function buildFuneralPaymentLinkEmail(
@@ -49,7 +49,7 @@ export function buildFuneralPaymentLinkEmail(
   const expiresLabel = params.expiresLabel?.trim() || '';
   const fecha = new Date().toLocaleDateString('es-VE', {
     day: 'numeric',
-    month: 'short',
+    month: 'long',
     year: 'numeric',
   });
 
@@ -69,9 +69,9 @@ export function buildFuneralPaymentLinkEmail(
     .filter(Boolean)
     .join('\n');
 
-  const vigenciaLine = expiresLabel
-    ? `Válido hasta ${escapeHtml(expiresLabel)}`
-    : `Emitido ${escapeHtml(fecha)}`;
+  const vigencia = expiresLabel
+    ? `El enlace vence el ${escapeHtml(expiresLabel)}.`
+    : `${escapeHtml(fecha)}.`;
 
   const html = `<!DOCTYPE html>
 <html lang="es">
@@ -81,135 +81,82 @@ export function buildFuneralPaymentLinkEmail(
   <meta http-equiv="x-ua-compatible" content="ie=edge">
   <title>${escapeHtml(subject)}</title>
   <style type="text/css">
-    @keyframes lm-fade {
-      from { opacity: 0; transform: translateY(12px); }
-      to { opacity: 1; transform: none; }
-    }
     @keyframes lm-pulse {
-      0%, 100% { box-shadow: 0 0 0 0 rgba(232,79,81,0.55); }
-      70% { box-shadow: 0 0 0 16px rgba(232,79,81,0); }
+      0%, 100% { box-shadow: 0 0 0 0 rgba(232,79,81,0.35); }
+      70% { box-shadow: 0 0 0 10px rgba(232,79,81,0); }
     }
-    @keyframes lm-sheen {
-      0% { background-position: 0% 50%; }
-      100% { background-position: 200% 50%; }
-    }
-    .lm-pass { animation: lm-fade 0.75s ease-out; box-shadow: 0 18px 40px rgba(15,26,90,0.10); }
-    .lm-cta { animation: lm-pulse 2.1s ease-out infinite; }
-    .lm-sheen {
-      background-image: linear-gradient(90deg,#0F1A5A 0%,#2E6DBF 35%,#E84F51 68%,#0F1A5A 100%);
-      background-size: 200% 100%;
-      animation: lm-sheen 5s linear infinite;
-    }
-    @media only screen and (max-width: 620px) {
-      .lm-stub, .lm-main { display: block !important; width: 100% !important; }
-      .lm-stub { border-bottom: 1px dashed #3A4A8A !important; }
-    }
+    .lm-cta { animation: lm-pulse 2.4s ease-out infinite; }
   </style>
 </head>
-<body style="margin:0;padding:0;background:#F4F6FB;">
-  <table role="presentation" width="100%" cellspacing="0" cellpadding="0" bgcolor="#F4F6FB" style="background:#F4F6FB;">
+<body style="margin:0;padding:0;background:#F7F8FA;">
+  <table role="presentation" width="100%" cellspacing="0" cellpadding="0" bgcolor="#F7F8FA" style="background:#F7F8FA;">
     <tr>
-      <td align="center" style="padding:28px 12px 36px;">
-        <table role="presentation" width="600" cellspacing="0" cellpadding="0" class="lm-pass" style="max-width:600px;width:100%;">
+      <td align="center" style="padding:32px 16px 40px;">
+        <table role="presentation" width="560" cellspacing="0" cellpadding="0" style="max-width:560px;width:100%;">
           <tr>
-            <td align="center" style="padding:4px 0 18px;">
-              <p style="margin:0 0 10px;font-family:Georgia,Times New Roman,serif;font-size:11px;letter-spacing:0.28em;text-transform:uppercase;color:#6B7280;">Pase digital · pago</p>
-              <img src="https://lamundialdeseguros.com/wp-content/uploads/2023/02/Logotipo-La-Mundial-01.jpg" width="200" alt="La Mundial de Seguros" style="display:block;width:200px;max-width:64%;height:auto;border:0;">
+            <td align="left" style="padding:0 0 20px;">
+              <img src="https://lamundialdeseguros.com/wp-content/uploads/2023/02/Logotipo-La-Mundial-01.jpg" width="168" alt="La Mundial de Seguros" style="display:block;width:168px;max-width:55%;height:auto;border:0;">
             </td>
           </tr>
           <tr>
-            <td>
-              <table role="presentation" width="100%" cellspacing="0" cellpadding="0" style="border-collapse:separate;">
-                <tr>
-                  <td class="lm-sheen" height="6" bgcolor="#0F1A5A" style="font-size:0;line-height:0;background:#0F1A5A;">&nbsp;</td>
-                </tr>
-              </table>
-            </td>
-          </tr>
-          <tr>
-            <td bgcolor="#0F1A5A" style="background:#0F1A5A;">
+            <td bgcolor="#ffffff" style="background:#ffffff;border:1px solid #E6E8EE;">
               <table role="presentation" width="100%" cellspacing="0" cellpadding="0">
                 <tr>
-                  <td class="lm-stub" width="118" valign="middle" bgcolor="#0F1A5A" style="width:118px;padding:28px 12px;text-align:center;border-right:1px dashed #3A4A8A;">
-                    <p style="margin:0 0 6px;font-family:Georgia,Times New Roman,serif;font-size:10px;letter-spacing:0.2em;color:#8AA0C8;">LM</p>
-                    <p style="margin:0 0 14px;font-family:Georgia,Times New Roman,serif;font-size:28px;line-height:1;font-weight:700;color:#ffffff;">01</p>
-                    <p style="margin:0;font-family:Arial,Helvetica,sans-serif;font-size:10px;letter-spacing:0.16em;text-transform:uppercase;color:#E84F51;">Funerario</p>
-                  </td>
-                  <td class="lm-main" valign="top" bgcolor="#0F1A5A" style="padding:26px 26px 22px;">
-                    <p style="margin:0 0 6px;font-family:Arial,Helvetica,sans-serif;font-size:11px;font-weight:700;letter-spacing:0.16em;text-transform:uppercase;color:#E84F51;">Seguro funerario</p>
-                    <h1 style="margin:0 0 14px;font-family:Georgia,Times New Roman,serif;font-size:26px;line-height:1.2;font-weight:700;color:#ffffff;">Tu cobertura espera un último paso</h1>
-                    <p style="margin:0;font-family:Arial,Helvetica,sans-serif;font-size:14px;line-height:1.6;color:#C5D0EA;">Hola <strong style="color:#ffffff;">${escapeHtml(nombre)}</strong>. El plan ya está armado. Solo falta el pago para activarlo.</p>
-                  </td>
-                </tr>
-              </table>
-            </td>
-          </tr>
-          <tr>
-            <td bgcolor="#0F1A5A" style="background:#0F1A5A;padding:0 16px;">
-              <table role="presentation" width="100%" cellspacing="0" cellpadding="0">
-                <tr>
-                  <td width="14" height="14" bgcolor="#F4F6FB" style="width:14px;height:14px;background:#F4F6FB;border-radius:14px;font-size:0;line-height:0;">&nbsp;</td>
-                  <td style="border-bottom:1px dashed #3A4A8A;font-size:0;line-height:0;">&nbsp;</td>
-                  <td width="14" height="14" bgcolor="#F4F6FB" style="width:14px;height:14px;background:#F4F6FB;border-radius:14px;font-size:0;line-height:0;">&nbsp;</td>
-                </tr>
-              </table>
-            </td>
-          </tr>
-          <tr>
-            <td bgcolor="#FFFFFF" style="background:#FFFFFF;padding:22px 26px 20px;">
-              <table role="presentation" width="100%" cellspacing="0" cellpadding="0">
-                <tr>
-                  <td style="padding:0 0 16px;">
-                    <p style="margin:0 0 6px;font-family:Arial,Helvetica,sans-serif;font-size:11px;letter-spacing:0.12em;text-transform:uppercase;color:#6B7280;">Plan</p>
-                    <p style="margin:0;font-family:Georgia,Times New Roman,serif;font-size:20px;line-height:1.3;color:#0F1A5A;">${escapeHtml(planName)}</p>
-                  </td>
-                </tr>
-                <tr>
-                  <td style="padding:0 0 20px;">
-                    <table role="presentation" width="100%" cellspacing="0" cellpadding="0" style="background:#F4F6FB;border-left:3px solid #E84F51;">
+                  <td>
+                    <table role="presentation" width="100%" cellspacing="0" cellpadding="0">
                       <tr>
-                        <td width="50%" style="padding:12px 14px;font-family:Arial,Helvetica,sans-serif;font-size:12px;color:#6B7280;">Producto<br><strong style="color:#0F1A5A;font-size:14px;">Funerario</strong></td>
-                        <td width="50%" style="padding:12px 14px;font-family:Arial,Helvetica,sans-serif;font-size:12px;color:#6B7280;text-align:right;">${expiresLabel ? 'Vigencia' : 'Fecha'}<br><strong style="color:#0F1A5A;font-size:14px;">${expiresLabel ? escapeHtml(expiresLabel) : escapeHtml(fecha)}</strong></td>
+                        <td width="72%" height="4" bgcolor="#0F1A5A" style="font-size:0;line-height:0;">&nbsp;</td>
+                        <td width="16%" height="4" bgcolor="#2E6DBF" style="font-size:0;line-height:0;">&nbsp;</td>
+                        <td width="12%" height="4" bgcolor="#E84F51" style="font-size:0;line-height:0;">&nbsp;</td>
                       </tr>
                     </table>
                   </td>
                 </tr>
                 <tr>
-                  <td style="padding:0 0 12px;">
+                  <td style="padding:32px 36px 8px;">
+                    <p style="margin:0 0 10px;font-family:Arial,Helvetica,sans-serif;font-size:11px;font-weight:700;letter-spacing:0.16em;text-transform:uppercase;color:#E84F51;">Seguro funerario</p>
+                    <h1 style="margin:0 0 20px;font-family:Georgia,Times New Roman,serif;font-size:28px;line-height:1.25;font-weight:700;color:#0F1A5A;">Completa el pago<br>de tu póliza</h1>
+                    <p style="margin:0 0 16px;font-family:Arial,Helvetica,sans-serif;font-size:16px;line-height:1.55;color:#111827;">Hola ${escapeHtml(nombre)},</p>
+                    <p style="margin:0 0 28px;font-family:Arial,Helvetica,sans-serif;font-size:15px;line-height:1.7;color:#4B5563;">
+                      Ya preparamos tu contratación. El plan
+                      <strong style="color:#0F1A5A;">${escapeHtml(planName)}</strong>
+                      está listo: entra y paga en línea, con tus datos cargados.
+                    </p>
+                    <table role="presentation" width="100%" cellspacing="0" cellpadding="0" style="margin:0 0 28px;">
+                      <tr>
+                        <td style="border-top:1px solid #E6E8EE;border-bottom:1px solid #E6E8EE;padding:16px 0;">
+                          <table role="presentation" width="100%" cellspacing="0" cellpadding="0">
+                            <tr>
+                              <td width="50%" valign="top" style="font-family:Arial,Helvetica,sans-serif;font-size:12px;color:#6B7280;padding-right:12px;">
+                                Producto<br>
+                                <span style="display:inline-block;margin-top:4px;font-size:15px;font-weight:700;color:#0F1A5A;">Funerario</span>
+                              </td>
+                              <td width="50%" valign="top" align="right" style="font-family:Arial,Helvetica,sans-serif;font-size:12px;color:#6B7280;">
+                                ${expiresLabel ? 'Vigencia del enlace' : 'Fecha'}<br>
+                                <span style="display:inline-block;margin-top:4px;font-size:15px;font-weight:700;color:#0F1A5A;">${expiresLabel ? escapeHtml(expiresLabel) : escapeHtml(fecha)}</span>
+                              </td>
+                            </tr>
+                          </table>
+                        </td>
+                      </tr>
+                    </table>
                     ${ctaButtonHtml(paymentUrl, 'Ir a pagar mi póliza')}
+                    <p style="margin:18px 0 0;font-family:Arial,Helvetica,sans-serif;font-size:12px;line-height:1.6;color:#9CA3AF;">
+                      ${vigencia}<br>
+                      Si el botón no abre, usa este enlace:<br>
+                      <a href="${escapeHtml(paymentUrl)}" style="color:#2E6DBF;text-decoration:underline;word-break:break-all;">${escapeHtml(paymentUrl)}</a>
+                    </p>
                   </td>
                 </tr>
                 <tr>
-                  <td>
-                    <p style="margin:0;font-family:Arial,Helvetica,sans-serif;font-size:11px;line-height:1.55;color:#9CA3AF;word-break:break-all;">
-                      ${vigenciaLine}<br>
-                      Si el botón no abre: <a href="${escapeHtml(paymentUrl)}" style="color:#2E6DBF;text-decoration:underline;">${escapeHtml(paymentUrl)}</a>
+                  <td style="padding:28px 36px 28px;">
+                    <p style="margin:0;font-family:Arial,Helvetica,sans-serif;font-size:12px;line-height:1.6;color:#6B7280;">
+                      La Mundial de Seguros, C.A. · ${escapeHtml(callCenterPhone)}<br>
+                      <a href="https://lamundialdeseguros.com/" style="color:#2E6DBF;text-decoration:none;">lamundialdeseguros.com</a>
                     </p>
                   </td>
                 </tr>
               </table>
-            </td>
-          </tr>
-          <tr>
-            <td bgcolor="#FFFFFF" style="background:#FFFFFF;">
-              <table role="presentation" width="100%" cellspacing="0" cellpadding="0">
-                <tr>
-                  <td width="68%" height="4" bgcolor="#0F1A5A" style="font-size:0;line-height:0;">&nbsp;</td>
-                  <td width="18%" height="4" bgcolor="#2E6DBF" style="font-size:0;line-height:0;">&nbsp;</td>
-                  <td width="14%" height="4" bgcolor="#E84F51" style="font-size:0;line-height:0;">&nbsp;</td>
-                </tr>
-              </table>
-            </td>
-          </tr>
-          <tr>
-            <td align="center" style="padding:22px 16px 4px;font-family:Arial,Helvetica,sans-serif;font-size:12px;line-height:1.7;color:#6B7280;">
-              La Mundial de Seguros, C.A. · Call Center ${escapeHtml(callCenterPhone)}<br>
-              <a href="https://lamundialdeseguros.com/" style="color:#2E6DBF;text-decoration:none;">lamundialdeseguros.com</a>
-            </td>
-          </tr>
-          <tr>
-            <td align="center" style="padding:2px 16px 8px;font-family:Arial,Helvetica,sans-serif;font-size:11px;color:#9CA3AF;">
-              Mensaje automático. No respondas a este correo.
             </td>
           </tr>
         </table>
