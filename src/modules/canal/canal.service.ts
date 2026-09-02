@@ -1,4 +1,4 @@
-import { BadRequestException, Injectable } from '@nestjs/common';
+import { BadRequestException, Injectable, Logger } from '@nestjs/common';
 import { ValrepService } from '../valrep/valrep.service';
 import { GetCanalVisibilityDto } from './dto/get-canal-visibility.dto';
 import { mapCanalVisibility } from './canal-visibility.mapper';
@@ -33,12 +33,23 @@ function resolveEntityContext(query: GetCanalVisibilityDto): {
 
 @Injectable()
 export class CanalService {
+  private readonly logger = new Logger(CanalService.name);
+
   constructor(private readonly valrepService: ValrepService) {}
 
   async getVisibility(query: GetCanalVisibilityDto): Promise<CanalVisibilityResult> {
-    const { centidad, citem, ccanalalt } = resolveEntityContext(query);
+    const fallback = resolveEntityContext(query);
     const cproducto = query.cproducto?.trim() || undefined;
     const cscanalalt = query.cscanalalt ?? null;
+
+    const gestorKey = query.cgestor?.trim() || '';
+    const gestorEntity = gestorKey
+      ? await this.valrepService.resolveGestorVisibilityEntity(gestorKey)
+      : null;
+
+    const centidad = gestorEntity?.centidad ?? fallback.centidad;
+    const citem = gestorEntity?.citem ?? fallback.citem;
+    const ccanalalt = gestorEntity?.ccanalalt ?? fallback.ccanalalt;
 
     const resolvedCanalAlt = await this.valrepService.resolveCanalAltForEntity({
       centidad,
@@ -47,13 +58,16 @@ export class CanalService {
       cscanalalt,
     });
 
-    // matipoemision es por canal/gestor (centidad+citem), no por producto — paridad Canal.js / SysIP.
+    // matipoemision de la entidad del gestor (C/canal o P/productor), como SysIP getItemGestor.
     let emisionRows = await this.valrepService.getMatipoemision({ centidad, citem });
 
-    // matipoemision suele vivir en canal C; productor P hereda del canal vinculado.
-    // Gestor (215-28): no heredar emit_pay del canal — SysIP default es emit (pendiente).
-    const isGestorItem = String(citem).includes('-');
-    if (!emisionRows.length && resolvedCanalAlt != null && centidad !== 'C' && !isGestorItem) {
+    // Sin cgestor: productor P puede heredar el canal. Con gestor, getItemGestor ya eligió C o P.
+    if (
+      !gestorEntity
+      && !emisionRows.length
+      && resolvedCanalAlt != null
+      && centidad !== 'C'
+    ) {
       emisionRows = await this.valrepService.getMatipoemision({
         centidad: 'C',
         citem: String(resolvedCanalAlt),
@@ -69,7 +83,7 @@ export class CanalService {
         : Promise.resolve({ planes: [], mensaje: '' }),
     ]);
 
-    return mapCanalVisibility({
+    const mapped = mapCanalVisibility({
       centidad,
       citem,
       ccanalalt: resolvedCanalAlt ?? ccanalalt ?? null,
@@ -80,5 +94,12 @@ export class CanalService {
       pagoRows,
       planes: planesResult.planes,
     });
+
+    this.logger.log(
+      `visibility cgestor=${gestorKey || 'none'} entity=${centidad}/${citem} ` +
+        `tipoEmision=${mapped.tipoEmision ?? 'null'} emitPending=${mapped.tipoEmision === 'emit'}`,
+    );
+
+    return mapped;
   }
 }

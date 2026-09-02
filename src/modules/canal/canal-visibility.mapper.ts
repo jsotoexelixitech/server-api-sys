@@ -97,21 +97,19 @@ export function mapTipoPagoToMetodos(tipos: TipoPagoCanal[]): MetodoPagoExelixi[
 }
 
 /**
- * Resuelve tipo de emisión Sis2000 (matipoemision).
- * Si no hay fila pero sí métodos de pago: canal C → emit_pay; gestor P → emit (SysIP).
+ * Tipo de emisión = xtipo en matipoemision (paridad SysIP payData.type).
+ * Sin fila: emit_pay (SysIP ventacards default) — no se asume pendiente.
  */
 export function resolveTipoEmision(
   emisionRow: Record<string, unknown> | undefined,
   tipoPago: TipoPagoCanal[],
-  centidad?: string,
+  _centidad?: string,
 ): TipoEmisionCanal | null {
   const fromDb = normalizeTipoEmision(
     readRowField(emisionRow, 'xtipo', 'ctipoemision', 'tipoEmision'),
   );
   if (fromDb) return fromDb;
-  if (tipoPago.length > 0) {
-    return String(centidad ?? '').trim().toUpperCase() === 'C' ? 'emit_pay' : 'emit';
-  }
+  if (tipoPago.length > 0) return 'emit_pay';
   return null;
 }
 

@@ -21,6 +21,11 @@ export class GetCanalVisibilityDto {
   @IsString()
   citem?: string;
 
+  @ApiPropertyOptional({ example: '215-28', description: 'Gestor marketplace (magestor.cgestor).' })
+  @IsOptional()
+  @IsString()
+  cgestor?: string;
+
   @ApiPropertyOptional({ example: '248', description: 'Producto para filtrar planes y reglas de pago.' })
   @IsOptional()
   @IsString()

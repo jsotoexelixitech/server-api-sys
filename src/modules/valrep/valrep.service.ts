@@ -1059,6 +1059,56 @@ export class ValrepService {
   }
 
   /**
+   * Entidad de visibilidad para un gestor marketplace — paridad SysIP getItemGestor:
+   * si magestor.ccanalalt → C/canal; si no → P/productor (prefijo de 215-28).
+   * matipoemision no se consulta con citem=215-28 (SysIP usa citem numérico).
+   */
+  async resolveGestorVisibilityEntity(cgestor: string): Promise<{
+    centidad: string;
+    citem: string;
+    ccanalalt?: number | null;
+  } | null> {
+    const gestorKey = String(cgestor ?? '').trim();
+    if (!gestorKey) return null;
+
+    try {
+      const T = this.db.types;
+      const req = this.db.request();
+      req.input('cgestor', T.NVarChar(50), gestorKey);
+
+      const result = await req.query(`
+        SELECT TOP 1
+          cgestor,
+          ccanalalt,
+          CASE
+            WHEN CHARINDEX('-', cgestor) > 0
+              THEN LEFT(cgestor, CHARINDEX('-', cgestor) - 1)
+            ELSE cgestor
+          END AS cproductor
+        FROM magestor
+        WHERE cgestor = @cgestor
+      `);
+
+      const row = result.recordset?.[0];
+      if (!row) return null;
+
+      const canalRaw = row['ccanalalt'];
+      const canal = canalRaw != null ? Number(canalRaw) : NaN;
+      if (Number.isFinite(canal) && canal > 0) {
+        return { centidad: 'C', citem: String(canal), ccanalalt: canal };
+      }
+
+      const productor = row['cproductor'] != null ? String(row['cproductor']).trim() : '';
+      if (!productor) return null;
+      return { centidad: 'P', citem: productor, ccanalalt: null };
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : String(err);
+      this.logger.warn(`resolveGestorVisibilityEntity cgestor=${gestorKey}: ${msg}`);
+      return null;
+    }
+  }
+
+  /**
    * Resuelve ccanalalt vinculado a un productor/gestor (centidad P).
    * Usado cuando matipoemision está configurado en el canal C y no en el gestor P.
    */
