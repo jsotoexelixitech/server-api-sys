@@ -1,16 +1,27 @@
-import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
+import { ApiPropertyOptional } from '@nestjs/swagger';
 import { Type } from 'class-transformer';
-import { IsInt, IsNotEmpty, IsOptional, IsString } from 'class-validator';
+import { IsIn, IsInt, IsOptional, IsString } from 'class-validator';
 
-/** Query para GET /canal/visibility — reglas de UI por canal alterno. */
+/** Query para GET /canal/visibility — reglas de UI por entidad Sis2000. */
 export class GetCanalVisibilityDto {
-  @ApiProperty({ example: 1, description: 'Código de canal alterno (ccanalalt).' })
+  @ApiPropertyOptional({ example: 1, description: 'Canal alterno (si centidad=C).' })
   @Type(() => Number)
+  @IsOptional()
   @IsInt()
-  @IsNotEmpty()
-  ccanalalt: number;
+  ccanalalt?: number;
 
-  @ApiPropertyOptional({ example: '57', description: 'Producto para filtrar planes y overrides.' })
+  @ApiPropertyOptional({ example: 'P', description: 'Entidad: P=productor/gestor, C=canal.' })
+  @IsOptional()
+  @IsString()
+  @IsIn(['P', 'C', 'p', 'c'])
+  centidad?: string;
+
+  @ApiPropertyOptional({ example: '215', description: 'Ítem de la entidad (citem marketplace).' })
+  @IsOptional()
+  @IsString()
+  citem?: string;
+
+  @ApiPropertyOptional({ example: '248', description: 'Producto para filtrar planes y reglas de pago.' })
   @IsOptional()
   @IsString()
   cproducto?: string;

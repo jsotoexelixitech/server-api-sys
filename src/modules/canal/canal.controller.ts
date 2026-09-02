@@ -13,8 +13,9 @@ export class CanalController {
   @ApiOperation({
     summary: 'Visibilidad de canal (planes, emisión y métodos de pago)',
     description:
-      'Agrega matipoemision, matipopago_entidades y planes por producto para un canal alterno. ' +
-      'Usado por Exelixi en runtime para mostrar/ocultar pasos sin replicar el mantenimiento de SysIP.',
+      'Agrega matipoemision, matipopago_entidades y planes por producto para una entidad Sis2000 ' +
+      '(centidad+citem: gestor P o canal C). Usado por Exelixi en runtime para mostrar/ocultar pasos ' +
+      'sin replicar el mantenimiento de SysIP.',
     operationId: 'canalVisibility',
   })
   @ApiResponse({
