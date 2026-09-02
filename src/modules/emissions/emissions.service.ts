@@ -62,13 +62,28 @@ export class EmissionsService {
       ELSE g.cgestor
     END`;
 
+  /** 215-28 gana sobre 215 (citem/productor). */
+  private preferGestorCode(a: unknown, b: unknown): string {
+    const sa = a != null ? String(a).trim() : '';
+    const sb = b != null ? String(b).trim() : '';
+    if (!sa) return sb;
+    if (!sb) return sa;
+    if (sb.startsWith(`${sa}-`)) return sb;
+    if (sa.startsWith(`${sb}-`)) return sa;
+    if (sa.includes('-') && !sb.includes('-')) return sa;
+    if (sb.includes('-') && !sa.includes('-')) return sb;
+    return sa;
+  }
+
   /** Contexto marketplace resuelto desde Sis2000 (gestor / canal / productor). */
   private mergeMarketplaceContext(
     b: Record<string, unknown>,
     ctx: Record<string, unknown>,
     source: string,
   ): void {
-    if (ctx['cgestor'] != null) b['cgestor'] = ctx['cgestor'];
+    if (ctx['cgestor'] != null) {
+      b['cgestor'] = this.preferGestorCode(b['cgestor'], ctx['cgestor']);
+    }
     if (ctx['ccanalalt'] != null) b['ccanalalt'] = ctx['ccanalalt'];
     if (ctx['cscanalalt'] != null) b['cscanalalt'] = ctx['cscanalalt'];
     else if ('cscanalalt' in ctx) b['cscanalalt'] = null;
@@ -78,7 +93,7 @@ export class EmissionsService {
     if (ctx['cproductor'] != null && (b['cproductor'] == null || String(b['cproductor']).trim() === '')) {
       b['cproductor'] = ctx['cproductor'];
     }
-    if (ctx['cusuario'] != null) b['cusuario'] = ctx['cusuario'];
+    // Gestor marketplace: adpoliza.cusuario queda en 7 (Generico). No pisar con el login del gestor.
 
     this.logger.log(
       `applyMarketplaceActor [${source}]: cgestor=${ctx['cgestor'] ?? 'null'} ccanalalt=${ctx['ccanalalt'] ?? 'null'} cscanalalt=${ctx['cscanalalt'] ?? 'null'} cproductor=${ctx['cproductor'] ?? 'null'} cusuario=${ctx['cusuario'] ?? 'sin cambio'}`,
@@ -93,10 +108,22 @@ export class EmissionsService {
     LEFT JOIN seusuariosweb u_login ON RTRIM(u_login.xlogin) = RTRIM(g.cgestor)
     LEFT JOIN seusuariosweb u_email ON RTRIM(u_email.xcorreo) = RTRIM(g.xcorreo)`;
 
-  /** cusuario=7 es Generico (SSO del iframe marketplace). No es el gestor. */
-  private isIframeGenericUser(cusuario: unknown): boolean {
+  /**
+   * Usuarios técnicos / iframe — no son el gestor del marketplace.
+   * 7=Generico SSO, 4/6=defaults planes, 1422=cotización QA.
+   */
+  private isPlaceholderActorUser(cusuario: unknown): boolean {
     if (cusuario == null || String(cusuario).trim() === '') return true;
-    return parseInt(String(cusuario), 10) === 7;
+    const n = parseInt(String(cusuario), 10);
+    if (!Number.isFinite(n) || n <= 0) return true;
+    const extras = [
+      this.config.get<string>('LAMUNDIAL_CUSUARIO'),
+      this.config.get<string>('LAMUNDIAL_CUSUARIO_PLANES'),
+      this.config.get<string>('LAMUNDIAL_CUSUARIO_COBERTURAS'),
+    ]
+      .map((raw) => parseInt(String(raw ?? ''), 10))
+      .filter((id) => Number.isFinite(id) && id > 0);
+    return new Set([4, 6, 7, 1422, ...extras]).has(n);
   }
 
   /**
@@ -120,10 +147,31 @@ export class EmissionsService {
         const raw = result.recordset?.[0]?.['cusuario'];
         if (raw == null || String(raw).trim() === '') continue;
         const n = parseInt(String(raw), 10);
-        if (Number.isFinite(n) && n > 0 && n !== 7) return n;
+        if (Number.isFinite(n) && n > 0 && !this.isPlaceholderActorUser(n)) return n;
       } catch (err) {
         const msg = err instanceof Error ? err.message : String(err);
         this.logger.warn(`lookupUsuarioByLogin skip (${sql.split(' FROM ')[1]}): ${msg}`);
+      }
+    }
+    if (!key.includes('-')) {
+      const prefixLookups = [
+        'SELECT cusuario FROM seusuariosweb WHERE RTRIM(xlogin) LIKE RTRIM(@login) + \'-%\'',
+        'SELECT cusuario FROM seVlogin WHERE RTRIM(xlogin) LIKE RTRIM(@login) + \'-%\'',
+      ];
+      for (const sql of prefixLookups) {
+        try {
+          const req = this.db.request();
+          req.input('login', T.VarChar(120), key);
+          const result = await req.query(sql);
+          const rows = (result.recordset ?? [])
+            .map((row) => parseInt(String(row['cusuario'] ?? ''), 10))
+            .filter((n) => Number.isFinite(n) && n > 0 && !this.isPlaceholderActorUser(n));
+          const unique = [...new Set(rows)];
+          if (unique.length === 1) return unique[0];
+        } catch (err) {
+          const msg = err instanceof Error ? err.message : String(err);
+          this.logger.warn(`lookupUsuarioByLogin prefix skip: ${msg}`);
+        }
       }
     }
     return null;
@@ -150,17 +198,45 @@ export class EmissionsService {
       WHERE g.cgestor = @gestorKey
          OR RTRIM(g.xcorreo) = RTRIM(@gestorKey)
     `);
-    const row = (result.recordset?.[0] as Record<string, unknown> | undefined) ?? null;
+    let row = (result.recordset?.[0] as Record<string, unknown> | undefined) ?? null;
+    if (!row && !gestorKey.includes('-')) {
+      const likeReq = this.db.request();
+      likeReq.input('gestorKey', T.VarChar(120), gestorKey);
+      const likeResult = await likeReq.query(`
+        SELECT
+          g.cgestor,
+          ${EmissionsService.MAGESTOR_CPRODUCTOR_SQL} AS cproductor,
+          g.ccanalalt,
+          g.cscanalalt,
+          g.ctipocanal,
+          g.xcorreo,
+          ${EmissionsService.GESTOR_USUARIO_SQL} AS cusuario
+        FROM magestor g
+        ${EmissionsService.GESTOR_USUARIO_JOINS}
+        WHERE g.cgestor LIKE @gestorKey + '-%'
+      `);
+      const matches = likeResult.recordset ?? [];
+      if (matches.length === 1) {
+        row = matches[0] as Record<string, unknown>;
+        this.logger.log(
+          `resolveGestorContext: ${gestorKey} → único magestor ${row['cgestor']}`,
+        );
+      } else if (matches.length > 1) {
+        this.logger.warn(
+          `resolveGestorContext: ${gestorKey} tiene ${matches.length} gestores; se necesita cgestor completo (ej. 215-28)`,
+        );
+      }
+    }
 
     let cusuario = row?.['cusuario'] != null ? parseInt(String(row['cusuario']), 10) : NaN;
-    if (!Number.isFinite(cusuario) || cusuario === 7) {
-      cusuario = (await this.lookupUsuarioByLogin(gestorKey)) ?? NaN;
+    if (!Number.isFinite(cusuario) || this.isPlaceholderActorUser(cusuario)) {
+      cusuario = (await this.lookupUsuarioByLogin(String(row?.['cgestor'] ?? gestorKey))) ?? NaN;
     }
-    if ((!Number.isFinite(cusuario) || cusuario === 7) && row?.['xcorreo']) {
+    if ((!Number.isFinite(cusuario) || this.isPlaceholderActorUser(cusuario)) && row?.['xcorreo']) {
       cusuario = (await this.lookupUsuarioByLogin(String(row['xcorreo']))) ?? NaN;
     }
 
-    if (Number.isFinite(cusuario) && cusuario > 0 && cusuario !== 7) {
+    if (Number.isFinite(cusuario) && cusuario > 0 && !this.isPlaceholderActorUser(cusuario)) {
       return { ...(row || { cgestor: gestorKey }), cusuario };
     }
     return row;
@@ -261,6 +337,11 @@ export class EmissionsService {
       if (nested && typeof nested === 'object' && !Array.isArray(nested)) {
         const meta = nested as Record<string, unknown>;
         for (const key of ['cgestor', 'cgestor_in', 'centidad', 'citem', 'cproductor', 'ccanalalt', 'ccanalalt_in', 'cscanalalt', 'cscanalalt_in']) {
+          if (key === 'cgestor' || key === 'cgestor_in') {
+            const chosen = this.preferGestorCode(b[key], meta[key]);
+            if (chosen) b[key] = chosen;
+            continue;
+          }
           if ((b[key] == null || String(b[key]).trim() === '') && meta[key] != null && String(meta[key]).trim() !== '') {
             b[key] = meta[key];
           }
@@ -277,34 +358,12 @@ export class EmissionsService {
         const ctx = await this.resolveGestorContext(gestorKey);
         if (ctx) {
           this.mergeMarketplaceContext(b, ctx, 'gestor');
-          if (ctx['cusuario'] == null || this.isIframeGenericUser(b['cusuario'])) {
-            const cusuario = await this.lookupUsuarioByLogin(gestorKey);
-            if (cusuario != null) {
-              b['cusuario'] = cusuario;
-              this.logger.log(
-                `applyMarketplaceActor [gestor]: cusuario ${cusuario} via seVlogin/xlogin=${gestorKey}`,
-              );
-            } else {
-              this.logger.warn(
-                `applyMarketplaceActor: gestor ${gestorKey} sin cusuario (seusuariosweb/seVlogin); queda ${b['cusuario'] ?? 'vacio'}`,
-              );
-            }
-          }
+          b['cgestor'] = this.preferGestorCode(gestorKey, ctx['cgestor']);
           return;
         }
         if (gestorExplicit) {
           b['cgestor'] = String(cgestorCode).trim();
-          const cusuario = await this.lookupUsuarioByLogin(gestorKey);
-          if (cusuario != null) {
-            b['cusuario'] = cusuario;
-            this.logger.log(
-              `applyMarketplaceActor [gestor-login]: cgestor=${gestorKey} cusuario=${cusuario}`,
-            );
-            return;
-          }
-          this.logger.warn(
-            `applyMarketplaceActor: gestor ${gestorKey} sin usuario en magestor/seVlogin; no se usa productor genérico`,
-          );
+          this.logger.log(`applyMarketplaceActor [gestor-code]: cgestor=${b['cgestor']} cusuario=7`);
           return;
         }
         this.logger.warn(`applyMarketplaceActor: cgestor_in ${gestorKey} no resuelto en magestor`);
@@ -346,8 +405,9 @@ export class EmissionsService {
   }
 
   /**
-   * Paridad SysIP updatePolizaAltChannel: el SP suele dejar cusuario=Generico.
-   * Tras emitir, sella adpoliza/adrecibos con el usuario del gestor.
+   * Paridad SysIP updatePolizaAltChannel para marketplace gestor:
+   * cusuario queda en 7 (Generico). Hay que persistir cgestor (215-28) y canal.
+   * El SP no recibe @cgestor y deja cgestor NULL.
    */
   private async stampMarketplaceActorOnPolicy(
     cnpoliza: string,
@@ -356,24 +416,25 @@ export class EmissionsService {
     const poliza = String(cnpoliza ?? '').trim();
     if (!poliza) return;
 
-    const cgestorRaw = this.pick<string>(b, 'cgestor');
-    const cgestor = cgestorRaw ? String(cgestorRaw).trim() : '';
-    let cusuario = this.intField(this.pick(b, 'cusuario'));
-    if (cgestor && (cusuario == null || cusuario === 7)) {
-      cusuario = await this.lookupUsuarioByLogin(cgestor);
+    let cgestor = this.preferGestorCode(
+      this.pick(b, 'cgestor'),
+      this.pick(b, 'cgestor_in'),
+    );
+    if (cgestor && !cgestor.includes('-')) {
+      const ctx = await this.resolveGestorContext(cgestor);
+      cgestor = this.preferGestorCode(cgestor, ctx?.['cgestor']);
+      if (ctx) this.mergeMarketplaceContext(b, ctx, 'stamp');
     }
-    if (cusuario == null || cusuario === 7) {
-      this.logger.warn(
-        `stampMarketplaceActor omitido cnpoliza=${poliza} cgestor=${cgestor || 'none'} cusuario=${cusuario ?? 'none'}`,
-      );
+
+    if (!cgestor) {
+      this.logger.warn(`stampMarketplaceActor omitido cnpoliza=${poliza} sin cgestor`);
       return;
     }
 
     const T = this.db.types;
     const req = this.db.request();
     req.input('cnpoliza', T.NVarChar(30), poliza);
-    req.input('cusuario', T.Int, cusuario);
-    req.input('cgestor', T.VarChar(50), cgestor || null);
+    req.input('cgestor', T.VarChar(50), cgestor);
     req.input('ccanalalt', T.Int, this.intField(this.pick(b, 'ccanalalt', 'ccanalalt_in')));
     req.input('cscanalalt', T.Int, this.intField(this.pick(b, 'cscanalalt', 'cscanalalt_in')));
     req.input(
@@ -382,28 +443,27 @@ export class EmissionsService {
       this.pick(b, 'ctipocanal') != null ? String(this.pick(b, 'ctipocanal')).trim().charAt(0) : null,
     );
 
-    await req.query(`
+    const result = await req.query(`
       UPDATE adpoliza
-      SET cusuario = @cusuario,
-          cgestor = COALESCE(@cgestor, cgestor),
+      SET cgestor = @cgestor,
           ccanalalt = COALESCE(@ccanalalt, ccanalalt),
           cscanalalt = COALESCE(@cscanalalt, cscanalalt),
           ctipocanal = COALESCE(@ctipocanal, ctipocanal)
       WHERE RTRIM(cnpoliza) = RTRIM(@cnpoliza);
 
       UPDATE adrecibos
-      SET cusuario = @cusuario,
-          cgestor = COALESCE(@cgestor, cgestor),
+      SET cgestor = @cgestor,
           ccanalalt = COALESCE(@ccanalalt, ccanalalt),
           cscanalalt = COALESCE(@cscanalalt, cscanalalt),
           ctipocanal = COALESCE(@ctipocanal, ctipocanal)
-      WHERE cpoliza IN (
+      WHERE RTRIM(ISNULL(cnpoliza, '')) = RTRIM(@cnpoliza)
+         OR cpoliza IN (
         SELECT cpoliza FROM adpoliza WHERE RTRIM(cnpoliza) = RTRIM(@cnpoliza)
       );
     `);
 
     this.logger.log(
-      `stampMarketplaceActor OK cnpoliza=${poliza} cusuario=${cusuario} cgestor=${cgestor || 'none'}`,
+      `stampMarketplaceActor OK cnpoliza=${poliza} cgestor=${cgestor} rows=${JSON.stringify(result.rowsAffected)}`,
     );
   }
 

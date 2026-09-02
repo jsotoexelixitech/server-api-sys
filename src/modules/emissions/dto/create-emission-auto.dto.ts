@@ -279,6 +279,16 @@ export class CreateEmissionAutoDto {
   @IsString()
   cusuario?: string;
 
+  @ApiPropertyOptional({ example: '215-28', description: 'Gestor marketplace (magestor.cgestor). Se sella en adpoliza tras emitir.' })
+  @IsOptional()
+  @IsString()
+  cgestor?: string;
+
+  @ApiPropertyOptional({ description: 'Email del gestor (cgestor_in) si no viene el código.' })
+  @IsOptional()
+  @IsString()
+  cgestor_in?: string;
+
   @ApiPropertyOptional()
   @IsOptional()
   @IsNumber()
