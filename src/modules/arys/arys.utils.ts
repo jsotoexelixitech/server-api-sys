@@ -5,6 +5,19 @@ export const normalizeText = (value: unknown): string =>
     .trim()
     .toUpperCase();
 
+/** Sis2000 `maestados.xdescripcion_c` → nombre que usa el catálogo Arys. */
+const ESTADO_ARYS_ALIASES: Record<string, string> = {
+  'DTTO CAPITAL': 'DISTRITO CAPITAL',
+  'DTO CAPITAL': 'DISTRITO CAPITAL',
+  'DIST CAPITAL': 'DISTRITO CAPITAL',
+  'DIST. CAPITAL': 'DISTRITO CAPITAL',
+};
+
+export const resolveEstadoArysName = (estadoName: unknown): string => {
+  const normalized = normalizeText(estadoName);
+  return ESTADO_ARYS_ALIASES[normalized] ?? normalized;
+};
+
 export const onlyDigits = (value: unknown): string | null => {
   const digits = String(value ?? '').replace(/\D/g, '');
   return digits || null;

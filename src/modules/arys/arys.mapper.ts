@@ -20,11 +20,6 @@ export function buildPropietarioRequest(
     throw new Error('El teléfono del titular es obligatorio para Arys');
   }
 
-  let xestado = propietary.xestado;
-  if (xestado === 'Dtto Capital') {
-    xestado = 'DISTRITO CAPITAL';
-  }
-
   const rif = onlyDigits(casegurado) || onlyDigits(propietary.cci_rif);
 
   return {

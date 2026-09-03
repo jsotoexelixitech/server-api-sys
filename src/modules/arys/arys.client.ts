@@ -12,7 +12,13 @@ import {
   ArysPropietarioRequest,
   ArysVehiculoRequest,
 } from './arys.types';
-import { extractNumericResult, findByLabel, isZeroArysResult, normalizeText } from './arys.utils';
+import {
+  extractNumericResult,
+  findByLabel,
+  isZeroArysResult,
+  normalizeText,
+  resolveEstadoArysName,
+} from './arys.utils';
 
 @Injectable()
 export class ArysClient {
@@ -120,7 +126,7 @@ export class ArysClient {
 
   async findEstadoByName(estadoName: unknown): Promise<Record<string, unknown> | null> {
     const estados = await this.getEstados();
-    const normalizedInput = normalizeText(estadoName);
+    const normalizedInput = resolveEstadoArysName(estadoName);
     const numericInput = Number(estadoName);
     return (
       estados.find(

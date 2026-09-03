@@ -1,5 +1,6 @@
 import { BadGatewayException } from '@nestjs/common';
 import { ArysClient } from './arys.client';
+import { resolveEstadoArysName } from './arys.utils';
 
 describe('ArysClient', () => {
   const mockConfig = {
@@ -18,6 +19,10 @@ describe('ArysClient', () => {
       return map[key] ?? defaultValue;
     });
     client = new ArysClient(mockConfig as never);
+  });
+
+  it('mapea Dtto Capital al nombre de Arys', () => {
+    expect(resolveEstadoArysName('Dtto Capital')).toBe('DISTRITO CAPITAL');
   });
 
   it('parsea result objeto de Coberturas', async () => {
