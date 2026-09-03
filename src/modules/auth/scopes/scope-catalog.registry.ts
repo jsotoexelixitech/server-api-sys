@@ -62,6 +62,7 @@ export function inferScopeFromPath(normalizedPath: string): string | undefined {
   if (/\/api\/v1\/external\/(?:validateEmissionAuto|createEmissionAuto)/i.test(path)) {
     return 'emissions:auto';
   }
+  if (/\/api\/v1\/arys\//i.test(path)) return 'emissions:auto';
   if (/\/api\/v1\/emissions\//i.test(path)) return 'emissions:auto';
   if (/\/api\/v1\/valrep\//i.test(path)) return 'catalog:read';
   if (/\/api\/v1\/canal\//i.test(path)) return 'catalog:read';

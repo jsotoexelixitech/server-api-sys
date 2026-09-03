@@ -47,6 +47,11 @@ export const envValidationSchema = Joi.object({
   INGRESO_CAJA_URL: Joi.string().optional(),
   ARYS_TRADICIONAL_PDF_URL: Joi.string().uri().optional(),
   ARYS_AUTO_BI_PDF_URL: Joi.string().uri().optional(),
+  /** Integración HTTP Arys/Sarys (membresía post-emisión RCV). */
+  SARYS_API_ENABLED: Joi.boolean().default(true),
+  SARYS_BASE_URL: Joi.string().uri().default('http://sarys.arysauto.com:9082'),
+  SARYS_TIPO_MEMBRESIA_RCV: Joi.number().integer().min(1).default(6),
+  SARYS_TIMEOUT_MS: Joi.number().integer().min(1000).default(15000),
   EXTERNAL_API_URL_AUTO: Joi.string().optional(),
   EXTERNAL_API_KEY: Joi.string().optional(),
   EXTERNAL_BASIC_AUTH: Joi.string().optional(),
