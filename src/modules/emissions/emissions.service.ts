@@ -17,6 +17,7 @@ import {
 } from '../../config/sis2000-sp.constants';
 import { SearchProprietaryDto } from './dto/search-proprietary.dto';
 import { SearchVehicleByPlateDto, SearchVehicleBySerialDto } from './dto/search-vehicle.dto';
+import { ArysService } from '../arys/arys.service';
 
 @Injectable()
 export class EmissionsService {
@@ -25,6 +26,7 @@ export class EmissionsService {
   constructor(
     private readonly db: MssqlService,
     private readonly config: ConfigService,
+    private readonly arysService: ArysService,
   ) {}
 
   /** Fecha SQL: null si viene vacía; evita "Invalid date" del driver mssql con ''. */
@@ -289,6 +291,28 @@ export class EmissionsService {
       this.logger.warn(`Club Arys PDF omitido cnpoliza=${cnpoliza}: ${msg}`);
       return '';
     }
+  }
+
+  /** Registro de membresía Arys en segundo plano (solo pólizas con cobertura Club Arys). */
+  private scheduleArysMembershipRegistration(
+    cnpoliza: string,
+    body: Record<string, unknown>,
+  ): void {
+    void (async () => {
+      try {
+        const hasArys = await this.hasClubArysCoverage(cnpoliza, body);
+        if (!hasArys) return;
+
+        const xplaca = String(this.pick(body, 'xplaca') ?? this.pick(body, 'placa') ?? '').trim();
+        await this.arysService.registerMembershipFromEmission({
+          cnpoliza,
+          xplaca: xplaca || undefined,
+        });
+      } catch (err) {
+        const msg = err instanceof Error ? err.message : String(err);
+        this.logger.warn(`Arys post-emisión omitido cnpoliza=${cnpoliza}: ${msg}`);
+      }
+    })();
   }
 
   /**
@@ -1455,6 +1479,8 @@ export class EmissionsService {
       }
     }
 
+    this.scheduleArysMembershipRegistration(cnpoliza, b);
+
     return {
       message: 'Póliza generada exitosamente',
       cnpoliza,
@@ -1563,6 +1589,9 @@ export class EmissionsService {
       const url_club_arys = cnpoliza
         ? await this.resolveClubArysPdfForEmission(cnpoliza, b)
         : '';
+      if (cnpoliza) {
+        this.scheduleArysMembershipRegistration(cnpoliza, b);
+      }
       return {
         message: (resData['message'] as string) || 'Emisión registrada via API externa.',
         cnpoliza,
