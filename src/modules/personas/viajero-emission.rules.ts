@@ -6,15 +6,27 @@ export const VIAJERO_RAMO = 5;
 /** Ramo viajero local por días (plan VIAJE). */
 export const VIAJERO_LOCAL_RAMO = 25;
 
-/** Plan VIAJE local (prorrata por fechas). */
+/** Plan VIAJE local genérico (prorrata por fechas). */
 export const VIAJE_LOCAL_PLAN = 'VIAJE';
+
+/** Plan Viajero Nacional 3 días (ramo 25 · producto 1). */
+export const VIAJE_NACIONAL_PLAN = 'VIAJE3';
+
+export function isViajeNacionalPlan(
+  cramo: number | null | undefined,
+  plan: string | null | undefined,
+): boolean {
+  if (cramo !== VIAJERO_LOCAL_RAMO) return false;
+  return String(plan ?? '').trim().toUpperCase() === VIAJE_NACIONAL_PLAN;
+}
 
 export function isViajeLocalPlan(
   cramo: number | null | undefined,
   plan: string | null | undefined,
 ): boolean {
   if (cramo !== VIAJERO_LOCAL_RAMO) return false;
-  return String(plan ?? '').trim().toUpperCase() === VIAJE_LOCAL_PLAN;
+  const code = String(plan ?? '').trim().toUpperCase();
+  return code === VIAJE_LOCAL_PLAN || code === VIAJE_NACIONAL_PLAN;
 }
 
 /** Planes con prima = ndias × tarifa diaria (VIAJE ramo 25, VIAJ* ramo 5). */

@@ -24,6 +24,7 @@ import { PrismaModule } from './database/prisma/prisma.module';
 import { ProductEmissionModule } from './modules/product-emission/product-emission.module';
 import { MailModule } from './modules/mail/mail.module';
 import { CanalModule } from './modules/canal/canal.module';
+import { ViajeroNacionalModule } from './modules/viajero-nacional/viajero-nacional.module';
 
 @Module({
   imports: [
@@ -58,6 +59,7 @@ import { CanalModule } from './modules/canal/canal.module';
     ProductEmissionModule,
     MailModule,
     CanalModule,
+    ViajeroNacionalModule,
   ],
 })
 export class AppModule {}

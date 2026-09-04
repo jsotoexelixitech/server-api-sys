@@ -767,7 +767,10 @@ export class PersonasService {
         asegurados as Record<string, unknown>[],
         beneficiarios,
       );
-      if (isViajeroPlan(cramoEmision, planEmision) || isViajeLocalPlan(cramoEmision, planEmision)) {
+      if (
+        isViajeroPlan(cramoEmision, planEmision) ||
+        isViajeLocalPlan(cramoEmision, planEmision)
+      ) {
         beneficiarios = [];
         b['beneficiarios'] = [];
       }
