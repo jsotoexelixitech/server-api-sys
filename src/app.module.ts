@@ -25,6 +25,7 @@ import { ProductEmissionModule } from './modules/product-emission/product-emissi
 import { MailModule } from './modules/mail/mail.module';
 import { CanalModule } from './modules/canal/canal.module';
 import { ArysModule } from './modules/arys/arys.module';
+import { ViajeroNacionalModule } from './modules/viajero-nacional/viajero-nacional.module';
 
 @Module({
   imports: [
@@ -60,6 +61,7 @@ import { ArysModule } from './modules/arys/arys.module';
     MailModule,
     CanalModule,
     ArysModule,
+    ViajeroNacionalModule,
   ],
 })
 export class AppModule {}

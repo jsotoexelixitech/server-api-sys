@@ -54,6 +54,8 @@ export function inferScopeFromPath(normalizedPath: string): string | undefined {
   if (/\/api\/v1\/documents\//i.test(path)) return 'documents:write';
   if (/\/api\/v1\/condominio\//i.test(path)) return 'emissions:condominio';
   if (/\/api\/v1\/personas\//i.test(path)) return 'emissions:person';
+  if (/\/api\/v1\/viajero-nacional\//i.test(path)) return 'emissions:person';
+  if (/\/api\/v1\/viajero-margarita\//i.test(path)) return 'emissions:person';
   if (/\/api\/v1\/emision-personas\//i.test(path)) return 'emissions:person';
   // Partner Gestacio (y legacy) conserva /external/* personas
   if (/\/api\/v1\/external\/(?:getCotizacionPer|validateEmissionPerson|createEmissionPerson)/i.test(path)) {

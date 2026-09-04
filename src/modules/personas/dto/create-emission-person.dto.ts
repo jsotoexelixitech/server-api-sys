@@ -103,6 +103,8 @@ export class CreateEmissionPersonDto {
 
   // ── Canal ──────────────────────────────────────────────────────────────────
   @ApiPropertyOptional({ example: 80080 }) @IsOptional() @IsInt() productor?: number;
+  @ApiPropertyOptional({ example: 7, description: 'Usuario Sis2000 (SSO cusuario).' })
+  @IsOptional() @IsInt() cusuario?: number;
   @ApiPropertyOptional({ example: null }) @IsOptional() @IsString() ctipocanal?: string | null;
   @ApiPropertyOptional({ example: null }) @IsOptional() @IsInt() ccanalalt?: number | null;
   @ApiPropertyOptional({ example: null }) @IsOptional() @IsInt() cscanalalt?: number | null;
