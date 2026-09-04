@@ -146,6 +146,14 @@ export class PersonasService {
       estado_civil_beneficiario: String(b.iestado_civil_beneficiario ?? 'S').charAt(0),
       fnac_beneficiario: b.fnac_beneficiario ?? b.fechaNac ?? null,
       nparentesco_beneficiario: getPar(b.nparentesco_beneficiario ?? b.parentesco),
+      estado_beneficiario: this.intField(
+        b.estado_beneficiario ?? b.cestado_beneficiario ?? b.cestado ?? b.estado,
+      ),
+      ciudad_beneficiario: this.intField(
+        b.ciudad_beneficiario ?? b.cciudad_beneficiario ?? b.cciudad ?? b.ciudad,
+      ),
+      direccion_beneficiario:
+        b.direccion_beneficiario ?? b.xdireccion_beneficiario ?? b.direccion ?? null,
       telefono_beneficiario: b.xtelefono_beneficiario ?? b.telefono ?? null,
       correo_beneficiario: b.xcorreo_beneficiario ?? b.email ?? null,
       pporce_beneficiario: Number(b.pporce_beneficiario ?? b.pporcen ?? b.pporce) || 0,
@@ -859,6 +867,13 @@ export class PersonasService {
             isexo_beneficiario: String(a.isexo_beneficiario ?? (a.sexo ? String(a.sexo)[0].toUpperCase() : 'M')),
             nparentesco_beneficiario: Number(getPar(a.nparentesco_beneficiario ?? a.parentesco)),
             pporce_beneficiario: Number(a.pporce_beneficiario ?? a.pporcen ?? a.pporce) || 0,
+            estado_beneficiario: this.intField(
+              a.estado_beneficiario ?? a.cestado ?? a.estado,
+            ),
+            ciudad_beneficiario: this.intField(
+              a.ciudad_beneficiario ?? a.cciudad ?? a.ciudad,
+            ),
+            direccion_beneficiario: a.direccion_beneficiario ?? a.direccion ?? null,
             xtelefono_beneficiario: a.xtelefono_beneficiario ?? a.telefono ?? null,
             xcorreo_beneficiario: a.xcorreo_beneficiario ?? a.email ?? null,
           }))
