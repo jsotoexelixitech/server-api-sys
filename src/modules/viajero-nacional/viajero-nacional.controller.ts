@@ -79,7 +79,7 @@ export class ViajeroNacionalController {
   @HttpCode(HttpStatus.OK)
   @ApiOperation({
     summary: 'Cotizar VIAJE3',
-    description: 'Prima prorrata de 3 días. No acepta otro plan.',
+    description: 'Cotiza el plan fijo VIAJE3 con `spCalculoPer`. No usa prorrata viajero.',
     operationId: 'viajeroNacionalCotizacion',
   })
   @ApiBody({ type: CotizacionViaje3Dto })
