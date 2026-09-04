@@ -12,12 +12,23 @@ export const VIAJE_LOCAL_PLAN = 'VIAJE';
 /** Plan Viajero Nacional 3 días (ramo 25 · producto 1). */
 export const VIAJE_NACIONAL_PLAN = 'VIAJE3';
 
+/** Plan Viajero Margarita (ramo 25 · producto 1). No es el VIAJE4 del ramo 5. */
+export const VIAJE_MARGARITA_PLAN = 'VIAJE4';
+
 export function isViajeNacionalPlan(
   cramo: number | null | undefined,
   plan: string | null | undefined,
 ): boolean {
   if (cramo !== VIAJERO_LOCAL_RAMO) return false;
   return String(plan ?? '').trim().toUpperCase() === VIAJE_NACIONAL_PLAN;
+}
+
+export function isViajeMargaritaPlan(
+  cramo: number | null | undefined,
+  plan: string | null | undefined,
+): boolean {
+  if (cramo !== VIAJERO_LOCAL_RAMO) return false;
+  return String(plan ?? '').trim().toUpperCase() === VIAJE_MARGARITA_PLAN;
 }
 
 export function isViajeLocalPlan(
