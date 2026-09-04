@@ -129,6 +129,27 @@ export class PersonasService {
     return JSON.stringify(mapped);
   }
 
+  /** Geo del beneficiario: el SP lee `estado_beneficiario` o `cestado_beneficiario`. */
+  private mapBeneficiarioGeo(b: Record<string, unknown>): {
+    estado_beneficiario: number | null;
+    cestado_beneficiario: number | null;
+    ciudad_beneficiario: number | null;
+    cciudad_beneficiario: number | null;
+  } {
+    const estado = this.intField(
+      b.estado_beneficiario ?? b.cestado_beneficiario ?? b.cestado ?? b.estado,
+    );
+    const ciudad = this.intField(
+      b.ciudad_beneficiario ?? b.cciudad_beneficiario ?? b.cciudad ?? b.ciudad,
+    );
+    return {
+      estado_beneficiario: estado,
+      cestado_beneficiario: estado,
+      ciudad_beneficiario: ciudad,
+      cciudad_beneficiario: ciudad,
+    };
+  }
+
   /** JSON de beneficiarios al formato OPENJSON del pre-SP personas. */
   private mapBeneficiariosForSp(
     lista: Record<string, unknown>[],
@@ -146,12 +167,7 @@ export class PersonasService {
       estado_civil_beneficiario: String(b.iestado_civil_beneficiario ?? 'S').charAt(0),
       fnac_beneficiario: b.fnac_beneficiario ?? b.fechaNac ?? null,
       nparentesco_beneficiario: getPar(b.nparentesco_beneficiario ?? b.parentesco),
-      estado_beneficiario: this.intField(
-        b.estado_beneficiario ?? b.cestado_beneficiario ?? b.cestado ?? b.estado,
-      ),
-      ciudad_beneficiario: this.intField(
-        b.ciudad_beneficiario ?? b.cciudad_beneficiario ?? b.cciudad ?? b.ciudad,
-      ),
+      ...this.mapBeneficiarioGeo(b),
       direccion_beneficiario:
         b.direccion_beneficiario ?? b.xdireccion_beneficiario ?? b.direccion ?? null,
       telefono_beneficiario: b.xtelefono_beneficiario ?? b.telefono ?? null,
@@ -867,12 +883,7 @@ export class PersonasService {
             isexo_beneficiario: String(a.isexo_beneficiario ?? (a.sexo ? String(a.sexo)[0].toUpperCase() : 'M')),
             nparentesco_beneficiario: Number(getPar(a.nparentesco_beneficiario ?? a.parentesco)),
             pporce_beneficiario: Number(a.pporce_beneficiario ?? a.pporcen ?? a.pporce) || 0,
-            estado_beneficiario: this.intField(
-              a.estado_beneficiario ?? a.cestado ?? a.estado,
-            ),
-            ciudad_beneficiario: this.intField(
-              a.ciudad_beneficiario ?? a.cciudad ?? a.ciudad,
-            ),
+            ...this.mapBeneficiarioGeo(a as Record<string, unknown>),
             direccion_beneficiario: a.direccion_beneficiario ?? a.direccion ?? null,
             xtelefono_beneficiario: a.xtelefono_beneficiario ?? a.telefono ?? null,
             xcorreo_beneficiario: a.xcorreo_beneficiario ?? a.email ?? null,
