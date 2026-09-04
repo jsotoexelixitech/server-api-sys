@@ -129,12 +129,20 @@ export class PersonasService {
     return JSON.stringify(mapped);
   }
 
-  /** Geo del beneficiario: el SP lee `estado_beneficiario` o `cestado_beneficiario`. */
+  /**
+   * Geo del beneficiario. El cuadro (SPReCpBeneficiarioPref) lee
+   * `maclient_dir.cestado` → `maestados`. El OPENJSON Nexus usa rutas distintas
+   * (`estado_beneficiario`, `cestado_beneficiario` o `cestado`); se envían todas.
+   */
   private mapBeneficiarioGeo(b: Record<string, unknown>): {
     estado_beneficiario: number | null;
     cestado_beneficiario: number | null;
+    cestado: number | null;
+    estado: number | null;
     ciudad_beneficiario: number | null;
     cciudad_beneficiario: number | null;
+    cciudad: number | null;
+    ciudad: number | null;
   } {
     const estado = this.intField(
       b.estado_beneficiario ?? b.cestado_beneficiario ?? b.cestado ?? b.estado,
@@ -145,9 +153,44 @@ export class PersonasService {
     return {
       estado_beneficiario: estado,
       cestado_beneficiario: estado,
+      cestado: estado,
+      estado: estado,
       ciudad_beneficiario: ciudad,
       cciudad_beneficiario: ciudad,
+      cciudad: ciudad,
+      ciudad: ciudad,
     };
+  }
+
+  /**
+   * Sis2000 no actualiza `maclient_dir` si el RIF ya existe, y el SP Nexus
+   * a veces deja `cestado` en NULL aunque la ciudad sí entre. El PDF queda
+   * con ciudad y ESTADO vacío. Completa el código geográfico tras emitir.
+   */
+  private async syncBeneficiarioDir(lista: Record<string, unknown>[]): Promise<void> {
+    const T = this.db.types;
+    for (const b of lista) {
+      const rif = this.intField(b.xrif_beneficiario ?? b.identificacion ?? b.rif_beneficiario);
+      const geo = this.mapBeneficiarioGeo(b);
+      if (!rif || geo.cestado == null) continue;
+      const req = this.db.request();
+      req.input('cci_rif', T.Numeric(13, 0), rif);
+      req.input('cestado', T.SmallInt, geo.cestado);
+      req.input('cciudad', T.SmallInt, geo.cciudad);
+      const result = await req.query(`
+        UPDATE maclient_dir
+        SET cestado = @cestado,
+            cciudad = COALESCE(NULLIF(cciudad, 0), @cciudad, cciudad)
+        WHERE cci_rif = @cci_rif
+          AND (cestado IS NULL OR cestado = 0);
+      `);
+      const affected = Array.isArray(result.rowsAffected)
+        ? result.rowsAffected.reduce((a, n) => a + n, 0)
+        : Number(result.rowsAffected ?? 0);
+      this.logger.log(
+        `syncBeneficiarioDir rif=${rif} cestado=${geo.cestado} filas=${affected}`,
+      );
+    }
   }
 
   /** JSON de beneficiarios al formato OPENJSON del pre-SP personas. */
@@ -1041,7 +1084,7 @@ export class PersonasService {
             value: this.mapAseguradosForSp(asegurados as Record<string, unknown>[], getPar),
           },
           beneficiarios: {
-            type: T.NVarChar(5000),
+            type: T.NVarChar(T.MAX),
             value: this.mapBeneficiariosForSp(beneficiarios as Record<string, unknown>[], getPar),
           },
         };
@@ -1099,6 +1142,13 @@ export class PersonasService {
             const msg = clearErr instanceof Error ? clearErr.message : String(clearErr);
             this.logger.error(`clearViajeLocalBeneficiary falló cnpoliza=${cnpoliza}: ${msg}`);
           }
+        }
+
+        try {
+          await this.syncBeneficiarioDir(beneficiarios as Record<string, unknown>[]);
+        } catch (syncErr) {
+          const msg = syncErr instanceof Error ? syncErr.message : String(syncErr);
+          this.logger.error(`syncBeneficiarioDir falló cnpoliza=${cnpoliza}: ${msg}`);
         }
 
         this.logger.log(`createEmissionPerson: emitida OK cnpoliza=${cnpoliza}`);
