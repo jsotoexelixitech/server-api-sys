@@ -6,6 +6,7 @@ import { CreateEmissionPersonDto } from '../personas/dto/create-emission-person.
 import { VIAJERO_NACIONAL } from './viajero-nacional.constants';
 import { GetViaje3PlanDto } from './dto/get-viaje3-plan.dto';
 import { CotizacionViaje3Dto } from './dto/cotizacion-viaje3.dto';
+import { EmitViaje3Dto } from './dto/emit-viaje3.dto';
 
 @Injectable()
 export class ViajeroNacionalService {
@@ -80,7 +81,7 @@ export class ViajeroNacionalService {
     return this.personas.validateEmissionPerson(this.lockEmissionFields(body));
   }
 
-  async emitir(apikey: string, dto: CreateEmissionPersonDto) {
+  async emitir(apikey: string, dto: EmitViaje3Dto) {
     const locked = this.lockEmissionFields(dto as unknown as Record<string, unknown>);
     return this.personas.createEmissionPerson(
       apikey ?? '',

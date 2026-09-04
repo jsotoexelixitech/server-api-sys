@@ -5,8 +5,8 @@ import { APIKEY_HEADER } from '../../common/swagger/api-docs.constants';
 import { NestProtected } from '../auth/decorators/nest-protected.decorator';
 import { NestApiKey } from '../auth/decorators/nest-api-key.decorator';
 import { NEST_AUTH_SCOPES } from '../auth/scopes/nest-auth-scopes.constants';
-import { CreateEmissionPersonDto } from '../personas/dto/create-emission-person.dto';
 import { ValidateEmissionPersonDto } from '../emissions/dto/validate-emission-person.dto';
+import { EmitViaje3Dto } from './dto/emit-viaje3.dto';
 import { ViajeroNacionalService } from './viajero-nacional.service';
 import { GetViaje3PlanDto } from './dto/get-viaje3-plan.dto';
 import { CotizacionViaje3Dto } from './dto/cotizacion-viaje3.dto';
@@ -116,10 +116,10 @@ export class ViajeroNacionalController {
     operationId: 'viajeroNacionalEmision',
   })
   @ApiHeader(APIKEY_HEADER)
-  @ApiBody({ type: CreateEmissionPersonDto })
+  @ApiBody({ type: EmitViaje3Dto })
   @Api401()
   @ApiCommonErrors()
-  async emitir(@NestApiKey() apikey: string, @Body() dto: CreateEmissionPersonDto) {
+  async emitir(@NestApiKey() apikey: string, @Body() dto: EmitViaje3Dto) {
     const result = await this.svc.emitir(apikey ?? '', dto);
     return { status: true, result };
   }
