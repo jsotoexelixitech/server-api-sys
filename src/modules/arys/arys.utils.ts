@@ -40,11 +40,55 @@ export const findByLabel = (
   labelKeys: string[],
 ): Record<string, unknown> | null => {
   const normalizedLabel = normalizeText(label);
+  if (!normalizedLabel) return null;
   return (
     items.find((item) =>
       labelKeys.some((key) => normalizeText(item?.[key]) === normalizedLabel),
     ) ?? null
   );
+};
+
+const itemLabels = (item: Record<string, unknown>, labelKeys: string[]): string[] =>
+  labelKeys.map((key) => normalizeText(item?.[key])).filter(Boolean);
+
+/**
+ * Exact match first, then prefix/contains. Used for versión/color where
+ * Sis2000 (`R3`) and Arys (`R3 - Sincronico`) rarely share the same label.
+ */
+export const findBestByLabel = (
+  items: Record<string, unknown>[],
+  label: unknown,
+  labelKeys: string[],
+): Record<string, unknown> | null => {
+  const exact = findByLabel(items, label, labelKeys);
+  if (exact) return exact;
+
+  const normalizedLabel = normalizeText(label);
+  if (normalizedLabel.length < 2) return null;
+
+  let best: { item: Record<string, unknown>; score: number } | null = null;
+  for (const item of items) {
+    for (const value of itemLabels(item, labelKeys)) {
+      if (value.length < 2) continue;
+      let score = 0;
+      if (value.startsWith(normalizedLabel) || normalizedLabel.startsWith(value)) {
+        score = 2 + Math.min(value.length, normalizedLabel.length);
+      } else if (value.includes(normalizedLabel) || normalizedLabel.includes(value)) {
+        score = 1 + Math.min(value.length, normalizedLabel.length);
+      }
+      if (score > 0 && (!best || score > best.score)) {
+        best = { item, score };
+      }
+    }
+  }
+  return best?.item ?? null;
+};
+
+export const firstCatalogItem = (
+  items: Record<string, unknown>[] | null | undefined,
+): Record<string, unknown> | null => {
+  if (!items?.length) return null;
+  return items.find((item) => item.eliminado !== true) ?? items[0];
 };
 
 export const extractNumericResult = (payload: { result?: unknown }): number | null => {

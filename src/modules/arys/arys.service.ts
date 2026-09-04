@@ -82,8 +82,19 @@ export class ArysService {
       let vehiculoId = input.vehiculoId;
       if (!vehiculoId) {
         const vehiculoRow = await this.repository.getVehiculoByTarget(target);
+        this.logger.log(
+          `Arys vinma cnpoliza=${cnpoliza} xmarca=${vehiculoRow.xmarca ?? ''} ` +
+            `xmodelo=${vehiculoRow.xmodelo ?? ''} xversion=${vehiculoRow.xversion ?? ''} ` +
+            `xcolor=${vehiculoRow.xcolor ?? ''}`,
+        );
         const catalog = await this.client.resolveVehicleCatalogFromVinma(vehiculoRow);
         const vehiculoBody = buildVehiculoRequest(vehiculoRow, catalog, personaId);
+        this.logger.log(
+          `Arys AddVehiculo cnpoliza=${cnpoliza} placa=${vehiculoBody.placa} ` +
+            `marca=${vehiculoBody.id_marca} modelo=${vehiculoBody.id_modelo} ` +
+            `version=${vehiculoBody.id_version} color=${vehiculoBody.id_color} ` +
+            `tipo=${vehiculoBody.id_tipo_vehi}`,
+        );
         vehiculoId = await this.client.addVehiculo(vehiculoBody);
         this.logger.log(`Arys vehículo OK cnpoliza=${cnpoliza} vehiculoId=${vehiculoId}`);
       }

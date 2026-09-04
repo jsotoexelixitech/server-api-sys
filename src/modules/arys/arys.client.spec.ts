@@ -1,6 +1,6 @@
 import { BadGatewayException } from '@nestjs/common';
 import { ArysClient } from './arys.client';
-import { resolveEstadoArysName } from './arys.utils';
+import { findBestByLabel, resolveEstadoArysName } from './arys.utils';
 
 describe('ArysClient', () => {
   const mockConfig = {
@@ -23,6 +23,52 @@ describe('ArysClient', () => {
 
   it('mapea Dtto Capital al nombre de Arys', () => {
     expect(resolveEstadoArysName('Dtto Capital')).toBe('DISTRITO CAPITAL');
+  });
+
+  it('resuelve versión Arys por prefijo (R3 → R3 - Sincronico)', () => {
+    const version = findBestByLabel(
+      [
+        { id_version: 9, version1: 'R1 ' },
+        { id_version: 11, version1: 'R3 ', carroceria: 'R3 - Sincronico' },
+      ],
+      'R3',
+      ['version1', 'carroceria'],
+    );
+    expect(version?.id_version).toBe(11);
+  });
+
+  it('rechaza AddVehiculo con result 0 e incluye errorMessage', async () => {
+    global.fetch = jest.fn().mockResolvedValue({
+      ok: true,
+      json: async () => ({
+        isSuccess: true,
+        errorMessage: 'id_version inválido',
+        result: 0,
+      }),
+    } as Response);
+
+    await expect(
+      client.addVehiculo({
+        id_propietario: 1,
+        capacidad: 0,
+        id_marca: 80,
+        id_modelo: 11,
+        id_version: 0,
+        anio: 2024,
+        id_color: 0,
+        id_tipo_vehi: 0,
+        placa: 'ARYST00',
+        serial_carroceria: 'X',
+        serial_motor: 'N/A',
+        kilometraje: 0,
+        capacidad_pasajero: 0,
+        precio_inmas: 0,
+        num_certificado_origen: '',
+        importado: true,
+      }),
+    ).rejects.toMatchObject({
+      message: expect.stringContaining('id_version inválido'),
+    });
   });
 
   it('parsea result objeto de Coberturas', async () => {
