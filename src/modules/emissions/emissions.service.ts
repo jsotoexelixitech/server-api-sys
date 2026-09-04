@@ -942,6 +942,10 @@ export class EmissionsService {
     if (b['cscanalalt_in'] != null && b['cscanalalt'] == null) {
       b['cscanalalt'] = b['cscanalalt_in'];
     }
+    const centidad = String(b['centidad'] ?? '').trim().toUpperCase();
+    if (centidad === 'C' && b['citem'] != null && b['ccanalalt'] == null) {
+      b['ccanalalt'] = b['citem'];
+    }
     if (b['frecuencia'] != null && b['ifrecuencia'] == null) {
       b['ifrecuencia'] = b['frecuencia'];
     }
@@ -1070,6 +1074,58 @@ export class EmissionsService {
     `);
 
     this.logger.log(`applyBeneficiario OK cnpoliza=${cnpoliza} rif=${rif}`);
+  }
+
+  /**
+   * Gestor del canal (magestor): un guion en cgestor identifica el código UUID del gestor.
+   * Marketplace canal: se persiste en adpoliza tras emitir.
+   */
+  private async lookupChannelGestor(ccanalalt: number): Promise<string | null> {
+    const T = this.db.types;
+    const req = this.db.request();
+    req.input('ccanalalt', T.Int, ccanalalt);
+    const result = await req.query(`
+      SELECT TOP 1 cgestor
+      FROM magestor
+      WHERE ccanalalt = @ccanalalt
+        AND (LEN(cgestor) - LEN(REPLACE(cgestor, '-', ''))) = 1
+    `);
+    const raw = result.recordset?.[0]?.['cgestor'];
+    const cgestor = raw != null ? String(raw).trim() : '';
+    return cgestor !== '' ? cgestor : null;
+  }
+
+  private async resolveEmissionGestor(
+    b: Record<string, unknown>,
+    ccanalalt: number,
+  ): Promise<string | null> {
+    const explicit = this.pick<string>(b, 'cgestor');
+    if (explicit != null && String(explicit).trim() !== '') {
+      return String(explicit).trim();
+    }
+    return this.lookupChannelGestor(ccanalalt);
+  }
+
+  private async applyPolicyGestor(cnpoliza: string, cgestor: string): Promise<void> {
+    const poliza = String(cnpoliza ?? '').trim();
+    const gestor = String(cgestor ?? '').trim();
+    if (!poliza || !gestor) return;
+
+    const T = this.db.types;
+    const req = this.db.request();
+    req.input('cnpoliza', T.NVarChar(30), poliza);
+    req.input('cgestor', T.VarChar(50), gestor);
+    const result = await req.query(`
+      UPDATE adpoliza
+      SET cgestor = @cgestor
+      WHERE RTRIM(cnpoliza) = RTRIM(@cnpoliza)
+    `);
+    const rows = Number(result.rowsAffected?.[0] ?? 0);
+    if (rows === 0) {
+      this.logger.warn(`applyPolicyGestor: sin filas cnpoliza=${poliza} cgestor=${gestor}`);
+      return;
+    }
+    this.logger.log(`applyPolicyGestor OK cnpoliza=${poliza} cgestor=${gestor}`);
   }
 
   private async emitLocalAutomobile(
@@ -1476,6 +1532,23 @@ export class EmissionsService {
       } catch (err) {
         const msg = err instanceof Error ? err.message : String(err);
         this.logger.warn(`applyBeneficiario falló cnpoliza=${cnpoliza}: ${msg}`);
+      }
+    }
+
+    const ccanalalt = this.intField(this.pick(b, 'ccanalalt', 'ccanalalt_in'));
+    if (ccanalalt != null) {
+      try {
+        const cgestor = await this.resolveEmissionGestor(b, ccanalalt);
+        if (cgestor) {
+          await this.applyPolicyGestor(cnpoliza, cgestor);
+        } else {
+          this.logger.warn(
+            `emitLocal: canal ${ccanalalt} sin gestor en magestor (filtro UUID) cnpoliza=${cnpoliza}`,
+          );
+        }
+      } catch (err) {
+        const msg = err instanceof Error ? err.message : String(err);
+        this.logger.warn(`applyPolicyGestor falló cnpoliza=${cnpoliza}: ${msg}`);
       }
     }
 
