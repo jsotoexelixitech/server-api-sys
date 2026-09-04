@@ -14,7 +14,9 @@ import {
 } from './arys.types';
 import {
   extractNumericResult,
+  findBestByLabel,
   findByLabel,
+  firstCatalogItem,
   isZeroArysResult,
   normalizeText,
   resolveEstadoArysName,
@@ -67,7 +69,13 @@ export class ArysClient {
   async addVehiculo(body: ArysVehiculoRequest): Promise<number> {
     const payload = await this.request<unknown>('POST', '/api/v1/Vehiculo/AddVehiculo', body);
     if (isZeroArysResult(payload)) {
-      throw new BadGatewayException('Arys rechazó el registro del vehículo.');
+      const detail = payload.errorMessage ? `: ${payload.errorMessage}` : '';
+      this.logger.warn(
+        `Arys AddVehiculo result=0 placa=${body.placa} ` +
+          `marca=${body.id_marca} modelo=${body.id_modelo} version=${body.id_version} ` +
+          `color=${body.id_color} tipo=${body.id_tipo_vehi}${detail}`,
+      );
+      throw new BadGatewayException(`Arys rechazó el registro del vehículo${detail}`);
     }
     const id = extractNumericResult(payload);
     if (!id) {
@@ -188,29 +196,32 @@ export class ArysClient {
 
     const modeloId = Number(modelo.id_modelo ?? modelo.id);
     const versiones = await this.getVersiones(marcaId, modeloId);
-    const version = vehiculo.xversion
-      ? findByLabel(versiones, vehiculo.xversion, [
-          'etiqueta',
-          'version',
-          'xversion',
-          'version1',
-          'descripcion',
-          'nombre',
-          'carroceria',
-        ])
-      : null;
+    const versionKeys = [
+      'etiqueta',
+      'version',
+      'xversion',
+      'version1',
+      'descripcion',
+      'nombre',
+      'carroceria',
+    ];
+    const version =
+      findBestByLabel(versiones, vehiculo.xversion, versionKeys) ?? firstCatalogItem(versiones);
+    if (!version) {
+      throw new BadGatewayException(
+        `Versión no encontrada en Arys para ${vehiculo.xmarca} ${vehiculo.xmodelo} ${vehiculo.xversion}`,
+      );
+    }
 
     const colores = await this.getColores();
-    const color = vehiculo.xcolor
-      ? findByLabel(colores, vehiculo.xcolor, [
-          'etiqueta',
-          'color',
-          'xcolor',
-          'color1',
-          'descripcion',
-          'nombre',
-        ])
-      : null;
+    const colorKeys = ['etiqueta', 'color', 'xcolor', 'color1', 'descripcion', 'nombre'];
+    const color =
+      findBestByLabel(colores, vehiculo.xcolor, colorKeys) ??
+      findByLabel(colores, 'NEGRO', colorKeys) ??
+      firstCatalogItem(colores);
+    if (!color) {
+      throw new BadGatewayException(`Color no encontrado en Arys: ${vehiculo.xcolor}`);
+    }
 
     return { marca, modelo, version, color };
   }
