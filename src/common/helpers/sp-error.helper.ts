@@ -7,6 +7,52 @@ export function isMissingStoredProcedureError(message: string): boolean {
   );
 }
 
+const USER_ERROR_FALLBACK =
+  'No pudimos completar la operación. Inténtalo de nuevo o contacta a soporte.';
+
+const USER_ERROR_RULES: Array<{ test: RegExp; message: string }> = [
+  {
+    test: /truncated|xavecalle|string or binary|would be truncated/i,
+    message:
+      'La dirección del inmueble es demasiado larga. Usa calle, urbanización y ciudad e inténtalo de nuevo.',
+  },
+  {
+    test: /sp_create_maclient|maclient_dir|maclient/i,
+    message:
+      'No pudimos registrar los datos del cliente. Revisa RIF, nombre y dirección e inténtalo de nuevo.',
+  },
+  {
+    test: /sp_emision|emisi[oó]n ramo/i,
+    message: 'No se pudo emitir la póliza en este momento. Inténtalo de nuevo o contacta a soporte.',
+  },
+  {
+    test: /could not find stored procedure|invalid object name|no se encontr.*procedimiento/i,
+    message: 'El servicio de emisión no está disponible. Inténtalo más tarde o contacta a soporte.',
+  },
+  {
+    test: /overflow|arithmetic overflow|conversion failed|cannot insert/i,
+    message: 'Algunos datos no tienen el formato esperado. Revísalos e inténtalo de nuevo.',
+  },
+];
+
+/** Mensaje corto para el cliente. El detalle técnico debe quedar solo en logs. */
+export function toUserFacingError(raw: string, fallback = USER_ERROR_FALLBACK): string {
+  const text = String(raw || '').replace(/\s+/g, ' ').trim();
+  if (!text) return fallback;
+  for (const rule of USER_ERROR_RULES) {
+    if (rule.test.test(text)) return rule.message;
+  }
+  if (
+    /sp_|dbo\.|sis2000|truncated|cpoliza=|cproces=|nvarchar|l[ií]nea\s+\d+|xavecalle|maclient/i.test(
+      text,
+    ) ||
+    text.length > 180
+  ) {
+    return fallback;
+  }
+  return text;
+}
+
 export function parseSPError(err: unknown): string {
   const msg = err instanceof Error ? err.message : String(err);
 

@@ -4,7 +4,7 @@ import { MssqlService } from '../../database/mssql.service';
 import { GetPlanesCondominioDto } from './dto/get-planes-condominio.dto';
 import { CotizacionCondominioDto } from './dto/cotizacion-condominio.dto';
 import { CreateEmissionCondominioDto } from './dto/create-emission-condominio.dto';
-import { parseSPError } from '../../common/helpers/sp-error.helper';
+import { parseSPError, toUserFacingError } from '../../common/helpers/sp-error.helper';
 import { buildPolicyPdfUrl } from '../../common/helpers/policy-url.helper';
 import {
   SP_BUSCA_PLANES_CONDOMINIO,
@@ -415,7 +415,7 @@ export class CondominioService {
     } catch (err) {
       const msg = parseSPError(err);
       this.logger.error(`emitir (condominio): ${msg}`);
-      throw new BadRequestException(msg);
+      throw new BadRequestException(toUserFacingError(msg));
     }
   }
 
