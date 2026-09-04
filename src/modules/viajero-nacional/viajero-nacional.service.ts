@@ -67,15 +67,10 @@ export class ViajeroNacionalService {
   }
 
   async cotizar(body: CotizacionViaje3Dto) {
-    const fdesde = this.resolveFdesde(body.fdesde);
-    const fhasta = body.fhasta?.trim() || this.addInclusiveDays(fdesde, VIAJERO_NACIONAL.ndias);
     const dto: CotizacionPerDto = {
       cramo: VIAJERO_NACIONAL.cramo,
       cplan: VIAJERO_NACIONAL.cplan,
       ifrecuencia: VIAJERO_NACIONAL.ifrecuencia,
-      ndias: VIAJERO_NACIONAL.ndias,
-      fdesde,
-      fhasta,
       asegurados: body.asegurados,
     };
     return this.personas.getCotizacionPer(dto);

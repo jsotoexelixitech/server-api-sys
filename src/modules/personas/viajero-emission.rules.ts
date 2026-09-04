@@ -25,8 +25,7 @@ export function isViajeLocalPlan(
   plan: string | null | undefined,
 ): boolean {
   if (cramo !== VIAJERO_LOCAL_RAMO) return false;
-  const code = String(plan ?? '').trim().toUpperCase();
-  return code === VIAJE_LOCAL_PLAN || code === VIAJE_NACIONAL_PLAN;
+  return String(plan ?? '').trim().toUpperCase() === VIAJE_LOCAL_PLAN;
 }
 
 /** Planes con prima = ndias × tarifa diaria (VIAJE ramo 25, VIAJ* ramo 5). */
