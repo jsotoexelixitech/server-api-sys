@@ -168,28 +168,16 @@ export class ArysClient {
     xcolor?: string;
   }) {
     const marcas = await this.getMarcas();
-    const marca = findByLabel(marcas, vehiculo.xmarca, [
-      'etiqueta',
-      'marca',
-      'xmarca',
-      'marca1',
-      'descripcion',
-      'nombre',
-    ]);
+    const marcaKeys = ['etiqueta', 'marca', 'xmarca', 'marca1', 'descripcion', 'nombre'];
+    const marca = findBestByLabel(marcas, vehiculo.xmarca, marcaKeys);
     if (!marca) {
       throw new BadGatewayException(`Marca no encontrada en Arys: ${vehiculo.xmarca}`);
     }
 
     const marcaId = Number(marca.id_marca ?? marca.id);
     const modelos = await this.getModelos(marcaId);
-    const modelo = findByLabel(modelos, vehiculo.xmodelo, [
-      'etiqueta',
-      'modelo',
-      'xmodelo',
-      'modelo1',
-      'descripcion',
-      'nombre',
-    ]);
+    const modeloKeys = ['etiqueta', 'modelo', 'xmodelo', 'modelo1', 'descripcion', 'nombre'];
+    const modelo = findBestByLabel(modelos, vehiculo.xmodelo, modeloKeys);
     if (!modelo) {
       throw new BadGatewayException(`Modelo no encontrado en Arys: ${vehiculo.xmodelo}`);
     }

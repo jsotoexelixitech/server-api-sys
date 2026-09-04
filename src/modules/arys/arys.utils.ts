@@ -52,8 +52,8 @@ const itemLabels = (item: Record<string, unknown>, labelKeys: string[]): string[
   labelKeys.map((key) => normalizeText(item?.[key])).filter(Boolean);
 
 /**
- * Exact match first, then prefix/contains. Used for versión/color where
- * Sis2000 (`R3`) and Arys (`R3 - Sincronico`) rarely share the same label.
+ * Exact match first, then prefix/contains. Used for marca/modelo/versión/color
+ * when Sis2000 and Arys do not share the same label (`R3` vs `R3 - Sincronico`).
  */
 export const findBestByLabel = (
   items: Record<string, unknown>[],

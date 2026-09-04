@@ -195,20 +195,41 @@ export class ArysRepository {
         v.xplaca,
         v.xsercar,
         v.xsermot,
-        m.xmarca,
-        m.xmodelo,
-        m.xversion,
+        COALESCE(
+          NULLIF(LTRIM(RTRIM(t.xmarca)), ''),
+          NULLIF(LTRIM(RTRIM(inm.xmarca)), ''),
+          NULLIF(LTRIM(RTRIM(mar.xmarca)), '')
+        ) AS xmarca,
+        COALESCE(
+          NULLIF(LTRIM(RTRIM(t.xmodelo)), ''),
+          NULLIF(LTRIM(RTRIM(inm.xmodelo)), '')
+        ) AS xmodelo,
+        COALESCE(
+          NULLIF(LTRIM(RTRIM(t.xversion)), ''),
+          NULLIF(LTRIM(RTRIM(inm.xversion)), '')
+        ) AS xversion,
         v.xcolor,
-        LEFT(m.xtransm, 1) AS xtransm,
-        m.mvalor,
-        m.npasajero
+        CAST(NULL AS VARCHAR(1)) AS xtransm,
+        inm.mvalor,
+        inm.npasajero
       FROM adpoliza p
       INNER JOIN vhcerti v ON v.cnpoliza = p.cnpoliza
-      LEFT JOIN vinma m
-        ON m.cmarca = v.cmarca
-       AND m.cmodelo = v.cmodelo
-       AND m.cversion = v.cversion
-       AND m.cano = v.cano
+      OUTER APPLY (
+        SELECT TOP 1 xmarca, xmodelo, xversion
+        FROM TMEMISION_AUTOMOVIL_RCV2
+        WHERE cnpoliza = p.cnpoliza
+        ORDER BY fingreso DESC
+      ) t
+      OUTER APPLY (
+        SELECT TOP 1 xmarca, xmodelo, xversion, mvalor, npasajero
+        FROM VInma
+        WHERE LTRIM(RTRIM(CONVERT(VARCHAR(10), cmarca))) = LTRIM(RTRIM(CONVERT(VARCHAR(10), v.cmarca)))
+          AND LTRIM(RTRIM(CONVERT(VARCHAR(10), cmodelo))) = LTRIM(RTRIM(CONVERT(VARCHAR(10), v.cmodelo)))
+          AND LTRIM(RTRIM(CONVERT(VARCHAR(10), cversion))) = LTRIM(RTRIM(CONVERT(VARCHAR(10), v.cversion)))
+        ORDER BY CASE WHEN cano = v.cano THEN 0 ELSE 1 END, cano DESC
+      ) inm
+      LEFT JOIN mamarcas mar
+        ON LTRIM(RTRIM(CONVERT(VARCHAR(10), mar.cmarca))) = LTRIM(RTRIM(CONVERT(VARCHAR(10), v.cmarca)))
       WHERE ${whereClause}
       ORDER BY p.fanopol DESC, p.fmespol DESC
     `);

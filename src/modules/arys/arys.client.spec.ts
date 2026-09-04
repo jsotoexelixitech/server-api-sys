@@ -25,6 +25,18 @@ describe('ArysClient', () => {
     expect(resolveEstadoArysName('Dtto Capital')).toBe('DISTRITO CAPITAL');
   });
 
+  it('resuelve marca Arys por coincidencia de nombre (YAMAHA → YAMAHA MOTOR)', () => {
+    const marca = findBestByLabel(
+      [
+        { id_marca: 12, marca1: 'HONDA' },
+        { id_marca: 80, marca1: 'YAMAHA MOTOR' },
+      ],
+      'YAMAHA',
+      ['marca1', 'marca', 'xmarca'],
+    );
+    expect(marca?.id_marca).toBe(80);
+  });
+
   it('resuelve versión Arys por prefijo (R3 → R3 - Sincronico)', () => {
     const version = findBestByLabel(
       [
