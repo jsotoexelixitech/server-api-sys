@@ -16,6 +16,8 @@ import {
 const RIF_MAX_DIGITS = 12;
 /** Numeric(18,2): máximo ~1e16 antes de overflow. */
 const MONEY_MAX_ABS = 1e16 - 1;
+/** SIS2000 maclient_dir.xavecalle = CHAR(60). */
+const XAVECALLE_MAX = 60;
 
 @Injectable()
 export class CondominioService {
@@ -63,6 +65,26 @@ export class CondominioService {
     if (!Number.isFinite(n)) return fallback;
     if (Math.abs(n) >= MONEY_MAX_ABS) return fallback;
     return Math.round(n * 100) / 100;
+  }
+
+  /**
+   * Dirección para maclient_dir.xavecalle / @xdireccion CHAR(60).
+   * Prefiere segmentos separados por coma para no cortar a mitad de palabra.
+   */
+  private toXavecalle(raw: unknown, fallback = 'Caracas'): string {
+    const text = String(raw ?? '')
+      .replace(/\s+/g, ' ')
+      .trim();
+    if (!text) return fallback;
+    if (text.length <= XAVECALLE_MAX) return text;
+    const parts = text.split(',').map((p) => p.trim()).filter(Boolean);
+    let acc = '';
+    for (const part of parts) {
+      const next = acc ? `${acc}, ${part}` : part;
+      if (next.length > XAVECALLE_MAX) break;
+      acc = next;
+    }
+    return (acc || text).slice(0, XAVECALLE_MAX).trim() || fallback;
   }
 
   /**
@@ -303,9 +325,9 @@ export class CondominioService {
       req.input('mcomision', T.Numeric(18, 2), mcomision);
       req.input('mcomisionext', T.Numeric(18, 2), mcomisionext);
 
-      // Staging / Certificados
-      req.input('xdirecob', T.VarChar(250), String(dto.xdirecob ?? '').slice(0, 250));
-      req.input('xdireccion', T.VarChar(250), String(dto.xdireccion ?? '').slice(0, 250));
+      // Staging / Certificados — xdireccion alimenta maclient_dir.xavecalle CHAR(60)
+      req.input('xdirecob', T.VarChar(60), this.toXavecalle(dto.xdirecob));
+      req.input('xdireccion', T.VarChar(60), this.toXavecalle(dto.xdireccion));
       req.input('xdescrip1', T.VarChar(250), String(dto.xdescrip1 ?? '').slice(0, 250));
       req.input('xdescrip2', T.VarChar(250), String(dto.xdescrip2 ?? '').slice(0, 250));
       req.input('xdescrip3', T.VarChar(250), dto.xdescrip3 != null ? String(dto.xdescrip3).slice(0, 250) : null);
@@ -326,7 +348,7 @@ export class CondominioService {
       req.input('fnac_tomador', T.Date, dto.fnac_tomador ?? '1990-01-01');
       req.input('cestado_tomador', T.VarChar(100), cestadoTomador);
       req.input('cciudad_tomador', T.VarChar(100), cciudadTomador);
-      req.input('xdireccion_tomador', T.VarChar(1000), dto.direccion_tomador ?? '');
+      req.input('xdireccion_tomador', T.VarChar(60), this.toXavecalle(dto.direccion_tomador));
       req.input('xtelefono_tomador', T.VarChar(250), telTomador);
       req.input('xcorreo_tomador', T.VarChar(250), dto.correo_tomador ?? '');
 
@@ -340,7 +362,7 @@ export class CondominioService {
       req.input('fnac_asegurado', T.Date, dto.fnac_asegurado ?? '1990-01-01');
       req.input('cestado_asegurado', T.VarChar(100), cestadoAsegurado);
       req.input('cciudad_asegurado', T.VarChar(100), cciudadAsegurado);
-      req.input('xdireccion_asegurado', T.VarChar(1000), dto.direccion_asegurado ?? '');
+      req.input('xdireccion_asegurado', T.VarChar(60), this.toXavecalle(dto.direccion_asegurado));
       req.input('xtelefono_asegurado', T.VarChar(250), telAsegurado);
       req.input('xcorreo_asegurado', T.VarChar(250), dto.correo_asegurado ?? '');
 
