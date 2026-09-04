@@ -42,6 +42,7 @@ export const NEST_AUTH_SCOPE_CATALOG: NestAuthScopeMeta[] = [
     routes: [
       'POST /api/v1/personas/poliza-vigente',
       'POST /api/v1/personas/emision',
+      'POST /api/v1/viajero-nacional/emision',
     ],
   },
   {
