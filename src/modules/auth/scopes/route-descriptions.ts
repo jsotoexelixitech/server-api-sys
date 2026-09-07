@@ -59,6 +59,8 @@ const ROUTE_LABELS: Record<string, string> = {
   'GET /api/v1/product-emission/policies/:param': 'Consultar póliza emitida',
   // emissions:person
   'POST /api/v1/personas/planes': 'Planes disponibles (personas/viajero)',
+  'POST /api/v1/app/getParenPlanPer': 'Parentescos válidos para un plan de personas (legacy SysIP)',
+  'POST /api/v1/app/getCotizacionPer': 'Cotización personas formato legacy SysIP',
   'POST /api/v1/personas/cotizacion': 'Cotización personas / viajero',
   'POST /api/v1/personas/validacion': 'Validación pre-emisión personas',
   'POST /api/v1/personas/poliza-vigente': 'Consultar póliza funeraria vigente por cédula',

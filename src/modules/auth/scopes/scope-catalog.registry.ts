@@ -48,6 +48,11 @@ export function inferScopeFromPath(normalizedPath: string): string | undefined {
 
   if (/\/api\/v1\/auth\//i.test(path)) return undefined;
 
+  // Legacy SysIP /app — mismo scope que emisión personas (no quedar sin scope en docs)
+  if (/\/api\/v1\/app\/(?:getParenPlanPer|getCotizacionPer)/i.test(path)) {
+    return 'emissions:person';
+  }
+
   if (/\/api\/v1\/client\//i.test(path)) return 'client:read';
   if (/\/api\/v1\/product-emission\//i.test(path)) return 'product-emission:write';
   if (/\/api\/v1\/external\/collection\//i.test(path)) return 'collection:write';

@@ -31,6 +31,14 @@ describe('grantMatchesRoute', () => {
       grantMatchesRoute(
         ['emissions:person'],
         'POST',
+        '/api/v1/app/getParenPlanPer',
+        'emissions:person',
+      ),
+    ).toBe(true);
+    expect(
+      grantMatchesRoute(
+        ['emissions:person'],
+        'POST',
         '/api/v1/emision-personas/createEmissionPerson',
         'emissions:person',
       ),

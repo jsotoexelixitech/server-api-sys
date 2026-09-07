@@ -158,6 +158,17 @@
       }
     }
 
+    function authorizeBearer(ui, token) {
+      if (!token || !ui) return;
+      if (typeof ui.preauthorizeApiKey === 'function') {
+        ui.preauthorizeApiKey('bearer', token);
+        return;
+      }
+      if (typeof ui.preauthorizeBearer === 'function') {
+        ui.preauthorizeBearer('bearer', token);
+      }
+    }
+
     function authorizeSwagger(apiKey, ui) {
       ui.preauthorizeApiKey('apikey', apiKey);
       setStatus('Key cargada para Try it out');
@@ -180,7 +191,7 @@
         sessionStorage.setItem(STORAGE_KEY, apiKey);
         if (window.swaggerUi) {
           authorizeSwagger(apiKey, window.swaggerUi);
-          window.swaggerUi.preauthorizeBearer('bearer', data.access_token);
+          authorizeBearer(window.swaggerUi, data.access_token);
         }
         setStatus('Conectado · token activo');
       } catch (err) {
