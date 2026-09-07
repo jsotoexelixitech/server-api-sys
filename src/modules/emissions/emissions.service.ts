@@ -17,6 +17,7 @@ import {
 } from '../../config/sis2000-sp.constants';
 import { SearchProprietaryDto } from './dto/search-proprietary.dto';
 import { SearchVehicleByPlateDto, SearchVehicleBySerialDto } from './dto/search-vehicle.dto';
+import { ArysService } from '../arys/arys.service';
 
 @Injectable()
 export class EmissionsService {
@@ -25,6 +26,7 @@ export class EmissionsService {
   constructor(
     private readonly db: MssqlService,
     private readonly config: ConfigService,
+    private readonly arysService: ArysService,
   ) {}
 
   /** Fecha SQL: null si viene vacía; evita "Invalid date" del driver mssql con ''. */
@@ -289,6 +291,28 @@ export class EmissionsService {
       this.logger.warn(`Club Arys PDF omitido cnpoliza=${cnpoliza}: ${msg}`);
       return '';
     }
+  }
+
+  /** Registro de membresía Arys en segundo plano (solo pólizas con cobertura Club Arys). */
+  private scheduleArysMembershipRegistration(
+    cnpoliza: string,
+    body: Record<string, unknown>,
+  ): void {
+    void (async () => {
+      try {
+        const hasArys = await this.hasClubArysCoverage(cnpoliza, body);
+        if (!hasArys) return;
+
+        const xplaca = String(this.pick(body, 'xplaca') ?? this.pick(body, 'placa') ?? '').trim();
+        await this.arysService.registerMembershipFromEmission({
+          cnpoliza,
+          xplaca: xplaca || undefined,
+        });
+      } catch (err) {
+        const msg = err instanceof Error ? err.message : String(err);
+        this.logger.warn(`Arys post-emisión omitido cnpoliza=${cnpoliza}: ${msg}`);
+      }
+    })();
   }
 
   /**
@@ -918,6 +942,10 @@ export class EmissionsService {
     if (b['cscanalalt_in'] != null && b['cscanalalt'] == null) {
       b['cscanalalt'] = b['cscanalalt_in'];
     }
+    const centidad = String(b['centidad'] ?? '').trim().toUpperCase();
+    if (centidad === 'C' && b['citem'] != null && b['ccanalalt'] == null) {
+      b['ccanalalt'] = b['citem'];
+    }
     if (b['frecuencia'] != null && b['ifrecuencia'] == null) {
       b['ifrecuencia'] = b['frecuencia'];
     }
@@ -1046,6 +1074,58 @@ export class EmissionsService {
     `);
 
     this.logger.log(`applyBeneficiario OK cnpoliza=${cnpoliza} rif=${rif}`);
+  }
+
+  /**
+   * Gestor del canal (magestor): un guion en cgestor identifica el código UUID del gestor.
+   * Marketplace canal: se persiste en adpoliza tras emitir.
+   */
+  private async lookupChannelGestor(ccanalalt: number): Promise<string | null> {
+    const T = this.db.types;
+    const req = this.db.request();
+    req.input('ccanalalt', T.Int, ccanalalt);
+    const result = await req.query(`
+      SELECT TOP 1 cgestor
+      FROM magestor
+      WHERE ccanalalt = @ccanalalt
+        AND (LEN(cgestor) - LEN(REPLACE(cgestor, '-', ''))) = 1
+    `);
+    const raw = result.recordset?.[0]?.['cgestor'];
+    const cgestor = raw != null ? String(raw).trim() : '';
+    return cgestor !== '' ? cgestor : null;
+  }
+
+  private async resolveEmissionGestor(
+    b: Record<string, unknown>,
+    ccanalalt: number,
+  ): Promise<string | null> {
+    const explicit = this.pick<string>(b, 'cgestor');
+    if (explicit != null && String(explicit).trim() !== '') {
+      return String(explicit).trim();
+    }
+    return this.lookupChannelGestor(ccanalalt);
+  }
+
+  private async applyPolicyGestor(cnpoliza: string, cgestor: string): Promise<void> {
+    const poliza = String(cnpoliza ?? '').trim();
+    const gestor = String(cgestor ?? '').trim();
+    if (!poliza || !gestor) return;
+
+    const T = this.db.types;
+    const req = this.db.request();
+    req.input('cnpoliza', T.NVarChar(30), poliza);
+    req.input('cgestor', T.VarChar(50), gestor);
+    const result = await req.query(`
+      UPDATE adpoliza
+      SET cgestor = @cgestor
+      WHERE RTRIM(cnpoliza) = RTRIM(@cnpoliza)
+    `);
+    const rows = Number(result.rowsAffected?.[0] ?? 0);
+    if (rows === 0) {
+      this.logger.warn(`applyPolicyGestor: sin filas cnpoliza=${poliza} cgestor=${gestor}`);
+      return;
+    }
+    this.logger.log(`applyPolicyGestor OK cnpoliza=${poliza} cgestor=${gestor}`);
   }
 
   private async emitLocalAutomobile(
@@ -1455,6 +1535,25 @@ export class EmissionsService {
       }
     }
 
+    const ccanalalt = this.intField(this.pick(b, 'ccanalalt', 'ccanalalt_in'));
+    if (ccanalalt != null) {
+      try {
+        const cgestor = await this.resolveEmissionGestor(b, ccanalalt);
+        if (cgestor) {
+          await this.applyPolicyGestor(cnpoliza, cgestor);
+        } else {
+          this.logger.warn(
+            `emitLocal: canal ${ccanalalt} sin gestor en magestor (filtro UUID) cnpoliza=${cnpoliza}`,
+          );
+        }
+      } catch (err) {
+        const msg = err instanceof Error ? err.message : String(err);
+        this.logger.warn(`applyPolicyGestor falló cnpoliza=${cnpoliza}: ${msg}`);
+      }
+    }
+
+    this.scheduleArysMembershipRegistration(cnpoliza, b);
+
     return {
       message: 'Póliza generada exitosamente',
       cnpoliza,
@@ -1563,6 +1662,9 @@ export class EmissionsService {
       const url_club_arys = cnpoliza
         ? await this.resolveClubArysPdfForEmission(cnpoliza, b)
         : '';
+      if (cnpoliza) {
+        this.scheduleArysMembershipRegistration(cnpoliza, b);
+      }
       return {
         message: (resData['message'] as string) || 'Emisión registrada via API externa.',
         cnpoliza,

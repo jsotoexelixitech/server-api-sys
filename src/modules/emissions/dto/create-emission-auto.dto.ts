@@ -329,4 +329,29 @@ export class CreateEmissionAutoDto {
   @IsOptional()
   @IsNumber()
   tasaPp?: number;
+
+  @ApiPropertyOptional({ description: 'Canal alterno (Marketplace / SSO).' })
+  @IsOptional()
+  @IsInt()
+  ccanalalt_in?: number;
+
+  @ApiPropertyOptional({ description: 'Subcanal alterno (Marketplace / SSO).' })
+  @IsOptional()
+  @IsInt()
+  cscanalalt_in?: number;
+
+  @ApiPropertyOptional({ description: 'Código gestor (magestor.cgestor). Si omitido y hay canal, se resuelve en emisión.' })
+  @IsOptional()
+  @IsString()
+  cgestor?: string;
+
+  @ApiPropertyOptional({ description: 'Entidad emisora: C = canal, P = productor.' })
+  @IsOptional()
+  @IsString()
+  centidad?: string;
+
+  @ApiPropertyOptional({ description: 'Ítem de entidad (ccanalalt si centidad=C).' })
+  @IsOptional()
+  @IsString()
+  citem?: string;
 }
