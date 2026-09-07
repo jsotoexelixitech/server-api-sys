@@ -38,7 +38,7 @@ export class ViajeroMargaritaController {
           cramo: 25,
           xramo: 'RIESGOS ESPECIALES',
           cproducto: '1',
-          ndias: 4,
+          ndias: 7,
           ifrecuencia: 'E',
         },
       },

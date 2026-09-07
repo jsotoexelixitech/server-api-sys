@@ -32,14 +32,14 @@ export const VIAJERO_NACIONAL: ViajeroRiesgosPlan = {
   cproductor: 0,
 };
 
-/** Pantalla Sis2000: VIAJE4 · Plan Viajero Margarita · producto 1. */
+/** Pantalla Sis2000: VIAJE4 · Plan Viajero Margarita · 7 días · producto 1. */
 export const VIAJERO_MARGARITA: ViajeroRiesgosPlan = {
   cramo: 25,
   xramo: 'RIESGOS ESPECIALES',
   cplan: 'VIAJE4',
   xplan: 'Plan Viajero Margarita',
   cproducto: '1',
-  ndias: 4,
+  ndias: 7,
   cmoneda: '$',
   xmoneda: 'DOLARES',
   maxDependientes: 5,
