@@ -46,6 +46,8 @@ export const NEST_AUTH_SCOPE_CATALOG: NestAuthScopeMeta[] = [
       'POST /api/v1/app/getCotizacionPer',
       'POST /api/v1/viajero-nacional/emision',
       'POST /api/v1/viajero-margarita/emision',
+      'POST /api/v1/viajero-3-dias/emision',
+      'POST /api/v1/viajero-7-dias/emision',
     ],
   },
   {
