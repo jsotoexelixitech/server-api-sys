@@ -189,6 +189,7 @@ async function bootstrap(): Promise<void> {
         SWAGGER_TAGS.PRODUCT_EMISSION,
         SWAGGER_TAG_DESCRIPTIONS[SWAGGER_TAGS.PRODUCT_EMISSION],
       )
+      .addTag(SWAGGER_TAGS.REPORTES, SWAGGER_TAG_DESCRIPTIONS[SWAGGER_TAGS.REPORTES])
       .build();
 
     const document = SwaggerModule.createDocument(app, swaggerConfig);
