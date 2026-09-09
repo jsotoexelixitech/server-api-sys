@@ -143,7 +143,7 @@ export class SyncUpsertRepository {
        monto_reserva_ext, monto_pagado_bs, monto_pagado_ext, tipo_movimiento, numero_orden_pago,
        fecha_emision_orden, fecha_pago_orden, id_estatus, productor, plan_poliza,
        id_sucursal_receptora, sucursal_receptora, id_anulacion, anulacion, fecha_anulacion,
-       id_rechazo, rechazo, fecha_rechazo, tasa_cambio, synced_at
+       id_rechazo, rechazo, fecha_rechazo, tasa_cambio, cobertura_afectada, synced_at
      ) VALUES (
        @aseguradoraId, @origenClave, @idRamo, @numeroPoliza, @numeroSiniestro,
        @cedulaAsegurado, @nombreApellidoAsegurado, @certificado, @placa, @serialCarroceria,
@@ -153,7 +153,7 @@ export class SyncUpsertRepository {
        @montoReservaExt, @montoPagadoBs, @montoPagadoExt, @tipoMovimiento, @numeroOrdenPago,
        @fechaEmisionOrden, @fechaPagoOrden, @idEstatus, @productor, @planPoliza,
        @idSucursalReceptora, @sucursalReceptora, @idAnulacion, @anulacion, @fechaAnulacion,
-       @idRechazo, @rechazo, @fechaRechazo, @tasaCambio, NOW()
+       @idRechazo, @rechazo, @fechaRechazo, @tasaCambio, @coberturaAfectada, NOW()
      )
      ON CONFLICT (id_aseguradora, origen_clave) WHERE origen_clave IS NOT NULL
      DO UPDATE SET
@@ -198,6 +198,7 @@ export class SyncUpsertRepository {
        rechazo = EXCLUDED.rechazo,
        fecha_rechazo = EXCLUDED.fecha_rechazo,
        tasa_cambio = EXCLUDED.tasa_cambio,
+       cobertura_afectada = EXCLUDED.cobertura_afectada,
        synced_at = NOW()`,
       {
         aseguradoraId,
@@ -243,6 +244,7 @@ export class SyncUpsertRepository {
         rechazo: row.rechazo,
         fechaRechazo: row.fechaRechazo,
         tasaCambio: row.tasaCambio,
+        coberturaAfectada: row.coberturaAfectada ?? '',
       },
     );
   }

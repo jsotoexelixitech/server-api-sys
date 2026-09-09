@@ -909,8 +909,8 @@ async function getFiltros(user, headers) {
 }
 
 async function execute(body, user, headers) {
-  // Sync de pólizas en cada execute (no catálogos).
-  const syncMeta = await maybeSyncBeforeReport('polizas', body || {}, { ignoreTtl: true }, headers);
+  // Sync respeta TTL (como recibos). forceSync fuerza refresco desde origen.
+  const syncMeta = await maybeSyncBeforeReport('polizas', body || {}, {}, headers);
   const schema = await dynamicService.getSchema(buildParams(), {}, user, headers);
   if (schema.error) return schema;
 
@@ -920,9 +920,11 @@ async function execute(body, user, headers) {
 
   const rawRows = Array.isArray(result.grid) ? result.grid.map(ensureRowColumns) : [];
   const sortedRows = sortRows(rawRows, body && body.sortField, body && body.sortDir);
-  const pagedRows = paginateRows(sortedRows, body && body.page, body && body.pageSize);
-  const filtrosOpciones = await loadFiltrosOpciones(user, headers);
-  if (filtrosOpciones.error) return filtrosOpciones;
+  const pagedRows = paginateRows(sortedRows, body && body.page, Math.min(Number(body?.pageSize) || 25, 200));
+  const filtrosOpciones = body?.includeFiltrosOpciones
+    ? await loadFiltrosOpciones(user, headers)
+    : undefined;
+  if (filtrosOpciones?.error) return filtrosOpciones;
 
   const [dbKpis, dbGraficos] = await Promise.all([loadKpisFromDb(), loadGraficosFromDb()]);
   const kpiDefs = mergeKpiDefinitions(
@@ -945,7 +947,7 @@ async function execute(body, user, headers) {
 }
 
 async function exportData(body, user, headers) {
-  await maybeSyncBeforeReport('polizas', body || {}, { ignoreTtl: true }, headers);
+  await maybeSyncBeforeReport('polizas', body || {}, {}, headers);
   const schema = await dynamicService.getSchema(buildParams(), {}, user, headers);
   if (schema.error) return schema;
 

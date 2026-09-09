@@ -196,6 +196,9 @@ export const mundialAdapter: InsurerAdapter = {
       rechazo: toStr(pick(row, 'rechazo')),
       fechaRechazo: toDateOnly(pick(row, 'fecha_rechazo')),
       tasaCambio: toNum(pick(row, 'tasa_cambio', 'tasaCambio', 'ptasamon')) ?? 1.0,
+      coberturaAfectada:
+        toStr(pick(row, 'cobertura_afectada', 'coberturaAfectada', 'cobertura')) ||
+        '',
     };
   },
 

@@ -81,6 +81,7 @@ const SINIESTROS_COLUMN_ORDER = [
   'nombre_apellido_asegurado',
   'cedula_siniestrado',
   'nombre_apellido_siniestrado',
+  'cobertura_afectada',
 ];
 
 const SINIESTROS_COLUMN_LABELS = {
@@ -92,6 +93,7 @@ const SINIESTROS_COLUMN_LABELS = {
   fecha_notificacion: 'Fecha Notificación',
   estatus_siniestro: 'Estatus',
   tipo_movimiento: 'Tipo Movimiento',
+  cobertura_afectada: 'Cobertura Afectada',
   moneda: 'Moneda',
   tasa_cambio: 'Tasa de Cambio',
   monto_siniestro: 'Monto Siniestro EXT',
@@ -1143,23 +1145,33 @@ async function obtenerVisualesDesdeEsquema(body, user, headers) {
 }
 
 async function execute(body, user, headers) {
-  // Sync de siniestros en cada execute (no catálogos).
-  const syncMeta = await maybeSyncBeforeReport('siniestros', body || {}, { ignoreTtl: true }, headers);
+  // Sync respeta TTL (como recibos). forceSync fuerza refresco desde origen.
+  const syncMeta = await maybeSyncBeforeReport('siniestros', body || {}, {}, headers);
   const schema = await dynamicService.getSchema(buildParams(), {}, user, headers);
   if (schema.error) return schema;
 
-  const payload = buildExecutePayload(body || {}, schema, { bexportar: body?.bexportar ? 1 : 0 });
+  const aseguradoraId = await resolveAseguradoraId(null, body || {}, headers);
+  const bodyWithAseguradora = {
+    ...(body || {}),
+    filtros: {
+      ...((body && body.filtros) || {}),
+      ...(aseguradoraId != null
+        ? { id_aseguradora: aseguradoraId, aseguradoraId }
+        : {}),
+    },
+  };
+
+  const payload = buildExecutePayload(bodyWithAseguradora, schema, {
+    bexportar: body?.bexportar ? 1 : 0,
+  });
   const result = await dynamicService.executeReport(buildParams(), payload, user, headers);
   if (result.error) {
     if (!isSchemaUnavailableError(result)) return result;
-    const filtrosOpciones = await loadFiltrosOpciones(user, headers);
-    if (filtrosOpciones.error) return filtrosOpciones;
     return {
       data: [],
       total: 0,
       kpis: emptyKpis(),
       graphics: { comparativo_siniestros: [{ Estado: 'Sin Graficos' }] },
-      filtrosOpciones,
       sync: syncMeta,
     };
   }
@@ -1172,26 +1184,35 @@ async function execute(body, user, headers) {
     getRequestedRamoFilter(payload.filtros),
   );
   const sortedRows = sortRows(rowsWithVehicleRule, body && body.sortField, body && body.sortDir);
-  const pagedRows = paginateRows(sortedRows, body && body.page, body && body.pageSize);
-  const filtrosOpciones = sanitizeTextPayload(await loadFiltrosOpciones(user, headers));
-  if (filtrosOpciones.error) return filtrosOpciones;
+  const paging = getPagingFromBody(body);
+  const pagedRows = paginateRows(sortedRows, paging.page, Math.min(Number(paging.pageSize) || 25, 200));
 
   return {
     data: pagedRows,
     total: sortedRows.length,
     kpis: mapKpis(payload.kpis, sortedRows, result.kpis, payload.filtros),
     graphics: mapGraphics(payload.graficos, result.graphics, payload.filtros),
-    filtrosOpciones,
     sync: syncMeta,
   };
 }
 
 async function exportData(body, user, headers) {
-  await maybeSyncBeforeReport('siniestros', body || {}, { ignoreTtl: true }, headers);
+  await maybeSyncBeforeReport('siniestros', body || {}, {}, headers);
   const schema = await dynamicService.getSchema(buildParams(), {}, user, headers);
   if (schema.error) return schema;
 
-  const payload = buildExecutePayload(body || {}, schema, { bexportar: 1 });
+  const aseguradoraId = await resolveAseguradoraId(null, body || {}, headers);
+  const bodyWithAseguradora = {
+    ...(body || {}),
+    filtros: {
+      ...((body && body.filtros) || {}),
+      ...(aseguradoraId != null
+        ? { id_aseguradora: aseguradoraId, aseguradoraId }
+        : {}),
+    },
+  };
+
+  const payload = buildExecutePayload(bodyWithAseguradora, schema, { bexportar: 1 });
   const result = await dynamicService.executeReport(buildParams(), payload, user, headers);
   if (result.error) return result;
 
