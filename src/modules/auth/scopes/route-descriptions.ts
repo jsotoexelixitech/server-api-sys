@@ -104,6 +104,27 @@ const ROUTE_LABELS: Record<string, string> = {
   'POST /api/v1/report/ReRecibosV2': 'Reporte de recibos V2',
   'POST /api/v1/report/movimientosComisiones': 'Movimientos de comisiones',
   'POST /api/v1/report/movimientosComisiones/definition': 'Definición del reporte de comisiones',
+  // reportes ET
+  'GET /api/v1/dynamic-schemas': 'Listar esquemas de reporte activos',
+  'GET /api/v1/dynamic-schemas/:param/meta': 'Meta/esquema de un reporte',
+  'POST /api/v1/dynamic-schemas/:param/execute': 'Ejecutar reporte dinámico',
+  'POST /api/v1/dynamic-schemas/:param/export': 'Exportar reporte dinámico',
+  'POST /api/v1/dynamic-schemas/:param/insights': 'Insights IA del reporte',
+  'GET /api/v1/components/:param/filtros': 'Filtros de componente RPT_*',
+  'POST /api/v1/components/:param/execute': 'Ejecutar componente RPT_*',
+  'POST /api/v1/components/:param/export': 'Exportar componente RPT_*',
+  'GET /api/v1/siniestros/filtros': 'Filtros de siniestros',
+  'POST /api/v1/siniestros/execute': 'Ejecutar reporte de siniestros',
+  'POST /api/v1/siniestros/export': 'Exportar siniestros',
+  'GET /api/v1/recibos/filtros': 'Filtros de recibos',
+  'POST /api/v1/recibos/execute': 'Ejecutar reporte de recibos',
+  'POST /api/v1/recibos/export': 'Exportar recibos',
+  'GET /api/v1/polizas/filtros': 'Filtros de pólizas',
+  'GET /api/v1/reportes/aseguradoras': 'Listar aseguradoras activas (sync)',
+  'GET /api/v1/reportes/sync/status': 'Estado de sync de reportes',
+  'POST /api/v1/reportes/sync': 'Ejecutar sync incremental',
+  'GET /api/v1/aseguradoras': 'CRUD aseguradoras (conexiones origen)',
+  'POST /api/v1/aseguradoras/provision': 'Provisionar aseguradora',
 };
 
 function normalizeRouteKey(routeId: string): string {

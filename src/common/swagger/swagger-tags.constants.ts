@@ -14,6 +14,7 @@ export const SWAGGER_TAGS = {
   /** Solo para paquetes partner — no addTag en main (evita sección vacía en Swagger). */
   RENOVATIONS: '11. Renovaciones',
   PRODUCT_EMISSION: '12. Emisión genérica (product-builder)',
+  REPORTES: '13. Reportes dinámicos (ET)',
 } as const;
 
 export const SWAGGER_TAG_ORDER: string[] = Object.values(SWAGGER_TAGS);
@@ -43,4 +44,6 @@ export const SWAGGER_TAG_DESCRIPTIONS: Record<string, string> = {
   [SWAGGER_TAGS.RENOVATIONS]: 'Renovación de pólizas (integradores partner).',
   [SWAGGER_TAGS.PRODUCT_EMISSION]:
     'Cotizar, validar y emitir pólizas de ramos creados en product-builder.',
+  [SWAGGER_TAGS.REPORTES]:
+    'Esquemas dinámicos, siniestros, recibos, pólizas, sync y aseguradoras (ET / DB reportes).',
 };
