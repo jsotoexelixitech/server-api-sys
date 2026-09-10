@@ -91,7 +91,6 @@ BEGIN
         DECLARE @cuotaIdx INT = 1;
         DECLARE @firstCnrecibo NVARCHAR(30) = NULL;
         DECLARE @firstCrecibo NUMERIC(19, 0) = NULL;
-        DECLARE @cnreciboRel NVARCHAR(30) = NULL;
         DECLARE @newCnrecibo NVARCHAR(30);
         DECLARE @newCrecibo NUMERIC(19, 0);
         DECLARE @errCounter INT;
@@ -99,6 +98,8 @@ BEGIN
         DECLARE @cuotaPrimaBs NUMERIC(18, 2);
         DECLARE @cuotaFdesde DATE;
         DECLARE @cuotaFhasta DATE;
+        DECLARE @daysPerCuota INT = @totalDays / @totalCuotas;
+        IF @daysPerCuota < 1 SET @daysPerCuota = 1;
 
         WHILE @cuotaIdx <= @totalCuotas
         BEGIN
@@ -125,31 +126,33 @@ BEGIN
             BEGIN
                 SET @firstCnrecibo = TRIM(@newCnrecibo);
                 SET @firstCrecibo = @newCrecibo;
-                SET @cnreciboRel = TRIM(@newCnrecibo);
             END
 
-            SET @cuotaPrimaExt = CASE WHEN @cuotaIdx = 1 THEN @firstPrimaExt ELSE @basePrimaExt END;
+            IF @cuotaIdx = 1
+                SET @cuotaPrimaExt = @firstPrimaExt;
+            ELSE
+                SET @cuotaPrimaExt = @basePrimaExt;
+
             SET @cuotaPrimaBs = ROUND(@cuotaPrimaExt * @ptasamon, 2);
-            SET @cuotaFdesde = DATEADD(DAY, (@cuotaIdx - 1) * (@totalDays / @totalCuotas), @fdesde);
-            SET @cuotaFhasta = CASE
-                WHEN @cuotaIdx = @totalCuotas THEN @fhasta
-                ELSE DATEADD(DAY, @cuotaIdx * (@totalDays / @totalCuotas), @fdesde)
-            END;
+            SET @cuotaFdesde = DATEADD(DAY, (@cuotaIdx - 1) * @daysPerCuota, @fdesde);
+
+            IF @cuotaIdx = @totalCuotas
+                SET @cuotaFhasta = @fhasta;
+            ELSE
+                SET @cuotaFhasta = DATEADD(DAY, @cuotaIdx * @daysPerCuota, @fdesde);
 
             INSERT INTO adrecibos (
                 crecibo, cnrecibo, cpoliza, cnpoliza, cramo, itipopol, csucur, ccerti_mae,
                 casegurado, ctenedor, cbeneficiario, cproductor, cplan, qcuotas,
                 fdesde, fhasta, fdesde_dev, fhasta_dev, femision, fingreso, cusuario, cprog,
-                iestadorec, ifrecuencia, cnrecibo_rel,
-                mprimabruta, mprimaneta, mprimareas, mmontoneto, mmontorec, mmontoapag, mpendiente,
+                iestadorec, mprimabruta, mprimaneta, mprimareas, mmontoneto, mmontorec, mmontoapag, mpendiente,
                 mprimabrutaext, mprimanetaext, mprimareasext, mmontonetoext, mmontorecext, mmontoapagext, mpendientext, ptasamon
             )
             VALUES (
                 @newCrecibo, TRIM(@newCnrecibo), @cpoliza, @cleanCnpoliza, @cramo, @itipopol, @csucur, @ccerti_mae,
                 @casegurado, @ctenedor, @cbeneficiario, @cproductor, ISNULL(@cplan, 'ESTANDAR'), @maxCuota,
                 @cuotaFdesde, @cuotaFhasta, @cuotaFdesde, @cuotaFhasta, GETDATE(), GETDATE(), @cusuario, 'EndosoRecibo',
-                'P', @ifrecuencia, @cnreciboRel,
-                @cuotaPrimaBs, @cuotaPrimaBs, @cuotaPrimaBs, @cuotaPrimaBs, @cuotaPrimaBs, @cuotaPrimaBs, @cuotaPrimaBs,
+                'P', @cuotaPrimaBs, @cuotaPrimaBs, @cuotaPrimaBs, @cuotaPrimaBs, @cuotaPrimaBs, @cuotaPrimaBs, @cuotaPrimaBs,
                 @cuotaPrimaExt, @cuotaPrimaExt, @cuotaPrimaExt, @cuotaPrimaExt, @cuotaPrimaExt, @cuotaPrimaExt, @cuotaPrimaExt, @ptasamon
             );
 
