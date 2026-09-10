@@ -58,13 +58,16 @@ BEGIN
             SET @totalCuotas = @ncuotas;
         ELSE IF @ifrecuencia IS NOT NULL AND LTRIM(RTRIM(@ifrecuencia)) <> '' AND @ifrecuencia NOT IN ('A', 'E')
         BEGIN
-            SET @monthsPerCuota = CASE UPPER(@ifrecuencia)
-                WHEN 'M' THEN 1
-                WHEN 'T' THEN 3
-                WHEN 'C' THEN 4
-                WHEN 'S' THEN 6
-                ELSE 12
-            END;
+            IF UPPER(@ifrecuencia) = 'M'
+                SET @monthsPerCuota = 1;
+            ELSE IF UPPER(@ifrecuencia) = 'T'
+                SET @monthsPerCuota = 3;
+            ELSE IF UPPER(@ifrecuencia) = 'C'
+                SET @monthsPerCuota = 4;
+            ELSE IF UPPER(@ifrecuencia) = 'S'
+                SET @monthsPerCuota = 6;
+            ELSE
+                SET @monthsPerCuota = 12;
             SET @periodMonths = DATEDIFF(MONTH, @fdesde, @fhasta);
             IF @periodMonths < 1 SET @periodMonths = 1;
             SET @totalCuotas = CEILING(CAST(@periodMonths AS FLOAT) / @monthsPerCuota);
@@ -187,10 +190,10 @@ BEGIN
         SET @pCnrecibo = @firstCnrecibo;
         SET @pCrecibo = @firstCrecibo;
         SET @pSuccess = 1;
-        SET @pErrorMessage = CASE
-            WHEN @totalCuotas > 1 THEN CONCAT('Recibos de endoso creados exitosamente (', @totalCuotas, ' cuotas).')
-            ELSE 'Recibo de endoso creado exitosamente.'
-        END;
+        IF @totalCuotas > 1
+            SET @pErrorMessage = 'Recibos de endoso creados exitosamente (' + CAST(@totalCuotas AS NVARCHAR(10)) + ' cuotas).';
+        ELSE
+            SET @pErrorMessage = 'Recibo de endoso creado exitosamente.';
 
         COMMIT TRANSACTION;
     END TRY
