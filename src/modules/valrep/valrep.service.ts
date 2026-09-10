@@ -7,7 +7,11 @@ import {
 import { ConfigService } from '@nestjs/config';
 import { MssqlService } from '../../database/mssql.service';
 import { parseSPError } from '../../common/helpers/sp-error.helper';
-import { SP_CALCULO_AUTO_NEXUS, SP_GET_SUSTANCIAS_NEXUS } from '../../config/sis2000-sp.constants';
+import {
+  SP_BUSCA_FRECUENCIA_PLAN_NEXUS,
+  SP_CALCULO_AUTO_NEXUS,
+  SP_GET_SUSTANCIAS_NEXUS,
+} from '../../config/sis2000-sp.constants';
 import { GetPlanesV2Dto } from './dto/get-planes-v2.dto';
 import { GetCotizacionAutoDto } from './dto/get-cotizacion-auto.dto';
 import { CalculatePlanCoberturasDto } from './dto/calculate-plan-coberturas.dto';
@@ -309,6 +313,13 @@ export class ValrepService {
 
   private spGetSustanciasNexusName(): string {
     return process.env.MSSQL_SP_GET_SUSTANCIAS_NEXUS?.trim() || SP_GET_SUSTANCIAS_NEXUS;
+  }
+
+  private spBuscaFrecuenciaPlanNexusName(): string {
+    return (
+      process.env.MSSQL_SP_BUSCA_FRECUENCIA_PLAN_NEXUS?.trim() ||
+      SP_BUSCA_FRECUENCIA_PLAN_NEXUS
+    );
   }
 
   /** Coberturas casco/AP que spCalculoAuto excluye de totalPA (ramo RCV / binacional). */
@@ -653,6 +664,7 @@ export class ValrepService {
   }
 
   async getFrecuencia(cplan: string, cramo?: number) {
+    const spName = this.spBuscaFrecuenciaPlanNexusName();
     try {
       const T = this.db.types;
       const req = this.db.request();
@@ -661,7 +673,8 @@ export class ValrepService {
       req.output('berror', T.Bit, false);
       req.output('mensaje', T.NVarChar(60), '');
 
-      const result = await req.execute('spBuscaFrecuenciaPlan');
+      this.logger.log(`getFrecuencia: EXEC ${spName} cplan=${cplan} cramo=${cramo ?? 'null'}`);
+      const result = await req.execute(spName);
       const rows = (result.recordset ?? []) as {
         cvalor: string;
         xdescripcion: string;

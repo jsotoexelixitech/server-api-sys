@@ -1,5 +1,5 @@
-import { ApiProperty } from '@nestjs/swagger';
-import { IsNotEmpty, IsString, MaxLength } from 'class-validator';
+import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
+import { IsInt, IsNotEmpty, IsOptional, IsString, MaxLength } from 'class-validator';
 
 export class GetFrecuenciaDto {
   @ApiProperty({
@@ -10,4 +10,9 @@ export class GetFrecuenciaDto {
   @IsNotEmpty()
   @MaxLength(10)
   cplan: string;
+
+  @ApiPropertyOptional({ example: 18, description: 'Ramo RCV (opcional, p. ej. 18)' })
+  @IsOptional()
+  @IsInt()
+  cramo?: number;
 }

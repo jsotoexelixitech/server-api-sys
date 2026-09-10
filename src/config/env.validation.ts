@@ -30,6 +30,9 @@ export const envValidationSchema = Joi.object({
    */
   MSSQL_SP_CALCULO_AUTO_NEXUS_OMIT_TASA_PARAMS: Joi.boolean().default(false),
   MSSQL_SP_GET_SUSTANCIAS_NEXUS: Joi.string().default('sp_get_sustancias_nexus'),
+  MSSQL_SP_BUSCA_FRECUENCIA_PLAN_NEXUS: Joi.string().default(
+    'sp_busca_frecuencia_plan_nexus',
+  ),
 
   /** local = INSERT directo Sis2000 (default). external = HTTP La Mundial QA. */
   EMISSION_SOURCE: Joi.string().valid('local', 'external').default('local'),

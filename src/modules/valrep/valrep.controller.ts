@@ -354,7 +354,7 @@ export class ValrepController {
   @ApiResponse({ status: 400, description: 'cplan requerido o inválido' })
   @Api500()
   async getFrecuencia(@Body() body: GetFrecuenciaDto) {
-    const frecuencias = await this.valrepService.getFrecuencia(body.cplan);
+    const frecuencias = await this.valrepService.getFrecuencia(body.cplan, body.cramo);
     return { status: true, data: { frecuencias } };
   }
 

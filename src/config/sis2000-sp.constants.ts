@@ -45,6 +45,9 @@ export const SP_CALCULO_AUTO_NEXUS = 'sp_calculo_auto_nexus';
 /** Catálogo recargo RCV / actividades asociadas (masustac). GET /valrep/recargosRCV. */
 export const SP_GET_SUSTANCIAS_NEXUS = 'sp_get_sustancias_nexus';
 
+/** Frecuencias de pago por plan RCV (POST /valrep/frecuencia). */
+export const SP_BUSCA_FRECUENCIA_PLAN_NEXUS = 'sp_busca_frecuencia_plan_nexus';
+
 // ── Condominio ──────────────────────────────────────────────────────────────
 export const SP_BUSCA_PLANES_CONDOMINIO = 'sp_busca_planes_condominio_nexus';
 export const SP_CALCULO_COTIZACION_CONDOMINIO = 'sp_calculo_cotizacion_condominio_nexus';
