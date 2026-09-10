@@ -10,6 +10,11 @@ import { CambioDatosPolizaDto } from './dto/cambio-datos-poliza.dto';
 import { CambioDatosVehiculoDto } from './dto/cambio-datos-vehiculo.dto';
 import { AsientoContableEndosoDto } from './dto/asiento-contable.dto';
 import { CalcularPrimaEndosoDto } from './dto/calcular-prima-endoso.dto';
+import {
+  AUTO_IFRECUENCIA_CUOTAS,
+  AUTO_IFRECUENCIA_VALUES,
+  AutoIfrecuenciaCode,
+} from '../valrep/constants/auto-ifrecuencia.constants';
 
 @Injectable()
 export class EndososService {
@@ -111,10 +116,14 @@ export class EndososService {
     }
   }
 
+  /**
+   * La frecuencia es la fuente de verdad del fraccionamiento: si no llega, se infiere
+   * de las cuotas usando el mismo mapa que Sis2000 (spGeneraCoberturasYRecibos_Auto_RCV2).
+   */
   private resolveIfrecuencia(
     dto: CrearReciboEndosoDto,
     ncuotas?: number | null,
-  ): string | null {
+  ): AutoIfrecuenciaCode {
     const dtoAny = dto as CrearReciboEndosoDto & {
       cfrecuencia?: string;
       xfrecuencia?: string;
@@ -125,13 +134,15 @@ export class EndososService {
       dtoAny.cfrecuencia ??
       dtoAny.xfrecuencia;
     if (raw != null && String(raw).trim() !== '') {
-      return String(raw).trim().toUpperCase().charAt(0);
+      const code = String(raw).trim().toUpperCase().charAt(0) as AutoIfrecuenciaCode;
+      if (AUTO_IFRECUENCIA_VALUES.includes(code)) return code;
     }
     const n = ncuotas ?? this.resolveNcuotas(dto);
     if (n != null && n >= 12) return 'M';
     if (n != null && n >= 4) return 'T';
-    if (n != null && n >= 2) return 'S';
-    return null;
+    if (n === 3) return 'C';
+    if (n === 2) return 'S';
+    return 'A';
   }
 
   private resolveNcuotas(dto: CrearReciboEndosoDto): number | null {
@@ -141,21 +152,37 @@ export class EndososService {
     return n > 0 ? n : null;
   }
 
+  private resolvePeriodo(dto: CrearReciboEndosoDto): {
+    fanopol: number | null;
+    fmespol: number | null;
+  } {
+    const toInt = (value?: number | null) =>
+      value == null || Number.isNaN(Number(value)) ? null : Math.floor(Number(value));
+    return {
+      fanopol: toInt(dto.fanopol ?? dto.fanopoliza),
+      fmespol: toInt(dto.fmespol ?? dto.fmespoliza),
+    };
+  }
+
   /**
    * Creación de un nuevo recibo de endoso.
    * Plan e ifrecuencia se persisten en adpoliza dentro de sp_crear_recibo_endoso_nexus.
    */
   async crearRecibo(dto: CrearReciboEndosoDto) {
     try {
-      const ncuotas = this.resolveNcuotas(dto);
-      const ifrecuencia = this.resolveIfrecuencia(dto, ncuotas);
+      const ifrecuencia = this.resolveIfrecuencia(dto, this.resolveNcuotas(dto));
+      // El SP genera un recibo por cuota según la frecuencia; reportamos ese mismo número.
+      const ncuotas = AUTO_IFRECUENCIA_CUOTAS[ifrecuencia];
+      const { fanopol, fmespol } = this.resolvePeriodo(dto);
 
       this.logger.log(
-        `crearRecibo cnpoliza=${dto.cnpoliza} ifrecuencia=${ifrecuencia ?? 'null'} ncuotas=${ncuotas ?? 'null'} mprima=${dto.mprima}`,
+        `crearRecibo cnpoliza=${dto.cnpoliza} ifrecuencia=${ifrecuencia} ncuotas=${ncuotas} mprima=${dto.mprima}`,
       );
 
       const req = this.db.request();
       req.input('cnpoliza', T.NVarChar(50), dto.cnpoliza);
+      req.input('fanopol', T.Int, fanopol);
+      req.input('fmespol', T.Int, fmespol);
       req.input('mprima', T.Numeric(18, 2), dto.mprima);
       req.input('fdesde', T.Date, new Date(dto.fdesde));
       req.input('fhasta', T.Date, new Date(dto.fhasta));
@@ -183,8 +210,8 @@ export class EndososService {
         message,
         cnrecibo,
         crecibo,
-        ifrecuencia: ifrecuencia ?? undefined,
-        ncuotas: ncuotas ?? undefined,
+        ifrecuencia,
+        ncuotas,
       };
     } catch (err: any) {
       if (err instanceof BadRequestException) throw err;

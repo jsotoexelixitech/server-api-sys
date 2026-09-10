@@ -65,4 +65,28 @@ export class CrearReciboEndosoDto {
   @IsInt()
   @Min(1)
   cuotas?: number;
+
+  @ApiPropertyOptional({ example: 2026, description: 'Año del período de la póliza a endosar (adpoliza.fanopol)' })
+  @IsOptional()
+  @Type(() => Number)
+  @IsInt()
+  fanopol?: number;
+
+  @ApiPropertyOptional({ example: 2026, description: 'Alias de fanopol' })
+  @IsOptional()
+  @Type(() => Number)
+  @IsInt()
+  fanopoliza?: number;
+
+  @ApiPropertyOptional({ example: 9, description: 'Mes del período de la póliza a endosar (adpoliza.fmespol)' })
+  @IsOptional()
+  @Type(() => Number)
+  @IsInt()
+  fmespol?: number;
+
+  @ApiPropertyOptional({ example: 9, description: 'Alias de fmespol' })
+  @IsOptional()
+  @Type(() => Number)
+  @IsInt()
+  fmespoliza?: number;
 }
