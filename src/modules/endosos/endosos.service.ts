@@ -111,6 +111,55 @@ export class EndososService {
     }
   }
 
+  private resolveIfrecuencia(dto: CrearReciboEndosoDto): string | null {
+    const raw = dto.ifrecuencia ?? dto.frecuencia;
+    if (raw == null || String(raw).trim() === '') return null;
+    return String(raw).trim().toUpperCase().charAt(0);
+  }
+
+  private resolveNcuotas(dto: CrearReciboEndosoDto): number | null {
+    const raw = dto.ncuotas ?? dto.cuotas;
+    if (raw == null || Number.isNaN(Number(raw))) return null;
+    const n = Math.floor(Number(raw));
+    return n > 0 ? n : null;
+  }
+
+  /**
+   * Actualiza ifrecuencia en adpoliza tras un endoso con fraccionamiento.
+   */
+  async actualizarFrecuenciaPoliza(params: {
+    cnpoliza: string;
+    ifrecuencia: string;
+    ncuotas?: number | null;
+    cusuario?: number;
+  }) {
+    try {
+      const req = this.db.request();
+      req.input('cnpoliza', T.NVarChar(50), params.cnpoliza);
+      req.input('ifrecuencia', T.Char(1), params.ifrecuencia);
+      req.input('ncuotas', T.Int, params.ncuotas ?? null);
+      req.input('cusuario', T.Int, params.cusuario || 1);
+      req.output('pSuccess', T.Bit);
+      req.output('pErrorMessage', T.NVarChar(T.MAX));
+
+      const res = await req.execute('sp_actualizar_frecuencia_poliza_endoso_nexus');
+      const success = Boolean(res.output?.['pSuccess']);
+      const message = String(res.output?.['pErrorMessage'] || '');
+
+      if (!success) {
+        throw new BadRequestException(message || 'Error al actualizar frecuencia de pago');
+      }
+
+      return { status: true, message, cnpoliza: params.cnpoliza, ifrecuencia: params.ifrecuencia };
+    } catch (err: any) {
+      if (err instanceof BadRequestException) throw err;
+      this.logger.error(`Error en actualizarFrecuenciaPoliza: ${err.message}`, err.stack);
+      throw new InternalServerErrorException(
+        err.message || 'Fallo al actualizar frecuencia de pago de la póliza.',
+      );
+    }
+  }
+
   /**
    * Creación de un nuevo recibo de endoso.
    */
@@ -138,7 +187,18 @@ export class EndososService {
         throw new BadRequestException(message || 'Error al generar recibo de endoso');
       }
 
-      return { status: true, message, cnrecibo, crecibo };
+      const ifrecuencia = this.resolveIfrecuencia(dto);
+      const ncuotas = this.resolveNcuotas(dto);
+      if (ifrecuencia) {
+        await this.actualizarFrecuenciaPoliza({
+          cnpoliza: dto.cnpoliza,
+          ifrecuencia,
+          ncuotas,
+          cusuario: dto.cusuario,
+        });
+      }
+
+      return { status: true, message, cnrecibo, crecibo, ifrecuencia: ifrecuencia ?? undefined };
     } catch (err: any) {
       if (err instanceof BadRequestException) throw err;
       this.logger.error(`Error en crearRecibo: ${err.message}`, err.stack);
