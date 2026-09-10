@@ -19,7 +19,6 @@ const LOGO_URL =
 const BRAND_BLUE = '#0f3462';
 const BRAND_RED = '#c8102e';
 const MUTED = '#6b7280';
-const HIGHLIGHT = '#fef08a';
 
 function escapeHtml(value: string): string {
   return String(value ?? '')
@@ -31,15 +30,6 @@ function escapeHtml(value: string): string {
 
 function formatEstimado(nombre: string): string {
   return nombre.trim().toUpperCase() || 'CLIENTE';
-}
-
-function highlightWord(text: string, word: string): string {
-  const escaped = escapeHtml(text);
-  const pattern = new RegExp(`(${word.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')})`, 'gi');
-  return escaped.replace(
-    pattern,
-    `<span style="background:${HIGHLIGHT};padding:0 2px;">$1</span>`,
-  );
 }
 
 export function buildFuneralPaymentLinkEmail(
@@ -94,7 +84,7 @@ export function buildFuneralPaymentLinkEmail(
           <td align="center">
             <a href="${escapeHtml(paymentUrl)}" target="_blank" rel="noopener noreferrer"
               style="display:inline-block;background:${BRAND_BLUE};color:#ffffff;text-decoration:none;font-weight:700;font-size:15px;padding:14px 32px;border-radius:6px;">
-              Ir a pagar mi <span style="background:${HIGHLIGHT};color:${BRAND_BLUE};padding:0 3px;">póliza</span>
+              Ir a pagar mi póliza
             </a>
           </td>
         </tr>
@@ -142,10 +132,8 @@ export function buildFuneralPaymentLinkEmail(
           <tr>
             <td style="padding:18px 32px 0;text-align:center;">
               <p style="margin:0;font-size:15px;line-height:1.7;color:${BRAND_BLUE};">
-                <span style="background:${HIGHLIGHT};padding:0 2px;">Tu</span> plan
-                <strong>${highlightWord(planName, 'Funerario')}</strong> está listo.
-                Pulsa el botón para continuar con el
-                <strong><span style="background:${HIGHLIGHT};padding:0 2px;">pago</span></strong> en línea;
+                Tu plan <strong>${escapeHtml(planName)}</strong> está listo.
+                Pulsa el botón para continuar con el <strong>pago</strong> en línea;
                 tus datos ya están cargados.
               </p>
             </td>
@@ -157,12 +145,12 @@ export function buildFuneralPaymentLinkEmail(
                   <tr>
                     <td width="50%" style="padding:18px 16px;text-align:center;vertical-align:top;">
                       <div style="font-size:11px;font-weight:700;letter-spacing:0.12em;text-transform:uppercase;color:${MUTED};margin-bottom:8px;">Producto</div>
-                      <div style="font-size:15px;font-weight:700;color:${BRAND_BLUE};"><span style="background:${HIGHLIGHT};padding:0 2px;">Funerario</span></div>
+                      <div style="font-size:15px;font-weight:700;color:${BRAND_BLUE};">Funerario</div>
                     </td>
                     <td width="1" style="background:#d1d5db;font-size:0;line-height:0;">&nbsp;</td>
                     <td width="50%" style="padding:18px 16px;text-align:center;vertical-align:top;">
                       <div style="font-size:11px;font-weight:700;letter-spacing:0.12em;text-transform:uppercase;color:${MUTED};margin-bottom:8px;">Plan</div>
-                      <div style="font-size:15px;font-weight:700;color:${BRAND_BLUE};">${highlightWord(planName, 'Funerario')}</div>
+                      <div style="font-size:15px;font-weight:700;color:${BRAND_BLUE};">${escapeHtml(planName)}</div>
                     </td>
                   </tr>
                 </table>
