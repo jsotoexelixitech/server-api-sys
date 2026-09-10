@@ -292,61 +292,88 @@ export class PersonasService {
   // ── Planes de personas (spGetPlanesPerFunerario) ───────────────────────────
 
   async getPlanesPer(cramo?: number, _ctipo?: number | null): Promise<PlanPerItem[]> {
+    const ramo = cramo ?? this.defaultRamo;
     try {
-      const T = this.db.types;
-      const ramo = cramo ?? this.defaultRamo;
-      const codes = this.funeralPlanCodes;
-
-      const req = this.db.request();
-      req.input('cramo', T.Int, ramo);
-      req.input(
-        'cplanes',
-        T.NVarChar(200),
-        codes.length > 0 ? codes.join(',') : null,
-      );
-
-      const result = await req.execute('spGetPlanesPerFunerario');
-      const planRows = (result.recordsets?.[0] ??
-        result.recordset ??
-        []) as Record<string, unknown>[];
-      const parentRows = (result.recordsets?.[1] ?? []) as Record<string, unknown>[];
-
-      const parentescosByPlan = new Map<
-        string,
-        PlanPerItem['parentescos']
-      >();
-      for (const row of parentRows) {
-        const cplan = String(row['cplan'] ?? '').trim();
-        if (!cplan) continue;
-        const list = parentescosByPlan.get(cplan) ?? [];
-        list.push({
-          cparen: Number(row['cparen']),
-          xparentesco: String(row['xparentesco'] ?? '').trim(),
-          min_edad: Number(row['min_edad']),
-          max_edad: Number(row['max_edad']),
-        });
-        parentescosByPlan.set(cplan, list);
-      }
-
-      return planRows
-        .map((p) => {
-          const cplan = String(p['cplan'] ?? '').trim();
-          return {
-            cplan,
-            xplan: String(p['xplan'] ?? '').trim(),
-            cramo: Number(p['cramo'] ?? ramo),
-            cmoneda: String(p['cmoneda'] ?? '').trim() || undefined,
-            parentescos: parentescosByPlan.get(cplan) ?? [],
-          };
-        })
-        .filter((p) => p.cplan);
+      return await this.getPlanesPerFromFuneralSp(ramo);
     } catch (err) {
       const msg = err instanceof Error ? err.message : String(err);
-      this.logger.error(`getPlanesPer: ${msg}`);
-      throw new InternalServerErrorException(
-        `Error al obtener los planes de personas: ${msg}`,
-      );
+      this.logger.warn(`getPlanesPer: spGetPlanesPerFunerario falló, fallback por cplan. ${msg}`);
+      return this.getPlanesPerByCodes(ramo);
     }
+  }
+
+  private async getPlanesPerFromFuneralSp(ramo: number): Promise<PlanPerItem[]> {
+    const T = this.db.types;
+    const codes = this.funeralPlanCodes;
+    const req = this.db.request();
+    req.input('cramo', T.Int, ramo);
+    req.input(
+      'cplanes',
+      T.NVarChar(200),
+      codes.length > 0 ? codes.join(',') : null,
+    );
+
+    const result = await req.execute('spGetPlanesPerFunerario');
+    const planRows = (result.recordsets?.[0] ??
+      result.recordset ??
+      []) as Record<string, unknown>[];
+    const parentRows = (result.recordsets?.[1] ?? []) as Record<string, unknown>[];
+
+    const parentescosByPlan = new Map<string, PlanPerItem['parentescos']>();
+    for (const row of parentRows) {
+      const cplan = String(row['cplan'] ?? '').trim();
+      if (!cplan) continue;
+      const list = parentescosByPlan.get(cplan) ?? [];
+      list.push({
+        cparen: Number(row['cparen']),
+        xparentesco: String(row['xparentesco'] ?? '').trim(),
+        min_edad: Number(row['min_edad']),
+        max_edad: Number(row['max_edad']),
+      });
+      parentescosByPlan.set(cplan, list);
+    }
+
+    const planes = planRows
+      .map((p) => {
+        const cplan = String(p['cplan'] ?? '').trim();
+        return {
+          cplan,
+          xplan: String(p['xplan'] ?? '').trim(),
+          cramo: Number(p['cramo'] ?? ramo),
+          cmoneda: String(p['cmoneda'] ?? '').trim() || undefined,
+          parentescos: parentescosByPlan.get(cplan) ?? [],
+        };
+      })
+      .filter((p) => p.cplan);
+    if (!planes.length) {
+      throw new Error('spGetPlanesPerFunerario no devolvió planes');
+    }
+    return planes;
+  }
+
+  private async getPlanesPerByCodes(ramo: number): Promise<PlanPerItem[]> {
+    const planes: PlanPerItem[] = [];
+    for (const cplan of this.funeralPlanCodes) {
+      let parentescos: PlanPerItem['parentescos'] = [];
+      try {
+        const rows = await this.getParenPlanPer(ramo, cplan);
+        parentescos = rows.map((row) => ({
+          cparen: Number(row.cparen),
+          xparentesco: String(row.xparentesco ?? '').trim(),
+          min_edad: Number.NaN,
+          max_edad: Number.NaN,
+        }));
+      } catch {
+        parentescos = [];
+      }
+      planes.push({
+        cplan,
+        xplan: `Plan ${cplan}`,
+        cramo: ramo,
+        parentescos,
+      });
+    }
+    return planes;
   }
 
   async getParenPlanPer(cramo: number, cplan: string) {
