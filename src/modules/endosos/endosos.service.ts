@@ -157,7 +157,14 @@ export class EndososService {
         throw new BadRequestException(message || 'Error al generar recibo de endoso');
       }
 
-      return { status: true, message, cnrecibo, crecibo, ifrecuencia: ifrecuencia ?? undefined };
+      return {
+        status: true,
+        message,
+        cnrecibo,
+        crecibo,
+        ifrecuencia: ifrecuencia ?? undefined,
+        ncuotas: ncuotas ?? undefined,
+      };
     } catch (err: any) {
       if (err instanceof BadRequestException) throw err;
       this.logger.error(`Error en crearRecibo: ${err.message}`, err.stack);

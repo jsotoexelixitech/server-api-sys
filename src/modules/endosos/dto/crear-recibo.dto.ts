@@ -8,7 +8,7 @@ export class CrearReciboEndosoDto {
   @IsString()
   cnpoliza: string;
 
-  @ApiProperty({ example: 87.5, description: 'Prima neta del endoso en divisas (USD)' })
+  @ApiProperty({ example: 87.5, description: 'Prima total del endoso en divisas (USD). El SP la divide entre ncuotas si aplica fraccionamiento.' })
   @Type(() => Number)
   @IsNumber()
   @Min(0)

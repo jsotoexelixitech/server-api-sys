@@ -19,7 +19,7 @@ export class EndosoRecibosController {
   @ApiOperation({
     summary: 'Crear recibo de endoso (alias legacy)',
     description:
-      'Alias de POST /endosos/recibos. Acepta ifrecuencia/ncuotas para actualizar la frecuencia de pago en la póliza.',
+      'Alias de POST /endosos/recibos. Con ncuotas > 1 genera recibos fraccionados en Sis2000 (divide mprima y vigencia). Devuelve el 1er recibo para cobro.',
   })
   @ApiBody({ type: CrearReciboEndosoDto })
   @ApiResponse({
@@ -31,6 +31,7 @@ export class EndosoRecibosController {
         cnrecibo: '18-10002',
         crecibo: 180000002,
         ifrecuencia: 'S',
+        ncuotas: 2,
       },
     },
   })
