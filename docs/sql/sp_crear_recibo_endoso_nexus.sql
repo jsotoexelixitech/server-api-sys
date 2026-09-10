@@ -51,19 +51,21 @@ BEGIN
 
         -- 2. Resolver cantidad de cuotas / recibos a generar
         DECLARE @totalCuotas INT = 1;
+        DECLARE @monthsPerCuota INT;
+        DECLARE @periodMonths INT;
 
         IF @ncuotas IS NOT NULL AND @ncuotas > 1
             SET @totalCuotas = @ncuotas;
         ELSE IF @ifrecuencia IS NOT NULL AND LTRIM(RTRIM(@ifrecuencia)) <> '' AND @ifrecuencia NOT IN ('A', 'E')
         BEGIN
-            DECLARE @monthsPerCuota INT = CASE UPPER(@ifrecuencia)
+            SET @monthsPerCuota = CASE UPPER(@ifrecuencia)
                 WHEN 'M' THEN 1
                 WHEN 'T' THEN 3
                 WHEN 'C' THEN 4
                 WHEN 'S' THEN 6
                 ELSE 12
             END;
-            DECLARE @periodMonths INT = DATEDIFF(MONTH, @fdesde, @fhasta);
+            SET @periodMonths = DATEDIFF(MONTH, @fdesde, @fhasta);
             IF @periodMonths < 1 SET @periodMonths = 1;
             SET @totalCuotas = CEILING(CAST(@periodMonths AS FLOAT) / @monthsPerCuota);
             IF @totalCuotas < 1 SET @totalCuotas = 1;
@@ -90,10 +92,19 @@ BEGIN
         DECLARE @firstCnrecibo NVARCHAR(30) = NULL;
         DECLARE @firstCrecibo NUMERIC(19, 0) = NULL;
         DECLARE @cnreciboRel NVARCHAR(30) = NULL;
+        DECLARE @newCnrecibo NVARCHAR(30);
+        DECLARE @newCrecibo NUMERIC(19, 0);
+        DECLARE @errCounter INT;
+        DECLARE @cuotaPrimaExt NUMERIC(18, 2);
+        DECLARE @cuotaPrimaBs NUMERIC(18, 2);
+        DECLARE @cuotaFdesde DATE;
+        DECLARE @cuotaFhasta DATE;
 
         WHILE @cuotaIdx <= @totalCuotas
         BEGIN
-            DECLARE @newCnrecibo NVARCHAR(30), @newCrecibo NUMERIC(19, 0), @errCounter INT;
+            SET @newCnrecibo = NULL;
+            SET @newCrecibo = NULL;
+            SET @errCounter = 0;
 
             EXEC dbo.sp_calcula_num_contador_nexus
                 @cramo = @cramo,
@@ -117,11 +128,10 @@ BEGIN
                 SET @cnreciboRel = TRIM(@newCnrecibo);
             END
 
-            DECLARE @cuotaPrimaExt NUMERIC(18, 2) = CASE WHEN @cuotaIdx = 1 THEN @firstPrimaExt ELSE @basePrimaExt END;
-            DECLARE @cuotaPrimaBs NUMERIC(18, 2) = ROUND(@cuotaPrimaExt * @ptasamon, 2);
-
-            DECLARE @cuotaFdesde DATE = DATEADD(DAY, (@cuotaIdx - 1) * (@totalDays / @totalCuotas), @fdesde);
-            DECLARE @cuotaFhasta DATE = CASE
+            SET @cuotaPrimaExt = CASE WHEN @cuotaIdx = 1 THEN @firstPrimaExt ELSE @basePrimaExt END;
+            SET @cuotaPrimaBs = ROUND(@cuotaPrimaExt * @ptasamon, 2);
+            SET @cuotaFdesde = DATEADD(DAY, (@cuotaIdx - 1) * (@totalDays / @totalCuotas), @fdesde);
+            SET @cuotaFhasta = CASE
                 WHEN @cuotaIdx = @totalCuotas THEN @fhasta
                 ELSE DATEADD(DAY, @cuotaIdx * (@totalDays / @totalCuotas), @fdesde)
             END;
