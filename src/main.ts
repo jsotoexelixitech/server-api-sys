@@ -18,6 +18,9 @@ import {
   SWAGGER_TAGS,
   createBrowserTagsSorter,
 } from './common/swagger/swagger-tags.constants';
+import { normalizeSwaggerDocumentTags } from './common/swagger/normalize-swagger-tags';
+import { sanitizeSwaggerDocForNestUi } from './common/swagger/sanitize-swagger-for-ui';
+import { stripPasoLabelsFromExternalPersonasDoc } from './common/swagger/strip-external-personas-paso';
 import {
   LA_MUNDIAL_BRAND,
   SWAGGER_BRAND_META,
@@ -30,6 +33,7 @@ import {
 import { readPartnerPackagesConfig } from './partner/partner-env';
 import { OpenApiDocumentStore } from './modules/docs/open-api-document.store';
 import { joinPublicPath } from './common/config/public-path';
+import { nestRequestAuthAls } from './modules/auth/nest-request-auth.context';
 
 function resolveBrandAssetsDir(): string {
   const candidates = [
@@ -98,6 +102,18 @@ async function bootstrap(): Promise<void> {
   app.set('trust proxy', 1);
   app.setGlobalPrefix('api');
 
+  // ALS global: PartnerHost.getConfig('CANAL_VENTA') lee el canal de la API key del request.
+  // Debe ir en Express (app.use), no solo en AuthModule.middleware (no cubre partners).
+  app.use((_req: any, _res: any, next: any) => {
+    nestRequestAuthAls.run({}, () => next());
+  });
+
+  // Permitir acceso a la red privada (Private Network Access / LNA) para evitar bloqueos del navegador
+  app.use((req: any, res: any, next: any) => {
+    res.setHeader('Access-Control-Allow-Private-Network', 'true');
+    next();
+  });
+
   app.enableCors({
     origin: corsOrigin === '*' ? true : corsOrigin.split(','),
     methods: 'GET,HEAD,PUT,PATCH,POST,DELETE,OPTIONS',
@@ -138,16 +154,27 @@ async function bootstrap(): Promise<void> {
       .addBearerAuth();
 
     if (showInternalSwaggerServers) {
-      // Sin prefijo: en :3002 Nest expone /api/… directo (el prefijo lo aplica Apache en HTTPS).
+      const isQaOrigin = publicPaths.origin.includes('nexusqa');
+      const internalHost = isQaOrigin ? '192.168.8.121' : '192.168.8.120';
+      const internalLabel = isQaOrigin
+        ? 'La Mundial — QA interno (121)'
+        : 'La Mundial — desarrollo interno (120)';
       swaggerConfigBuilder
-        .addServer(`http://192.168.8.120:${port}`, 'srv001 — QA interno')
-        .addServer(`http://localhost:${port}`, 'Desarrollo local');
+        .addServer(`http://${internalHost}:${port}`, internalLabel)
+        .addServer(`http://localhost:${port}`, 'Desarrollo local (tu PC)');
     }
     if (publicPaths.prefix) {
-      swaggerConfigBuilder.addServer(publicPaths.publicBaseUrl, 'La Mundial — QA (HTTPS)');
+      const serverLabel = publicPaths.origin.includes('nexusqa')
+        ? 'La Mundial — QA HTTPS (nexusqa.exelixitech.com)'
+        : 'La Mundial — Desarrollo HTTPS (cierrelmds.exelixitech.com)';
+      swaggerConfigBuilder.addServer(publicPaths.publicBaseUrl, serverLabel);
+      bootstrapLog.log(
+        `Swagger server HTTPS: ${publicPaths.publicBaseUrl} (${serverLabel})`,
+      );
     }
 
     const swaggerConfig = swaggerConfigBuilder
+      .addTag(SWAGGER_TAGS.AUTH, SWAGGER_TAG_DESCRIPTIONS[SWAGGER_TAGS.AUTH])
       .addTag(SWAGGER_TAGS.INMA, SWAGGER_TAG_DESCRIPTIONS[SWAGGER_TAGS.INMA])
       .addTag(SWAGGER_TAGS.VALREP, SWAGGER_TAG_DESCRIPTIONS[SWAGGER_TAGS.VALREP])
       .addTag(SWAGGER_TAGS.EMISSION, SWAGGER_TAG_DESCRIPTIONS[SWAGGER_TAGS.EMISSION])
@@ -157,9 +184,17 @@ async function bootstrap(): Promise<void> {
       .addTag(SWAGGER_TAGS.CLIENT, SWAGGER_TAG_DESCRIPTIONS[SWAGGER_TAGS.CLIENT])
       .addTag(SWAGGER_TAGS.PARTNER, SWAGGER_TAG_DESCRIPTIONS[SWAGGER_TAGS.PARTNER])
       .addTag(SWAGGER_TAGS.CONDOMINIO, SWAGGER_TAG_DESCRIPTIONS[SWAGGER_TAGS.CONDOMINIO])
+      .addTag(SWAGGER_TAGS.ENDOSOS, SWAGGER_TAG_DESCRIPTIONS[SWAGGER_TAGS.ENDOSOS])
+      .addTag(
+        SWAGGER_TAGS.PRODUCT_EMISSION,
+        SWAGGER_TAG_DESCRIPTIONS[SWAGGER_TAGS.PRODUCT_EMISSION],
+      )
+      .addTag(SWAGGER_TAGS.REPORTES, SWAGGER_TAG_DESCRIPTIONS[SWAGGER_TAGS.REPORTES])
       .build();
 
     const document = SwaggerModule.createDocument(app, swaggerConfig);
+    normalizeSwaggerDocumentTags(document);
+    stripPasoLabelsFromExternalPersonasDoc(document);
     document.security = [{ bearer: [] }, { apikey: [] }];
     for (const pathKey of Object.keys(document.paths ?? {})) {
       if (pathKey.includes('/auth/token') || pathKey.includes('/auth/refresh')) {
@@ -172,7 +207,12 @@ async function bootstrap(): Promise<void> {
     }
     app.get(OpenApiDocumentStore).setDocument(document);
 
-    SwaggerModule.setup(swaggerPath, app, document, {
+    // Copia sanitizada solo para swagger-ui-init.js (Nest String.replace + $')
+    const documentForUi = sanitizeSwaggerDocForNestUi(
+      JSON.parse(JSON.stringify(document)),
+    );
+
+    SwaggerModule.setup(swaggerPath, app, documentForUi, {
       customSiteTitle: SWAGGER_BRAND_META.siteTitle,
       customfavIcon: brandFaviconUrl,
       customCssUrl: LA_MUNDIAL_BRAND.fontsCss,
@@ -187,14 +227,14 @@ async function bootstrap(): Promise<void> {
      Usar rutas absolutas; fallback desde pathname si falta PUBLIC_API_PREFIX en el servidor. */
   var NEXUS_BRAND_LOGO = '${brandLogoUrl}';
   var NEXUS_BRAND_FAVICON = '${brandFaviconUrl}';
-  function nexusBrandAsset(rel) {
+  function lmBrandAsset(rel) {
     var path = window.location.pathname.replace(/\\/docs\\/?$/, '');
     if (path) return path + '/assets/' + rel;
     return '/assets/' + rel;
   }
   (function fixBrandAssets() {
     document.querySelectorAll('link[rel="icon"], link[rel="shortcut icon"]').forEach(function(link) {
-      link.href = nexusBrandAsset('brand/favicon-64.png');
+      link.href = lmBrandAsset('brand/favicon-64.png');
     });
   })();
 
@@ -270,7 +310,7 @@ async function bootstrap(): Promise<void> {
 
     nav.innerHTML =
       '<div class="sb-brand">'
-      + '<img class="sb-logo" src="' + nexusBrandAsset('brand/logo-lamundial-sidebar.png') + '" alt="${LA_MUNDIAL_BRAND.name}" />'
+      + '<img class="sb-logo" src="' + lmBrandAsset('brand/logo-lamundial-sidebar.png') + '" alt="${LA_MUNDIAL_BRAND.name}" />'
       + '<p class="sb-tagline">${LA_MUNDIAL_BRAND.tagline}</p>'
       + '</div>'
       + '<div class="sb-search-wrap">'
@@ -496,6 +536,7 @@ async function bootstrap(): Promise<void> {
         .sb-logo {
           width: 100%; max-width: 168px; height: auto;
           object-fit: contain; flex-shrink: 0;
+          image-rendering: -webkit-optimize-contrast;
         }
         .sb-tagline {
           margin: 10px 0 0; padding: 0;

@@ -36,8 +36,8 @@ export class GetPlanesV2Dto {
   cusuario: string;
 
   @ApiPropertyOptional({
-    example: 'N',
-    description: 'Indicador de placa nacional (B = nacional)',
+    example: 'B',
+    description: 'Indicador de placa: N=nacional, E=extranjera, B=binacional (activa bnacional en spBuscaPlan).',
   })
   @IsOptional()
   @IsString()

@@ -1,0 +1,403 @@
+<html>
+
+<head>
+	<title>{{titlepdf}}</title>
+	<style type="text/css">
+		table {
+			width: 100%;
+		}
+		p {
+			font-size: 14px;
+			text-align: justify;
+		}
+		b,
+		th {
+			font-size: 13px;
+		}
+
+		.title {
+			text-align: center;
+			font-style: none;
+			line-height: 1.2;
+		}
+
+		.subtitle {
+			background-color: #ccc;
+			width: 100%;
+			text-align: center;
+			font-size: 10px;
+			font-weight: bold;
+			line-height: 2;
+		}
+
+		th.subtitle {
+			background-color: #ccc;
+			width: 100%;
+			text-align: center;
+			font-size: 16px;
+			font-weight: bold;
+			line-height: 2;
+		}
+
+		.section {
+			font-size: 8px;
+			text-align: left;
+			line-height: 1.5;
+		}
+
+		.section th {
+			font-size: 8px;
+			text-align: left;
+			line-height: 1.5;
+		}
+
+		.section td b {
+			font-size: 8px;
+			text-align: left;
+			line-height: 1.5;
+		}
+
+		table.declaracion {
+			border: 1px solid black;
+			font-size: 10px;
+			text-align: left;
+			line-height: 1.5;
+			font-weight: bold;
+		}
+
+		
+
+		ul li {
+			list-style-type: none;
+		}
+
+		.bold {
+			font-weight: bold;
+		}
+
+		.right {
+			text-align: right;
+		}
+
+		.center_description {
+			text-align: center;
+			font-style: none;
+		}
+
+		.justify_description {
+			text-align: justify;
+			font-style: none;
+		}
+		.line10 {
+			line-height: 1;
+		}
+		.line12 {
+			line-height: 1.2;
+		}
+		.line15 {
+			line-height: 1.5;
+		}
+
+		.size8 {
+			font-size: 8px;
+		}
+
+		.size10 {
+			font-size: 10px;
+		}
+
+		.size12 {
+			font-size: 12px;
+		}
+	</style>
+</head>
+
+<body>
+	<h5 class="title">{{title}}</h5>
+		 </tbody>
+		 </table>
+		</div>
+	<div class="subtitle">DATOS DEL RECIBO</div>
+	<table>
+		<thead>
+			<tr>
+				<td class="section bold">Nro. Póliza</td>
+				
+				<td class="section bold">Descripción del Ramo:</td>
+				<td class="section bold">Fecha Emisión Recibo:</td>
+				<td class="section bold">Fecha desde Póliza:</td>
+				<td class="section bold">Fecha hasta Póliza:</td>
+				<td class="section bold">C.I./R.I.F. Tomador:</td>
+				<td class="section bold">Tomador:</td>
+				<td class="section bold">C.I./R.I.F. Asegurado:</td>
+				<td class="section bold">Asegurado:</td>
+				
+				
+				<td class="section bold">Moneda:</td>
+				<td class="section bold">Nro. Recibo:</td>
+				<td class="section bold">Fecha desde Recibo:</td>
+				<td class="section bold">Fecha hasta Recibo:</td>
+				
+				<td class="section bold">Estatus Recibo:</td>
+				<td class="section bold">Suma Asegurada:</td>
+				<td class="section bold">Suma Asegurada Ext:</td>
+				<td class="section bold">Monto Recibo:</td>
+				<td class="section bold">Monto Recibo Ext:</td>
+				<td class="section bold">Tasa:</td>
+				<td class="section bold">Vigencia:</td>
+				<td class="section bold">Sucursal:</td>
+				<td class="section bold">CProductor:</td>
+				
+				
+				<td class="section bold">Intermediario</td>
+			</tr>
+		</thead>
+		<tbody>
+			{{store_procedure}}
+		</tbody>
+	</table>
+	<!-- <table class="section">
+			<tr>
+				<td class="bold">C.I. TITULAR:</td>
+				<td>{{xcedula_tomador}}</td>
+				<td class="bold">TITULAR:</td>
+				<td width="12%">{{xtomador}}</td>
+				<td class="bold" >C.I.ASEGURADO:</td>
+				<td>{{xcedula_asegurado}}</td>
+				<td class="bold">ASEGURADO:</td>
+				<td>{{xasegurado}}</td>
+			</tr>
+			<tr>
+				<td class="bold">MONEDA:</td>
+				<td>{{xmoneda}}</td>
+				<td class="bold">RECIBO:</td>
+				<td></td>
+				<td class="bold">FECHA RECIBO:</td>
+				<td>{{fdesde_pol}}</td>
+				<td class="bold">FECHA RECIBO:</td>
+				<td>{{fhasta_pol}}</td>
+			</tr>
+			<tr>
+				<td class="bold">INTERMEDIARIO:</td>
+				<td>{{xintermediario}}</td>
+				<td class="bold">SUCURSAL</td>
+				<td>{{xsucursal}}</td>
+				<td class="bold">ESTADO DEL RECIBO:</td>
+				<td>{{xzona_postal_asegurado}}</td>
+				<td class="bold">DESCRIPCIÓN DEL ESTADO:</td>
+				<td>{{xtelefono_asegurado}}</td>
+			</tr>
+			<tr>
+				<td class="bold">SUMA ASEGURADA:</td>
+				<td>{{xciudad_asegurado}}</td>
+				<td class="bold">MONEDA EXT.:</td>
+				<td>{{xestado_asegurado}}</td>
+				<td class="bold">MONTO RECIBO:</td>
+				<td>{{xzona_postal_asegurado}}</td>
+				<td class="bold">MONTO MONEDA EXT.:</td>
+				<td></td>
+			</tr>
+			<tr>
+				
+				<td class="bold">TASA:</td>
+				<td>36,50</td>
+				<td class="bold">VIGENCIA:</td>
+				<td>{{xestado_asegurado}}</td>
+				<td class="bold">CPRODUCTOR.:</td>
+				<td></td>
+				<td class="bold"></td>
+				<td></td>
+			</tr>
+		</tbody>
+	</table>
+	
+	<div class="subtitle">BENEFICIARIOS</div>
+	<table class="section line10">
+	<thead>
+			<tr>
+				<th class="bold"width="15%">NOMBRE:</th>
+				<th>PRUEBA PRUEBA</th>
+				<th class="bold"width="10%">C.I./R.I.F.:</th>
+				<th width="10%">10001</th>
+				<th class="bold"width="15%">PARENTESCO:</th>
+				<th>Hijo (a)</th>
+				<th class="bold"width="15%">F. NACIMIENTO:</th>
+				<th>01/01/1996</th>
+				<th class="bold"width="15%">SEXO:</th>
+				<th>MASCULINO</th>
+			</tr>
+		</thead>
+	</table> -->
+	<!-- <div class="subtitle">ASEGURADOS - COBERTURA</div> 
+	<table class="section">
+		<tbody>
+			<tr>
+				<td class="bold" width="12%">Nombre:</td>
+				<td width="28%">HON ,ANA</td>
+				<td class="bold" width="10%">V-9972603</td>
+				<td class="bold" width="9%">TITULAR</td>
+				<td class="bold" width="9%">F. Nacimiento:</td>
+				<td>29/10/1971</td>
+				<td class="bold">SEXO:</td>
+				<td>FEMENINO</td>
+				<td class="bold">E. Civil:</td>
+				<td>SOLTERO</td>
+			</tr>
+			{{asegurados}}
+		</tbody>
+	</table>
+	<div class="subtitle">COBERTURAS CONTRATADAS</div>
+	<table class="section line10">
+		<thead>
+			<tr>
+				<th width="70%">COBERTURAS:</th>
+				<th width="15%" style="text-align:right">SUMA ASEGURADA</th>
+				<th width="15%" style="text-align:right">PRIMA</th>
+			</tr>
+		</thead>
+		<tbody> -->
+			<!-- {{coberturas}} -->
+			<!-- <tr>&nbsp;</tr>
+			<tr>
+				<td class="bold">EMERGENCIAS MÉDICAS</td>
+				<td class="bold right">20.000,00</td>
+				<td class="bold right">1.020,00</td>
+			</tr>
+			<tr>&nbsp;</tr>
+			<tr>
+				<td class="bold">TELEMEDICINA</td>
+				<td class="bold right">0,00</td>
+				<td class="bold right">268,00</td>
+			</tr>
+			<tr>&nbsp;</tr>
+			<tr>
+				<td class="bold">Total</td>
+				<td class="right"></td>
+				<td class="bold right">1.288,00</td>
+			</tr>
+		</tbody>
+	</table> -->
+	<!-- <div class="center_description bold size8"><br>La prima no incluye el Impuesto del 3 del IGTF, el cual debe pagar en
+		caso que su moneda de pago sea diferente de Bolívares<br><br></div> -->
+	
+	<!-- <div class="subtitle">RECIBOS DE PRIMAS - FRACCIONAMIENTO</div>
+	<table class="section line10">
+		<thead>
+			<tr>
+				<th width="15%">NO. RECIBO</th>
+				<th width="15%" style="text-align:right">TIPO DE RECIBO</th>
+				<th width="15%" style="text-align:right">FECHA DESDE</th>
+				<th width="15%" style="text-align:right">FECHA HASTA</th>
+				<th width="15%" style="text-align:right">FECHA COBRO</th>
+				<th width="10%" style="text-align:right">MONEDA</th>
+				<th width="15%" style="text-align:right">PRIMA</th>
+			</tr>
+		</thead> -->
+		<!-- <thead>
+			<tr>
+				<th width="15%">1000000105</th>
+				<th width="15%" style="text-align:left">Primer Año (Nuevo)</th>
+				<th width="15%" style="text-align:right">22/01/2024</th>
+				<th width="15%" style="text-align:right">22/01/2025</th>
+				<th width="15%" style="text-align:right"></th>
+				<th width="10%" style="text-align:center">$</th>
+				<th width="15%" style="text-align:right">56,49</th>
+			</tr>
+		</thead>
+		<thead>
+			<tr>
+				<th width="15%">1000000106</th>
+				<th width="15%" style="text-align:left">Adicional</th>
+				<th width="15%" style="text-align:right">22/01/2024</th>
+				<th width="15%" style="text-align:right">22/01/2025</th>
+				<th width="15%" style="text-align:right"></th>
+				<th width="10%" style="text-align:center">$</th>
+				<th width="15%" style="text-align:right">36,60</th>
+			</tr>
+		</thead> -->
+		
+		<tbody>
+			<thead>
+			
+			</thead>
+		</tbody>
+	</table>
+	<!-- <tbody> 
+			{{recibos}}
+		</tbody> -->
+	</table>
+	<!-- <div class="subtitle">DECLARACIÓN DE FÉ</div>
+	<div class="justify_description bold size10">
+		En mi carácter de Tomador de la Póliza contratada con La Mundial de Seguros, C.A., bajo Fe de Juramento
+		certifico que el dinero utilizado para el pago de la prima de la referida Póliza, proviene de fuente lícita; por
+		lo tanto no tiene relación alguna con dinero, capitales, bienes, haberes, valores o títulos producto de
+		actividades o acciones a que se refiere el Articulo 37 de la Ley Orgánica sobre Sustancias Estupefacientes y
+		Psicotrópicas.
+	</div> -->
+	<!-- <div style="display: inline-block">
+
+		<p class="subtitle">POR EL TOMADOR</p>
+		<p class="subtitle">POR LA MUNDIAL DE SEGUROS</p>
+	</div> -->
+	<!-- <table>
+		<thead>
+			<tr>
+				<th class="subtitle">POR EL TOMADOR</th>
+				<th class="subtitle">POR LA MUNDIAL DE SEGUROS</th>
+			</tr>
+		</thead>
+	</table> -->
+	<!-- <table class="declaracion">
+		<tbody>
+			<tr>
+				<td width="40%" style="border-right:1px solid black">Nombre Apellido / Denominación Social:</td>
+				<td width="30%">Representante:</td>
+				<td rowspan="5" style="text-align:center;"><img src="img\firma_sello_la_mundial.png" width="20%"></td>
+			</tr>
+			<tr>
+				<td style="border-right:1px solid black">HON, ANA</td>
+				<td>Nombre y Apellido</td> 
+				 <td></td> 
+			</tr>
+			<tr>
+				<td style="border-right:1px solid black">C.I.RIF: V-9972603</td>
+				<td></td> 
+				<td></td> 
+			</tr>
+			<tr>
+				<td style="border-right:1px solid black"></td>
+				<td></td>
+				<td></td>
+			</tr>
+			<tr>
+				<td style="border-right:1px solid black">Firma:</td>
+				<td>Firma Autorizada:</td>
+				<td></td>
+			</tr>
+			<tr>
+				<td style="border-right:1px solid black"></td>
+				<td></td>
+				<td></td>
+			</tr>
+		</tbody>
+	</table>  -->
+	 <div class="center_description bold size8" style="margin: 10px;">En Caracas a los {{date_day}} dias del mes de {{fmespol}} del {{date_year}}
+
+	 </div>
+	<!-- <div class="justify_description bold size10 line12"> 
+		Obtenga y conozca el contenido de las Condiciones Generales, Condiciones Particulares y Anexos correspondientes
+		a las coberturas descritas en este Cuadro Recibo de la Póliza, accediendo a nuestra página web
+		www.lamundialdeseguros.com
+		<br><br>Aprobado por la Superintendencia de la Actividad Aseguradora mediante Oficio N° de fecha El Tomador
+		Asegurado o Beneficiario de las Pólizas, que sienta vulneración de sus derechos, y requiera presentar cualquier
+		denuncia, queja, reclamo o solicitud de asesoría sugerida con ocasión de este contrato de seguros; puede acudir
+		a la Oficina de la Defensor del Asegurado de la Superintendencia de la Actividad Aseguradora, o comunicarlo a
+		través de la Pagina web: https://www.lamundialdeseguros.com
+	</div>   -->
+	<br>
+	<!-- <div class="center_description bold size8" style="color: red">CLIENTE</div>-->
+	<!-- <pagebreak />  -->
+	
+</body>
+
+</html>

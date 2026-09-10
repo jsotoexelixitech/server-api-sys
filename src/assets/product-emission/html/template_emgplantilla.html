@@ -1,0 +1,87 @@
+<html>
+
+<head>
+  <title>{{title}}</title>
+  <link rel="stylesheet" href="../templates/style.css">
+
+</head>
+
+<body>
+
+  <h5 class="title">&nbsp;</h5>
+  <!-- Puedes insertar este bloque HTML donde lo necesites -->
+  <div style="width: 100%; font-family: Arial, sans-serif; font-size: 12pt;">
+
+    <h2 class="title" style="text-align: center; font-size: 14pt; font-weight: bold; margin-bottom: 8px;">
+      PÓLIZA DE SEGURO DE SALUD - EMERGENCIAS MÉDICAS<br>{{titulo_pdf}}
+
+    </h2>
+    <!-- <h3 style="text-align: center; font-size: 13pt; font-weight: bold; margin-bottom: 8px;">
+      ANEXO DE EXCLUSIÓN DE COBERTURA<br>ASISTENCIA PRIMARIA DE SALUD
+    </h3> -->
+
+    <p style="text-align: justify; margin-bottom: 8px;">
+      Para ser adherido y formar parte integrante de la Póliza de Seguro de Salud-Emergencias Médicas
+      <u>{{cnpoliza}}</u> contratada por <u>{{xtomador}}</u> emitida a favor de
+      <u>{{xasegurado}}</u> Cédula de Identidad N°.<u>{{casegurado}}</u> bajo los siguientes términos y condiciones: 
+    </p>
+
+    <!-- <p style="font-weight: bold; margin-bottom: 2px;">CLÁUSULA 1. OBJETO DEL ANEXO</p> -->
+    <p style="text-align: justify; margin-bottom: 8px;">
+      Este anexo modifica la <b>Cláusula 3 (Patologías Amparadas)</b> de las Condiciones Particulares para incluir cobertura a enfermedades No Nombradas, la cual se descontará de la suma asegurada contratada en la póliza con un límite máximo anual.
+    </p>
+
+    <p style="margin-bottom: 8px;">
+      Límite de coberturas:
+    </p>
+    <p style="font-weight: bold; margin-bottom: 12px;">
+      {{sumaText}}
+    </p>
+
+    <p style="text-align: justify; margin-bottom: 8px;">
+      El límite de cobertura aplica por año póliza. Cada pago que se realice por una enfermedad No Nombrada reducirá la suma asegurada disponible. Por lo tanto, la responsabilidad de la aseguradora para futuros reclamos dentro del mismo año de póliza estará limitada al saldo restante.
+    </p>
+
+    <p style="text-align: justify; margin-bottom: 8px;">
+      Todos los demás términos y condiciones aplicables a este Anexo se regirán por lo establecido en las Condiciones Generales y Particulares de la Póliza. En caso de contradicción entre ambos textos, prevalecerá lo establecido en este anexo
+    </p>
+
+    <p style="margin-bottom: 24px;">
+      Emitido en <u>{{fanopol_d}}</u> a los <u>{{fdiapol}}</u> días del mes de <u>{{fmespol_d}}</u>.
+    </p>
+
+    <table style="width: 100%; margin-bottom: 8px;">
+      <tr>
+        <td style="width: 50%; text-align: center; vertical-align: bottom;">
+          <span style="display: inline-block; width: 90%;">&nbsp;</span><br>
+          <b>___________________________</b>
+        </td>
+        <td style="width: 50%; text-align: center; vertical-align: bottom;">
+          <span style="display: inline-block; width: 90%;">&nbsp;</span><br>
+          <b>___________________________</b>
+        </td>
+      </tr>
+      <tr>
+        <td style="width: 50%; text-align: center; vertical-align: bottom;">
+          <span style="display: inline-block; width: 90%;">&nbsp;</span><br>
+          <b>POR EL ASEGURADOR</b>
+        </td>
+        <td style="width: 50%; text-align: center; vertical-align: bottom;">
+          <span style="display: inline-block; width: 90%;">&nbsp;</span><br>
+          <b>EL TOMADOR</b>
+        </td>
+      </tr>
+    </table>
+
+    <p style="font-size: 9pt; text-align: center; margin-top: 25px;">
+      <!-- Aprobado por la Superintendencia de la Actividad Aseguradora mediante Providencia No. _____ de fecha 26/09/2022. -->
+      <!-- La Mundial de Seguros, C.A, Inscrita en la Superintendencia de la Actividad Aseguradora Bajo El No.73. -->
+      <!-- <br><br> -->
+       <br>
+      <!-- APROBADO MEDIANTE OFICIO FSAA-1-1-8904-2022 de fecha 26/09/2022. -->
+    </p>
+  </div>
+
+</body>
+
+</html>

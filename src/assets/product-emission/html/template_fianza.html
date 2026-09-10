@@ -1,0 +1,324 @@
+<html>
+
+<head>
+    <title>{{titulo_pdf}}</title>
+    <link rel="stylesheet" href="templates/style.css">
+</head>
+
+<body>
+    <h5 class="title">{{title}}</h5>
+    <div class="subtitle">DATOS DEL TOMADOR - ASEGURADO</div>
+    {{section_tomador_asegurado}}
+    <div class="subtitle">DATOS DE LA PÓLIZA</div>
+    {{section_poliza}}
+    <div class="subtitle">DESCRIPCIÓN DEL BIEN ASEGURADO</div> <!-- foreach ben -->
+    {{section_bien_asegurado}}
+    <div class="subtitle">COBERTURAS</div>
+    {{section_coberturas}}
+    <div class="subtitle">BENEFICIARIOS</div>
+    {{section_beneficiarios}}
+    <div class="subtitle">RECIBOS DE PRIMAS - FRACCIONAMIENTO</div>
+    {{section_recibos}}
+    <div class="subtitle">DECLARACIÓN DE FÉ</div>
+    {{section_declaracion}}
+    <table>
+        <thead>
+            <tr>
+                <th class="subtitle">POR EL TOMADOR</th>
+                <th class="subtitle">POR LA MUNDIAL DE SEGUROS</th>
+            </tr>
+        </thead>
+    </table>
+    <table class="declaracion" style="line-height: 0.2; font-size: 8px">
+        <tbody>
+            <tr>
+                <td width="40%" class="bold" style="border-right:1px solid black">Nombre Apellido / Denominación
+                    Social:
+                </td>
+                <td width="20%" class="bold">Representante:</td>
+                <td rowspan="5" style="text-align:center;"><img src="img\firma_sello_la_mundial.png" width="14%">
+                </td>
+            </tr>
+            <tr>
+                <td style="border-right:1px solid black">{{xtomador}}</td>
+                <td>Humberto Martínez</td>
+                <!-- <td></td> -->
+            </tr>
+            <tr>
+                <td style="border-right:1px solid black">{{xcedula_tomador}}</td>
+                <td></td>
+                <!-- <td></td> -->
+            </tr>
+            <tr>
+                <td style="border-right:1px solid black"></td>
+                <td></td>
+                <td></td>
+            </tr>
+            <tr>
+                <td style="border-right:1px solid black" class="bold">Firma:</td>
+                <td class="bold">Firma Autorizada:</td>
+                <td></td>
+            </tr>
+            <tr>
+                <td style="border-right:1px solid black"></td>
+                <td></td>
+                <td></td>
+            </tr>
+        </tbody>
+    </table>
+    <div class="center_description bold size8" style="margin: 10px;">En Caracas a los {{dia_emision}} dias del mes
+        de
+        {{fmespol}} del {{fanopol}}</div>
+    <div class="justify_description bold size10 line12">
+        Obtenga y conozca el contenido de las Condiciones Generales, Condiciones Particulares y Anexos
+        correspondientes
+        a las coberturas descritas en este Cuadro Recibo de la Póliza, accediendo a nuestra página web
+        www.lamundialdeseguros.com
+        <br><br>Aprobado por la Superintendencia de la Actividad Aseguradora mediante Oficio N° de fecha. El Tomador
+        Asegurado o Beneficiario de las Pólizas, que sienta vulneración de sus derechos, y requiera presentar
+        cualquier
+        denuncia, queja, reclamo o solicitud de asesoría sugerida con ocasión de este contrato de seguros; puede
+        acudir
+        a la Oficina de la Defensor del Asegurado de la Superintendencia de la Actividad Aseguradora, o comunicarlo
+        a
+        través de la Pagina web: https://www.lamundialdeseguros.com
+    </div>
+    <br>
+    <div class="center_description bold size8" style="color: red">CLIENTE</div>
+
+    <pagebreak />
+
+    <h5 class="title">{{title}}</h5>
+    <div class="subtitle">DATOS DEL TOMADOR - ASEGURADO</div>
+    <table class="section line08">
+        <!-- Nota: Todas las filas deben contener una suma de 8 columnas. 
+		La suma de los width deben dar un 100%.
+		Al afectar el width de la primera columna, afecta las consecuentes.
+		Los colspan definen la cantidad de columnas que ocupa ese campo -->
+        <tbody>
+            <tr>
+                <td class="bold" width="12%">TOMADOR:</td>
+                <td width="25%">{{xtomador}}</td>
+                <td class="bold" width="8%">C.I. / R.I.F.:</td>
+                <td width="20%">{{xcedula_tomador}}</td>
+                <td class="bold" width="10%">RAMO PÓLIZA:</td>
+                <td colspan="2">{{xramo}}</td>
+                <td></td>
+            </tr>
+            <tr>
+                <td class="bold">DIRECCIÓN:</td>
+                <td>{{xdireccion_tomador}}</td>
+                <td class="bold">EMAIL:</td>
+                <td>{{xcorreo_tomador}}</td>
+                <td class="bold">PÓLIZA:</td>
+                <td colspan="2">{{cpoliza}}</td>
+                <td></td>
+            </tr>
+            <tr>
+                <td class="bold">CIUDAD:</td>
+                <td>{{xciudad_tomador}}</td>
+                <td class="bold">ESTADO:</td>
+                <td>{{xestado_tomador}}</td>
+                <td class="bold">ZONA POSTAL:</td>
+                <td>{{xzona_postal_tomador}}</td>
+                <td class="bold">TELÉFONO:</td>
+                <td>{{xtelefono_tomador}}</td>
+            </tr>
+            <tr>
+                <td class="bold">ASEGURADO:</td>
+                <td>{{xasegurado}}</td>
+                <td class="bold">C.I./R.I.F.:</td>
+                <td>{{xcedula_asegurado}}</td>
+                <td></td>
+                <td></td>
+                <td></td>
+                <td></td>
+            </tr>
+            <tr>
+                <td class="bold">DIRECCIÓN:</td>
+                <td>{{xdireccion_asegurado}}</td>
+                <td class="bold">EMAIL:</td>
+                <td colspan="2">{{xcorreo_asegurado}}</td>
+                <td></td>
+                <td></td>
+                <td></td>
+                <td></td>
+            </tr>
+            <tr>
+                <td class="bold">CIUDAD:</td>
+                <td>{{xciudad_asegurado}}</td>
+                <td class="bold">ESTADO:</td>
+                <td>{{xestado_asegurado}}</td>
+                <td class="bold">ZONA POSTAL:</td>
+                <td>{{xzona_postal_asegurado}}</td>
+                <td class="bold">TELÉFONO:</td>
+                <td>{{xtelefono_asegurado}}</td>
+            </tr>
+        </tbody>
+    </table>
+    <div class="subtitle">DATOS DE LA PÓLIZA</div>
+    <table class="section line08">
+        <tbody>
+            <tr>
+                <td class="bold" width="12%">FECHA EMISIÓN:</td>
+                <td width="28%">{{femision_pol}}</td>
+                <td class="bold" width="15%">VIGENCIA:</td>
+                <td>{{fdesde_pol}} - {{fhasta_pol}}</td>
+                <td class="bold">MONEDA:</td>
+                <td colspan="2">{{xmoneda}}</td>
+            </tr>
+            <tr>
+                <td class="bold">SUCURSAL</td>
+                <td>{{xsucursal}}</td>
+                <td class="bold">CANAL DE VENTA:</td>
+                <td>{{xcanal_venta}}</td>
+                <td class="bold">FRECUENCIA DE PAGO:</td>
+                <td colspan="2">{{xfrecuencia}}</td>
+            </tr>
+            <tr>
+                <td class="bold">INTERMEDIARIO:</td>
+                <td colspan="3">{{xintermediario}}</td>
+                <!-- <td></td> -->
+                <!-- <td></td> -->
+                <td class="bold"></td>
+                <td></td>
+                <td></td>
+                <td></td>
+            </tr>
+        </tbody>
+    </table>
+    <div class="subtitle">ASEGURADOS</div> <!-- foreach ben -->
+    <div style="height: 60px">
+        <table class="section line08">
+            <tbody>
+                {{asegurados}}
+            </tbody>
+        </table>
+    </div>
+    <div class="subtitle">COBERTURAS</div>
+    <div style="height: 100px">
+        <table class="section line08 table_coberturas">
+            <thead>
+                <tr>
+                    <th width="70%"></th>
+                    <th width="15%" style="text-align:right">SUMA ASEGURADA</th>
+                    <th width="15%" style="text-align:right">PRIMA</th>
+                </tr>
+            </thead>
+            <tbody>
+                {{coberturas_fianzas}}
+            </tbody>
+        </table>
+    </div>
+    <div class="center_description bold size8 mt8">La prima no incluye el Impuesto del 3 del IGTF, el cual debe pagar
+        en
+        caso que su moneda de pago sea diferente de Bolívares<br><br></div>
+    <div class="subtitle">BENEFICIARIOS</div>
+    <div style="height: 50px">
+        <table class="section line04">
+            <thead>
+                {{beneficiarios}}
+            </thead>
+        </table>
+    </div>
+
+    <div class="subtitle">RECIBOS DE PRIMAS - FRACCIONAMIENTO</div>
+    <div style="height: 100px">
+        <table class="section line04">
+            <thead>
+                <tr>
+                    <th width="15%">NO. RECIBO</th>
+                    <th width="15%" style="text-align:right">TIPO DE RECIBO</th>
+                    <th width="15%" style="text-align:right">FECHA DESDE</th>
+                    <th width="15%" style="text-align:right">FECHA HASTA</th>
+                    <th width="15%" style="text-align:right">FECHA COBRO</th>
+                    <th width="10%" style="text-align:right">MONEDA</th>
+                    <th width="15%" style="text-align:right">PRIMA</th>
+                </tr>
+            </thead>
+            <tbody>
+                {{recibos}}
+            </tbody>
+        </table>
+    </div>
+    <div class="subtitle">DECLARACIÓN DE FÉ</div>
+    <div class="justify_description bold size10">
+        En mi carácter de Tomador de la Póliza contratada con La Mundial de Seguros, C.A., bajo Fe de Juramento
+        certifico que el dinero utilizado para el pago de la prima de la referida Póliza, proviene de fuente lícita;
+        por
+        lo tanto no tiene relación alguna con dinero, capitales, bienes, haberes, valores o títulos producto de
+        actividades o acciones a que se refiere el Articulo 37 de la Ley Orgánica sobre Sustancias Estupefacientes y
+        Psicotrópicas.
+    </div>
+    <!-- <div style="display: inline-block">
+
+		<p class="subtitle">POR EL TOMADOR</p>
+		<p class="subtitle">POR LA MUNDIAL DE SEGUROS</p>
+	</div> -->
+    <table>
+        <thead>
+            <tr>
+                <th class="subtitle">POR EL TOMADOR</th>
+                <th class="subtitle">POR LA MUNDIAL DE SEGUROS</th>
+            </tr>
+        </thead>
+    </table>
+    <table class="declaracion" style="line-height: 0.2; font-size: 8px">
+        <tbody>
+            <tr>
+                <td width="40%" class="bold" style="border-right:1px solid black">Nombre Apellido / Denominación
+                    Social:
+                </td>
+                <td width="20%" class="bold">Representante:</td>
+                <td rowspan="5" style="text-align:center;"><img src="img\firma_sello_la_mundial.png" width="14%">
+                </td>
+            </tr>
+            <tr>
+                <td style="border-right:1px solid black">{{xtomador}}</td>
+                <td>Humberto Martínez</td>
+                <!-- <td></td> -->
+            </tr>
+            <tr>
+                <td style="border-right:1px solid black">{{xcedula_tomador}}</td>
+                <td></td>
+                <!-- <td></td> -->
+            </tr>
+            <tr>
+                <td style="border-right:1px solid black"></td>
+                <td></td>
+                <td></td>
+            </tr>
+            <tr>
+                <td style="border-right:1px solid black" class="bold">Firma:</td>
+                <td class="bold">Firma Autorizada:</td>
+                <td></td>
+            </tr>
+            <tr>
+                <td style="border-right:1px solid black"></td>
+                <td></td>
+                <td></td>
+            </tr>
+        </tbody>
+    </table>
+    <div class="center_description bold size8" style="margin: 10px;">En Caracas a los {{dia_emision}} dias del mes
+        de
+        {{fmespol}} del {{fanopol}}</div>
+    <div class="justify_description bold size10 line12">
+        Obtenga y conozca el contenido de las Condiciones Generales, Condiciones Particulares y Anexos
+        correspondientes
+        a las coberturas descritas en este Cuadro Recibo de la Póliza, accediendo a nuestra página web
+        www.lamundialdeseguros.com
+        <br><br>Aprobado por la Superintendencia de la Actividad Aseguradora mediante Oficio N° de fecha. El Tomador
+        Asegurado o Beneficiario de las Pólizas, que sienta vulneración de sus derechos, y requiera presentar
+        cualquier
+        denuncia, queja, reclamo o solicitud de asesoría sugerida con ocasión de este contrato de seguros; puede
+        acudir
+        a la Oficina de la Defensor del Asegurado de la Superintendencia de la Actividad Aseguradora, o comunicarlo
+        a
+        través de la Pagina web: https://www.lamundialdeseguros.com
+    </div>
+    <br>
+    <div class="center_description bold size8" style="color: red">INTERMEDIARIO</div>
+</body>
+
+</html>

@@ -1,0 +1,31 @@
+# Ambiente LOCAL y AISLADO exclusivo del flujo product-emission.
+# No usar este compose para nada de La Mundial: es una BD nueva, separada
+# de nest_api (srv001) y de insurance_product_builder (proyecto-product-builder).
+#
+# Uso:
+#   docker compose -f docker-compose.product-emission.yml up -d
+#   npm run prisma:migrate:product-emission
+#   npm run start:dev
+
+services:
+  postgres-product-emission:
+    image: postgres:16-alpine
+    container_name: nest-api-product-emission-db
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: product_emission
+      POSTGRES_PASSWORD: product_emission_dev
+      POSTGRES_DB: product_emission
+    ports:
+      # Puerto distinto a product-builder (5432) para poder correr ambos a la vez.
+      - "5433:5432"
+    volumes:
+      - product_emission_pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U product_emission -d product_emission"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+
+volumes:
+  product_emission_pgdata:

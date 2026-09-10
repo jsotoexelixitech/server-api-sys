@@ -3,12 +3,21 @@ import {
   Injectable,
   InternalServerErrorException,
   Logger,
+  NotFoundException,
 } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { MssqlService } from '../../database/mssql.service';
-import { parseSPError, formatValidateAutoError } from '../../common/helpers/sp-error.helper';
-import { buildPolicyPdfUrl } from '../../common/helpers/policy-url.helper';
-import { SP_PRE_EMISION_AUTO_RCV } from '../../config/sis2000-sp.constants';
+import { formatValidateAutoError, parseSPError } from '../../common/helpers/sp-error.helper';
+import { buildPolicyPdfUrl, resolveClubArysPdfUrl } from '../../common/helpers/policy-url.helper';
+import {
+  SP_PRE_EMISION_AUTO_RCV,
+  SP_REPAIR_RCV_COBERTURAS,
+  SP_SEARCH_AUTOMOBILE_PROPIETARY,
+  SP_VALIDATE_AUTOMOVIL_LEGACY,
+} from '../../config/sis2000-sp.constants';
+import { SearchProprietaryDto } from './dto/search-proprietary.dto';
+import { SearchVehicleByPlateDto, SearchVehicleBySerialDto } from './dto/search-vehicle.dto';
+import { ArysService } from '../arys/arys.service';
 
 @Injectable()
 export class EmissionsService {
@@ -17,7 +26,15 @@ export class EmissionsService {
   constructor(
     private readonly db: MssqlService,
     private readonly config: ConfigService,
+    private readonly arysService: ArysService,
   ) {}
+
+  /** Fecha SQL: null si viene vacía; evita "Invalid date" del driver mssql con ''. */
+  private dateField(value: unknown): string | null {
+    if (value == null) return null;
+    const s = String(value).trim();
+    return s === '' ? null : s;
+  }
 
   private nvarchar(value: unknown): string | null {
     if (value == null || String(value).trim() === '') return null;
@@ -53,6 +70,67 @@ export class EmissionsService {
 
     const prima = this.pick<number>(b, 'prima');
     return prima != null ? Number(prima) : null;
+  }
+
+  /** Plan en USD/Dólares (maplanes.cmoneda). */
+  private isUsdMoneda(cmoneda: string | null | undefined): boolean {
+    const m = String(cmoneda ?? '').trim().toUpperCase();
+    if (!m || m === 'BS') return false;
+    return m === '$' || m === 'USD' || m.startsWith('DOL');
+  }
+
+  /** Moneda del plan en maplanes (ej. '$' para planes premium AutoV). */
+  private async resolvePlanMoneda(cplan: string): Promise<string | null> {
+    const plan = String(cplan ?? '').trim();
+    if (!plan) return null;
+    const T = this.db.types;
+    const req = this.db.request();
+    req.input('cplan', T.VarChar(10), plan);
+    const result = await req.query<{ cmoneda: string }>(
+      `SELECT TOP 1 RTRIM(cmoneda) AS cmoneda FROM maplanes WHERE cplan = @cplan AND iestado = 'V'`,
+    );
+    const raw = result.recordset?.[0]?.cmoneda;
+    return raw != null && String(raw).trim() !== '' ? String(raw).trim() : null;
+  }
+
+  /**
+   * Prima para el SP de pre-emisión.
+   * Debe reinyectarse la prima cotizada (igual que SysIP-backend): si va en 0 el SP
+   * recalcula y los recibos del cuadro no coinciden con la cuota mostrada en UI.
+   * - Planes en $: @mprima = mprimaext (USD)
+   * - Planes en Bs: @mprima = mprima o mprimaext × ptasa
+   */
+  private async resolveMprimaForSp(
+    b: Record<string, unknown>,
+  ): Promise<{ mprima: number | null; cmoneda: string | null }> {
+    const cplan = String(this.pick(b, 'cplan', 'plan') ?? '').trim();
+    let cmoneda = this.pick(b, 'cmoneda')
+      ? String(this.pick(b, 'cmoneda')).trim().slice(0, 4)
+      : null;
+    if (!cmoneda && cplan) {
+      cmoneda = await this.resolvePlanMoneda(cplan);
+    }
+
+    if (this.isUsdMoneda(cmoneda)) {
+      const ext = Number(this.pick(b, 'mprimaext', 'mprima_ext') ?? 0);
+      return {
+        mprima: Number.isFinite(ext) && ext > 0 ? ext : 0,
+        cmoneda: '$',
+      };
+    }
+
+    const mprima = this.resolveMprima(b);
+    return {
+      mprima: mprima != null && Number(mprima) > 0 ? Number(mprima) : 0,
+      cmoneda,
+    };
+  }
+
+  /** Log de trazabilidad prima: body HTTP vs valor enviado al SP. */
+  private logEmissionPrima(b: Record<string, unknown>, mprima: number | null, cmoneda: string | null): void {
+    this.logger.log(
+      `emitLocal prima trace body.mprimaext=${this.pick(b, 'mprimaext') ?? 'null'} body.mprima=${this.pick(b, 'mprima') ?? 'null'} → SP @mprima=${mprima} cmoneda=${cmoneda ?? 'null'} ifrecuencia=${this.pick(b, 'ifrecuencia', 'frecuencia') ?? 'A'}`,
+    );
   }
 
   /** Tasa BCV: ptasa / tasa / ptasamon (alias La Mundial). */
@@ -105,75 +183,536 @@ export class EmissionsService {
     return (result.recordset?.[0] ?? {}) as Record<string, unknown>;
   }
 
-  private async searchVehicle(field: 'xplaca' | 'xsercar', value: string) {
+  /** Cobertura Club Arys: adpolcob ccober=15 en ramo 18 (igual SysIP Poliza.js). */
+  private async queryClubArysInDb(cnpoliza: string): Promise<boolean> {
+    const poliza = String(cnpoliza ?? '').trim();
+    if (!poliza) return false;
+
     const T = this.db.types;
     const req = this.db.request();
-    req.input('value', T.VarChar(60), value.trim().toUpperCase());
+    req.input('cnpoliza', T.Char(30), poliza);
     const result = await req.query(`
-      SELECT TOP 1 *
-      FROM vhcerti
-      WHERE ${field} = @value
-        AND istatcer != 'A'
+      SELECT CASE WHEN EXISTS (
+        SELECT 1
+        FROM adpolcob c
+        INNER JOIN adpoliza p ON p.cpoliza = c.cpoliza
+        WHERE LTRIM(RTRIM(p.cnpoliza)) = LTRIM(RTRIM(@cnpoliza))
+          AND LTRIM(RTRIM(c.ccober)) = '15'
+          AND c.cramo = 18
+      ) THEN 1 ELSE 0 END AS hasArys
     `);
-    const vehicle = result.recordset ?? [];
-    if (vehicle.length === 0) return { status: false };
-
-    const polReq = this.db.request();
-    polReq.input('cnpoliza', T.VarChar(20), String(vehicle[0]['cnpoliza'] ?? ''));
-    const polResult = await polReq.query(`
-      SELECT TOP 1 fhasta, cnpoliza
-      FROM adpoliza
-      WHERE cnpoliza = @cnpoliza
-        AND (iestado != 'N' OR istatpol != 'A')
-    `);
-    if (polResult.recordset.length > 0) {
-      vehicle[0] = { ...vehicle[0], fhasta: polResult.recordset[0]['fhasta'] };
-      return {
-        status: true,
-        message: `El vehículo ya tiene una póliza vigente (${field === 'xplaca' ? 'PLACA' : 'SERIAL DE CARROCERÍA'})`,
-        vehicle: vehicle[0],
-      };
-    }
-    return { status: false, vehicle: vehicle[0] };
+    return Number(result.recordset?.[0]?.['hasArys'] ?? 0) === 1;
   }
 
-  async searchByPlate(xplaca: string) {
+  /** Planes legacy / patrimoniales con Club Arys sin depender del catálogo. */
+  private planIncludesClubArysLegacy(body: Record<string, unknown>): boolean {
+    const plan = String(this.pick(body, 'cplan', 'plan') ?? '')
+      .trim()
+      .toUpperCase();
+    if (['RCVBAS', 'RUSPAT'].includes(plan)) return true;
+    const centidad = String(this.pick(body, 'centidad') ?? '').trim().toUpperCase();
+    return centidad === 'P';
+  }
+
+  /** SysIP receipt-vehicle-form: ccobertura 15 en maplancob (cotización / catálogo plan). */
+  private async queryPlanHasClubArysInCatalog(
+    cplan: string,
+    cramo = 18,
+  ): Promise<boolean> {
+    const plan = String(cplan ?? '').trim();
+    if (!plan) return false;
+
+    const T = this.db.types;
+    const req = this.db.request();
+    req.input('cplan', T.NVarChar(20), plan);
+    req.input('cramo', T.Int, cramo);
+    const result = await req.query(`
+      SELECT CASE WHEN EXISTS (
+        SELECT 1
+        FROM maplancob m
+        WHERE m.cramo = @cramo
+          AND LTRIM(RTRIM(m.cplan)) = LTRIM(RTRIM(@cplan))
+          AND LTRIM(RTRIM(CAST(m.ccobertura AS VARCHAR(10)))) = '15'
+      ) THEN 1 ELSE 0 END AS hasArys
+    `);
+    return Number(result.recordset?.[0]?.['hasArys'] ?? 0) === 1;
+  }
+
+  private async hasClubArysCoverage(
+    cnpoliza: string,
+    body?: Record<string, unknown>,
+  ): Promise<boolean> {
+    if (body) {
+      const cplan = String(this.pick(body, 'cplan', 'plan') ?? '').trim();
+      const cramo = this.intField(this.pick(body, 'cramo', 'ramo')) ?? 18;
+      if (cplan) {
+        try {
+          if (await this.queryPlanHasClubArysInCatalog(cplan, cramo)) return true;
+        } catch (err) {
+          const msg = err instanceof Error ? err.message : String(err);
+          this.logger.warn(`Club Arys catálogo cplan=${cplan}: ${msg}`);
+        }
+      }
+      if (this.planIncludesClubArysLegacy(body)) return true;
+    }
+
+    for (let attempt = 0; attempt < 5; attempt += 1) {
+      try {
+        if (await this.queryClubArysInDb(cnpoliza)) return true;
+      } catch (err) {
+        const msg = err instanceof Error ? err.message : String(err);
+        this.logger.warn(`Club Arys query cnpoliza=${cnpoliza}: ${msg}`);
+      }
+      if (attempt < 4) {
+        await new Promise((resolve) => setTimeout(resolve, 400));
+      }
+    }
+    return false;
+  }
+
+  private resolveClubArysPdfUrl(hasCoverage: boolean, iplaca?: unknown): string {
+    return resolveClubArysPdfUrl(
+      hasCoverage,
+      iplaca,
+      this.config.get<string>('ARYS_TRADICIONAL_PDF_URL'),
+      this.config.get<string>('ARYS_AUTO_BI_PDF_URL'),
+    );
+  }
+
+  private async resolveClubArysPdfForEmission(
+    cnpoliza: string,
+    body: Record<string, unknown>,
+  ): Promise<string> {
     try {
-      return await this.searchVehicle('xplaca', xplaca);
+      const hasArys = await this.hasClubArysCoverage(cnpoliza, body);
+      return this.resolveClubArysPdfUrl(hasArys, this.pick(body, 'iplaca'));
     } catch (err) {
+      const msg = err instanceof Error ? err.message : String(err);
+      this.logger.warn(`Club Arys PDF omitido cnpoliza=${cnpoliza}: ${msg}`);
+      return '';
+    }
+  }
+
+  /** Registro de membresía Arys en segundo plano (solo pólizas con cobertura Club Arys). */
+  private scheduleArysMembershipRegistration(
+    cnpoliza: string,
+    body: Record<string, unknown>,
+  ): void {
+    void (async () => {
+      try {
+        const hasArys = await this.hasClubArysCoverage(cnpoliza, body);
+        if (!hasArys) return;
+
+        const xplaca = String(this.pick(body, 'xplaca') ?? this.pick(body, 'placa') ?? '').trim();
+        await this.arysService.registerMembershipFromEmission({
+          cnpoliza,
+          xplaca: xplaca || undefined,
+        });
+      } catch (err) {
+        const msg = err instanceof Error ? err.message : String(err);
+        this.logger.warn(`Arys post-emisión omitido cnpoliza=${cnpoliza}: ${msg}`);
+      }
+    })();
+  }
+
+  /**
+   * Migración de SysIP Express `POST /api/v1/emissions/automobile/vehicle`.
+   * Usa `dbo.fn_validar_placa(@xplaca, @fdesde)` — no la búsqueda por vhcerti.
+   *
+   * Compat Express:
+   * - Placa activa → `{ status: true, message }` (`type === 'warning'` cambia el texto)
+   * - Placa libre  → `{ status: false }`
+   */
+  async searchByPlate(dto: SearchVehicleByPlateDto) {
+    const xplaca = String(dto.xplaca ?? dto.placa ?? '').trim();
+    if (!xplaca) {
+      throw new BadRequestException('Debe enviar `xplaca` o `placa`.');
+    }
+    if (!dto.fdesde) {
+      throw new BadRequestException('Debe enviar `fdesde`.');
+    }
+
+    try {
+      const req = this.db.request();
+      const T = this.db.types;
+      req.input('xplaca', T.VarChar(15), xplaca);
+      req.input('fdesde', T.Date, new Date(dto.fdesde));
+      const result = await req.query(`
+        SELECT ISNULL(dbo.fn_validar_placa(@xplaca, @fdesde), 0) AS is_active
+      `);
+      const isActive = Boolean(result.recordset?.[0]?.['is_active']);
+
+      if (isActive) {
+        const message =
+          dto.type === 'warning'
+            ? 'ADVERTENCIA: el campo PLACA ya se encuentra registrado y activo en el sistema.'
+            : 'Lo sentimos, el campo PLACA ingresado ya se encuentra registrado y activo en el sistema';
+        return { status: true as const, message, is_active: true };
+      }
+
+      return { status: false as const, is_active: false };
+    } catch (err) {
+      if (err instanceof BadRequestException) throw err;
       const msg = err instanceof Error ? err.message : String(err);
       this.logger.error(`searchByPlate: ${msg}`);
-      throw new InternalServerErrorException('Error al buscar vehículo por placa.');
+      throw new InternalServerErrorException('Error al validar placa.');
     }
   }
 
-  async searchBySerial(xsercar: string) {
+  /**
+   * Migración de SysIP Express `POST /api/v1/emissions/automobile/serial`.
+   * Usa `dbo.fn_validar_serialCar(@xsercar, @fdesde)`.
+   *
+   * Compat Express:
+   * - Serial activo → `{ status: true, message }` (`type === 'warning'` cambia el texto)
+   * - Serial libre  → `{ status: false }`
+   */
+  async searchBySerial(dto: SearchVehicleBySerialDto) {
+    const xsercar = String(dto.xsercar ?? dto.xserialcarroceria ?? '').trim();
+    if (!xsercar) {
+      throw new BadRequestException('Debe enviar `xsercar` o `xserialcarroceria`.');
+    }
+    if (!dto.fdesde) {
+      throw new BadRequestException('Debe enviar `fdesde`.');
+    }
+
     try {
-      return await this.searchVehicle('xsercar', xsercar);
+      const req = this.db.request();
+      const T = this.db.types;
+      req.input('xsercar', T.VarChar(60), xsercar);
+      req.input('fdesde', T.Date, new Date(dto.fdesde));
+      const result = await req.query(`
+        SELECT ISNULL(dbo.fn_validar_serialCar(@xsercar, @fdesde), 0) AS is_active
+      `);
+      const isActive = Boolean(result.recordset?.[0]?.['is_active']);
+
+      if (isActive) {
+        const message =
+          dto.type === 'warning'
+            ? 'ADVERTENCIA: el campo SERIAL DE CARROCERÍA ya se encuentra registrado y activo en el sistema.'
+            : 'Lo sentimos, el campo SERIAL DE CARROCERÍA ingresado ya se encuentra registrado y activo en el sistema';
+        return { status: true as const, message, is_active: true };
+      }
+
+      return { status: false as const, is_active: false };
     } catch (err) {
+      if (err instanceof BadRequestException) throw err;
       const msg = err instanceof Error ? err.message : String(err);
       this.logger.error(`searchBySerial: ${msg}`);
-      throw new InternalServerErrorException('Error al buscar vehículo por serial.');
+      throw new InternalServerErrorException('Error al validar serial de carrocería.');
     }
+  }
+
+  /** SP Nexus primero; si no hay fila, consulta SQL a `maclient`. */
+  async searchAutomobileProprietary(dto: SearchProprietaryDto) {
+    const cid = String(dto.cid ?? dto.xrif_cliente ?? '').trim();
+    if (!cid) {
+      throw new BadRequestException('Debe enviar `xrif_cliente` o `cid`.');
+    }
+
+    try {
+      return await this.searchNewPropietary(cid);
+    } catch (err) {
+      if (err instanceof NotFoundException) {
+        return await this.searchNewProprietary(dto);
+      }
+      throw err;
+    }
+  }
+
+  async searchNewPropietary(xrif_cliente: string) {
+    const cid = xrif_cliente.trim();
+    if (!cid) {
+      throw new BadRequestException('xrif_cliente es requerido.');
+    }
+
+    try {
+      const req = this.db.request();
+      const T = this.db.types;
+      req.input('cid', T.VarChar(20), cid);
+      const result = await req.execute(SP_SEARCH_AUTOMOBILE_PROPIETARY);
+      const rows = result.recordset ?? [];
+      if (rows.length === 0) {
+        throw new NotFoundException({
+          status: false,
+          notFound: 'Propietario no encontrado',
+        });
+      }
+      return { status: true as const, info: rows[0] as Record<string, unknown> };
+    } catch (err) {
+      if (err instanceof NotFoundException || err instanceof BadRequestException) {
+        throw err;
+      }
+      const msg = err instanceof Error ? err.message : String(err);
+      this.logger.error(`searchNewPropietary: ${msg}`);
+      throw new InternalServerErrorException({
+        status: false,
+        message: msg,
+      });
+    }
+  }
+
+  /**
+   * Migración de SysIP Express `POST /api/v1/emissions/automobile_new/propietary`.
+   * Busca propietario/cliente en `maclient` (+ dirección, correo, teléfono, atributos).
+   *
+   * Acepta documento con o sin letra (`V22` / `22`). Coincide contra:
+   * - `maclient.cci_rif` (cédula numérica — lo habitual en formularios)
+   * - `maclient.cid` (documento completo o solo dígitos)
+   */
+  async searchNewProprietary(dto: SearchProprietaryDto) {
+    const raw = String(dto.cid ?? dto.xrif_cliente ?? '').trim();
+    if (!raw) {
+      throw new BadRequestException('Debe enviar `xrif_cliente` o `cid`.');
+    }
+
+    const digits = raw.replace(/\D/g, '');
+    const letterMatch = raw.match(/^([A-Za-z])/);
+    const letter = (letterMatch?.[1] ?? 'V').toUpperCase();
+    const cidWithLetter = digits ? `${letter}${digits}` : raw.toUpperCase();
+
+    try {
+      const req = this.db.request();
+      const T = this.db.types;
+      req.input('cidRaw', T.VarChar(30), raw);
+      req.input('cidDigits', T.VarChar(30), digits || raw);
+      req.input('cidLetter', T.VarChar(30), cidWithLetter);
+      req.input('cciRif', T.VarChar(30), digits || raw);
+
+      const result = await req.query(`
+        SELECT TOP 1
+          RTRIM(LTRIM(maclient.xnombre_1))   AS xnombre,
+          RTRIM(LTRIM(maclient.xapellido_1)) AS xapellido,
+          CONVERT(DATE, maclient.fnacimiento) AS fnacimiento,
+          maclient.isexo,
+          maclient.npeso,
+          maclient.nestatura,
+          maclient.ipersona,
+          maclient.iestado_civil,
+          maclient_dir.cestado,
+          RTRIM(LTRIM(maestados.xdescripcion_c)) AS xestado,
+          maclient_dir.cciudad,
+          maclient.cci_rif,
+          maclient.cid,
+          TRIM(maciudades.xdescripcion_c) AS xciudad,
+          TRIM(maclient_dir.xavecalle)    AS xavecalle,
+          TRIM(maclient_correo.xcorreo)   AS xcorreo,
+          TRIM(maclient_tel.xtelefono)    AS xtelefono,
+          TRIM(maclient.xcliente)         AS cliente,
+          CASE
+            WHEN maclient.fnacimiento IS NOT NULL
+              AND DATEDIFF(YEAR, maclient.fnacimiento, GETDATE())
+                - CASE
+                    WHEN MONTH(maclient.fnacimiento) > MONTH(GETDATE())
+                      OR (
+                        MONTH(maclient.fnacimiento) = MONTH(GETDATE())
+                        AND DAY(maclient.fnacimiento) > DAY(GETDATE())
+                      )
+                    THEN 1
+                    ELSE 0
+                  END >= 18
+            THEN 1
+            ELSE 0
+          END AS es_mayor_de_edad,
+          COALESCE(maprofes.xprofesion, '') AS xprofesion,
+          COALESCE(maocupac.xocupacion, '') AS xocupacion,
+          COALESCE(maactivi.xactividad, '') AS xactividad
+        FROM maclient
+        LEFT JOIN maclient_dir
+          ON maclient.cci_rif = maclient_dir.cci_rif
+        LEFT JOIN maclient_correo
+          ON maclient.cci_rif = maclient_correo.cci_rif
+        LEFT JOIN maestados
+          ON maclient_dir.cestado = maestados.cestado
+         AND COALESCE(maclient_dir.cpais, 58) = maestados.cpais
+        LEFT JOIN maciudades
+          ON maclient_dir.cestado = maciudades.cestado
+         AND maclient_dir.cciudad = maciudades.cciudad
+        LEFT JOIN maclient_tel
+          ON maclient.cci_rif = maclient_tel.cci_rif
+        LEFT JOIN maclient_atr
+          ON maclient.cci_rif = maclient_atr.cci_rif
+        LEFT JOIN maprofes
+          ON maclient_atr.cprofesion = maprofes.cprofesion
+        LEFT JOIN maocupac
+          ON maclient_atr.cocupacion = maocupac.cocupacion
+        LEFT JOIN maactivi
+          ON maclient_atr.cactividad = maactivi.cactividad
+        WHERE
+          LTRIM(RTRIM(CONVERT(VARCHAR(30), maclient.cci_rif))) = @cciRif
+          OR LTRIM(RTRIM(CONVERT(VARCHAR(30), maclient.cid))) IN (@cidRaw, @cidDigits, @cidLetter)
+          OR LTRIM(RTRIM(CONVERT(VARCHAR(30), maclient.cid))) LIKE '[VEJPGvejpg]' + @cciRif
+      `);
+
+      const row = result.recordset?.[0] as Record<string, unknown> | undefined;
+      if (!row) {
+        throw new NotFoundException('Propietario no encontrado');
+      }
+
+      // `data` = envelope Nest; `info` = compat con respuesta Express SysIP
+      return { status: true as const, data: row, info: row };
+    } catch (err) {
+      if (err instanceof BadRequestException || err instanceof NotFoundException) {
+        throw err;
+      }
+      const msg = err instanceof Error ? err.message : String(err);
+      this.logger.error(`searchNewProprietary: ${msg}`);
+      throw new InternalServerErrorException('Error al buscar propietario.');
+    }
+  }
+
+  /** Ramo externo BINAC* en maplanes (srv001: 26; SysIP legacy: 28). */
+  private resolveRamoBinacional(): number {
+    return parseInt(this.config.get<string>('LAMUNDIAL_RAMO_BINACIONAL', '28') ?? '28', 10);
+  }
+
+  /** cramo del plan vigente en maplanes (null si no existe). BINAC* prioriza LAMUNDIAL_RAMO_BINACIONAL. */
+  private async resolvePlanCramo(cplan: string): Promise<number | null> {
+    const T = this.db.types;
+    const req = this.db.request();
+    req.input('cplan', T.VarChar(10), cplan);
+    const ramoBinac = this.resolveRamoBinacional();
+    const orderBinacFirst = /^BINAC/i.test(cplan)
+      ? `ORDER BY CASE WHEN cramo = ${ramoBinac} THEN 0 WHEN cramo = 18 THEN 1 ELSE 2 END`
+      : '';
+    const result = await req.query(`
+      SELECT TOP 1 cramo FROM maplanes WHERE cplan = @cplan AND iestado = 'V'
+      ${orderBinacFirst}
+    `);
+    const row = result.recordset?.[0] as { cramo?: number } | undefined;
+    if (row?.cramo == null) return null;
+    return Number(row.cramo);
+  }
+
+  private isBinacAutoEmission(b: Record<string, unknown>): boolean {
+    const cplan = String(this.pick(b, 'cplan', 'plan') ?? '').trim();
+    if (/^BINAC/i.test(cplan)) return true;
+    const iplaca = String(this.pick(b, 'iplaca', 'tipo_placa') ?? 'N').trim().toUpperCase();
+    if (iplaca === 'B') return true;
+    return this.intField(this.pick(b, 'cramo', 'ramo')) === this.resolveRamoBinacional();
+  }
+
+  /** spee_validate_automovil_general_nexus en Sis2000 debe aceptar ramo 28 (BINAC*). */
+  private throwIfBinacEmissionBlockedBySis2000(
+    b: Record<string, unknown>,
+    spMessage: string,
+  ): void {
+    if (!this.isBinacAutoEmission(b)) return;
+    const lower = spMessage.toLowerCase();
+    if (!lower.includes('ramo no corresponde')) return;
+    throw new BadRequestException(
+      'Emisión binacional bloqueada por spee_validate_automovil_general_nexus en Sis2000 (debe aceptar ramo 28). ' +
+        'Referencia: docs/sql/spee_validate_automovil_general_nexus.sql',
+    );
+  }
+
+  private validateEmissionAutoFailure(raw: string) {
+    const formatted = formatValidateAutoError(raw);
+    this.logger.warn(`validateEmissionAuto: ${raw} → ${formatted.code}`);
+    return { status: false as const, error: formatted.message, code: formatted.code };
+  }
+
+  /** BINAC* (ramo 28): validar placa/serial sin depender del SP nexus hasta que DBA acepte ramo 28. */
+  private shouldValidateEmissionAutoViaLegacySp(cplan: string, cramo: number): boolean {
+    if (/^BINAC/i.test(cplan)) return false;
+    const ramoNacional = parseInt(this.config.get<string>('LAMUNDIAL_RAMO', '18') ?? '18', 10);
+    return cramo === ramoNacional;
+  }
+
+  private async validateEmissionAutoInline(
+    placa: unknown,
+    serialCarroceria: unknown,
+  ): Promise<{ ok: true } | { ok: false; raw: string }> {
+    const xplaca = String(placa ?? '').trim();
+    const xsercar = String(serialCarroceria ?? '').trim();
+
+    if (!xplaca) return { ok: false, raw: 'Placa no debe estar vacío' };
+    if (!xsercar) return { ok: false, raw: 'Serial de Carrocería no debe estar vacío' };
+
+    const T = this.db.types;
+
+    const placaReq = this.db.request();
+    placaReq.input('xplaca', T.VarChar(15), xplaca);
+    const placaResult = await placaReq.query(`
+      SELECT CASE WHEN EXISTS (
+        SELECT 1 FROM vhcerti
+        WHERE xplaca = @xplaca AND istatcer = 'V' AND fhasta >= GETDATE()
+      ) THEN 1 ELSE 0 END AS existsPlaca
+    `);
+    if (Number(placaResult.recordset?.[0]?.['existsPlaca'])) {
+      return {
+        ok: false,
+        raw: 'Se ha detectado la existencia de una póliza vigente la misma placa del vehículo.',
+      };
+    }
+
+    const serialReq = this.db.request();
+    serialReq.input('xsercar', T.VarChar(60), xsercar);
+    const serialResult = await serialReq.query(`
+      SELECT CASE WHEN EXISTS (
+        SELECT 1 FROM vhcerti
+        WHERE xsercar = @xsercar AND istatcer = 'V' AND fhasta >= GETDATE()
+      ) THEN 1 ELSE 0 END AS existsSerial
+    `);
+    if (Number(serialResult.recordset?.[0]?.['existsSerial'])) {
+      return {
+        ok: false,
+        raw: 'Se ha detectado la existencia de una póliza vigente con el mismo Serial Carrocería del Vehículo.',
+      };
+    }
+
+    return { ok: true };
   }
 
   async validateEmissionAuto(body: Record<string, unknown>) {
-    const req = this.db.request();
-    const T = this.db.types;
     const defaultPlan = this.config.get<string>('LAMUNDIAL_PLAN_DEFAULT', 'RCVBAS');
     const cplan = String(body.plan ?? defaultPlan).trim() || defaultPlan;
+
+    let cramo: number | null;
+    try {
+      cramo = await this.resolvePlanCramo(cplan);
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : String(err);
+      this.logger.error(`validateEmissionAuto resolvePlanCramo: ${msg}`);
+      throw new InternalServerErrorException('Error al validar el plan del vehículo.');
+    }
+
+    if (cramo == null) {
+      return this.validateEmissionAutoFailure('Plan enviado no se encuentra registrado.');
+    }
+
+    if (!this.shouldValidateEmissionAutoViaLegacySp(cplan, cramo)) {
+      try {
+        this.logger.log(`validateEmissionAuto inline plan=${cplan} cramo=${cramo}`);
+        const inline = await this.validateEmissionAutoInline(body.placa, body.serial_carroceria);
+        if (!inline.ok) return this.validateEmissionAutoFailure(inline.raw);
+        return {
+          status: true,
+          message: 'El vehículo puede asegurarse. No hay póliza vigente con esta placa ni serial.',
+        };
+      } catch (err) {
+        const msg = err instanceof Error ? err.message : String(err);
+        this.logger.error(`validateEmissionAuto inline plan=${cplan}: ${msg}`);
+        throw new InternalServerErrorException('Error al validar el vehículo para emisión.');
+      }
+    }
+
+    const req = this.db.request();
+    const T = this.db.types;
     req.input('cplan', T.VarChar(10), cplan);
     req.input('xplaca', T.VarChar(15), body.placa);
     req.input('xsercar', T.VarChar(60), body.serial_carroceria);
     req.input('xsermot', T.VarChar(60), null);
     try {
-      await req.execute('speeValidateAutomovilGeneral');
-      return { status: true, message: 'El vehículo puede asegurarse. No hay póliza vigente con esta placa ni serial.' };
+      this.logger.log(`validateEmissionAuto EXEC ${SP_VALIDATE_AUTOMOVIL_LEGACY} plan=${cplan} cramo=${cramo}`);
+      await req.execute(SP_VALIDATE_AUTOMOVIL_LEGACY);
+      return {
+        status: true,
+        message: 'El vehículo puede asegurarse. No hay póliza vigente con esta placa ni serial.',
+      };
     } catch (err) {
       const raw = parseSPError(err);
-      const formatted = formatValidateAutoError(raw);
-      this.logger.warn(`validateEmissionAuto (SP): ${raw} → ${formatted.code}`);
-      return { status: false, error: formatted.message, code: formatted.code };
+      return this.validateEmissionAutoFailure(raw);
     }
   }
 
@@ -209,6 +748,18 @@ export class EmissionsService {
       }
       if (b['cpoliza'] == null || String(b['cpoliza']).trim() === '') {
         delete b['cpoliza'];
+      }
+
+      this.flattenConductorBeneficiario(b);
+      this.normalizeEmissionBodyAliases(b);
+
+      for (const dateKey of [
+        'fnac_tomador',
+        'fnac_titular',
+        'fnac_conductor',
+        'fnac_beneficiario',
+      ]) {
+        if (dateKey in b) b[dateKey] = this.dateField(b[dateKey]);
       }
 
       if (
@@ -268,6 +819,7 @@ export class EmissionsService {
         ['fdesde', b['fdesde']],
         ['fhasta', b['fhasta']],
         ['fnac_tomador', b['fnac_tomador']],
+        ['fnac_titular', b['fnac_titular']],
         ['cestado_tomador', b['estado_tomador'] ?? b['cestado_tomador']],
         ['cciudad_tomador', b['ciudad_tomador'] ?? b['cciudad_tomador']],
         ['xplaca', b['xplaca'] ?? b['placa']],
@@ -288,6 +840,7 @@ export class EmissionsService {
         ['fdesde', b['fdesde']],
         ['fhasta', b['fhasta']],
         ['fnac_tomador', b['fnac_tomador']],
+        ['fnac_titular', b['fnac_titular']],
       ]
         .filter(([, value]) => typeof value !== 'string' || !isoDate.test(value))
         .map(([name]) => name);
@@ -364,10 +917,65 @@ export class EmissionsService {
     return lower.includes('póliza rel ya existente') || lower.includes('poliza rel ya existente');
   }
 
+  /**
+   * Emision-Plan envía conductor/beneficiario anidados; el SP espera columnas planas
+   * (@icedula_conductor, @xrif_beneficiario, …). Sin esto TMEMISION queda en NULL.
+   */
+  private flattenConductorBeneficiario(b: Record<string, unknown>): void {
+    for (const key of ['conductor', 'beneficiario'] as const) {
+      const raw = b[key];
+      if (!raw || typeof raw !== 'object' || Array.isArray(raw)) continue;
+      for (const [field, value] of Object.entries(raw as Record<string, unknown>)) {
+        if (b[field] == null && value != null && String(value).trim() !== '') {
+          b[field] = value;
+        }
+      }
+    }
+  }
+
+  /** Alias Emision-Plan / SSO → nombres que lee el SP. */
+  private normalizeEmissionBodyAliases(b: Record<string, unknown>): void {
+    if (b['productor'] != null && b['cproductor'] == null) {
+      b['cproductor'] = b['productor'];
+    }
+    if (b['ccanalalt_in'] != null && b['ccanalalt'] == null) {
+      b['ccanalalt'] = b['ccanalalt_in'];
+    }
+    if (b['cscanalalt_in'] != null && b['cscanalalt'] == null) {
+      b['cscanalalt'] = b['cscanalalt_in'];
+    }
+    const centidad = String(b['centidad'] ?? '').trim().toUpperCase();
+    if (centidad === 'C' && b['citem'] != null && b['ccanalalt'] == null) {
+      b['ccanalalt'] = b['citem'];
+    }
+    if (b['frecuencia'] != null && b['ifrecuencia'] == null) {
+      b['ifrecuencia'] = b['frecuencia'];
+    }
+    if (b['tasa_ca'] != null && b['tasaCa'] == null) b['tasaCa'] = b['tasa_ca'];
+    if (b['tasa_pt'] != null && b['tasaPt'] == null) b['tasaPt'] = b['tasa_pt'];
+    if (b['tasa_pp'] != null && b['tasaPp'] == null) b['tasaPp'] = b['tasa_pp'];
+  }
+
+  private char1(value: unknown): string | null {
+    if (value == null || String(value).trim() === '') return null;
+    return String(value).trim().charAt(0).toUpperCase();
+  }
+
+  private rifNumeric(value: unknown): number | null {
+    if (value == null || String(value).trim() === '') return null;
+    const n = Number(String(value).replace(/\D/g, ''));
+    return Number.isFinite(n) && n > 0 ? n : null;
+  }
+
   /** Beneficiario preferencial anidado (createEmissionAuto / policyMapper). */
   private extractBeneficiario(b: Record<string, unknown>): Record<string, unknown> | null {
     const raw = b['beneficiario'];
-    if (!raw || typeof raw !== 'object' || Array.isArray(raw)) return null;
+    if (!raw || typeof raw !== 'object' || Array.isArray(raw)) {
+      // También aceptar campos ya aplanados en el body
+      const rif = b['xrif_beneficiario'] ?? b['rif_beneficiario'];
+      if (rif == null || String(rif).replace(/\D/g, '') === '') return null;
+      return b;
+    }
     const ben = raw as Record<string, unknown>;
     const rif = ben['xrif_beneficiario'] ?? ben['rif_beneficiario'] ?? ben['identificacion'];
     if (rif == null || String(rif).replace(/\D/g, '') === '') return null;
@@ -432,8 +1040,7 @@ export class EmissionsService {
       xtelefono != null ? String(xtelefono).replace(/\D/g, '').slice(0, 20) : null,
     );
     macReq.input('ifuente', T.Char(10), ifuente);
-    macReq.output('salida', T.VarChar(50), '');
-    await macReq.execute('spCreateMaclient');
+    await macReq.execute('sp_create_maclient_nexus');
 
     const polReq = this.db.request();
     polReq.input('cnpoliza', T.NVarChar(30), cnpoliza);
@@ -471,13 +1078,68 @@ export class EmissionsService {
     this.logger.log(`applyBeneficiario OK cnpoliza=${cnpoliza} rif=${rif}`);
   }
 
+  /**
+   * Gestor del canal (magestor): un guion en cgestor identifica el código UUID del gestor.
+   * Marketplace canal: se persiste en adpoliza tras emitir.
+   */
+  private async lookupChannelGestor(ccanalalt: number): Promise<string | null> {
+    const T = this.db.types;
+    const req = this.db.request();
+    req.input('ccanalalt', T.Int, ccanalalt);
+    const result = await req.query(`
+      SELECT TOP 1 cgestor
+      FROM magestor
+      WHERE ccanalalt = @ccanalalt
+        AND (LEN(cgestor) - LEN(REPLACE(cgestor, '-', ''))) = 1
+    `);
+    const raw = result.recordset?.[0]?.['cgestor'];
+    const cgestor = raw != null ? String(raw).trim() : '';
+    return cgestor !== '' ? cgestor : null;
+  }
+
+  private async resolveEmissionGestor(
+    b: Record<string, unknown>,
+    ccanalalt: number,
+  ): Promise<string | null> {
+    const explicit = this.pick<string>(b, 'cgestor');
+    if (explicit != null && String(explicit).trim() !== '') {
+      return String(explicit).trim();
+    }
+    return this.lookupChannelGestor(ccanalalt);
+  }
+
+  private async applyPolicyGestor(cnpoliza: string, cgestor: string): Promise<void> {
+    const poliza = String(cnpoliza ?? '').trim();
+    const gestor = String(cgestor ?? '').trim();
+    if (!poliza || !gestor) return;
+
+    const T = this.db.types;
+    const req = this.db.request();
+    req.input('cnpoliza', T.NVarChar(30), poliza);
+    req.input('cgestor', T.VarChar(50), gestor);
+    const result = await req.query(`
+      UPDATE adpoliza
+      SET cgestor = @cgestor
+      WHERE RTRIM(cnpoliza) = RTRIM(@cnpoliza)
+    `);
+    const rows = Number(result.rowsAffected?.[0] ?? 0);
+    if (rows === 0) {
+      this.logger.warn(`applyPolicyGestor: sin filas cnpoliza=${poliza} cgestor=${gestor}`);
+      return;
+    }
+    this.logger.log(`applyPolicyGestor OK cnpoliza=${poliza} cgestor=${gestor}`);
+  }
+
   private async emitLocalAutomobile(
     b: Record<string, unknown>,
     canal: Record<string, unknown>,
   ) {
+    this.flattenConductorBeneficiario(b);
+    this.normalizeEmissionBodyAliases(b);
     const T = this.db.types;
     const ptasamon = this.resolvePtasamon(b);
-    const mprima = this.resolveMprima(b);
+    const { mprima, cmoneda: planMoneda } = await this.resolveMprimaForSp(b);
+    this.logEmissionPrima(b, mprima, planMoneda);
     const defaultRamo = parseInt(this.config.get<string>('LAMUNDIAL_RAMO', '18') ?? '18', 10);
     const femision =
       this.pick<string>(b, 'fecha_emision', 'femision') ??
@@ -485,9 +1147,10 @@ export class EmissionsService {
 
     const req = this.db.request();
     const params: Record<string, { type: unknown; value: unknown }> = {
+      // Emisión nueva RCV: cnpoliza_rel vacío; Sis2000 genera cnpoliza.
       cnpoliza_rel: {
         type: T.NVarChar(30),
-        value: this.nvarchar(this.pick(b, 'cnpoliza_rel', 'poliza')),
+        value: null,
       },
       cramo: {
         type: T.Int,
@@ -507,7 +1170,7 @@ export class EmissionsService {
         type: T.Char(1),
         value: this.pick(b, 'iestado_civil_tomador', 'estado_civil_tomador'),
       },
-      fnac_tomador: { type: T.Date, value: b['fnac_tomador'] },
+      fnac_tomador: { type: T.Date, value: this.dateField(b['fnac_tomador']) },
       cestado_tomador: {
         type: T.VarChar(100),
         value: String(this.pick(b, 'cestado_tomador', 'estado_tomador') ?? ''),
@@ -540,7 +1203,7 @@ export class EmissionsService {
         type: T.Char(1),
         value: this.pick(b, 'iestado_civil_titular', 'estado_civil_titular'),
       },
-      fnac_titular: { type: T.Date, value: b['fnac_titular'] ?? null },
+      fnac_titular: { type: T.Date, value: this.dateField(b['fnac_titular']) },
       cestado_titular: {
         type: T.VarChar(100),
         value: String(this.pick(b, 'cestado_titular', 'estado_titular') ?? ''),
@@ -560,6 +1223,105 @@ export class EmissionsService {
       xcorreo_titular: {
         type: T.NVarChar(250),
         value: this.pick(b, 'xcorreo_titular', 'correo_titular'),
+      },
+      // Conductor / beneficiario (payload anidado ya aplanado en createEmissionAuto)
+      icedula_conductor: {
+        type: T.Char(1),
+        value: this.char1(this.pick(b, 'icedula_conductor')),
+      },
+      xrif_conductor: {
+        type: T.Numeric(13, 0),
+        value: this.rifNumeric(this.pick(b, 'xrif_conductor', 'rif_conductor')),
+      },
+      xnombre_conductor: {
+        type: T.NVarChar(250),
+        value: this.pick(b, 'xnombre_conductor', 'nombre_conductor') ?? null,
+      },
+      xapellido_conductor: {
+        type: T.NVarChar(250),
+        value: this.pick(b, 'xapellido_conductor', 'apellido_conductor') ?? null,
+      },
+      isexo_conductor: {
+        type: T.Char(1),
+        value: this.char1(this.pick(b, 'isexo_conductor', 'sexo_conductor')),
+      },
+      iestado_civil_conductor: {
+        type: T.Char(1),
+        value: this.char1(this.pick(b, 'iestado_civil_conductor', 'estado_civil_conductor')),
+      },
+      fnac_conductor: {
+        type: T.Date,
+        value: this.dateField(this.pick(b, 'fnac_conductor')),
+      },
+      cestado_conductor: {
+        type: T.VarChar(100),
+        value: String(this.pick(b, 'cestado_conductor', 'estado_conductor') ?? ''),
+      },
+      cciudad_conductor: {
+        type: T.VarChar(100),
+        value: String(this.pick(b, 'cciudad_conductor', 'ciudad_conductor') ?? ''),
+      },
+      xdireccion_conductor: {
+        type: T.NVarChar(1000),
+        value: this.pick(b, 'xdireccion_conductor', 'direccion_conductor') ?? null,
+      },
+      xtelefono_conductor: {
+        type: T.NVarChar(250),
+        value: this.pick(b, 'xtelefono_conductor', 'telefono_conductor') ?? null,
+      },
+      xcorreo_conductor: {
+        type: T.NVarChar(250),
+        value: this.pick(b, 'xcorreo_conductor', 'correo_conductor') ?? null,
+      },
+      icedula_beneficiario: {
+        type: T.Char(1),
+        value: this.char1(this.pick(b, 'icedula_beneficiario')),
+      },
+      xrif_beneficiario: {
+        type: T.Numeric(13, 0),
+        value: this.rifNumeric(this.pick(b, 'xrif_beneficiario', 'rif_beneficiario')),
+      },
+      xnombre_beneficiario: {
+        type: T.NVarChar(250),
+        value: this.pick(b, 'xnombre_beneficiario', 'nombre_beneficiario') ?? null,
+      },
+      xapellido_beneficiario: {
+        type: T.NVarChar(250),
+        value: this.pick(b, 'xapellido_beneficiario', 'apellido_beneficiario') ?? null,
+      },
+      isexo_beneficiario: {
+        type: T.Char(1),
+        value: this.char1(this.pick(b, 'isexo_beneficiario', 'sexo_beneficiario')),
+      },
+      iestado_civil_beneficiario: {
+        type: T.Char(1),
+        value: this.char1(
+          this.pick(b, 'iestado_civil_beneficiario', 'estado_civil_beneficiario'),
+        ),
+      },
+      fnac_beneficiario: {
+        type: T.Date,
+        value: this.dateField(this.pick(b, 'fnac_beneficiario')),
+      },
+      cestado_beneficiario: {
+        type: T.VarChar(100),
+        value: String(this.pick(b, 'cestado_beneficiario', 'estado_beneficiario') ?? ''),
+      },
+      cciudad_beneficiario: {
+        type: T.VarChar(100),
+        value: String(this.pick(b, 'cciudad_beneficiario', 'ciudad_beneficiario') ?? ''),
+      },
+      xdireccion_beneficiario: {
+        type: T.NVarChar(1000),
+        value: this.pick(b, 'xdireccion_beneficiario', 'direccion_beneficiario') ?? null,
+      },
+      xtelefono_beneficiario: {
+        type: T.NVarChar(250),
+        value: this.pick(b, 'xtelefono_beneficiario', 'telefono_beneficiario') ?? null,
+      },
+      xcorreo_beneficiario: {
+        type: T.NVarChar(250),
+        value: this.pick(b, 'xcorreo_beneficiario', 'correo_beneficiario') ?? null,
       },
       cmarca: { type: T.VarChar(3), value: this.pick(b, 'cmarca', 'marca') },
       cmodelo: { type: T.VarChar(3), value: this.pick(b, 'cmodelo', 'modelo') },
@@ -606,11 +1368,11 @@ export class EmissionsService {
       },
       ccanalalt: {
         type: T.Int,
-        value: b['ccanalalt'] != null ? this.intField(b['ccanalalt']) : null,
+        value: this.intField(this.pick(b, 'ccanalalt', 'ccanalalt_in')),
       },
       cscanalalt: {
         type: T.Int,
-        value: b['cscanalalt'] != null ? this.intField(b['cscanalalt']) : null,
+        value: this.intField(this.pick(b, 'cscanalalt', 'cscanalalt_in')),
       },
       cusuario: {
         type: T.Numeric(13, 0),
@@ -619,7 +1381,7 @@ export class EmissionsService {
       ptasamon_pago: { type: T.Numeric(18, 6), value: ptasamon },
       cmoneda: {
         type: T.Char(4),
-        value: this.pick(b, 'cmoneda') ? String(this.pick(b, 'cmoneda')).slice(0, 4) : null,
+        value: planMoneda ? String(planMoneda).slice(0, 4) : null,
       },
       msumaaseg: {
         type: T.Numeric(18, 2),
@@ -648,6 +1410,46 @@ export class EmissionsService {
         type: T.Numeric(18, 2),
         value: this.pick(b, 'precargorcv') ?? null,
       },
+      itipoEmi: {
+        type: T.VarChar(10),
+        value: this.pick(b, 'itipoEmi') ?? 'NU',
+      },
+      coberAdicional: {
+        type: T.VarChar(2),
+        value: this.pick(b, 'coberAdicional', 'cober_adicional') ?? 'RC',
+      },
+      tasaPt: {
+        type: T.Numeric(18, 2),
+        value: this.pick(b, 'tasaPt', 'tasa_pt') ?? 0,
+      },
+      tasaCa: {
+        type: T.Numeric(18, 2),
+        value: this.pick(b, 'tasaCa', 'tasa_ca') ?? 0,
+      },
+      tasaPp: {
+        type: T.Numeric(18, 2),
+        value: this.pick(b, 'tasaPp', 'tasa_pp') ?? 0,
+      },
+      itipo_diligencia: {
+        type: T.Char(1),
+        value: this.pick(b, 'itipo_diligencia', 'itipoDiligencia') ?? null,
+      },
+      cprofesion_tomador: {
+        type: T.Int,
+        value: this.intField(this.pick(b, 'cprofesion_tomador')) ?? null,
+      },
+      cactividad_tomador: {
+        type: T.Int,
+        value: this.intField(this.pick(b, 'cactividad_tomador')) ?? null,
+      },
+      cprofesion_titular: {
+        type: T.Int,
+        value: this.intField(this.pick(b, 'cprofesion_titular')) ?? null,
+      },
+      cactividad_titular: {
+        type: T.Int,
+        value: this.intField(this.pick(b, 'cactividad_titular')) ?? null,
+      },
       fdesde: { type: T.Date, value: b['fdesde'] },
       fhasta: { type: T.Date, value: b['fhasta'] },
     };
@@ -659,8 +1461,17 @@ export class EmissionsService {
     const xplaca = String(this.pick(b, 'xplaca', 'placa') ?? '').trim();
     const preEmisionSp = SP_PRE_EMISION_AUTO_RCV;
     this.logger.log(
-      `emitLocal: EXEC ${preEmisionSp} placa=${xplaca} plan=${b['cplan'] ?? b['plan']} mprima=${mprima} ptasamon=${ptasamon}`,
+      `emitLocal: EXEC ${preEmisionSp} placa=${xplaca} plan=${b['cplan'] ?? b['plan']} mprima=${mprima} cmoneda=${planMoneda ?? 'null'} ifrecuencia=${this.pick(b, 'ifrecuencia', 'frecuencia') ?? 'A'} msumaaseg=${this.pick(b, 'msumaaseg', 'sumaaseg') ?? 'null'} fhasta=${b['fhasta'] ?? 'null'} ptasamon=${ptasamon}`,
     );
+    // TEMP debug: payload completo enviado al SP (quitar cuando ya no se necesite).
+    const spPayload = Object.fromEntries(
+      Object.entries(params).map(([key, field]) => {
+        const value = (field as { value: unknown }).value;
+        if (value instanceof Date) return [key, value.toISOString()];
+        return [key, value];
+      }),
+    );
+    this.logger.log(`emitLocal SP params ${preEmisionSp}: ${JSON.stringify(spPayload)}`);
 
     await this.syncPolVehCounter(
       this.intField(this.pick(b, 'cramo', 'ramo')) ?? defaultRamo,
@@ -674,6 +1485,7 @@ export class EmissionsService {
       spResult = await req.execute(preEmisionSp);
     } catch (err) {
       const msg = parseSPError(err);
+      this.throwIfBinacEmissionBlockedBySis2000(b, msg);
       if (!this.isCounterCollisionMessage(msg)) throw err;
       this.logger.warn(`emitLocal: contador POL_VEH desfasado (${msg}); reintento tras sync`);
       await this.syncPolVehCounter(
@@ -710,8 +1522,11 @@ export class EmissionsService {
     const pdfBase =
       this.config.get<string>('POLICY_PDF_URL') ?? this.config.get<string>('URLPoliza');
     const urlpoliza = buildPolicyPdfUrl(pdfBase, cnpoliza, fanopol, fmespol);
+    const url_club_arys = await this.resolveClubArysPdfForEmission(cnpoliza, b);
 
     this.logger.log(`emitLocal OK cnpoliza=${cnpoliza} cnrecibo=${cnrecibo}`);
+
+    await this.repairRcvCoberturasIfEmpty(cnpoliza);
 
     if (this.extractBeneficiario(b)) {
       try {
@@ -722,15 +1537,72 @@ export class EmissionsService {
       }
     }
 
+    const ccanalalt = this.intField(this.pick(b, 'ccanalalt', 'ccanalalt_in'));
+    if (ccanalalt != null) {
+      try {
+        const cgestor = await this.resolveEmissionGestor(b, ccanalalt);
+        if (cgestor) {
+          await this.applyPolicyGestor(cnpoliza, cgestor);
+        } else {
+          this.logger.warn(
+            `emitLocal: canal ${ccanalalt} sin gestor en magestor (filtro UUID) cnpoliza=${cnpoliza}`,
+          );
+        }
+      } catch (err) {
+        const msg = err instanceof Error ? err.message : String(err);
+        this.logger.warn(`applyPolicyGestor falló cnpoliza=${cnpoliza}: ${msg}`);
+      }
+    }
+
+    this.scheduleArysMembershipRegistration(cnpoliza, b);
+
     return {
       message: 'Póliza generada exitosamente',
       cnpoliza,
       cnrecibo,
       urlpoliza,
+      url_club_arys: url_club_arys || undefined,
       ncuota,
       fanopol,
       fmespol,
     };
+  }
+
+  /** Si adpolcob quedó sin prima (plan premium Auto), re-ejecuta spCalculoAuto vía repair SP. */
+  private async repairRcvCoberturasIfEmpty(cnpoliza: string): Promise<void> {
+    const poliza = String(cnpoliza ?? '').trim();
+    if (!poliza) return;
+
+    const T = this.db.types;
+    const check = this.db.request();
+    check.input('cnpoliza', T.NVarChar(30), poliza);
+    const existing = await check.query(`
+      SELECT CASE WHEN EXISTS (
+        SELECT 1 FROM adpolcob c
+        INNER JOIN adrecibos r ON r.crecibo = c.crecibo
+        INNER JOIN adpoliza p ON p.cpoliza = r.cpoliza
+        WHERE RTRIM(p.cnpoliza) = RTRIM(@cnpoliza) AND c.mprimabruta > 0
+      ) THEN 1 ELSE 0 END AS hasPrima
+    `);
+    if (Number(existing.recordset?.[0]?.['hasPrima'] ?? 0) === 1) return;
+
+    try {
+      const req = this.db.request();
+      req.input('cnpoliza', T.NVarChar(30), poliza);
+      req.output('pSuccess', T.Bit);
+      req.output('pErrorMessage', T.NVarChar(4000));
+      const result = await req.execute(SP_REPAIR_RCV_COBERTURAS);
+      const ok = result.output['pSuccess'] === true;
+      if (!ok) {
+        const msg = String(result.output['pErrorMessage'] ?? 'repair falló');
+        this.logger.warn(`repairRcvCoberturas cnpoliza=${poliza}: ${msg}`);
+        return;
+      }
+      this.logger.log(`repairRcvCoberturas OK cnpoliza=${poliza}`);
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : String(err);
+      this.logger.warn(`repairRcvCoberturas omitido cnpoliza=${poliza}: ${msg}`);
+    }
   }
 
   private async createEmissionAutoExternal(
@@ -788,11 +1660,19 @@ export class EmissionsService {
       }
 
       const dataObj = (resData['result'] ?? resData['data'] ?? resData) as Record<string, unknown>;
+      const cnpoliza = String(dataObj['poliza'] ?? dataObj['cnpoliza'] ?? '');
+      const url_club_arys = cnpoliza
+        ? await this.resolveClubArysPdfForEmission(cnpoliza, b)
+        : '';
+      if (cnpoliza) {
+        this.scheduleArysMembershipRegistration(cnpoliza, b);
+      }
       return {
         message: (resData['message'] as string) || 'Emisión registrada via API externa.',
-        cnpoliza: String(dataObj['poliza'] ?? dataObj['cnpoliza'] ?? ''),
+        cnpoliza,
         cnrecibo: String(dataObj['recibo'] ?? dataObj['cnrecibo'] ?? ''),
         urlpoliza: String(dataObj['urlpoliza'] ?? ''),
+        url_club_arys: url_club_arys || undefined,
         ncuota: dataObj['ncuota'] as number | undefined,
         fanopol: dataObj['fanopol'] as number | undefined,
         fmespol: dataObj['fmespol'] as number | undefined,

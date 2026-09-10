@@ -294,3 +294,39 @@ export async function updateApiKeyLegacy(
   );
   return findApiKeyByIdLegacy(prisma, id, withDocsSlug);
 }
+
+/**
+ * Realiza una consulta PostgreSQL a la base de datos "nest_api" (srv001 192.168.8.120)
+ * sobre la tabla public.maclient_api usando Prisma.
+ *
+ * Query:
+ * "SELECT * FROM public.maclient_api WHERE xcanal_venta = canal_venta LIMIT 1;"
+ *
+ * @param prisma Instancia de PrismaService
+ * @param canal_venta Parámetro de entrada (variable) para filtrar por xcanal_venta
+ * @returns El resultset como objeto JSON o null si no se encuentra registro
+ */
+export async function queryMaclientApi(
+  prisma: PrismaService,
+  canal_venta: string,
+): Promise<Record<string, any> | null> {
+  if (!prisma.isEnabled()) {
+    return null;
+  }
+
+  const rows = (await prisma.$queryRawUnsafe<Record<string, any>[]>(
+    `SELECT * FROM public.maclient_api WHERE xcanal_venta = $1 LIMIT 1;`,
+    canal_venta,
+  )) as Record<string, any>[];
+
+  if (!rows || rows.length === 0) {
+    return null;
+  }
+
+  return JSON.parse(
+    JSON.stringify(rows[0], (_, value) =>
+      typeof value === 'bigint' ? value.toString() : value,
+    ),
+  );
+}
+

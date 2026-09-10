@@ -58,9 +58,21 @@ Mismo `.npmrc` en `~/.npmrc` del usuario que ejecuta `npm install` para paquetes
 
 El monorepo usa `file:packages/nest-api-sdk` en desarrollo; integradores usan la versión de GitHub Packages.
 
-### Instalar paquete partner externo
+### Instalar / actualizar paquete partner externo
 
-1. `~/.npmrc` con scope del integrador + PAT `read:packages`.
-2. `npm install @ORG/partner-api-xxx@VERSION` en `server-api-sys`.
-3. `.env`: `PARTNER_PACKAGES=@ORG/partner-api-xxx` — **no** en `ecosystem.config.js` (PM2 pisa dotenv).
-4. `bash deploy.sh` → log: `Módulo partner cargado: ...`
+**Regla fija:** nunca borrar partners que ya estén en producción. Solo se **suman** o se actualiza la versión de uno.
+
+1. Anotar partners actuales:
+   ```bash
+   grep '^PARTNER_PACKAGES=' .env
+   npm ls --depth=0 | grep -E 'partner|quand-mind|esanchez'
+   ```
+2. `.npmrc` con scopes + PAT `read:packages` de la org del paquete a instalar (token real, no placeholder).
+3. `npm install @ORG/partner-api-xxx@VERSION` en `server-api-sys`.
+4. `.env`: **añadir** el paquete a `PARTNER_PACKAGES` (coma-separado). Ejemplo:
+   ```env
+   PARTNER_PACKAGES=@esanchez-exelixitech/partner-api-test,@exelixi/partner-api-starter,@quand-mind/api_planes_v2
+   ```
+   **No** en `ecosystem.config.js` (PM2 pisa dotenv).
+5. Si un partner previo desapareció de `node_modules`, reinstalarlo antes del restart.
+6. `npm run build && pm2 restart sysip-nest-api` → log debe listar **todos** en `Partner modules loaded`.

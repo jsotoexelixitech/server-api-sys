@@ -83,6 +83,7 @@ export class NestAuthService {
       resolved.apiKeyId,
       key,
       resolved.scopes,
+      resolved.xcanalVenta,
     );
     return this.buildTokenPair(session);
   }
@@ -115,7 +116,7 @@ export class NestAuthService {
 
   async resolveApiKeyForRequest(
     plainKey: string,
-  ): Promise<{ apiKeyId: string; scopes: string[] }> {
+  ): Promise<{ apiKeyId: string; scopes: string[]; xcanalVenta?: string | null }> {
     return this.resolveApiKey(plainKey);
   }
 
@@ -137,22 +138,33 @@ export class NestAuthService {
 
   private async resolveApiKey(
     key: string,
-  ): Promise<{ apiKeyId: string; scopes: string[] }> {
+  ): Promise<{ apiKeyId: string; scopes: string[]; xcanalVenta?: string | null }> {
     if (key.startsWith('nest_')) {
       const row = await this.apiKeys.findByPlainKey(key);
       if (!row) {
         throw new UnauthorizedException('API key nest-api no válida o revocada.');
       }
-      return { apiKeyId: row.id, scopes: row.scopes };
+      return {
+        apiKeyId: row.id,
+        scopes: row.scopes,
+        xcanalVenta: row.xcanalVenta ?? null,
+      };
     }
 
     if (this.envBool('NEST_AUTH_STRICT_APIKEY')) {
       await this.channels.assertApiKeyRegistered(key);
-    } else {
-      await this.channels.resolveChannel(key);
     }
 
-    return { apiKeyId: LEGACY_KEY_ID, scopes: ['*'] };
+    const channel = await this.channels.resolveChannel(key);
+    const canal = channel?.xcanal_venta;
+    return {
+      apiKeyId: LEGACY_KEY_ID,
+      scopes: ['*'],
+      xcanalVenta:
+        canal != null && String(canal).trim() !== ''
+          ? String(canal).trim()
+          : null,
+    };
   }
 
   private async buildTokenPair(session: NestAuthSession): Promise<TokenPairResponse> {

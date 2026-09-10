@@ -1,6 +1,7 @@
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
 import { Type } from 'class-transformer';
 import { IsIn, IsInt, IsNotEmpty, IsOptional, IsString, Max, MaxLength, Min, MinLength } from 'class-validator';
+import { AUTO_IFRECUENCIA_VALUES } from '../constants/auto-ifrecuencia.constants';
 
 export class GetCotizacionAutoDto {
   @ApiProperty({ example: '083', description: 'Código de marca del catálogo vehicular' })
@@ -62,10 +63,53 @@ export class GetCotizacionAutoDto {
   @Min(0)
   ntoneladas?: number;
 
+  @ApiPropertyOptional({
+    example: 0,
+    description: 'Porcentaje recargo RCV (masustac.porcenta). 0 = No aplica.',
+  })
+  @IsOptional()
+  @Type(() => Number)
+  @Min(0)
+  precargorcv?: number;
+
   @ApiPropertyOptional({ example: 18, description: 'Código de ramo (default 18 = RCV)' })
   @IsOptional()
   @Type(() => Number)
   @IsInt()
   @Min(1)
   cramo?: number;
+
+  @ApiPropertyOptional({ example: 5000, description: 'Suma asegurada del vehículo' })
+  @IsOptional()
+  @Type(() => Number)
+  @Min(0)
+  sumaAsegurada?: number;
+
+  @ApiPropertyOptional({
+    example: 'A',
+    description: 'Frecuencia de pago (ifrecuencia) — de spBuscaFrecuenciaPlan',
+    enum: AUTO_IFRECUENCIA_VALUES,
+  })
+  @IsOptional()
+  @IsIn([...AUTO_IFRECUENCIA_VALUES])
+  ifrecuencia?: string;
+
+  @ApiPropertyOptional({
+    example: 365,
+    description: 'Días de vigencia según frecuencia (maplanes_frec.ndias)',
+  })
+  @IsOptional()
+  @Type(() => Number)
+  @IsInt()
+  ndias?: number;
+
+  @ApiPropertyOptional({
+    example: 7,
+    description: 'Usuario Sis2000 (sso-delegate metadata.cusuario). Si omitido, usa env LAMUNDIAL_CUSUARIO_*.',
+  })
+  @IsOptional()
+  @Type(() => Number)
+  @IsInt()
+  @Min(1)
+  cusuario?: number;
 }

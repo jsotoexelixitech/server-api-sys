@@ -1,5 +1,5 @@
 -- Pre-emisión RCV auto (Nexus). Mismo contrato de parámetros que sp_pre_emision_Automovil_RCV2.
--- Cadena: speeValidateAutomovilGeneral → spCreateInmaItem → sp_contador_nexus → TMEMISION → sp_emision_automovil_rcv_nexus
+-- Cadena: spee_validate_automovil_general_nexus → spCreateInmaItem → sp_contador_nexus → TMEMISION → sp_emision_automovil_rcv_nexus
 -- Referencia: nest-api POST /external/createEmissionAuto (emitLocalAutomobile).
 
 CREATE PROCEDURE [dbo].[sp_pre_emision_automovil_rcv_nexus]
@@ -71,7 +71,12 @@ CREATE PROCEDURE [dbo].[sp_pre_emision_automovil_rcv_nexus]
     @xmodelo            VARCHAR(60)   = NULL,
     @xversion           VARCHAR(60)   = NULL,
     @fdesde             DATE          = NULL,
-    @fhasta             DATE          = NULL
+    @fhasta             DATE          = NULL,
+    @coberAdicional     VARCHAR(2)    = NULL,
+    @tasaPt             NUMERIC(18,2) = NULL,
+    @tasaCa             NUMERIC(18,2) = NULL,
+    @tasaPp             NUMERIC(18,2) = NULL,
+    @itipoEmi           VARCHAR(10)   = NULL
 AS
 BEGIN
     SET NOCOUNT ON;
@@ -107,7 +112,7 @@ BEGIN
         THROW 99001, @xerror, 1;
     END CATCH;
 
-    EXEC speeValidateAutomovilGeneral @cplan, @xplaca, @xsercar;
+    EXEC spee_validate_automovil_general_nexus @cplan, @xplaca, @xsercar;
 
     EXEC spCreateInmaItem
         @xmarca = @xmarca,
@@ -173,6 +178,7 @@ BEGIN
         cpersona_politica, cterm_y_cod, cproductor, ptasamon, mprima, ifrecuencia, femision, corigen_rel, api, method,
         cprog, ifuente, fingreso, cpoliza, cnpoliza, cproces, ccanalalt, cscanalalt, ctipocanal, ccategoria_uso, cmoneda,
         cusuario, ntoneladas, npuestos, precargorcv, iplaca, ptasamon_pago, msumaaseg, xmarca, xmodelo, xversion, fdesde, fhasta,
+        coberAdicional, tasaPt, tasaCa, tasaPp,
         iestado, xestado, xlog
     )
     VALUES (
@@ -184,7 +190,9 @@ BEGIN
         @cpersona_politica, @cterm_y_cod, @cproductor, @ptasamon, @mprima, @ifrecuencia, @femision, @corigen_rel, @api, @method,
         @cprog, @ifuente, @fingreso, @cpoliza, @cnpoliza, @cproces, @ccanalalt, @cscanalalt, @ctipocanal, @ccategoria_uso,
         @cmoneda, @cusuario, @ntoneladas, @npuestos, @precargorcv, @iplaca, @ptasamon_pago, @msumaaseg, @xmarca, @xmodelo,
-        @xversion, @fdesde, @fhasta, @iestado, @xestado, @xlog
+        @xversion, @fdesde, @fhasta,
+        NULLIF(RTRIM(@coberAdicional), ''), @tasaPt, @tasaCa, @tasaPp,
+        @iestado, @xestado, @xlog
     );
 
     SET @id = SCOPE_IDENTITY();

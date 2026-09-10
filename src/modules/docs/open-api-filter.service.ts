@@ -1,9 +1,17 @@
 import { Injectable, NotFoundException } from '@nestjs/common';
 import { OpenAPIObject } from '@nestjs/swagger/dist/interfaces';
-import { grantMatchesRoute } from '../auth/scopes/nest-auth-scopes.constants';
-import { buildScopeCatalog } from '../auth/scopes/scope-catalog.registry';
+import {
+  canonicalizePathTemplate,
+  grantMatchesRoute,
+} from '../auth/scopes/nest-auth-scopes.constants';
+import {
+  buildScopeCatalog,
+  inferScopeFromPath,
+} from '../auth/scopes/scope-catalog.registry';
 import { OpenApiDocumentStore } from './open-api-document.store';
+import { pruneOpenApiComponents } from './prune-openapi-components';
 
+/** Todos los verbos OpenAPI — no omitir put/patch (Swagger individual). */
 const HTTP_METHODS = new Set([
   'get',
   'post',
@@ -60,16 +68,21 @@ export class OpenApiFilterService {
     }
 
     const titleSuffix = keyName ? ` — ${keyName}` : '';
+    const components = pruneOpenApiComponents(source.components, [
+      filteredPaths,
+    ]);
+
     return {
       ...source,
       info: {
         ...source.info,
         title: `${source.info?.title ?? 'nest-api'}${titleSuffix}`,
         description:
-          'Documentación filtrada según los scopes de su token. Solo aparecen los endpoints autorizados.',
+          'Documentación filtrada según los scopes de su token. Solo aparecen los endpoints autorizados y sus schemas.',
       },
       paths: filteredPaths,
       tags: (source.tags ?? []).filter((tag) => visibleTags.has(tag.name)),
+      components,
     };
   }
 
@@ -80,7 +93,7 @@ export class OpenApiFilterService {
         const space = route.indexOf(' ');
         if (space <= 0) continue;
         const method = route.slice(0, space).toUpperCase();
-        const path = this.normalizePath(route.slice(space + 1));
+        const path = canonicalizePathTemplate(route.slice(space + 1));
         index.set(`${method} ${path}`, String(entry.id));
       }
     }
@@ -94,9 +107,9 @@ export class OpenApiFilterService {
     scopeIndex: Map<string, string>,
   ): boolean {
     const normalizedPath = this.normalizePath(pathKey);
-    const lookupKey = `${method.toUpperCase()} ${normalizedPath}`;
+    const lookupKey = `${method.toUpperCase()} ${canonicalizePathTemplate(normalizedPath)}`;
     const requiredScope =
-      scopeIndex.get(lookupKey) ?? this.inferPartnerScope(normalizedPath);
+      scopeIndex.get(lookupKey) ?? inferScopeFromPath(normalizedPath);
 
     if (!requiredScope) return true;
     return grantMatchesRoute(
@@ -105,12 +118,6 @@ export class OpenApiFilterService {
       normalizedPath,
       requiredScope,
     );
-  }
-
-  private inferPartnerScope(path: string): string | undefined {
-    const match = path.match(/\/api\/v1\/partner\/([^/]+)/i);
-    if (!match) return undefined;
-    return `partner:${match[1]}`;
   }
 
   private isAlwaysVisible(path: string): boolean {

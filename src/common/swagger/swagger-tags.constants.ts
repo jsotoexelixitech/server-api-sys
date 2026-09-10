@@ -1,5 +1,6 @@
 /** Tags Swagger — nombres orientados a integradores (La Mundial). */
 export const SWAGGER_TAGS = {
+  AUTH: '0. Autenticación nest-api',
   INMA: '1. Catálogo vehicular',
   VALREP: '2. Cotización y catálogos',
   EMISSION: '3. Emisión automóvil',
@@ -9,6 +10,11 @@ export const SWAGGER_TAGS = {
   CLIENT: '7. Consulta de clientes',
   PARTNER: '8. Integraciones partner',
   CONDOMINIO: '9. Emisión condominio',
+  ENDOSOS: '10. Endosos',
+  /** Solo para paquetes partner — no addTag en main (evita sección vacía en Swagger). */
+  RENOVATIONS: '11. Renovaciones',
+  PRODUCT_EMISSION: '12. Emisión genérica (product-builder)',
+  REPORTES: '13. Reportes dinámicos (ET)',
 } as const;
 
 export const SWAGGER_TAG_ORDER: string[] = Object.values(SWAGGER_TAGS);
@@ -23,6 +29,7 @@ export function createBrowserTagsSorter(): (a: string, b: string) => number {
 }
 
 export const SWAGGER_TAG_DESCRIPTIONS: Record<string, string> = {
+  [SWAGGER_TAGS.AUTH]: 'Canje de apikey por Bearer token y renovación de sesión.',
   [SWAGGER_TAGS.INMA]: 'Año, marca, modelo, versión y categoría de uso del vehículo.',
   [SWAGGER_TAGS.VALREP]: 'Estados, ciudades, planes, frecuencias y cálculo de prima.',
   [SWAGGER_TAGS.EMISSION]: 'Validación de placa/serial y emisión de póliza automóvil.',
@@ -33,4 +40,10 @@ export const SWAGGER_TAG_DESCRIPTIONS: Record<string, string> = {
   [SWAGGER_TAGS.PARTNER]:
     'Endpoints de integradores externos (paquetes npm registrados en PARTNER_PACKAGES).',
   [SWAGGER_TAGS.CONDOMINIO]: 'Planes, cotización y emisión de póliza de condominio.',
+  [SWAGGER_TAGS.ENDOSOS]: 'Endosos, anulaciones, cambios de datos y recibos.',
+  [SWAGGER_TAGS.RENOVATIONS]: 'Renovación de pólizas (integradores partner).',
+  [SWAGGER_TAGS.PRODUCT_EMISSION]:
+    'Cotizar, validar y emitir pólizas de ramos creados en product-builder.',
+  [SWAGGER_TAGS.REPORTES]:
+    'Esquemas dinámicos, siniestros, recibos, pólizas, sync y aseguradoras (ET / DB reportes).',
 };

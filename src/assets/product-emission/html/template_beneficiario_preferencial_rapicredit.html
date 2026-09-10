@@ -1,0 +1,434 @@
+<html>
+
+<head>
+  <title>{{title}}</title>
+  <!-- <link rel="stylesheet" href="templates/style.css"> -->
+  <style type="text/css">
+    
+    * {
+      margin: 0;
+      padding: 0;
+      text-indent: 0;
+      font-style: italic !important;
+    }
+
+    h1 {
+      color: black;
+      font-family: Arial, sans-serif;
+      font-style: normal;
+      font-weight: bold;
+      text-decoration: none;
+      font-size: 12pt;
+    }
+
+    p {
+      color: black;
+      font-family: Arial, sans-serif;
+      font-style: normal;
+      font-weight: normal;
+      text-decoration: none;
+      font-size: 12pt;
+      margin: 0pt;
+    }
+
+    li {
+      display: block;
+    }
+
+    #l1 {
+      padding-left: 0pt;
+      counter-reset: c1 1;
+    }
+
+    #l1>li>*:first-child:before {
+      counter-increment: c1;
+      content: counter(c1, decimal) ". ";
+      color: black;
+      font-style: normal;
+      font-weight: normal;
+      text-decoration: none;
+    }
+
+    #l1>li:first-child>*:first-child:before {
+      counter-increment: c1 0;
+    }
+
+    #l2 {
+      padding-left: 0pt;
+    }
+
+    #l2>li>*:first-child:before {
+      content: " ";
+      color: black;
+      font-family: Symbol, serif;
+      font-style: normal;
+      font-weight: normal;
+      text-decoration: none;
+      font-size: 12pt;
+    }
+
+    #l3 {
+      padding-left: 0pt;
+    }
+
+    #l3>li>*:first-child:before {
+      content: " ";
+      color: black;
+      font-family: Symbol, serif;
+      font-style: normal;
+      font-weight: normal;
+      text-decoration: none;
+      font-size: 12pt;
+    }
+
+    #l4 {
+      padding-left: 0pt;
+    }
+
+    #l4>li>*:first-child:before {
+      content: " ";
+      color: black;
+      font-family: Symbol, serif;
+      font-style: normal;
+      font-weight: normal;
+      text-decoration: none;
+      font-size: 12pt;
+    }
+
+    #l5 {
+      padding-left: 0pt;
+    }
+
+    #l5>li>*:first-child:before {
+      content: " ";
+      color: black;
+      font-family: Symbol, serif;
+      font-style: normal;
+      font-weight: normal;
+      text-decoration: none;
+      font-size: 12pt;
+    }
+
+    #l6 {
+      padding-left: 0pt;
+    }
+
+    #l6>li>*:first-child:before {
+      content: " ";
+      color: black;
+      font-family: Symbol, serif;
+      font-style: normal;
+      font-weight: normal;
+      text-decoration: none;
+      font-size: 12pt;
+    }
+  </style>
+</head>
+
+<body>
+
+  <!-- Puedes insertar esta tabla donde la necesites en tu archivo PHP/HTML -->
+   <div class="title">&nbsp;</div>
+
+  <table
+    style="width: 100%; font-family: Arial, sans-serif; font-size: 12pt; border-collapse: collapse; margin-top: 16px;">
+    <tr>
+      <td style="padding: 0; border: none;">
+        <b><i>FECHA: </i></b>{{fdiapol}} de {{fmespol}} de {{fanopol}}<br>
+        <b><i>PÓLIZA:</i></b>  {{cnpoliza}}<br>
+        <b>Certificado:</b> 0<br>
+        <b><i>ASEGURADO:</i></b> {{xasegurado}}
+      </td>
+    </tr>
+  </table>
+
+  <div
+    style="font-style: italic !important; font-family: Arial, sans-serif; font-size: 12pt; text-align: center; margin-bottom: 16px;">
+
+    <h2
+      style="text-align: center; font-family: Arial, sans-serif; font-style: italic; font-size: 18pt; margin: 16px 0;">
+      Beneficiario Preferencial
+    </h2>
+
+    <p style="font-family: Arial, sans-serif; font-size: 12pt; text-align: justify;">
+      En caso de siniestro por el cual <b>LA COMPAÑÍA</b> esté obligada a indemnizar pérdidas o daños según la Póliza,
+      la
+      indemnización será pagadera al Beneficiario Preferencial que conste en el Cuadro de la Póliza o sus Anexos, sin
+      exceder del saldo de su acreencia al momento del siniestro ni de la Suma Asegurada sobre los bienes dados en
+      garantía.
+    </p>
+    <p style="font-family: Arial, sans-serif; font-size: 12pt; text-align: justify;">
+      En cuanto se refiere a los intereses del Beneficiario Preferencial, esta Póliza no será anulada, perjudicada, ni
+      invalidada por cualquier acto u omisión de <b>EL ASEGURADO</b> ni por la falta de cumplimiento con cualquiera de
+      sus
+      garantías o condiciones sobre las cuales el Beneficiario preferencial no tenga control. Tampoco será anulada ni
+      modificada materialmente, en cuanto a los intereses del Beneficiario Preferencial, sin antes haberle dado un
+      preaviso por escrito de tal anulación o modificación con treinta (30) días consecutivos de anticipación.
+    </p>
+    <p style="font-family: Arial, sans-serif; font-size: 12pt; text-align: justify;">
+      Si <b>EL ASEGURADO</b> dejare de pagar cualquier prima en virtud de la Póliza a la cual esta Cláusula se adhiere,
+      el
+      Beneficiario Preferencial podrá pagarla al serle exigida.
+    </p>
+
+    <p style="font-family: Arial, sans-serif; font-size: 12pt; margin-top: 12px;">
+      <b><i>Beneficiario Preferencial:</i></b><br>
+      <b>“RAPI-CREDIT, C.A Rif: J-505363506”</b> Hasta donde sus intereses aparezcan involucrados.
+    </p>
+
+    <table style="width: 100%; margin-top: 32px; border-collapse: collapse;">
+      <tr>
+        <td style="border: none; text-align: center; font-family: Arial, sans-serif; font-size: 12pt;">
+          Por <b>LA MUNDIAL DE SEGUROS, C.A.</b>
+        </td>
+      </tr>
+      <tr>
+        <td style="border: none; text-align: center; padding-top: 12px;">
+          <!-- <img src="https://i.imgur.com/6QwQZ5y.png" alt="La Mundial de Seguros" style="height: 60px;"><br> -->
+                  {{img_sello}}<br>
+          <span style="font-size: 10pt;">----------------------------------------------</span>
+        </td>
+      </tr>
+    </table>
+
+  </div>
+
+</body>
+
+<!-- <body>
+  <h1 style="padding-top: 8pt; text-indent: 0pt; text-align: center">
+    ANEXO {{title}}
+  </h1>
+  <h1 style="
+        padding-top: 12pt;
+        padding-left: 14pt;
+        text-indent: 0pt;
+        line-height: 150%;
+        text-align: center;
+      ">
+    Para ser adherido y formar parte integrante de la póliza individual de
+    accidentes personales n° {{cnpoliza}} cuyo Tomador es {{xtomador}} y Asegurado es
+    {{xasegurado}} y vigencia {{fdesde}} - {{fhasta}}
+  </h1>
+  <p style="
+        padding-top: 5pt;
+        padding-left: 5pt;
+        text-indent: 0pt;
+        line-height: 150%;
+        text-align: justify;
+      ">
+    Contrario a lo indicado en la cláusula 4, numeral 4.2. de las Condiciones
+    Particulares del Seguros de Accidentes Personales, la cobertura de gastos
+    médicos tendrá el alcance que se describe a continuación. Las coberturas
+    serán las siguientes<b>:</b>
+  </p>
+  <p style="text-indent: 0pt; text-align: left"><br /></p>
+  <p style="
+        padding-left: 5pt;
+        text-indent: 0pt;
+        line-height: 150%;
+        text-align: justify;
+      ">
+    Los servicios descritos a continuación, luego de haber trascurrido el
+    plazo de espera (si lo hubiere) {{clinica}}
+  </p>
+  <p style="text-indent: 0pt; text-align: left"><br /></p>
+  <ol id="l1">
+    <li data-list-text="1.">
+      <h1 style="padding-left: 41pt; text-indent: -17pt; text-align: left">
+        Consultas Preventivas
+      </h1>
+      <ul id="l2">
+        <li data-list-text="">
+          <p style="padding-left: 77pt; text-indent: -17pt; text-align: left">
+            Tres (3) consultas al año: Medicina General
+          </p>
+          <p style="padding-top: 1pt; text-indent: 0pt; text-align: left">
+            <br />
+          </p>
+        </li>
+      </ul>
+    </li>
+    <li data-list-text="2.">
+      <h1 style="padding-left: 41pt; text-indent: -17pt; text-align: left">
+        Exámenes o Laboratorios
+      </h1>
+      <ul id="l3">
+        <li data-list-text="">
+          <p style="padding-left: 77pt; text-indent: -17pt; text-align: left">
+            1 Rx de máximo 2 Proyecciones
+          </p>
+        </li>
+        <li data-list-text="">
+          <p style="
+                padding-top: 6pt;
+                padding-left: 77pt;
+                text-indent: -17pt;
+                text-align: left;
+              ">
+            1 Laboratorio Perfil 20
+          </p>
+        </li>
+      </ul>
+    </li>
+    <li data-list-text="3.">
+      <h1 style="
+            padding-top: 6pt;
+            padding-left: 41pt;
+            text-indent: -17pt;
+            text-align: left;
+          ">
+        Servicios
+      </h1>
+      <ul id="l4">
+        <li data-list-text="">
+          <h1 style="
+                padding-top: 6pt;
+                padding-left: 77pt;
+                text-indent: -17pt;
+                line-height: 15pt;
+                text-align: left;
+              ">
+            Atención y Orientación Médica (Telemedicina)
+          </h1>
+          <ul id="l5">
+            <li data-list-text="">
+              <p style="
+                    padding-left: 113pt;
+                    text-indent: -8pt;
+                    line-height: 15pt;
+                    text-align: left;
+                  ">
+                Récipe, indicaciones e informe médico digital.
+              </p>
+            </li>
+            <li data-list-text="">
+              <p style="
+                    padding-left: 113pt;
+                    text-indent: -8pt;
+                    line-height: 15pt;
+                    text-align: left;
+                  ">
+                Seguimiento Médico.
+              </p>
+            </li>
+            <li data-list-text="">
+              <p style="
+                    padding-left: 113pt;
+                    text-indent: -8pt;
+                    line-height: 15pt;
+                    text-align: left;
+                  ">
+                Lectura de resultados.
+              </p>
+            </li>
+          </ul>
+        </li>
+        <li data-list-text="">
+          <h1 style="
+                padding-left: 77pt;
+                text-indent: -17pt;
+                line-height: 15pt;
+                text-align: left;
+              ">
+            Asistencia Médica Domiciliaria
+          </h1>
+          <p style="padding-left: 76pt; text-indent: 0pt; text-align: justify">
+            Va dirigida apacientes que por inconvenientes de movilidad y/o
+            estado de salud no pueden dirigirse a un centro hospitalario y
+            amerita ser tratado en su domicilio e incluye:
+          </p>
+          <ul id="l6">
+            <li data-list-text="">
+              <p style="
+                    padding-left: 148pt;
+                    text-indent: -17pt;
+                    line-height: 15pt;
+                    text-align: left;
+                  ">
+                Tratamiento unidosis en caso que se requiera
+              </p>
+            </li>
+            <li data-list-text="">
+              <p style="
+                    padding-left: 148pt;
+                    text-indent: -17pt;
+                    line-height: 15pt;
+                    text-align: left;
+                  ">
+                Tratamiento vía oral, intramuscular o endovenoso.
+              </p>
+            </li>
+            <li data-list-text="">
+              <p style="
+                    padding-left: 148pt;
+                    text-indent: -17pt;
+                    line-height: 15pt;
+                    text-align: left;
+                  ">
+                Hidrataciones.
+              </p>
+            </li>
+            <li data-list-text="">
+              <p style="
+                    padding-left: 148pt;
+                    text-indent: -17pt;
+                    line-height: 15pt;
+                    text-align: left;
+                  ">
+                Nebulizaciones.
+              </p>
+            </li>
+          </ul>
+        </li>
+        <li data-list-text="">
+          <h1 style="
+                padding-left: 77pt;
+                text-indent: -17pt;
+                line-height: 15pt;
+                text-align: left;
+              ">
+            Traslado de Ambulancia (1 al año)
+          </h1>
+        </li>
+      </ul>
+    </li>
+  </ol>
+  <p style="padding-left: 76pt; text-indent: 0pt; text-align: left">
+    La solicitud de traslado se realizará siempre que la misma sea requerida
+    por la Asistencia médica Domiciliaria
+  </p>
+  <pagebreak />
+  <h1 style="
+        padding-top: 20pt;
+        padding-left: 5pt;
+        text-indent: 0pt;
+        text-align: left;
+      ">
+    Salvo para el Servicio de telemedicina, Para el uso de estos servicios Se
+    establece un plazo de espera de 30 días contínuos.
+  </h1>
+  <p style="text-indent: 0pt; text-align: left"><br /></p>
+  <h1 style="padding-left: 5pt; text-indent: 0pt; text-align: left">
+    La solicitud de servicios se realiza a través del 05005526256
+  </h1>
+  <p style="text-indent: 0pt; text-align: left"><br /></p>
+  <h1 style="padding-left: 5pt; text-indent: 0pt; text-align: left">
+    Todos los demás términos y condiciones generales y particulares se
+    mantienen vigentes siempre que no contradigan lo aquí convenido entre las
+    partes
+  </h1>
+  <p style="text-indent: 0pt; text-align: left"><br /></p>
+
+  <table style="padding-left: 17pt; padding-right: 17pt; text-align: center; width: 100%">
+    <tbody>
+      <tr>
+        <td style="text-align: left"><strong>POR EL ASEGURADOR</strong></td>
+        <td style="text-align: right"><strong>POR EL TOMADOR</strong></td>
+      </tr>
+    </tbody>
+  </table>
+
+</body> -->
+
+</html>

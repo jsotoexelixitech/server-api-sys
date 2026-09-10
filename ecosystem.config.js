@@ -15,16 +15,34 @@ module.exports = {
       // ── Entorno ────────────────────────────────────────────────────────────
       // PUBLIC_* también en `env` base: pm2 restart sin --env production las conserva.
       // PARTNER_PACKAGES: leer solo de .env (no hardcodear aquí — PM2 pisa dotenv)
+      // srv001qa (121) = QA La Mundial → pm2 --env qa
+      // srv001 (120) = desarrollo cierrelmds → pm2 --env development
       env: {
         PUBLIC_API_PREFIX: '/nest-api-docs',
-        PUBLIC_API_ORIGIN: 'https://cierrelmds.exelixitech.com',
+        PUBLIC_API_ORIGIN: 'https://nexusqa.exelixitech.com',
         SWAGGER_SHOW_INTERNAL_SERVERS: 'true',
       },
-      env_production: {
+      env_development: {
         NODE_ENV:           'production',
-        SWAGGER_PATH:       'docs',   // vacío ('') para deshabilitar Swagger en prod
+        SWAGGER_PATH:       'docs',
         PUBLIC_API_PREFIX:  '/nest-api-docs',
         PUBLIC_API_ORIGIN:  'https://cierrelmds.exelixitech.com',
+        SWAGGER_SHOW_INTERNAL_SERVERS: 'true',
+      },
+      /** Alias legacy — usar env_development en srv001 (120) */
+      env_production: {
+        NODE_ENV:           'production',
+        SWAGGER_PATH:       'docs',
+        PUBLIC_API_PREFIX:  '/nest-api-docs',
+        PUBLIC_API_ORIGIN:  'https://cierrelmds.exelixitech.com',
+        SWAGGER_SHOW_INTERNAL_SERVERS: 'true',
+      },
+      /** QA La Mundial — mismo prefijo /nest-api-docs, origen https://nexusqa.exelixitech.com */
+      env_qa: {
+        NODE_ENV:           'production',
+        SWAGGER_PATH:       'docs',
+        PUBLIC_API_PREFIX:  '/nest-api-docs',
+        PUBLIC_API_ORIGIN:  'https://nexusqa.exelixitech.com',
         SWAGGER_SHOW_INTERNAL_SERVERS: 'true',
       },
 

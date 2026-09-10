@@ -11,6 +11,7 @@ import { ApiKeyService } from './api-key.service';
 import { ApiChannelService } from './api-channel.service';
 import { NestTokenRefreshInterceptor } from './nest-token-refresh.interceptor';
 import { ScopeCatalogBootstrapService } from './scopes/scope-catalog.bootstrap';
+import { NestRequestAuthInterceptor } from './nest-request-auth.interceptor';
 
 @Global()
 @Module({
@@ -44,6 +45,10 @@ import { ScopeCatalogBootstrapService } from './scopes/scope-catalog.bootstrap';
     {
       provide: APP_INTERCEPTOR,
       useClass: NestTokenRefreshInterceptor,
+    },
+    {
+      provide: APP_INTERCEPTOR,
+      useClass: NestRequestAuthInterceptor,
     },
   ],
   exports: [NestAuthService, NestAuthGuard, ApiChannelService, ApiKeyService],

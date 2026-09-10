@@ -4,14 +4,28 @@ import {
   InternalServerErrorException,
   Logger,
 } from '@nestjs/common';
+import { ConfigService } from '@nestjs/config';
 import { MssqlService } from '../../database/mssql.service';
+import { parseSPError } from '../../common/helpers/sp-error.helper';
+import {
+  SP_BUSCA_FRECUENCIA_PLAN_NEXUS,
+  SP_CALCULO_AUTO_NEXUS,
+  SP_GET_SUSTANCIAS_NEXUS,
+} from '../../config/sis2000-sp.constants';
 import { GetPlanesV2Dto } from './dto/get-planes-v2.dto';
 import { GetCotizacionAutoDto } from './dto/get-cotizacion-auto.dto';
+import { CalculatePlanCoberturasDto } from './dto/calculate-plan-coberturas.dto';
 
 export interface CotizacionResult {
   mprimaext: number;
   mprima: number;
   ptasa: number;
+  rates?: {
+    CA: number;
+    PT: number;
+    PP: number;
+  };
+  referenceSuma?: number;
 }
 
 export interface PlanItem {
@@ -32,11 +46,58 @@ interface CoberturaPlan {
   xcobertura: string;
 }
 
+export interface CalculatePlanCoberturasRow {
+  ccobertura?: number | string;
+  xdescripcion_l?: string;
+  prima?: number | null;
+  masegurada?: number | null;
+  cproducto?: string;
+  [key: string]: unknown;
+}
+
+export interface CalculatePlanCoberturasTotals {
+  totalPA?: number;
+  totalCA?: number;
+  totalPT?: number;
+  totalAP?: number;
+  totalPP?: number;
+}
+
+export interface CalculatePlanCoberturasResponse {
+  message: string;
+  status: true;
+  mount: CalculatePlanCoberturasRow[];
+  pa: number;
+  ca: number;
+  pt: number;
+  ap: number;
+  pp: number;
+  boolPT: boolean;
+  boolPP: boolean;
+  boolCA: boolean;
+  boolBl: boolean;
+  boolAd: boolean;
+  cproducto: string;
+}
+
 @Injectable()
 export class ValrepService {
   private readonly logger = new Logger(ValrepService.name);
 
-  constructor(private readonly db: MssqlService) {}
+  constructor(
+    private readonly db: MssqlService,
+    private readonly config: ConfigService,
+  ) {}
+
+  /** Placeholder Sis2000 en catálogos geo — no es estado/ciudad válido. */
+  static isGeoCatalogPlaceholder(label: string): boolean {
+    const t = String(label ?? '').trim().toUpperCase();
+    return t === 'TODO' || t === 'TODOS' || t === 'TODAS';
+  }
+
+  private resolveRamoBinacional(): number {
+    return parseInt(this.config.get<string>('LAMUNDIAL_RAMO_BINACIONAL', '28') ?? '28', 10);
+  }
 
   async getPlanesV2(body: GetPlanesV2Dto): Promise<PlanItem[]> {
     try {
@@ -143,10 +204,12 @@ export class ValrepService {
 
       const result = await req.execute('sp_ma_obtener_estados');
       const rows = (result.recordset ?? []) as { cvalor: number; xdescripcion: string }[];
-      return rows.map((r) => ({
-        cestado: Number(r.cvalor),
-        xdescripcion_l: String(r.xdescripcion ?? '').trim(),
-      }));
+      return rows
+        .map((r) => ({
+          cestado: Number(r.cvalor),
+          xdescripcion_l: String(r.xdescripcion ?? '').trim(),
+        }))
+        .filter((r) => r.xdescripcion_l && !ValrepService.isGeoCatalogPlaceholder(r.xdescripcion_l));
     } catch (err) {
       const msg = err instanceof Error ? err.message : String(err);
       this.logger.error(`getStates: ${msg}`);
@@ -171,10 +234,12 @@ export class ValrepService {
 
       const result = await req.execute('sp_ma_obtener_ciudades');
       const rows = (result.recordset ?? []) as { cvalor: number; xdescripcion: string }[];
-      return rows.map((r) => ({
-        cciudad: Number(r.cvalor),
-        xdescripcion_l: String(r.xdescripcion ?? '').trim(),
-      }));
+      return rows
+        .map((r) => ({
+          cciudad: Number(r.cvalor),
+          xdescripcion_l: String(r.xdescripcion ?? '').trim(),
+        }))
+        .filter((r) => r.xdescripcion_l && !ValrepService.isGeoCatalogPlaceholder(r.xdescripcion_l));
     } catch (err) {
       const msg = err instanceof Error ? err.message : String(err);
       this.logger.error(`getCities: ${msg}`);
@@ -182,13 +247,165 @@ export class ValrepService {
     }
   }
 
+  /** ctipo, npasajero y suma de referencia desde VInma (paridad cotización). */
+  private async resolveVinmaMeta(
+    cmarca: string,
+    cmodelo: string,
+    cversion: string,
+    cano: number,
+  ): Promise<{ ctipo: number; npasajero: number; mvalor: number }> {
+    const T = this.db.types;
+    const vinmaReq = this.db.request();
+    vinmaReq.input('cmarca', T.VarChar(4), cmarca);
+    vinmaReq.input('cmodelo', T.VarChar(4), cmodelo);
+    vinmaReq.input('cversion', T.VarChar(4), cversion);
+    vinmaReq.input('cano', T.Int, cano);
+    const vinmaResult = await vinmaReq.query<{
+      ctipo: number;
+      npasajero: number;
+      mvalor?: number;
+    }>(
+      `SELECT ctipo, npasajero, mvalor
+           FROM VInma
+          WHERE cmarca   = @cmarca
+            AND cmodelo  = @cmodelo
+            AND cversion = @cversion
+            AND cano     = @cano`,
+    );
+    const row = vinmaResult.recordset[0];
+    if (!row) {
+      throw new BadRequestException(
+        'Vehículo no encontrado en catálogo INMA para la combinación marca/modelo/versión/año.',
+      );
+    }
+    return {
+      ctipo: Number(row.ctipo ?? 0),
+      npasajero: Number(row.npasajero ?? 0),
+      mvalor: Number(row.mvalor ?? 0) || 5000,
+    };
+  }
+
   // ── Cotización automóvil ─────────────────────────────────────────────────
 
+  private spCalculoAutoNexusName(): string {
+    return process.env.MSSQL_SP_CALCULO_AUTO_NEXUS?.trim() || SP_CALCULO_AUTO_NEXUS;
+  }
+
+  /**
+   * HTTP: tasaPt/tasaCa/tasaPp opcionales (RCV no las manda; casco sí o null).
+   * SP: siempre se bindean (null si omitidas) salvo OMIT=true cuando el SP no las declara.
+   */
+  private spCalculoAutoNexusOmitsTasaParams(): boolean {
+    return process.env.MSSQL_SP_CALCULO_AUTO_NEXUS_OMIT_TASA_PARAMS === 'true';
+  }
+
+  private bindSpCalculoAutoNexusTasaParams(
+    calcReq: { input: (name: string, type: unknown, value: unknown) => void },
+    T: MssqlService['types'],
+    body: Pick<CalculatePlanCoberturasDto, 'tasaPt' | 'tasaCa' | 'tasaPp'>,
+  ): void {
+    if (this.spCalculoAutoNexusOmitsTasaParams()) return;
+    // Siempre enviar: si se omiten del EXEC, SQL Server falla con "expects @tasaPt".
+    calcReq.input('tasaPt', T.Numeric(18, 2), body.tasaPt ?? null);
+    calcReq.input('tasaCa', T.Numeric(18, 2), body.tasaCa ?? null);
+    calcReq.input('tasaPp', T.Numeric(18, 2), body.tasaPp ?? null);
+  }
+
+  private spGetSustanciasNexusName(): string {
+    return process.env.MSSQL_SP_GET_SUSTANCIAS_NEXUS?.trim() || SP_GET_SUSTANCIAS_NEXUS;
+  }
+
+  private spBuscaFrecuenciaPlanNexusName(): string {
+    return (
+      process.env.MSSQL_SP_BUSCA_FRECUENCIA_PLAN_NEXUS?.trim() ||
+      SP_BUSCA_FRECUENCIA_PLAN_NEXUS
+    );
+  }
+
+  /** Coberturas casco/AP que spCalculoAuto excluye de totalPA (ramo RCV / binacional). */
+  private static readonly COBER_EXCLUIDAS_TOTAL_PA = new Set([
+    '1', '2', '3', '4', '5', '16', '28', '69',
+  ]);
+
+  /**
+   * sp_calculo_auto_nexus con iplaca=B devuelve detalle pero a menudo NO el 2.º recordset
+   * con totalPA (a diferencia de la rama nacional). Sumamos prima del detalle con la misma
+   * regla que spCalculoAuto: coberturas fuera de casco/PT/PP/AP.
+   */
+  private sumPaFromDetalleBinacional(detalle: CalculatePlanCoberturasRow[]): number {
+    return detalle.reduce((sum, row) => {
+      const cc = String(row.ccobertura ?? '').trim();
+      if (ValrepService.COBER_EXCLUIDAS_TOTAL_PA.has(cc)) return sum;
+      return sum + Number(row.prima ?? 0);
+    }, 0);
+  }
+
+  private formatLocalYmd(d: Date): string {
+    const y = d.getFullYear();
+    const m = String(d.getMonth() + 1).padStart(2, '0');
+    const day = String(d.getDate()).padStart(2, '0');
+    return `${y}-${m}-${day}`;
+  }
+
+  /** Vigencia cotización — misma lógica que emision policyMapper.resolveVigencia. */
+  private resolveQuoteVigenciaYmd(ndias?: number | null): { fdesde: string; fhasta: string } {
+    const fdesde = this.formatLocalYmd(new Date());
+    const fhastaDate = new Date(`${fdesde}T12:00:00`);
+    const n = ndias != null ? Number(ndias) : null;
+    if (n != null && !Number.isNaN(n) && n > 0) {
+      fhastaDate.setDate(fhastaDate.getDate() + n);
+    } else if (n != null && !Number.isNaN(n) && n < 0) {
+      fhastaDate.setDate(fhastaDate.getDate() + Math.abs(n));
+    } else {
+      fhastaDate.setFullYear(fhastaDate.getFullYear() + 1);
+    }
+    return { fdesde, fhasta: this.formatLocalYmd(fhastaDate) };
+  }
+
+  private resolveCusuarioSis2000(): number {
+    const raw =
+      process.env.LAMUNDIAL_CUSUARIO_PLANES
+      ?? process.env.LAMUNDIAL_CUSUARIO_COBERTURAS
+      ?? process.env.LAMUNDIAL_CUSUARIO
+      ?? '6';
+    const n = parseInt(String(raw).trim(), 10);
+    return Number.isFinite(n) && n > 0 ? n : 6;
+  }
+
+  /**
+   * Usuario para `sp_calculo_auto_nexus` en cotización.
+   * Debe coincidir con `sp_genera_coberturas_recibos_auto_rcv_nexus`, que cotiza con cusuario 1422
+   * (no el cusuario de la póliza / TMEMISION).
+   */
+  private resolveCusuarioSpCalculoAuto(): number {
+    const raw =
+      process.env.LAMUNDIAL_CUSUARIO_SP_CALCULO
+      ?? process.env.LAMUNDIAL_CUSUARIO_COBERTURAS
+      ?? '1422';
+    const n = parseInt(String(raw).trim(), 10);
+    return Number.isFinite(n) && n > 0 ? n : 1422;
+  }
+
+  private describeSqlError(err: unknown): string {
+    const parsed = parseSPError(err).trim();
+    if (parsed) return parsed;
+    if (err && typeof err === 'object') {
+      const e = err as Record<string, unknown>;
+      const info = (e.originalError as Record<string, unknown> | undefined)?.info;
+      if (info && typeof info === 'object') {
+        const infoMsg = String((info as Record<string, unknown>).message ?? '').trim();
+        if (infoMsg) return infoMsg;
+      }
+      const number = e.number != null ? String(e.number) : '';
+      const code = e.code != null ? String(e.code) : '';
+      if (number || code) return `SQL error ${[code, number].filter(Boolean).join(' ')}`.trim();
+    }
+    return 'Error SQL sin mensaje (revisar sp_calculo_auto_nexus en Sis2000).';
+  }
+
+  /** POST /valrep/cotizacion — usa sp_calculo_auto_nexus (flujo Nexus), no spCalculoAuto legacy. */
   async getCotizacionAuto(body: GetCotizacionAutoDto): Promise<CotizacionResult> {
     try {
-      const T = this.db.types;
-
-      // 1. Tasa de cambio del dólar
       const rateReq = this.db.request();
       const rateResult = await rateReq.query<{ ptasamon: number }>(
         `SELECT ptasamon FROM mamonedas WHERE TRIM(cmoneda) = '$'`,
@@ -196,88 +413,113 @@ export class ValrepService {
       const ptasa: number = rateResult.recordset[0]?.ptasamon ?? 0;
       if (!ptasa) this.logger.warn('getCotizacionAuto: ptasa = 0 (verificar mamonedas)');
 
-      // 2. tipoV y puestos desde VInma (parámetros del SP)
-      const vinmaReq = this.db.request();
-      vinmaReq.input('cmarca',   T.VarChar(4), body.cmarca);
-      vinmaReq.input('cmodelo',  T.VarChar(4), body.cmodelo);
-      vinmaReq.input('cversion', T.VarChar(4), body.cversion);
-      vinmaReq.input('cano',     T.Int,        body.fano);
-      const vinmaResult = await vinmaReq.query<{ ctipo: number; npasajero: number }>(
-        `SELECT ctipo, npasajero
-           FROM VInma
-          WHERE cmarca   = @cmarca
-            AND cmodelo  = @cmodelo
-            AND cversion = @cversion
-            AND cano     = @cano`,
+      const vinma = await this.resolveVinmaMeta(
+        body.cmarca,
+        body.cmodelo,
+        body.cversion,
+        body.fano,
       );
-      const tipoV   = vinmaResult.recordset[0]?.ctipo    ?? 0;
-      const puestos = vinmaResult.recordset[0]?.npasajero ?? 0;
+      const mvalor = vinma.mvalor;
+      const { fdesde, fhasta } = this.resolveQuoteVigenciaYmd(body.ndias);
+      const ifrecuencia = String(body.ifrecuencia ?? 'A')
+        .trim()
+        .toUpperCase()
+        .charAt(0) || 'A';
 
-      // 3. Fechas: póliza anual por defecto
-      const fdesde = new Date();
-      const fhasta = new Date();
-      fhasta.setFullYear(fhasta.getFullYear() + 1);
+      const iplaca = body.iplaca ?? 'N';
+      let cramo = body.cramo ?? 18;
+      const ramoBinac = this.resolveRamoBinacional();
+      if (iplaca === 'B' && cramo !== ramoBinac) {
+        cramo = ramoBinac;
+      }
 
-      // 4. Ejecutar spCalculoAuto (replica exacta de externalChannelsModel.js)
-      const calcReq = this.db.request();
-      calcReq.input('cmarca',    T.VarChar(3),      body.cmarca);
-      calcReq.input('cmodelo',   T.VarChar(3),      body.cmodelo);
-      calcReq.input('cversion',  T.VarChar(3),      body.cversion);
-      calcReq.input('cano',      T.Int,             body.fano);
-      calcReq.input('cplan',     T.NVarChar(50),    body.cplan);
-      calcReq.input('sumaAseg',  T.Numeric(18, 2),  null);
-      calcReq.input('sumaAsegBl',T.Numeric(18, 2),  0);
-      calcReq.input('sumaAsegAd',T.Numeric(18, 2),  0);
-      calcReq.input('iplaca',    T.Char(1),         body.iplaca ?? 'N');
-      calcReq.input('fdesde',    T.Date,            fdesde);
-      calcReq.input('fhasta',    T.Date,            fhasta);
-      calcReq.input('tasaPt',    T.Numeric(18, 2),  0);
-      calcReq.input('tasaCa',    T.Numeric(18, 2),  0);
-      calcReq.input('recargo',   T.Numeric(18, 0),  0);
-      calcReq.input('tipoV',     T.Numeric(4, 0),   tipoV);
-      calcReq.input('uso',       T.Numeric(4, 0),   body.ccategoria_uso);
-      calcReq.input('puestos',   T.Numeric(4, 0),   puestos);
-      calcReq.input('toneladas', T.Numeric(4, 0),   body.ntoneladas ?? 0);
-      calcReq.input('recargoRcv',T.Numeric(6, 4),   0);
-      calcReq.input('cramo',     T.Numeric(5, 0),   body.cramo ?? 18);
+      const sumaRef = body.sumaAsegurada ?? mvalor;
+      const calc = await this.calculatePlanCoberturas({
+        cmarca: body.cmarca,
+        cmodelo: body.cmodelo,
+        cversion: body.cversion,
+        cano: body.fano,
+        idPlan: body.cplan,
+        suma: sumaRef,
+        iplaca,
+        fdesde,
+        fhasta,
+        uso: body.ccategoria_uso,
+        toneladas: body.ntoneladas ?? 0,
+        cramo,
+        ifrecuencia,
+        coberAdicional: 'RC',
+        sumaAsegBl: sumaRef,
+        sumaAsegAd: 0,
+        recargo: 0,
+        recargoRcv: body.precargorcv ?? 0,
+      });
 
-      const result = await calcReq.execute('spCalculoAuto');
-      const rows: Record<string, unknown>[] = result.recordsets?.[0] ?? [];
-
-      // 5. Filtrar coberturas PA (excluye casco/PT/PP: 1,2,3,4,5,16)
-      const EXCLUDE_PA = new Set([1, 2, 3, 4, 5, 16]);
-      const pa = rows.filter(
-        (r) => !EXCLUDE_PA.has(parseInt(String(r['ccobertura']).trim())),
-      );
-      const totalPa = pa.reduce(
-        (acc, r) => acc + (Number(r['prima']) || 0),
-        0,
-      );
-
-      if (totalPa === 0) {
+      const mprimaext = calc.pa;
+      if (mprimaext <= 0) {
         this.logger.warn(
-          `getCotizacionAuto: prima=0 para plan=${body.cplan} cmarca=${body.cmarca} cmodelo=${body.cmodelo} cversion=${body.cversion} fano=${body.fano} uso=${body.ccategoria_uso}`,
+          `getCotizacionAuto: prima=0 plan=${body.cplan} cmarca=${body.cmarca} cmodelo=${body.cmodelo} fano=${body.fano} iplaca=${iplaca} cramo=${cramo}`,
         );
         throw new BadRequestException(
           'La cotización retornó prima cero. Verifique que el plan y el vehículo sean compatibles.',
         );
       }
 
-      const mprimaext = parseFloat(totalPa.toFixed(2));
-      const mprima    = parseFloat((totalPa * ptasa).toFixed(2));
+      const mprima = parseFloat((mprimaext * ptasa).toFixed(2));
+
+      let rates = { CA: calc.ca, PT: calc.pt, PP: calc.pp };
+      try {
+        const T = this.db.types;
+        const targetSuma = body.sumaAsegurada ?? mvalor;
+        const rateQueryReq = this.db.request();
+        rateQueryReq.input('cmarca', T.VarChar(4), body.cmarca);
+        rateQueryReq.input('cmodelo', T.VarChar(4), body.cmodelo);
+        rateQueryReq.input('cversion', T.VarChar(4), body.cversion);
+        rateQueryReq.input('cano', T.Int, body.fano);
+        rateQueryReq.input('suma', T.Numeric(18, 2), targetSuma);
+        rateQueryReq.input('cplan', T.NVarChar(50), body.cplan);
+
+        const rateQueryRes = await rateQueryReq.query<{
+          tasaCA: number;
+          tasaPT: number;
+          tasaPP: number;
+        }>(
+          `SELECT
+             dbo.fn_buscar_tasa_casco(@cmarca, @cmodelo, @cversion, @cano, '1', @suma, @cplan) AS tasaCA,
+             dbo.fn_buscar_tasa_casco(@cmarca, @cmodelo, @cversion, @cano, '2', @suma, @cplan) AS tasaPT,
+             dbo.fn_buscar_tasa_casco(@cmarca, @cmodelo, @cversion, @cano, '28', @suma, @cplan) AS tasaPP`,
+        );
+
+        rates = {
+          CA: rateQueryRes.recordset[0]?.tasaCA ?? calc.ca,
+          PT: rateQueryRes.recordset[0]?.tasaPT ?? calc.pt,
+          PP: rateQueryRes.recordset[0]?.tasaPP ?? calc.pp,
+        };
+      } catch (rateErr) {
+        const msg = rateErr instanceof Error ? rateErr.message : String(rateErr);
+        this.logger.warn(`getCotizacionAuto: fn_buscar_tasa_casco falló, se usan tasas del SP Nexus: ${msg}`);
+      }
 
       this.logger.log(
-        `getCotizacionAuto: plan=${body.cplan} fano=${body.fano} mprimaext=$${mprimaext} mprima=Bs${mprima} ptasa=${ptasa}`,
+        `getCotizacionAuto: sp=${this.spCalculoAutoNexusName()} plan=${body.cplan} fano=${body.fano} mprimaext=$${mprimaext} mprima=Bs${mprima} ptasa=${ptasa}`,
       );
 
-      return { mprimaext, mprima, ptasa };
+      return {
+        mprimaext,
+        mprima,
+        ptasa,
+        rates,
+        referenceSuma: mvalor,
+      };
     } catch (err) {
       if (err instanceof BadRequestException) throw err;
       if (err instanceof InternalServerErrorException) throw err;
-      const msg = err instanceof Error ? err.message : String(err);
+      const msg = this.describeSqlError(err);
       this.logger.error(`getCotizacionAuto error: ${msg}`);
       throw new BadRequestException(
-        'No fue posible calcular la cotización con los datos suministrados. Verifique marca, modelo, versión y año.',
+        msg.length > 0 && msg.length <= 180
+          ? msg
+          : 'No fue posible calcular la cotización con los datos suministrados. Verifique marca, modelo, versión y año.',
       );
     }
   }
@@ -321,6 +563,65 @@ export class ValrepService {
 
   private static readonly ALLOWED_DOMAINS = ['SEXO', 'EDOCIVIL', 'PARENTESCOS', 'FRECUENCIAS', 'MATIPCANAL'];
 
+  private mapCatalogRows(
+    rows: Record<string, unknown>[],
+    codeKeys: string[],
+    labelKeys: string[],
+  ): { cvalor: string; xdescripcion: string }[] {
+    return rows
+      .map((row) => {
+        const codeRaw = codeKeys.map((k) => row[k]).find((v) => v != null && String(v).trim() !== '');
+        const labelRaw = labelKeys.map((k) => row[k]).find((v) => v != null && String(v).trim() !== '');
+        return {
+          cvalor: String(codeRaw ?? '').trim(),
+          xdescripcion: String(labelRaw ?? '').trim(),
+        };
+      })
+      .filter((item) => item.cvalor !== '' && item.xdescripcion !== '');
+  }
+
+  /** Profesiones / ocupaciones — sp_get_ocupaciones_nexus (campo cprofesion). */
+  async getOcupacionesNexus(): Promise<{ cvalor: string; xdescripcion: string }[]> {
+    try {
+      const result = await this.db.request().execute('sp_get_ocupaciones_nexus');
+      const rows = (result.recordset ?? []) as Record<string, unknown>[];
+      const mapped = this.mapCatalogRows(rows, ['cprofesion', 'cocupacion', 'cvalor'], [
+        'xprofesion',
+        'xocupacion',
+        'xdescripcion',
+      ]);
+      if (!mapped.length) {
+        throw new BadRequestException('No se encontraron ocupaciones/profesiones.');
+      }
+      this.logger.log(`getOcupacionesNexus: ${mapped.length} items vía SP`);
+      return mapped;
+    } catch (err) {
+      if (err instanceof BadRequestException) throw err;
+      const msg = err instanceof Error ? err.message : String(err);
+      this.logger.error(`getOcupacionesNexus: ${msg}`);
+      throw new InternalServerErrorException('No se pudo obtener la lista de profesiones.');
+    }
+  }
+
+  /** Actividades económicas — sp_get_actividades_nexus (campo cactividad). */
+  async getActividadesNexus(): Promise<{ cvalor: string; xdescripcion: string }[]> {
+    try {
+      const result = await this.db.request().execute('sp_get_actividades_nexus');
+      const rows = (result.recordset ?? []) as Record<string, unknown>[];
+      const mapped = this.mapCatalogRows(rows, ['cactividad', 'cvalor'], ['xactividad', 'xdescripcion']);
+      if (!mapped.length) {
+        throw new BadRequestException('No se encontraron actividades económicas.');
+      }
+      this.logger.log(`getActividadesNexus: ${mapped.length} items vía SP`);
+      return mapped;
+    } catch (err) {
+      if (err instanceof BadRequestException) throw err;
+      const msg = err instanceof Error ? err.message : String(err);
+      this.logger.error(`getActividadesNexus: ${msg}`);
+      throw new InternalServerErrorException('No se pudo obtener la lista de actividades económicas.');
+    }
+  }
+
   async getLists(cdominio: string): Promise<{ cvalor: string; xdescripcion: string }[]> {
     const domain = cdominio.toUpperCase().trim();
 
@@ -363,6 +664,8 @@ export class ValrepService {
   }
 
   async getFrecuencia(cplan: string, cramo?: number) {
+    const spName = this.spBuscaFrecuenciaPlanNexusName();
+    const ramoPersonas = 9;
     try {
       const T = this.db.types;
       const req = this.db.request();
@@ -371,14 +674,32 @@ export class ValrepService {
       req.output('berror', T.Bit, false);
       req.output('mensaje', T.NVarChar(60), '');
 
-      const result = await req.execute('spBuscaFrecuenciaPlan');
-      const rows = (result.recordset ?? []) as { cvalor: string; xdescripcion: string }[];
+      this.logger.log(`getFrecuencia: EXEC ${spName} cplan=${cplan} cramo=${cramo ?? 'null'}`);
+      const result = await req.execute(spName);
+      const rows = (result.recordset ?? []) as {
+        cvalor: string;
+        xdescripcion: string;
+        ndias?: number | null;
+      }[];
       if (Boolean(result.output['berror']) || !rows.length) {
+        // Personas/funerario (ramo 9): maplanes_frec suele estar vacío. SysIP
+        // persons-alt deja ANUAL y cotiza con ifrecuencia=A. No devolver 400.
+        if (Number(cramo) === ramoPersonas) {
+          this.logger.warn(
+            `getFrecuencia: plan=${cplan} cramo=9 sin filas en ${spName} — fallback ANUAL`,
+          );
+          return [{ cvalor: 'A', xdescripcion: 'ANUAL' }];
+        }
         throw new BadRequestException(
           String(result.output['mensaje'] ?? 'No se encontraron frecuencias para el plan.'),
         );
       }
-      return rows;
+      // El SP puede devolver varias filas con el mismo cvalor (A, B, D…).
+      return rows.filter((row, index, all) => {
+        const code = String(row.cvalor ?? '').trim();
+        if (!code) return false;
+        return all.findIndex((r) => String(r.cvalor ?? '').trim() === code) === index;
+      });
     } catch (err) {
       if (err instanceof BadRequestException) throw err;
       const msg = err instanceof Error ? err.message : String(err);
@@ -589,5 +910,259 @@ export class ValrepService {
       }
     }
     return planes;
+  }
+
+  /**
+   * Réplica SysIP `calculatePlanSis` usando `sp_calculo_auto_nexus` (flujo Nexus).
+   */
+  async calculatePlanCoberturas(
+    body: CalculatePlanCoberturasDto,
+  ): Promise<CalculatePlanCoberturasResponse> {
+    const spName = this.spCalculoAutoNexusName();
+    const cusuario = this.resolveCusuarioSpCalculoAuto();
+    const ifrecuenciaReq = String(body.ifrecuencia ?? 'A')
+      .trim()
+      .toUpperCase()
+      .charAt(0) || 'A';
+    // sp_genera_coberturas_nexus cotiza siempre en anual; fracciona al generar recibos.
+    const ifrecuencia = 'A';
+    if (ifrecuenciaReq !== 'A') {
+      this.logger.log(
+        `calculatePlanCoberturas: ifrecuencia=${ifrecuenciaReq} ignorada; se usa A (alineado sp_genera_nexus)`,
+      );
+    }
+
+    try {
+      const T = this.db.types;
+      const vinma = await this.resolveVinmaMeta(
+        body.cmarca,
+        body.cmodelo,
+        body.cversion,
+        body.cano,
+      );
+      const tipoV = body.tipo ?? vinma.ctipo;
+      const puestos = body.puestos ?? vinma.npasajero;
+      const sumaAseg =
+        body.suma != null && body.suma > 0 ? body.suma : vinma.mvalor || null;
+      const sumaAsegBl =
+        body.sumaAsegBl != null
+          ? body.sumaAsegBl
+          : sumaAseg != null && sumaAseg > 0
+            ? sumaAseg
+            : null;
+      const sumaAsegAd = body.sumaAsegAd ?? 0;
+      const iplaca = body.iplaca ?? 'N';
+      const calcReq = this.db.request();
+
+      calcReq.input('cmarca', T.NVarChar(4), body.cmarca);
+      calcReq.input('cmodelo', T.NVarChar(4), body.cmodelo);
+      calcReq.input('cversion', T.NVarChar(4), body.cversion);
+      calcReq.input('cano', T.Int, body.cano);
+      calcReq.input('cplan', T.VarChar(10), String(body.idPlan).trim());
+      calcReq.input('sumaAseg', T.Numeric(18, 2), sumaAseg);
+      calcReq.input('sumaAsegBl', T.Numeric(18, 2), sumaAsegBl);
+      calcReq.input('sumaAsegAd', T.Numeric(18, 2), sumaAsegAd);
+      calcReq.input('iplaca', T.Char(1), iplaca);
+      calcReq.input('fdesde', T.Date, new Date(body.fdesde));
+      calcReq.input('fhasta', T.Date, new Date(body.fhasta));
+      this.bindSpCalculoAutoNexusTasaParams(calcReq, T, body);
+      calcReq.input('recargo', T.Numeric(18, 2), body.recargo ?? 0);
+      calcReq.input('tipoV', T.Numeric(4), tipoV);
+      calcReq.input('uso', T.Numeric(4), body.uso);
+      calcReq.input('puestos', T.Numeric(4), puestos);
+      calcReq.input('toneladas', T.Numeric(4), body.toneladas ?? 0);
+      calcReq.input('recargoRcv', T.Numeric(6), body.recargoRcv ?? 0);
+      calcReq.input('cramo', T.Numeric(4), body.cramo ?? 18);
+      calcReq.input('cusuario', T.Numeric(20), cusuario);
+      calcReq.input('coberAdicional', T.VarChar(2), body.coberAdicional ?? 'RC');
+      calcReq.input('ifrecuencia', T.Char(1), ifrecuencia);
+
+      const result = await calcReq.execute(spName);
+      const recordsets = (result.recordsets ?? []) as CalculatePlanCoberturasRow[][];
+
+      if (!recordsets.length) {
+        throw new BadRequestException(
+          'Error en cálculos, por favor validar información',
+        );
+      }
+
+      const detalle = recordsets[0] ?? [];
+      if (!detalle.length) {
+        throw new BadRequestException(
+          'Error en cálculos, por favor validar información',
+        );
+      }
+      const precioRow = (recordsets[1]?.[0] ?? {}) as CalculatePlanCoberturasTotals;
+
+      let totalPA = Number(precioRow.totalPA ?? 0);
+      const totalCA = Number(precioRow.totalCA ?? 0);
+      const totalPT = Number(precioRow.totalPT ?? 0);
+      const totalAP = Number(precioRow.totalAP ?? 0);
+      const totalPP = Number(precioRow.totalPP ?? 0);
+
+      if (totalPA <= 0 && iplaca === 'B') {
+        totalPA = this.sumPaFromDetalleBinacional(detalle);
+        if (totalPA > 0) {
+          this.logger.log(
+            `calculatePlanCoberturas: totalPA binacional derivado del detalle (${detalle.length} filas) = ${totalPA}`,
+          );
+        }
+      }
+
+      const firstDetalle = detalle[0] as CalculatePlanCoberturasRow | undefined;
+      const tipoPlan = String(firstDetalle?.cproducto ?? '').trim();
+
+      this.logger.log(
+        `calculatePlanCoberturas: plan=${body.idPlan} sp=${spName} iplaca=${iplaca} cusuario=${cusuario} sumaAsegBl=${sumaAsegBl ?? 'null'} ifrecuencia=${ifrecuencia} pa=${totalPA} ca=${totalCA} pt=${totalPT}`,
+      );
+
+      return {
+        message: 'Calculo generado con exito',
+        status: true,
+        mount: detalle,
+        pa: totalPA,
+        ca: totalCA,
+        pt: totalPT,
+        ap: totalAP,
+        pp: totalPP,
+        boolPT: totalPT > 0,
+        boolPP: totalPP > 0,
+        boolCA: totalCA > 0,
+        boolBl: totalAP > 0,
+        boolAd: totalAP > 0,
+        cproducto: tipoPlan,
+      };
+    } catch (err) {
+      if (err instanceof BadRequestException) throw err;
+      const msg = this.describeSqlError(err);
+      this.logger.error(
+        `calculatePlanCoberturas error plan=${body.idPlan} cmarca=${body.cmarca} cmodelo=${body.cmodelo} cano=${body.cano} uso=${body.uso}: ${msg}`,
+      );
+      throw new BadRequestException(
+        msg.length > 0 && msg.length <= 180
+          ? msg
+          : 'No fue posible calcular las coberturas del plan. Verifique marca, modelo, versión, año y plan.',
+      );
+    }
+  }
+
+  /** Catálogo recargo RCV — sp_get_sustancias_nexus @cramo → masustac (18 = RCV). */
+  async getRecargosRcv(cramo = 18): Promise<
+    Array<{ csustanc: string; xsustanc: string; porcenta: number }>
+  > {
+    const spName = this.spGetSustanciasNexusName();
+    try {
+      const T = this.db.types;
+      const result = await this.db
+        .request()
+        .input('cramo', T.Int, cramo)
+        .execute(spName);
+      const rows = (result.recordset ?? []) as Array<{
+        csustanc: string | number;
+        xsustanc: string;
+        porcenta: number;
+      }>;
+      const recargos = rows.map((row) => ({
+        csustanc: String(row.csustanc ?? '').trim(),
+        xsustanc: String(row.xsustanc ?? '').trim(),
+        porcenta: Number(row.porcenta ?? 0),
+      }));
+      if (!recargos.length) {
+        this.logger.warn(`getRecargosRcv: SP ${spName} cramo=${cramo} sin filas`);
+      }
+      return recargos;
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : String(err);
+      this.logger.error(`getRecargosRcv sp=${this.spGetSustanciasNexusName()} cramo=${cramo}: ${msg}`);
+      throw new InternalServerErrorException(
+        'No se pudo obtener el catálogo de recargos RCV. Verifique sp_get_sustancias_nexus en Sis2000.',
+      );
+    }
+  }
+
+  /** Tipo de emisión por entidad/canal — tabla matipoemision (migrado desde SysIP-backend). */
+  async getMatipoemision(body: {
+    centidad: string;
+    citem: string;
+    cproducto?: string;
+  }): Promise<Record<string, unknown>[]> {
+    const centidad = String(body.centidad).trim();
+    const citem = String(body.citem).trim();
+    const cproducto = body.cproducto?.trim() || null;
+
+    try {
+      const T = this.db.types;
+      const req = this.db.request();
+      req.input('centidad', T.Char(1), centidad);
+      req.input('citem', T.NVarChar(20), citem);
+      req.input('cproducto', T.NVarChar(10), cproducto);
+
+      const result = await req.query(`
+        SELECT *
+        FROM matipoemision
+        WHERE centidad = @centidad
+          AND (citem = @citem OR citem IS NULL)
+          AND (@cproducto IS NULL OR cproducto = @cproducto OR cproducto IS NULL)
+      `);
+
+      return (result.recordset ?? []) as Record<string, unknown>[];
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : String(err);
+      this.logger.error(
+        `getMatipoemision centidad=${centidad} citem=${citem} cproducto=${cproducto}: ${msg}`,
+      );
+      throw new InternalServerErrorException(
+        'Error al obtener el tipo de emisión del canal.',
+      );
+    }
+  }
+
+  /** Métodos de pago por entidad/canal — tabla matipopago_entidades (migrado desde SysIP-backend). */
+  async getMatipopagoEntidades(body: {
+    centidad: string;
+    citem: string;
+    cproducto?: string;
+  }): Promise<Record<string, unknown>[]> {
+    const centidad = String(body.centidad).trim();
+    const citem = String(body.citem).trim();
+    const cproducto = body.cproducto?.trim() || null;
+
+    try {
+      const T = this.db.types;
+      const req = this.db.request();
+      req.input('centidad', T.Char(1), centidad);
+      req.input('citem', T.NVarChar(20), citem);
+      req.input('cproducto', T.NVarChar(10), cproducto);
+
+      const result = await req.query(`
+        SELECT *
+        FROM matipopago_entidades
+        WHERE centidad = @centidad
+          AND (@cproducto IS NULL OR cproducto = @cproducto OR cproducto IS NULL)
+          AND (
+            citem = @citem
+            OR (
+              citem IS NULL
+              AND NOT EXISTS (
+                SELECT 1
+                FROM matipopago_entidades AS specific
+                WHERE specific.centidad = @centidad
+                  AND specific.citem = @citem
+                  AND (@cproducto IS NULL OR specific.cproducto = @cproducto OR specific.cproducto IS NULL)
+              )
+            )
+          )
+      `);
+
+      return (result.recordset ?? []) as Record<string, unknown>[];
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : String(err);
+      this.logger.error(
+        `getMatipopagoEntidades centidad=${centidad} citem=${citem} cproducto=${cproducto}: ${msg}`,
+      );
+      throw new InternalServerErrorException(
+        'Error al obtener los métodos de pago del canal.',
+      );
+    }
   }
 }

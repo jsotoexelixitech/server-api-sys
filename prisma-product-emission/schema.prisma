@@ -1,0 +1,71 @@
+// product-emission — Flujo NUEVO y AISLADO de emisión genérica multi-ramo.
+// Ambiente 100% separado de nest-api/prisma/schema.prisma (auth La Mundial):
+//   - Datasource propio (PRODUCT_EMISSION_DATABASE_URL, distinta BD/credenciales).
+//   - Cliente Prisma propio, generado en carpeta separada (no comparte
+//     ../node_modules/@prisma/client con el schema de auth).
+//   - Migraciones propias (carpeta prisma-product-emission/migrations).
+//
+// Fuente del catálogo (ramo/producto/planes/coberturas): API de
+// proyecto-product-builder (otro proceso, otra BD). Este schema NO tiene
+// ninguna relación/FK con Sis2000 (mssql) ni con nest_auth (Postgres auth).
+
+generator client {
+  provider = "prisma-client-js"
+  output   = "../generated/product-emission-client"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("PRODUCT_EMISSION_DATABASE_URL")
+}
+
+enum GenericPolicyStatus {
+  EMITIDA
+  ANULADA
+}
+
+// Póliza emitida vía flujo genérico (ramo creado en proyecto-product-builder).
+model GenericPolicy {
+  id               String              @id @default(cuid())
+  numeroPoliza     String              @unique @map("numero_poliza") @db.VarChar(40)
+
+  // Referencia al Product de proyecto-product-builder (otra BD, sin FK real).
+  productId        String              @map("product_id") @db.VarChar(64)
+  productBranch    String              @map("product_branch") @db.VarChar(40)
+  ramoPoliza       String              @map("ramo_poliza") @db.VarChar(120)
+  productName      String              @map("product_name") @db.VarChar(200)
+  planName         String              @map("plan_name") @db.VarChar(150)
+
+  moneda           String              @db.VarChar(10)
+  primaTotal       Decimal             @map("prima_total") @db.Decimal(18, 2)
+
+  fechaEmision     DateTime            @map("fecha_emision") @db.Date
+  vigenciaDesde    DateTime            @map("vigencia_desde") @db.Date
+  vigenciaHasta    DateTime            @map("vigencia_hasta") @db.Date
+
+  status           GenericPolicyStatus @default(EMITIDA)
+
+  tomador          Json
+  asegurado        Json
+  beneficiarios    Json                @default("[]")
+  riskData         Json                @default("{}") @map("risk_data")
+  coberturas       Json                @default("[]")
+
+  documentFilename String?             @map("document_filename") @db.VarChar(160)
+  documentUrl      String?             @map("document_url") @db.VarChar(300)
+
+  createdAt        DateTime            @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt        DateTime            @updatedAt @map("updated_at") @db.Timestamptz(6)
+
+  @@index([productId])
+  @@index([productBranch])
+  @@map("generic_policy")
+}
+
+// Contador secuencial de número de póliza por ramo (evita colisiones concurrentes).
+model GenericPolicyCounter {
+  productBranch String @id @map("product_branch") @db.VarChar(40)
+  lastNumber    Int    @default(0) @map("last_number")
+
+  @@map("generic_policy_counter")
+}

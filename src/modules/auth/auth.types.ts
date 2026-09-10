@@ -5,6 +5,8 @@ export interface NestAuthSession {
   apiKeyId: string;
   apikey: string;
   scopes: string[];
+  /** Canal de venta de la API key (admin → nest_auth.api_key.xcanal_venta). */
+  xcanalVenta?: string | null;
   createdAt: number;
   lastUsedAt: number;
 }
@@ -13,6 +15,8 @@ export interface NestAuthContext {
   apikey: string;
   apiKeyId?: string;
   scopes: string[];
+  /** Canal de venta de la API key activa en este request. */
+  xcanalVenta?: string | null;
   sessionId?: string;
   via: 'bearer' | 'apikey' | 'none';
   refreshedAccessToken?: string;

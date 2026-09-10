@@ -1,0 +1,423 @@
+table {
+    width: 100%;
+    /*border-bottom: 1px solid #232323;
+/*margin-bottom: 1cm;*/
+}
+
+body {
+    font-family: Arial, Helvetica, sans-serif;
+    font-size: 10px;
+    margin: 0;
+    padding: 0;
+    -webkit-print-color-adjust: exact;
+    print-color-adjust: exact;
+}
+
+.policy-page {
+    position: relative;
+    padding-bottom: 4mm;
+}
+
+/* Marca de agua sutil (como mPDF SetWatermarkImage) */
+.policy-watermark::before {
+    content: '';
+    position: fixed;
+    top: 50%;
+    left: 50%;
+    transform: translate(-50%, -50%);
+    width: 260px;
+    height: 260px;
+    background-size: contain;
+    background-repeat: no-repeat;
+    background-position: center;
+    opacity: 0.07;
+    z-index: -1;
+    pointer-events: none;
+}
+
+.policy-watermark::after {
+    content: 'EXELIXI TECHNOLOGY';
+    position: fixed;
+    top: 52%;
+    left: 50%;
+    transform: translate(-50%, -50%) rotate(-20deg);
+    font-size: 34px;
+    font-weight: bold;
+    color: rgba(0, 52, 120, 0.05);
+    white-space: nowrap;
+    z-index: -2;
+    pointer-events: none;
+}
+
+.policy-footer {
+    text-align: center;
+    font-size: 9px;
+    margin-top: 6px;
+    color: #333;
+}
+
+p {
+    font-size: 14px;
+    text-align: justify;
+}
+
+b,
+th {
+    font-size: 13px;
+    
+}
+
+.title {
+    text-align: center;
+    font-style: none;
+    line-height: 1.2;
+}
+
+.subtitle {
+    background-color: #ccc;
+    width: 100%;
+    text-align: center;
+    font-size: 10px;
+    font-weight: bold;
+    line-height: 2;
+    margin: 2px 0;
+    padding: 1px 0;
+}
+
+th.subtitle {
+    background-color: #ccc;
+    width: 50%;
+    text-align: center;
+    font-size: 10px;
+    font-weight: bold;
+    line-height: 2;
+    padding: 2px 4px;
+}
+
+.section {
+    font-size: 8px;
+    text-align: left;
+    line-height: 1.35;
+}
+
+.section td,
+.section th {
+    padding: 1px 3px;
+    vertical-align: top;
+}
+
+.section th {
+    font-size: 8px;
+    text-align: left;
+    line-height: 1.5;
+}
+
+.section td b {
+    font-size: 8px;
+    text-align: left;
+    line-height: 1.5;
+}
+
+table.declaracion {
+    border: 1px solid black;
+    font-size: 8px;
+    text-align: left;
+    line-height: 1.35;
+    border-collapse: collapse;
+    width: 100%;
+}
+
+table.declaracion.firma-table td {
+    padding: 3px 5px;
+    vertical-align: top;
+    line-height: 1.35;
+}
+
+.firma-stamp {
+    text-align: center;
+    vertical-align: middle !important;
+    width: 22%;
+    border-left: 1px solid black;
+}
+
+.firma-estatus {
+    display: inline-block;
+    font-size: 13px;
+    font-weight: bold;
+    letter-spacing: 0.5px;
+}
+
+.declaracion-text {
+    line-height: 1.35;
+    margin: 4px 0 6px;
+}
+
+/* Tablas de coberturas — columnas fijas (no se corren entre ramos) */
+.table-coberturas-3,
+.table-coberturas-5 {
+    table-layout: fixed;
+    width: 100%;
+    border-collapse: collapse;
+}
+
+.table-coberturas-3 .cov-col-name {
+    width: 70%;
+    text-align: left;
+}
+
+.table-coberturas-3 .cov-col-suma,
+.table-coberturas-3 .cov-col-prima {
+    width: 15%;
+    text-align: right;
+}
+
+.table-coberturas-3 thead th {
+    font-weight: bold;
+    text-align: right;
+}
+
+.table-coberturas-3 thead th.cov-col-name {
+    text-align: left;
+}
+
+.table-coberturas-5 .cov5-col-name { width: 40%; text-align: left; }
+.table-coberturas-5 .cov5-col-suma { width: 18%; text-align: right; }
+.table-coberturas-5 .cov5-col-tasa { width: 12%; text-align: right; }
+.table-coberturas-5 .cov5-col-desc { width: 12%; text-align: right; }
+.table-coberturas-5 .cov5-col-prima { width: 18%; text-align: right; }
+
+.table-coberturas-5 thead th {
+    font-weight: bold;
+    text-align: right;
+}
+
+.table-coberturas-5 thead th.cov5-col-name {
+    text-align: left;
+}
+
+.table-coberturas-3 td,
+.table-coberturas-5 td {
+    vertical-align: top;
+    word-wrap: break-word;
+}
+
+/* .table_coberturas {
+    height:300px !important;
+} */
+
+.line31{
+    text-decoration: underline black;
+}
+.line30{
+    font-size: 12px;
+}
+
+ul li {
+    list-style-type: none;
+}
+
+.bold {
+    font-weight: bold;
+}
+
+.right {
+    text-align: right;
+}
+
+.center_description {
+    text-align: center;
+    font-style: none;
+}
+
+.justify_description {
+    text-align: justify;
+    font-style: none;
+}
+
+.line02 {
+    line-height: 0.2;
+}
+
+.line04 {
+    line-height: 0.4;
+}
+
+.line06 {
+    line-height: 0.6;
+}
+
+.line08 {
+    line-height: 1.1;
+}
+
+.line10 {
+    line-height: 1.2;
+}
+
+.line12 {
+    line-height: 1.2;
+}
+
+.line15 {
+    line-height: 1.5;
+}
+.line16 {
+    line-height: 2.8;
+}
+
+.size6 {
+    font-size: 6px;
+}
+
+.size8 {
+    font-size: 8px;
+}
+
+.size10 {
+    font-size: 10px;
+}
+
+.size12 {
+    font-size: 12px;
+}
+.size14 {
+    font-size: 14px;
+}
+.size16 {
+    font-size: 16px;
+}
+
+.mt6 {
+    margin-top: 6px;
+}
+
+.mt8 {
+    margin-top: 8px;
+}
+
+.mt10 {
+    margin-top: 10px;
+}
+
+
+/* CARNET ASEGURADOS RCV */
+
+.pre_cards {
+    text-align: center;
+    padding-top: 200px;
+}
+
+/* .cards {
+    display: inline-block;
+} */
+
+.pagado {
+    /* margin-top: 100px; */
+    /* position: fixed;
+    top: 400px;
+    right: 200px; */
+    /* float: left;
+    margin: 0 0 0 200px; */
+    /* z-index: 1;
+    position: absolute;
+    right: 0mm;
+    top: 500px; */
+
+    /* position: fixed;
+    z-index: 1; */
+}
+
+.card_background {
+    /* z-index: 1; */
+    /* background: rgba(230, 230, 230, 0.9); */
+    /* position: absolute;
+    bottom: -100px;
+    z-index: 0; */
+    /* position: relative; */
+    /* z-index: -1; */
+
+}
+
+.card {
+
+    /* display: flex;
+    flex-direction: column;
+    justify-content: space-between; */
+    width: 100%;
+    border: 4px dashed lightgray;
+    border-radius: 15px;
+    font-family: sans-serif;
+}
+
+.card table {
+    /* width: initial;
+    font-size: initial; */
+}
+
+.card_table_item {
+    font-size: 12px
+}
+
+.card_table_subitem {
+    font-size: 10px
+}
+
+.bold {
+    font-weight: bold;
+}
+
+
+.card_header {
+    /* display: flex;
+    flex-direction: row;
+    align-items: center;
+    justify-content: center; */
+    font-weight: bold;
+    margin-left: 10px;
+    margin-right: 10px;
+}
+
+.card_title {
+    font-size: 12px;
+    font-weight: bold;
+    /* justify-content: center;
+    align-items: center; */
+    padding-bottom: 10px;
+}
+
+.card_body {
+    /* display: flex;
+    flex-direction: row; */
+    /* font-size: 16px; */
+    /* font-size: 8px !important; */
+}
+
+.card_footer {
+    background: #003478;
+    border-radius: 0 0 15px 15px;
+    padding-top: 3px;
+    padding-bottom: 3px;
+    padding-left: 5px;
+    padding-right: 5px;
+    text-align: justify;
+    font-weight: bold;
+}
+
+.card_footer p {
+    padding: 0;
+    margin: 0;
+    color: white;
+    font-size: 9px;
+    line-height: 1;
+}
+
+.arys_data {
+    line-height: 0.8;
+    font-size: 9px;
+}
+
+.card_contact {
+
+    font-size: 10px;
+    text-align: center;
+}

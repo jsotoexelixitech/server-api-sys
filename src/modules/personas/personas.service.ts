@@ -129,6 +129,70 @@ export class PersonasService {
     return JSON.stringify(mapped);
   }
 
+  /**
+   * Geo del beneficiario. El cuadro (SPReCpBeneficiarioPref) lee
+   * `maclient_dir.cestado` → `maestados`. El OPENJSON Nexus usa rutas distintas
+   * (`estado_beneficiario`, `cestado_beneficiario` o `cestado`); se envían todas.
+   */
+  private mapBeneficiarioGeo(b: Record<string, unknown>): {
+    estado_beneficiario: number | null;
+    cestado_beneficiario: number | null;
+    cestado: number | null;
+    estado: number | null;
+    ciudad_beneficiario: number | null;
+    cciudad_beneficiario: number | null;
+    cciudad: number | null;
+    ciudad: number | null;
+  } {
+    const estado = this.intField(
+      b.estado_beneficiario ?? b.cestado_beneficiario ?? b.cestado ?? b.estado,
+    );
+    const ciudad = this.intField(
+      b.ciudad_beneficiario ?? b.cciudad_beneficiario ?? b.cciudad ?? b.ciudad,
+    );
+    return {
+      estado_beneficiario: estado,
+      cestado_beneficiario: estado,
+      cestado: estado,
+      estado: estado,
+      ciudad_beneficiario: ciudad,
+      cciudad_beneficiario: ciudad,
+      cciudad: ciudad,
+      ciudad: ciudad,
+    };
+  }
+
+  /**
+   * Sis2000 no actualiza `maclient_dir` si el RIF ya existe, y el SP Nexus
+   * a veces deja `cestado` en NULL aunque la ciudad sí entre. El PDF queda
+   * con ciudad y ESTADO vacío. Completa el código geográfico tras emitir.
+   */
+  private async syncBeneficiarioDir(lista: Record<string, unknown>[]): Promise<void> {
+    const T = this.db.types;
+    for (const b of lista) {
+      const rif = this.intField(b.xrif_beneficiario ?? b.identificacion ?? b.rif_beneficiario);
+      const geo = this.mapBeneficiarioGeo(b);
+      if (!rif || geo.cestado == null) continue;
+      const req = this.db.request();
+      req.input('cci_rif', T.Numeric(13, 0), rif);
+      req.input('cestado', T.SmallInt, geo.cestado);
+      req.input('cciudad', T.SmallInt, geo.cciudad);
+      const result = await req.query(`
+        UPDATE maclient_dir
+        SET cestado = @cestado,
+            cciudad = COALESCE(NULLIF(cciudad, 0), @cciudad, cciudad)
+        WHERE cci_rif = @cci_rif
+          AND (cestado IS NULL OR cestado = 0);
+      `);
+      const affected = Array.isArray(result.rowsAffected)
+        ? result.rowsAffected.reduce((a, n) => a + n, 0)
+        : Number(result.rowsAffected ?? 0);
+      this.logger.log(
+        `syncBeneficiarioDir rif=${rif} cestado=${geo.cestado} filas=${affected}`,
+      );
+    }
+  }
+
   /** JSON de beneficiarios al formato OPENJSON del pre-SP personas. */
   private mapBeneficiariosForSp(
     lista: Record<string, unknown>[],
@@ -146,6 +210,12 @@ export class PersonasService {
       estado_civil_beneficiario: String(b.iestado_civil_beneficiario ?? 'S').charAt(0),
       fnac_beneficiario: b.fnac_beneficiario ?? b.fechaNac ?? null,
       nparentesco_beneficiario: getPar(b.nparentesco_beneficiario ?? b.parentesco),
+      ...this.mapBeneficiarioGeo(b),
+      direccion_beneficiario:
+        b.direccion_beneficiario ?? b.xdireccion_beneficiario ?? b.direccion ?? null,
+      telefono_beneficiario: b.xtelefono_beneficiario ?? b.telefono ?? null,
+      correo_beneficiario: b.xcorreo_beneficiario ?? b.email ?? null,
+      pporce_beneficiario: Number(b.pporce_beneficiario ?? b.pporcen ?? b.pporce) || 0,
     }));
     return JSON.stringify(mapped);
   }
@@ -222,61 +292,88 @@ export class PersonasService {
   // ── Planes de personas (spGetPlanesPerFunerario) ───────────────────────────
 
   async getPlanesPer(cramo?: number, _ctipo?: number | null): Promise<PlanPerItem[]> {
+    const ramo = cramo ?? this.defaultRamo;
     try {
-      const T = this.db.types;
-      const ramo = cramo ?? this.defaultRamo;
-      const codes = this.funeralPlanCodes;
-
-      const req = this.db.request();
-      req.input('cramo', T.Int, ramo);
-      req.input(
-        'cplanes',
-        T.NVarChar(200),
-        codes.length > 0 ? codes.join(',') : null,
-      );
-
-      const result = await req.execute('spGetPlanesPerFunerario');
-      const planRows = (result.recordsets?.[0] ??
-        result.recordset ??
-        []) as Record<string, unknown>[];
-      const parentRows = (result.recordsets?.[1] ?? []) as Record<string, unknown>[];
-
-      const parentescosByPlan = new Map<
-        string,
-        PlanPerItem['parentescos']
-      >();
-      for (const row of parentRows) {
-        const cplan = String(row['cplan'] ?? '').trim();
-        if (!cplan) continue;
-        const list = parentescosByPlan.get(cplan) ?? [];
-        list.push({
-          cparen: Number(row['cparen']),
-          xparentesco: String(row['xparentesco'] ?? '').trim(),
-          min_edad: Number(row['min_edad']),
-          max_edad: Number(row['max_edad']),
-        });
-        parentescosByPlan.set(cplan, list);
-      }
-
-      return planRows
-        .map((p) => {
-          const cplan = String(p['cplan'] ?? '').trim();
-          return {
-            cplan,
-            xplan: String(p['xplan'] ?? '').trim(),
-            cramo: Number(p['cramo'] ?? ramo),
-            cmoneda: String(p['cmoneda'] ?? '').trim() || undefined,
-            parentescos: parentescosByPlan.get(cplan) ?? [],
-          };
-        })
-        .filter((p) => p.cplan);
+      return await this.getPlanesPerFromFuneralSp(ramo);
     } catch (err) {
       const msg = err instanceof Error ? err.message : String(err);
-      this.logger.error(`getPlanesPer: ${msg}`);
-      throw new InternalServerErrorException(
-        `Error al obtener los planes de personas: ${msg}`,
-      );
+      this.logger.warn(`getPlanesPer: spGetPlanesPerFunerario falló, fallback por cplan. ${msg}`);
+      return this.getPlanesPerByCodes(ramo);
     }
+  }
+
+  private async getPlanesPerFromFuneralSp(ramo: number): Promise<PlanPerItem[]> {
+    const T = this.db.types;
+    const codes = this.funeralPlanCodes;
+    const req = this.db.request();
+    req.input('cramo', T.Int, ramo);
+    req.input(
+      'cplanes',
+      T.NVarChar(200),
+      codes.length > 0 ? codes.join(',') : null,
+    );
+
+    const result = await req.execute('spGetPlanesPerFunerario');
+    const planRows = (result.recordsets?.[0] ??
+      result.recordset ??
+      []) as Record<string, unknown>[];
+    const parentRows = (result.recordsets?.[1] ?? []) as Record<string, unknown>[];
+
+    const parentescosByPlan = new Map<string, PlanPerItem['parentescos']>();
+    for (const row of parentRows) {
+      const cplan = String(row['cplan'] ?? '').trim();
+      if (!cplan) continue;
+      const list = parentescosByPlan.get(cplan) ?? [];
+      list.push({
+        cparen: Number(row['cparen']),
+        xparentesco: String(row['xparentesco'] ?? '').trim(),
+        min_edad: Number(row['min_edad']),
+        max_edad: Number(row['max_edad']),
+      });
+      parentescosByPlan.set(cplan, list);
+    }
+
+    const planes = planRows
+      .map((p) => {
+        const cplan = String(p['cplan'] ?? '').trim();
+        return {
+          cplan,
+          xplan: String(p['xplan'] ?? '').trim(),
+          cramo: Number(p['cramo'] ?? ramo),
+          cmoneda: String(p['cmoneda'] ?? '').trim() || undefined,
+          parentescos: parentescosByPlan.get(cplan) ?? [],
+        };
+      })
+      .filter((p) => p.cplan);
+    if (!planes.length) {
+      throw new Error('spGetPlanesPerFunerario no devolvió planes');
+    }
+    return planes;
+  }
+
+  private async getPlanesPerByCodes(ramo: number): Promise<PlanPerItem[]> {
+    const planes: PlanPerItem[] = [];
+    for (const cplan of this.funeralPlanCodes) {
+      let parentescos: PlanPerItem['parentescos'] = [];
+      try {
+        const rows = await this.getParenPlanPer(ramo, cplan);
+        parentescos = rows.map((row) => ({
+          cparen: Number(row.cparen),
+          xparentesco: String(row.xparentesco ?? '').trim(),
+          min_edad: Number.NaN,
+          max_edad: Number.NaN,
+        }));
+      } catch {
+        parentescos = [];
+      }
+      planes.push({
+        cplan,
+        xplan: `Plan ${cplan}`,
+        cramo: ramo,
+        parentescos,
+      });
+    }
+    return planes;
   }
 
   async getParenPlanPer(cramo: number, cplan: string) {
@@ -565,6 +662,55 @@ export class PersonasService {
     };
   }
 
+  /**
+   * ¿Hay póliza funeraria vigente para esta cédula? (adpoliza casegurado + ramo + iestado V).
+   * No requiere plan: se usa al capturar la cédula, antes de avanzar.
+   */
+  async findPolizaVigenteByCedula(rifRaw: string | number, cramo?: number) {
+    const digits = String(rifRaw ?? '').replace(/\D/g, '');
+    if (digits.length < 6) {
+      throw new BadRequestException('La cédula debe ser numérica (mínimo 6 dígitos).');
+    }
+    const ramo = cramo ?? this.defaultRamo;
+    try {
+      const req = this.db.request();
+      const T = this.db.types;
+      req.input('rif', T.Numeric(12, 0), Number(digits));
+      req.input('cramo', T.Int, ramo);
+      const result = await req.query(`
+        SELECT TOP 1
+          LTRIM(RTRIM(cnpoliza)) AS cnpoliza,
+          cramo,
+          LTRIM(RTRIM(cplan)) AS cplan,
+          CONVERT(varchar(10), fhasta, 23) AS fhasta
+        FROM adpoliza
+        WHERE casegurado = @rif
+          AND cramo = @cramo
+          AND iestado = 'V'
+          AND fhasta > GETDATE()
+        ORDER BY fhasta DESC
+      `);
+      const row = result.recordset?.[0] as
+        | { cnpoliza?: string; cramo?: number; cplan?: string; fhasta?: string }
+        | undefined;
+      if (!row?.cnpoliza) {
+        return { hasVigente: false as const };
+      }
+      return {
+        hasVigente: true as const,
+        cnpoliza: String(row.cnpoliza).trim(),
+        cramo: Number(row.cramo ?? ramo),
+        cplan: String(row.cplan ?? '').trim(),
+        fhasta: String(row.fhasta ?? '').trim(),
+      };
+    } catch (err) {
+      if (err instanceof BadRequestException) throw err;
+      const msg = err instanceof Error ? err.message : String(err);
+      this.logger.error(`findPolizaVigenteByCedula: ${msg}`);
+      throw new InternalServerErrorException('Error al consultar póliza vigente.');
+    }
+  }
+
   // ── Validación de persona (speeValidatePersonGeneral) ──────────────────────
   async validateEmissionPerson(body: Record<string, unknown>) {
     const req = this.db.request();
@@ -670,6 +816,13 @@ export class PersonasService {
         fhasta = d.toISOString().slice(0, 10);
       }
 
+      if (b['ccanalalt_in'] != null && b['ccanalalt'] == null) {
+        b['ccanalalt'] = b['ccanalalt_in'];
+      }
+      if (b['cscanalalt_in'] != null && b['cscanalalt'] == null) {
+        b['cscanalalt'] = b['cscanalalt_in'];
+      }
+
       const canalCtipo = canal['ctipocanal'] as string | null | undefined;
       const ctipocanal = (b['ctipocanal'] ??
         ((canalCtipo === 'T' || canalCtipo === 'A' || canalCtipo === 'D') ? canalCtipo : null)) as string | null;
@@ -715,7 +868,10 @@ export class PersonasService {
         asegurados as Record<string, unknown>[],
         beneficiarios,
       );
-      if (isViajeroPlan(cramoEmision, planEmision) || isViajeLocalPlan(cramoEmision, planEmision)) {
+      if (
+        isViajeroPlan(cramoEmision, planEmision) ||
+        isViajeLocalPlan(cramoEmision, planEmision)
+      ) {
         beneficiarios = [];
         b['beneficiarios'] = [];
       }
@@ -795,7 +951,12 @@ export class PersonasService {
             xapellido_beneficiario: String(a.xapellido_beneficiario ?? a.apellido),
             fnac_beneficiario: a.fnac_beneficiario ? String(a.fnac_beneficiario) : (a.fechaNac ? String(a.fechaNac) : null),
             isexo_beneficiario: String(a.isexo_beneficiario ?? (a.sexo ? String(a.sexo)[0].toUpperCase() : 'M')),
-            nparentesco_beneficiario: Number(getPar(a.nparentesco_beneficiario ?? a.parentesco))
+            nparentesco_beneficiario: Number(getPar(a.nparentesco_beneficiario ?? a.parentesco)),
+            pporce_beneficiario: Number(a.pporce_beneficiario ?? a.pporcen ?? a.pporce) || 0,
+            ...this.mapBeneficiarioGeo(a as Record<string, unknown>),
+            direccion_beneficiario: a.direccion_beneficiario ?? a.direccion ?? null,
+            xtelefono_beneficiario: a.xtelefono_beneficiario ?? a.telefono ?? null,
+            xcorreo_beneficiario: a.xcorreo_beneficiario ?? a.email ?? null,
           }))
         };
 
@@ -950,7 +1111,7 @@ export class PersonasService {
             value: this.mapAseguradosForSp(asegurados as Record<string, unknown>[], getPar),
           },
           beneficiarios: {
-            type: T.NVarChar(5000),
+            type: T.NVarChar(T.MAX),
             value: this.mapBeneficiariosForSp(beneficiarios as Record<string, unknown>[], getPar),
           },
         };
@@ -1008,6 +1169,13 @@ export class PersonasService {
             const msg = clearErr instanceof Error ? clearErr.message : String(clearErr);
             this.logger.error(`clearViajeLocalBeneficiary falló cnpoliza=${cnpoliza}: ${msg}`);
           }
+        }
+
+        try {
+          await this.syncBeneficiarioDir(beneficiarios as Record<string, unknown>[]);
+        } catch (syncErr) {
+          const msg = syncErr instanceof Error ? syncErr.message : String(syncErr);
+          this.logger.error(`syncBeneficiarioDir falló cnpoliza=${cnpoliza}: ${msg}`);
         }
 
         this.logger.log(`createEmissionPerson: emitida OK cnpoliza=${cnpoliza}`);

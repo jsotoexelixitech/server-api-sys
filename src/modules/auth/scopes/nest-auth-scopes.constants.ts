@@ -6,6 +6,16 @@ export const NEST_AUTH_SCOPES = {
   COLLECTION_WRITE: 'collection:write',
   DOCUMENTS_WRITE: 'documents:write',
   ADMIN_KEYS: 'admin:keys',
+  PRODUCT_EMISSION_WRITE: 'product-emission:write',
+  CLIENT_READ: 'client:read',
+  /** Rutas bajo /api/v1/renovations/* (paquetes partner de renovación). */
+  RENOVATIONS_WRITE: 'renovations:write',
+  /** Catálogos INMA / valrep (consultas auxiliares de emisión). */
+  CATALOG_READ: 'catalog:read',
+  /** Endosos bajo /api/endosos/ o /api/v1/endosos/. */
+  ENDOSOS_WRITE: 'endosos:write',
+  /** Reportes partner (/api/v1/report/) y reportes ET (dynamic-schemas, siniestros, etc.). */
+  REPORT_WRITE: 'report:write',
 } as const;
 
 export type NestAuthScopeId =
@@ -29,7 +39,16 @@ export const NEST_AUTH_SCOPE_CATALOG: NestAuthScopeMeta[] = [
     id: NEST_AUTH_SCOPES.EMISSIONS_PERSON,
     label: 'Emisión personas / viajero',
     description: 'Emitir pólizas de personas',
-    routes: [],
+    routes: [
+      'POST /api/v1/personas/poliza-vigente',
+      'POST /api/v1/personas/emision',
+      'POST /api/v1/app/getParenPlanPer',
+      'POST /api/v1/app/getCotizacionPer',
+      'POST /api/v1/viajero-nacional/emision',
+      'POST /api/v1/viajero-margarita/emision',
+      'POST /api/v1/viajero-3-dias/emision',
+      'POST /api/v1/viajero-7-dias/emision',
+    ],
   },
   {
     id: NEST_AUTH_SCOPES.EMISSIONS_CONDOMINIO,
@@ -53,6 +72,47 @@ export const NEST_AUTH_SCOPE_CATALOG: NestAuthScopeMeta[] = [
     id: NEST_AUTH_SCOPES.ADMIN_KEYS,
     label: 'Administrar keys',
     description: 'Panel y API de gestión de API keys',
+    routes: [],
+  },
+  {
+    id: NEST_AUTH_SCOPES.PRODUCT_EMISSION_WRITE,
+    label: 'Emisión genérica (product-builder)',
+    description: 'Cotizar/validar/emitir pólizas de ramos creados en proyecto-product-builder',
+    routes: [],
+  },
+  {
+    id: NEST_AUTH_SCOPES.CLIENT_READ,
+    label: 'Consulta de clientes',
+    description: 'Datos del cliente, pólizas del asegurado y coberturas',
+    routes: [
+      'GET /api/v1/client/search/{cci_rif}',
+      'GET /api/v1/client/search/policies/{cci_rif}',
+      'POST /api/v1/client/search/coverages',
+    ],
+  },
+  {
+    id: NEST_AUTH_SCOPES.RENOVATIONS_WRITE,
+    label: 'Renovaciones',
+    description: 'Renovación de pólizas (integradores partner bajo /api/v1/renovations/)',
+    routes: [],
+  },
+  {
+    id: NEST_AUTH_SCOPES.CATALOG_READ,
+    label: 'Catálogos INMA / valrep',
+    description: 'Consultas de catálogo vehicular y tarifario RCV',
+    routes: [],
+  },
+  {
+    id: NEST_AUTH_SCOPES.ENDOSOS_WRITE,
+    label: 'Endosos',
+    description: 'Consultas y operaciones de endosos',
+    routes: [],
+  },
+  {
+    id: NEST_AUTH_SCOPES.REPORT_WRITE,
+    label: 'Reportes',
+    description:
+      'Reportes partner (recibos, comisiones) y reportes dinámicos ET (esquemas, siniestros, recibos, pólizas, sync)',
     routes: [],
   },
 ];
@@ -85,6 +145,42 @@ export function normalizeHttpPath(path: string): string {
     : cleaned;
 }
 
+/**
+ * Unifica plantillas Nest (`:id`) y OpenAPI (`{id}`) para comparar grants.
+ * También sirve para match runtime: grant con `:id` vs URL concreta `/123`.
+ */
+export function canonicalizePathTemplate(path: string): string {
+  return normalizeHttpPath(path)
+    .replace(/\{[^}]+\}/gi, ':param')
+    .replace(/:[^/\s]+/g, ':param');
+}
+
+/** true si grantPath (plantilla o concreta) describe requestPath (plantilla o concreta). */
+export function pathMatchesRouteTemplate(
+  grantPath: string,
+  requestPath: string,
+): boolean {
+  const gCanon = canonicalizePathTemplate(grantPath);
+  const rCanon = canonicalizePathTemplate(requestPath);
+  if (gCanon === rCanon) return true;
+
+  const gParts = normalizeHttpPath(grantPath).split('/');
+  const rParts = normalizeHttpPath(requestPath).split('/');
+  if (gParts.length !== rParts.length) return false;
+
+  for (let i = 0; i < gParts.length; i++) {
+    const gp = gParts[i];
+    const rp = rParts[i];
+    const gIsParam =
+      gp.startsWith(':') || (gp.startsWith('{') && gp.endsWith('}'));
+    const rIsParam =
+      rp.startsWith(':') || (rp.startsWith('{') && rp.endsWith('}'));
+    if (gIsParam || rIsParam) continue;
+    if (gp !== rp) return false;
+  }
+  return true;
+}
+
 /** Línea canónica: `POST /api/v1/...` */
 export function toRouteGrantLine(method: string, path: string): string {
   return `${String(method).toUpperCase()} ${normalizeHttpPath(path)}`;
@@ -101,14 +197,15 @@ export function grantMatchesRoute(
   if (!granted?.length) return false;
   if (scopeMatches(granted, requiredScope)) return true;
 
-  const routeLine = toRouteGrantLine(method, path);
+  const methodUpper = String(method).toUpperCase();
   for (const grant of granted) {
     const normalized = String(grant ?? '').trim();
     if (!normalized.includes(' ')) continue;
     const space = normalized.indexOf(' ');
     const grantMethod = normalized.slice(0, space).toUpperCase();
-    const grantPath = normalizeHttpPath(normalized.slice(space + 1));
-    if (`${grantMethod} ${grantPath}` === routeLine) return true;
+    if (grantMethod !== methodUpper) continue;
+    const grantPath = normalized.slice(space + 1);
+    if (pathMatchesRouteTemplate(grantPath, path)) return true;
   }
   return false;
 }

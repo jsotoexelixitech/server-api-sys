@@ -13,7 +13,7 @@ import { CalcularPrimaEndosoDto } from './dto/calcular-prima-endoso.dto';
 import {
   AUTO_IFRECUENCIA_CUOTAS,
   AUTO_IFRECUENCIA_VALUES,
-  AutoIfrecuencia,
+  AutoIfrecuenciaCode,
 } from '../valrep/constants/auto-ifrecuencia.constants';
 
 @Injectable()
@@ -123,7 +123,7 @@ export class EndososService {
   private resolveIfrecuencia(
     dto: CrearReciboEndosoDto,
     ncuotas?: number | null,
-  ): AutoIfrecuencia {
+  ): AutoIfrecuenciaCode {
     const dtoAny = dto as CrearReciboEndosoDto & {
       cfrecuencia?: string;
       xfrecuencia?: string;
@@ -134,7 +134,7 @@ export class EndososService {
       dtoAny.cfrecuencia ??
       dtoAny.xfrecuencia;
     if (raw != null && String(raw).trim() !== '') {
-      const code = String(raw).trim().toUpperCase().charAt(0) as AutoIfrecuencia;
+      const code = String(raw).trim().toUpperCase().charAt(0) as AutoIfrecuenciaCode;
       if (AUTO_IFRECUENCIA_VALUES.includes(code)) return code;
     }
     const n = ncuotas ?? this.resolveNcuotas(dto);

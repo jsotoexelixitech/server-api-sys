@@ -9,6 +9,7 @@ import {
   IsString,
   Min,
 } from 'class-validator';
+import { AUTO_IFRECUENCIA_VALUES } from '../../valrep/constants/auto-ifrecuencia.constants';
 
 export class CreateEmissionAutoDto {
   // ── Póliza ────────────────────────────────────────────────────────────────
@@ -250,8 +251,8 @@ export class CreateEmissionAutoDto {
   @IsNumber()
   productor?: number;
 
-  @ApiProperty({ example: 'A', description: 'Frecuencia de pago', enum: ['A', 'S', 'C', 'T', 'M'] })
-  @IsIn(['A', 'S', 'C', 'T', 'M'])
+  @ApiProperty({ example: 'A', description: 'Frecuencia de pago', enum: AUTO_IFRECUENCIA_VALUES })
+  @IsIn([...AUTO_IFRECUENCIA_VALUES])
   frecuencia: string;
 
   @ApiProperty({ example: '2025-06-30', description: 'Fecha de emisión (YYYY-MM-DD)' })
@@ -303,4 +304,54 @@ export class CreateEmissionAutoDto {
   @IsOptional()
   @IsNumber()
   ptasa?: number;
+
+  @ApiPropertyOptional({ example: 'NU', description: 'Tipo de emisión (NU, SO, RE, RM)' })
+  @IsOptional()
+  @IsString()
+  itipoEmi?: string;
+
+  @ApiPropertyOptional({ example: 'RC', description: 'Cobertura adicional (RC, CA, PT)' })
+  @IsOptional()
+  @IsString()
+  coberAdicional?: string;
+
+  @ApiPropertyOptional({ example: 0, description: 'Tasa Pérdida Total' })
+  @IsOptional()
+  @IsNumber()
+  tasaPt?: number;
+
+  @ApiPropertyOptional({ example: 0, description: 'Tasa Cobertura Amplia' })
+  @IsOptional()
+  @IsNumber()
+  tasaCa?: number;
+
+  @ApiPropertyOptional({ example: 0, description: 'Tasa Pérdida Parcial' })
+  @IsOptional()
+  @IsNumber()
+  tasaPp?: number;
+
+  @ApiPropertyOptional({ description: 'Canal alterno (Marketplace / SSO).' })
+  @IsOptional()
+  @IsInt()
+  ccanalalt_in?: number;
+
+  @ApiPropertyOptional({ description: 'Subcanal alterno (Marketplace / SSO).' })
+  @IsOptional()
+  @IsInt()
+  cscanalalt_in?: number;
+
+  @ApiPropertyOptional({ description: 'Código gestor (magestor.cgestor). Si omitido y hay canal, se resuelve en emisión.' })
+  @IsOptional()
+  @IsString()
+  cgestor?: string;
+
+  @ApiPropertyOptional({ description: 'Entidad emisora: C = canal, P = productor.' })
+  @IsOptional()
+  @IsString()
+  centidad?: string;
+
+  @ApiPropertyOptional({ description: 'Ítem de entidad (ccanalalt si centidad=C).' })
+  @IsOptional()
+  @IsString()
+  citem?: string;
 }

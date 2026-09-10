@@ -9,7 +9,8 @@ export const envValidationSchema = Joi.object({
   /** Prefijo HTTPS cierrelmds (ej. /nest-api-docs). Vacío = rutas en raíz (/docs, /api). */
   PUBLIC_API_PREFIX: Joi.string().allow('').default(''),
   /** Origen público para Swagger servers (sin barra final). */
-  PUBLIC_API_ORIGIN: Joi.string().uri().default('https://cierrelmds.exelixitech.com'),
+  /** Origen público HTTPS. QA srv001: nexusqa. Prod: cierrelmds. */
+  PUBLIC_API_ORIGIN: Joi.string().uri().default('https://nexusqa.exelixitech.com'),
   CORS_ORIGIN: Joi.string().default('*'),
 
   SERVER_BD: Joi.string().required(),
@@ -21,16 +22,39 @@ export const envValidationSchema = Joi.object({
   MSSQL_ENCRYPT: Joi.boolean().default(false),
   MSSQL_TRUST_SERVER_CERTIFICATE: Joi.boolean().default(true),
   MSSQL_ENABLE_ARITH_ABORT: Joi.boolean().default(true),
+  /** SP Nexus: primas por cobertura (`POST /valrep/calculate-plan-coberturas`). */
+  MSSQL_SP_CALCULO_AUTO_NEXUS: Joi.string().default('sp_calculo_auto_nexus'),
+  /**
+   * HTTP: tasas opcionales. SP: se envían siempre como null si faltan, salvo:
+   * true = SP sin @tasaPt/@tasaCa/@tasaPp (no enviar nunca).
+   */
+  MSSQL_SP_CALCULO_AUTO_NEXUS_OMIT_TASA_PARAMS: Joi.boolean().default(false),
+  MSSQL_SP_GET_SUSTANCIAS_NEXUS: Joi.string().default('sp_get_sustancias_nexus'),
+  MSSQL_SP_BUSCA_FRECUENCIA_PLAN_NEXUS: Joi.string().default(
+    'sp_busca_frecuencia_plan_nexus',
+  ),
 
   /** local = INSERT directo Sis2000 (default). external = HTTP La Mundial QA. */
   EMISSION_SOURCE: Joi.string().valid('local', 'external').default('local'),
   LAMUNDIAL_PRODUCTOR: Joi.string().optional(),
   LAMUNDIAL_CUSUARIO: Joi.string().optional(),
+  /** cusuario en sp_calculo_auto_nexus (debe coincidir con sp_genera_coberturas_nexus, default 1422). */
+  LAMUNDIAL_CUSUARIO_SP_CALCULO: Joi.string().optional(),
   /** Plan por defecto en validateEmissionAuto cuando el cliente aún no eligió plan (Formulario Exélixi). */
   LAMUNDIAL_PLAN_DEFAULT: Joi.string().default('RCVBAS'),
   POLICY_PDF_URL: Joi.string().optional(),
   /** Alias legacy Express (misma URL base PDF). */
   URLPoliza: Joi.string().optional(),
+  /** Base PDF ingreso de caja Sis2000 (alias legacy URLingreso_caja). */
+  URLingreso_caja: Joi.string().optional(),
+  INGRESO_CAJA_URL: Joi.string().optional(),
+  ARYS_TRADICIONAL_PDF_URL: Joi.string().uri().optional(),
+  ARYS_AUTO_BI_PDF_URL: Joi.string().uri().optional(),
+  /** Integración HTTP Arys/Sarys (membresía post-emisión RCV). */
+  SARYS_API_ENABLED: Joi.boolean().default(true),
+  SARYS_BASE_URL: Joi.string().uri().default('http://sarys.arysauto.com:9082'),
+  SARYS_TIPO_MEMBRESIA_RCV: Joi.number().integer().min(1).default(6),
+  SARYS_TIMEOUT_MS: Joi.number().integer().min(1000).default(15000),
   EXTERNAL_API_URL_AUTO: Joi.string().optional(),
   EXTERNAL_API_KEY: Joi.string().optional(),
   EXTERNAL_BASIC_AUTH: Joi.string().optional(),
@@ -54,4 +78,68 @@ export const envValidationSchema = Joi.object({
   NEST_PG_DATABASE_URL: Joi.string().optional(),
   /** Token para panel /api/v1/admin y UI /admin/ */
   NEST_ADMIN_TOKEN: Joi.string().min(16).optional(),
+
+  /**
+   * Flujo NUEVO y AISLADO: emisión genérica multi-ramo (product-emission).
+   * Ambiente separado: BD propia, cliente Prisma propio (prisma-product-emission/),
+   * catálogo (ramo/planes/coberturas) vía API de proyecto-product-builder.
+   * No afecta módulos activos de La Mundial (emissions/personas/collection/external)
+   * ni comparte BD/schema con NEST_PG_DATABASE_URL (auth nest_auth).
+   */
+  PRODUCT_BUILDER_API_URL: Joi.string().uri().default('http://localhost:3001'),
+  PRODUCT_BUILDER_API_PREFIX: Joi.string().default('producto-builder-api'),
+  /** Cuenta de servicio para autenticarse contra proyecto-product-builder (requiere Bearer). */
+  PRODUCT_BUILDER_API_EMAIL: Joi.string().optional(),
+  PRODUCT_BUILDER_API_PASSWORD: Joi.string().optional(),
+  /** BD propia y separada de la póliza genérica (schema prisma-product-emission/). */
+  PRODUCT_EMISSION_DATABASE_URL: Joi.string().optional(),
+  /** Ruta absoluta o relativa donde se guardan los documentos generados (.docx/.pdf). */
+  PRODUCT_EMISSION_DOCS_DIR: Joi.string().default('temp-product-emission-docs'),
+
+  /** Correo post-emisión RCV (SMTP directo o proxy sendmail_sisip). */
+  MAIL_ENABLED: Joi.boolean().default(false),
+  /** smtp = Nodemailer + plantilla welcome. sisip = POST URL_API_EMAIL (PHP La Mundial). */
+  MAIL_TRANSPORT: Joi.string().valid('smtp', 'sisip').default('smtp'),
+  MAIL_AUTO_ON_EMIT: Joi.boolean().default(false),
+  MAIL_DEFAULT_CC: Joi.string().allow('').optional(),
+  SMTP_HOST: Joi.string().default('mail.lamundialdeseguros.com'),
+  SMTP_PORT: Joi.number().default(25),
+  SMTP_SECURE: Joi.boolean().default(false),
+  SMTP_USER: Joi.string().allow('').optional(),
+  SMTP_PASS: Joi.string().allow('').optional(),
+  SMTP_FROM: Joi.string().email().default('info@lamundialdeseguros.com'),
+  SMTP_FROM_NAME: Joi.string().default('La Mundial de Seguros'),
+  SMTP_REPLY_TO: Joi.string().email().optional(),
+  /** Endpoint PHP sendmail_sisip (modo sisip). Mismo contrato que SysIP email_php.service.js */
+  URL_API_EMAIL: Joi.string().uri().optional(),
+
+  /** Reportes ET — PostgreSQL DB `reportes` (independiente de Sis2000 MSSQL). */
+  REPORTES_ENABLED: Joi.boolean().default(false),
+  REPORTES_PG_HOST: Joi.string().when('REPORTES_ENABLED', {
+    is: true,
+    then: Joi.required(),
+    otherwise: Joi.optional(),
+  }),
+  REPORTES_PG_PORT: Joi.number().default(5432),
+  REPORTES_PG_USER: Joi.string().when('REPORTES_ENABLED', {
+    is: true,
+    then: Joi.required(),
+    otherwise: Joi.optional(),
+  }),
+  REPORTES_PG_PASSWORD: Joi.string().when('REPORTES_ENABLED', {
+    is: true,
+    then: Joi.required(),
+    otherwise: Joi.optional(),
+  }),
+  REPORTES_PG_DATABASE: Joi.string().default('reportes'),
+  REPORTES_PG_SCHEMA: Joi.string().default('public'),
+  REPORTES_PG_ENCRYPT: Joi.boolean().default(false),
+  REPORTES_PG_TRUST_SERVER_CERTIFICATE: Joi.boolean().default(true),
+  REPORTES_SYNC_ENABLED: Joi.boolean().default(false),
+  REPORTES_SYNC_TTL_SECONDS: Joi.number().default(120),
+  REPORTES_SYNC_CATALOG_TTL_SECONDS: Joi.number().default(3600),
+  REPORTES_SYNC_TIMEOUT_MS: Joi.number().default(30000),
+  REPORTES_SYNC_BATCH_SIZE: Joi.number().default(1000),
+  GEMINI_API_KEY: Joi.string().allow('').optional(),
+  GEMINI_MODEL: Joi.string().default('gemini-2.5-flash-lite'),
 });

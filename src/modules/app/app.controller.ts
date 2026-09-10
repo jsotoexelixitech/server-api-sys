@@ -1,11 +1,11 @@
 import { Body, Controller, HttpCode, HttpStatus, Post, BadRequestException } from '@nestjs/common';
-import { ApiExcludeController, ApiBody, ApiOperation, ApiResponse, ApiTags } from '@nestjs/swagger';
+import { ApiBody, ApiOperation, ApiResponse, ApiTags } from '@nestjs/swagger';
 import { PersonasService } from '../personas/personas.service';
 import { CotizacionPerDto } from '../personas/dto/cotizacion-per.dto';
 import { Api500, ApiCommonErrors } from '../../common/swagger/api-error-responses';
+import { SWAGGER_TAGS } from '../../common/swagger/swagger-tags.constants';
 
-@ApiExcludeController()
-@ApiTags('app')
+@ApiTags(SWAGGER_TAGS.PERSONAS)
 @Controller('v1/app')
 export class AppController {
   constructor(private readonly personasService: PersonasService) {}

@@ -1,0 +1,293 @@
+<html>
+
+<head>
+	<!-- <title>{{titulo_pdf}}</title> -->
+	<link rel="stylesheet" href="templates/style.css">
+</head>
+
+<body>
+	<h5 class="title">{{title}}</h5>
+	<div class="subtitle">DATOS DEL TOMADOR - ASEGURADO</div>
+	{{section_tomador_asegurado}}
+	<div class="subtitle">DATOS DE LA PÓLIZA</div>
+	{{section_poliza}}
+	<div class="subtitle">DATOS DEL VEHÍCULO</div> <!-- foreach ben -->
+	{{section_automovil}}
+	<div class="subtitle">COBERTURAS CONTRATADAS</div>
+	{{section_coberturas_bi}}
+	<div class="subtitle">RECIBOS DE PRIMAS - FRACCIONAMIENTO</div>
+	{{section_recibos}}
+	<!-- <div class="subtitle">DECLARACIÓN DE FÉ</div>
+	{{section_declaracion}} -->
+	<table>
+		<thead>
+			<tr>
+				<th class="subtitle">POR EL TOMADOR</th>
+				<th class="subtitle">POR LA MUNDIAL DE SEGUROS</th>
+			</tr>
+		</thead>
+	</table>
+	{{section_firma}}
+	<div class="center_description bold size8" style="margin: 10px;">En Caracas a los {{fdiapol}} dias del mes
+		de
+		{{fmespol}} del {{fanopol}}</div>
+	<div class="justify_description bold size8 line12">
+		El Asegurador entregará al Tomador este Cuadro Póliza, junto con las Condiciones Generales y
+		Particulares, los anexos, si los hubiere, copia de la solicitud de seguro y demás documentos que
+		formen parte del contrato de seguros. En las renovaciones del contrato de seguros, la obligación
+		del Asegurador se mantendrá, salvo que se modifiquen las condiciones originalmente pactadas entre
+		el Tomador, Asegurado y Asegurador, accediendo a nuestra página web www.lamundialdeseguros.com
+	</div>
+	<div class="subtitle" style="margin-top: 4px;">DECLARACIÓN DE FÉ</div>
+	<div class="justify_description bold size8 line12">
+		Yo, {{xasegurado}}, como propuesto asegurado, en mi carácter de solicitante de la póliza o en
+		representación de este, declaro que la información aquí suministrada es exacta, sin omisión alguna
+		de detalle, hecho o circunstancia con el propósito de aminorar el riesgo, en el entendido que esta
+		servirá de base a La Mundial de Seguros, C.A para la emisión de la póliza y el cobro de la prima.
+		<br><br>
+		Yo, {{xtomador}}, con C.I. N° {{xcedula_tomador}}, Tomador de la Póliza, doy fe que el dinero
+		utilizado para el pago de la prima, proviene de actividades lícitas y, por tanto, no tiene
+		relación alguna con dinero, capitales, bienes, haberes, valores o títulos que se consideren
+		producto de las actividades o acciones derivadas de operaciones ilícitas contempladas en la Ley
+		Orgánica Contra la Delincuencia Organizada y Financiamiento al Terrorismo, y/o en La Mundial de
+		Seguros, C.A., se obliga a atender y resolver cualquier denuncia, queja, reclamo o sugerencia que
+		presente el Tomador, Asegurado o Beneficiario, derivadas de la ejecución del presente contrato de
+		seguro, en cuyo caso podrá acudir a la Unidad de Defensa del Tomador, Asegurado o Beneficiario de
+		La Mundial de Seguros, C.A. o comunicarse a través del siguiente correo: 
+		defensordelasegurado@lamundialdeseguros.com
+		<br><br>
+		La Mundial de Seguros, C.A, Inscrita en la Superintendencia de la Actividad Aseguradora Bajo El No.73.
+		<!-- <br><br> -->
+		APROBADO MEDIANTE OFICIO {{cnaprsudpr}} de fecha {{faprsudpr}}.
+	</div>
+	<br>
+	<div class="center_description bold size8" style="color: red">CLIENTE</div>
+
+	<pagebreak />
+
+	<h5 class="title">{{title}}</h5>
+	<div class="subtitle">DATOS DEL TOMADOR - ASEGURADO</div>
+	{{section_tomador_asegurado}}
+	<div class="subtitle">DATOS DE LA PÓLIZA</div>
+	{{section_poliza}}
+	<div class="subtitle">DATOS DEL VEHÍCULO</div> <!-- foreach ben -->
+	{{section_automovil}}
+	<div class="subtitle">COBERTURAS CONTRATADAS</div>
+	{{section_coberturas}}
+	<div class="subtitle">RECIBOS DE PRIMAS - FRACCIONAMIENTO</div>
+	{{section_recibos}}
+	<!-- <div class="subtitle">DECLARACIÓN DE FÉ</div>
+	{{section_declaracion}} -->
+	<table>
+		<thead>
+			<tr>
+				<th class="subtitle">POR EL TOMADOR</th>
+				<th class="subtitle">POR LA MUNDIAL DE SEGUROS</th>
+			</tr>
+		</thead>
+	</table>
+	{{section_firma}}
+	<div class="center_description bold size8" style="margin: 10px;">
+		En Caracas a los {{fdiapol}} dias del mes de {{fmespol}} del {{fanopol}}</div>
+	<div class="justify_description bold size8 line12">
+		El Asegurador entregará al Tomador este Cuadro Póliza, junto con las Condiciones Generales y
+		Particulares, los anexos, si los hubiere, copia de la solicitud de seguro y demás documentos que
+		formen parte del contrato de seguros. En las renovaciones del contrato de seguros, la obligación
+		del Asegurador se mantendrá, salvo que se modifiquen las condiciones originalmente pactadas entre
+		el Tomador, Asegurado y Asegurador, accediendo a nuestra página web www.lamundialdeseguros.com
+	</div>
+	<div class="subtitle" style="margin-top: 4px;">DECLARACIÓN DE FÉ</div>
+	<div class="justify_description bold size8 line12" style="margin-top: 4px">
+		Yo, {{xasegurado}}, como propuesto asegurado, en mi carácter de solicitante de la póliza o en
+		representación de este, declaro que la información aquí suministrada es exacta, sin omisión alguna
+		de detalle, hecho o circunstancia con el propósito de aminorar el riesgo, en el entendido que esta
+		servirá de base a La Mundial de Seguros, C.A para la emisión de la póliza y el cobro de la prima.
+		<br><br>
+		Yo, {{xtomador}}, con C.I. N° {{xcedula_tomador}}, Tomador de la Póliza, doy fe que el dinero
+		utilizado para el pago de la prima, proviene de actividades lícitas y, por tanto, no tiene
+		relación alguna con dinero, capitales, bienes, haberes, valores o títulos que se consideren
+		producto de las actividades o acciones derivadas de operaciones ilícitas contempladas en la Ley
+		Orgánica Contra la Delincuencia Organizada y Financiamiento al Terrorismo, y/o en La Mundial de
+		Seguros, C.A., se obliga a atender y resolver cualquier denuncia, queja, reclamo o sugerencia que
+		presente el Tomador, Asegurado o Beneficiario, derivadas de la ejecución del presente contrato de
+		seguro, en cuyo caso podrá acudir a la Unidad de Defensa del Tomador, Asegurado o Beneficiario de
+		La Mundial de Seguros, C.A. o comunicarse a través del siguiente correo:
+		defensordelasegurado@lamundialdeseguros.com
+		<br><br>
+		La Mundial de Seguros, C.A, Inscrita en la Superintendencia de la Actividad Aseguradora Bajo El No.73.
+		<!-- <br><br> -->
+		APROBADO MEDIANTE OFICIO {{cnaprsudpr}} de fecha {{faprsudpr}}.
+	</div>
+	<br>
+	<div class="center_description bold size8" style="color: red">INTERMEDIARIO</div>
+
+	<pagebreak />
+
+	<div class="pre_cards">Es posible obtener una síntesis de la información contenida en su póliza RCV mediante la
+		impresión y recorte de las siguientes imágenes.</div>
+	<columns column-count="2" vAlign="" column-gap="0" />
+	<div class="cards">
+		<div class="card_background">
+			<div class="card_sign">
+				<div class="card">
+					<div class="card_header">
+						<table>
+							<tr>
+								<td>
+									<!-- <img id="logo" style="width:80px;" src="../img/logo.png"> -->
+									{{logo_carnet}}
+								</td>
+								<td>
+									<center><span class="card_title">
+											Póliza de Seguro de Responsabilidad Civil de Vehículos Terrestres
+											{{cpoliza}}
+										</span></center>
+								</td>
+							</tr>
+						</table>
+					</div>
+					<div style="height: 120px">
+						<table class="size10">
+							<tr>
+								<td class="bold">&nbsp;&nbsp;{{xasegurado}}&nbsp;&nbsp;CI: {{xcedula_asegurado}}</td>
+								<td style="font-size:8px; text-align: center;">Vigencia<br>{{fdesde_pol}} -
+									{{fhasta_pol}}</td>
+								<!-- </tr>
+							<tr> -->
+								<!-- &nbsp;&nbsp; -->
+								<!-- <td class="bold">&nbsp;&nbsp;CI: {{xcedula_tomador}}</td>
+								<td></td> -->
+							</tr>
+							<tr>
+								<td colspan="2" width="100%">
+									<table>
+										<tr>
+											<td>
+												<table class="size10 line08">
+													<tr>
+														<td class="bold">MARCA</td>
+														<td class="bold">MODELO</td>
+														<td class="bold">AÑO</td>
+														<td class="bold">VERSION</td>
+													</tr>
+													<tr>
+														<td>{{XMARCA}}</td>
+														<td>{{XMODELO}}</td>
+														<td>{{FANO}}</td>
+														<td>{{XVERSION}}</td>
+													</tr>
+												</table>
+											</td>
+										</tr>
+									</table>
+								</td>
+							</tr>
+							<tr>
+								<td width="80%">
+									<table>
+										<tr>
+											<td>
+												<table class="size10 line08">
+													<tr>
+														<td class="bold">COLOR:</td>
+														<td class="bold">PLACA:</td>
+														<td class="bold">SERIAL:</td>
+
+													</tr>
+													<tr>
+														<td>{{XCOLOR}}</td>
+														<td>{{XPLACA}}</td>
+														<td>{{XSERIALCARROCERIA}}</td>
+
+													</tr>
+													<!-- <tr>
+														<td class="bold">USO:</td>
+													</tr>
+													<tr>
+														<td colspan="3">{{XUSO}}</td>
+													</tr> -->
+												</table>
+											</td>
+										</tr>
+									</table>
+								</td>
+								<td width="20%">
+									<!-- <img src="images/firma_sello_lmds5.png" width="100px"> -->
+									{{firma_carnet}}
+								</td>
+							</tr>
+						</table>
+					</div>
+					<div class="card_contact">Contacto: 0500-5526256</div>
+					<div class="card_footer">
+						<p>
+							La Mundial de Seguros, C.A., Inscrita en la Superintendencia de la Actividad Aseguradora
+							Bajo el No. ES-73 APROBADO MEDIANTE PROVIDENCIA ADMINISTRATIVA SAA-09-0130-2025 de fecha
+							20/02/2025.
+						</p>
+					</div>
+				</div>
+			</div>
+		</div>
+		<columnbreak />
+	</div>
+	<div class="cards">
+		<div class="card_background">
+			<div class="card_sign">
+				<div class="card">
+					<div class="card_header">
+						<table>
+							<tr>
+								<td>
+									<!-- <img id="logo" style="width:80px;" src="images/arys_logo.png"> -->
+									{{logo_carnet}}
+								</td>
+								<td>
+									<center>
+										<span class="card_title">
+											Servicios y coberturas incluidos en la póliza de Responsabilidad Civil
+											Vehículos Terrestres:
+										</span>
+									</center>
+								</td>
+							</tr>
+						</table>
+					</div>
+					<div style="height: 120px;">
+						<table class="">
+							<tbody>
+								<tr>
+									<td width="75%">
+										<!-- <ul style="list-style-type: decimal !important; "> -->
+											<p class="size8 bold" style="text-align: center;">COBERTURAS</p>
+											<!-- <li class="size8 line06"> -->
+												<table>
+													{{coberturas_carnet}}
+												</table>
+											<!-- </li> -->
+										<!-- </ul> -->
+									</td>
+									<td width="25%" style="text-align: center; vertical-align:top !important">{{imgqr}}
+									</td>
+								</tr>
+							</tbody>
+						</table>
+					</div>
+					<div class="card_contact">Contacto: 0500-5526256</div>
+					<div class="card_footer">
+						<p>
+							La Mundial de Seguros, C.A., Inscrita en la Superintendencia de la Actividad Aseguradora
+							Bajo el No. ES-73 APROBADO MEDIANTE PROVIDENCIA ADMINISTRATIVA SAA-09-0130-2025 de fecha
+							20/02/2025.
+						</p>
+					</div>
+				</div>
+			</div>
+		</div>
+	</div><columns column-count="1" vAlign="" column-gap="0" />
+	
+
+
+</body>
+
+</html>

@@ -3,9 +3,12 @@ import { ApiBody, ApiExcludeEndpoint, ApiOperation, ApiQuery, ApiResponse, ApiTa
 import { GetPlanesV2Dto } from './dto/get-planes-v2.dto';
 import { GetCitiesDto } from './dto/get-cities.dto';
 import { GetCotizacionAutoDto } from './dto/get-cotizacion-auto.dto';
+import { CalculatePlanCoberturasDto } from './dto/calculate-plan-coberturas.dto';
 import { GetFrecuenciaDto } from './dto/get-frecuencia.dto';
 import { GetProductosPersonasDto } from './dto/get-productos-personas.dto';
 import { GetPlanesProductoDto } from './dto/get-planes-producto.dto';
+import { GetMatipoemisionDto } from './dto/get-matipoemision.dto';
+import { GetMatipopagoEntidadesDto } from './dto/get-matipopago-entidades.dto';
 import { GetPlanesDetallePersonasDto } from './dto/get-planes-detalle-personas.dto';
 import { ValrepService } from './valrep.service';
 import { Api500, ApiCommonErrors } from '../../common/swagger/api-error-responses';
@@ -148,6 +151,56 @@ export class ValrepController {
     return { status: true, data: { listas } };
   }
 
+  // ── GET /api/v1/valrep/ocupaciones ────────────────────────────────────────
+
+  @Get('ocupaciones')
+  @ApiOperation({
+    summary: 'Profesiones / ocupaciones (diligencia debida RCV)',
+    description: 'Ejecuta `sp_get_ocupaciones_nexus` — catálogo para el campo Profesión (`cprofesion`).',
+    operationId: 'valrepOcupaciones',
+  })
+  @ApiResponse({
+    status: 200,
+    schema: {
+      example: {
+        status: true,
+        data: {
+          listas: [{ cvalor: '1', xdescripcion: 'Empleado' }],
+        },
+      },
+    },
+  })
+  @Api500()
+  async getOcupaciones() {
+    const listas = await this.valrepService.getOcupacionesNexus();
+    return { status: true, data: { listas } };
+  }
+
+  // ── GET /api/v1/valrep/actividades ──────────────────────────────────────
+
+  @Get('actividades')
+  @ApiOperation({
+    summary: 'Actividades económicas (diligencia debida RCV)',
+    description: 'Ejecuta `sp_get_actividades_nexus` — catálogo para el campo Actividad económica (`cactividad`).',
+    operationId: 'valrepActividades',
+  })
+  @ApiResponse({
+    status: 200,
+    schema: {
+      example: {
+        status: true,
+        data: {
+          listas: [{ cvalor: '1', xdescripcion: 'Comercio' }],
+        },
+      },
+    },
+  })
+  @Api500()
+  async getActividades() {
+    const listas = await this.valrepService.getActividadesNexus();
+    return { status: true, data: { listas } };
+  }
+
   // ── Funerario: pasos 1–3 (catálogo valrep, fb_organizacion_swagger) ───────
 
   @Post('productos')
@@ -211,7 +264,7 @@ export class ValrepController {
     summary: 'Funerario paso 3 · Detalle del plan',
     description:
       'Detalle del plan: coberturas, parentescos y condiciones operativas.\n\n' +
-      '**Siguiente paso:** `POST /external/getCotizacionPer` o `POST /personas/cotizacion`.',
+      '**Siguiente paso:** `POST /emision-personas/getCotizacionPer` o `POST /personas/cotizacion` (partner: `POST /external/getCotizacionPer`).',
     operationId: 'funerarioValrepPlanesDetalle',
   })
   @ApiBody({ type: GetPlanesDetallePersonasDto })
@@ -301,8 +354,32 @@ export class ValrepController {
   @ApiResponse({ status: 400, description: 'cplan requerido o inválido' })
   @Api500()
   async getFrecuencia(@Body() body: GetFrecuenciaDto) {
-    const frecuencias = await this.valrepService.getFrecuencia(body.cplan);
+    const frecuencias = await this.valrepService.getFrecuencia(body.cplan, body.cramo);
     return { status: true, data: { frecuencias } };
+  }
+
+  // ── GET /api/v1/valrep/recargosRCV ─────────────────────────────────────
+
+  @Get('recargosRCV')
+  @ApiExcludeEndpoint()
+  @ApiOperation({
+    summary: 'Recargos RCV (actividades asociadas)',
+    description: 'Ejecuta sp_get_sustancias_nexus @cramo (masustac) — recargos RCV / actividades asociadas.',
+  })
+  @ApiResponse({
+    status: 200,
+    schema: {
+      example: {
+        status: true,
+        recargos: [{ csustanc: 4, xsustanc: 'No Aplica', porcenta: 0 }],
+      },
+    },
+  })
+  @Api500()
+  async getRecargosRcv() {
+    const recargos = await this.valrepService.getRecargosRcv(18);
+    // Paridad SysIP / qaapisys2000: { status, recargos } (sin wrapper data).
+    return { status: true, recargos };
   }
 
   // ── POST /api/v1/valrep/cotizacion ─────────────────────────────────────
@@ -326,6 +403,110 @@ export class ValrepController {
   @Api500()
   async getCotizacionAuto(@Body() dto: GetCotizacionAutoDto) {
     const data = await this.valrepService.getCotizacionAuto(dto);
+    return { status: true, data };
+  }
+
+  // ── POST /api/v1/valrep/calculate-plan-coberturas ───────────────────────
+
+  @Post('calculate-plan-coberturas')
+  @HttpCode(HttpStatus.OK)
+  @ApiOperation({
+    summary: 'Calcular primas por cobertura (plan auto)',
+    description:
+      'Equivalente de SysIP `calculatePlanSis`. Ejecuta el SP de cálculo por cobertura y devuelve ' +
+      'detalle por cobertura (`mount`) más totales PA/CA/PT/AP/PP.\n\n' +
+      '**Uso:** emisión y renovación cuando se necesita desglose de coberturas, no solo prima RCV total.',
+    operationId: 'valrepCalculatePlanCoberturas',
+  })
+  @ApiBody({ type: CalculatePlanCoberturasDto })
+  @ApiResponse({
+    status: 200,
+    description: 'Cálculo por cobertura generado.',
+    schema: {
+      example: {
+        status: true,
+        message: 'Calculo generado con exito',
+        mount: [
+          {
+            ccobertura: 15,
+            xdescripcion_l: 'RCV BASICO',
+            prima: 182.61,
+            masegurada: 0,
+            cproducto: 'E',
+          },
+        ],
+        pa: 182.61,
+        ca: 0,
+        pt: 0,
+        ap: 0,
+        pp: 0,
+        boolPT: false,
+        boolPP: false,
+        boolCA: false,
+        boolBl: false,
+        boolAd: false,
+        cproducto: 'E',
+      },
+    },
+  })
+  @ApiResponse({ status: 400, description: 'Datos inválidos o SP sin resultados.' })
+  @Api500()
+  async calculatePlanCoberturas(@Body() dto: CalculatePlanCoberturasDto) {
+    return this.valrepService.calculatePlanCoberturas(dto);
+  }
+
+  // ── POST /api/v1/valrep/matipoemision ───────────────────────────────────
+
+  @Post('matipoemision')
+  @HttpCode(HttpStatus.OK)
+  @ApiOperation({
+    summary: 'Tipo de emisión por canal o productor',
+    description:
+      'Consulta `matipoemision` en Sis2000. Paridad con SysIP-backend `POST /valrep/matipoemision`.',
+    operationId: 'valrepMatipoemision',
+  })
+  @ApiBody({ type: GetMatipoemisionDto })
+  @ApiResponse({
+    status: 200,
+    schema: {
+      example: {
+        status: true,
+        data: [{ centidad: 'C', citem: '1', xtipo: 'emit_pay', cproducto: null }],
+      },
+    },
+  })
+  @ApiCommonErrors()
+  async getMatipoemision(@Body() dto: GetMatipoemisionDto) {
+    const data = await this.valrepService.getMatipoemision(dto);
+    return { status: true, data };
+  }
+
+  // ── POST /api/v1/valrep/matipopago-entidades ────────────────────────────
+
+  @Post('matipopago-entidades')
+  @HttpCode(HttpStatus.OK)
+  @ApiOperation({
+    summary: 'Métodos de pago por canal o productor',
+    description:
+      'Consulta `matipopago_entidades` en Sis2000. Paridad con SysIP-backend `POST /valrep/matipopago-entidades`.',
+    operationId: 'valrepMatipopagoEntidades',
+  })
+  @ApiBody({ type: GetMatipopagoEntidadesDto })
+  @ApiResponse({
+    status: 200,
+    schema: {
+      example: {
+        status: true,
+        data: [
+          { centidad: 'C', citem: '1', xpago: 'sypago' },
+          { centidad: 'C', citem: '1', xpago: 'meritop' },
+        ],
+      },
+    },
+  })
+  @ApiCommonErrors()
+  async getMatipopagoEntidades(@Body() dto: GetMatipopagoEntidadesDto) {
+    const data = await this.valrepService.getMatipopagoEntidades(dto);
     return { status: true, data };
   }
 }

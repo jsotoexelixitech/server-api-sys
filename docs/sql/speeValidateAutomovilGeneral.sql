@@ -1,4 +1,6 @@
 CREATE PROCEDURE [dbo].[speeValidateAutomovilGeneral]
+-- LEGACY La Mundial (SysIP / triggers). NO usar en flujo Nexus.
+-- Flujo Exelixi: spee_validate_automovil_general_nexus (ver spee_validate_automovil_general_nexus.sql).
 		@cplan VARCHAR(10),
 		@xplaca  VARCHAR(15),
     @xsercar  VARCHAR(60),
@@ -26,7 +28,8 @@ BEGIN
 				END
 		END
 			
-		IF (@cramo = 18) BEGIN
+		-- RCV nacional (18) y binacional BINAC* (26 srv001 / 28 legacy)
+		IF (@cramo IN (18, 26, 28)) BEGIN
 		
 			-- VALIDACIÓN DATA VACÍA
 			IF (@xplaca = '' OR @xplaca IS NULL) BEGIN 

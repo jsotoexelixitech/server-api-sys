@@ -9,14 +9,13 @@ AS
 BEGIN
     SET NOCOUNT ON;
 
-    SELECT
+    SELECT DISTINCT
         TRIM(ifrecuencia) AS cvalor,
         TRIM(xfrecuencia) AS xdescripcion,
         ndias
     FROM maplanes_frec
     WHERE TRIM(cplan) = TRIM(@cplan)
-      AND (@cramo IS NULL OR cramo = @cramo)
-    ORDER BY ifrecuencia;
+      AND (@cramo IS NULL OR cramo = @cramo);
 
     IF @@ROWCOUNT = 0
     BEGIN

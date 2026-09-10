@@ -1,4 +1,4 @@
-/** Prefijo público HTTPS (cierrelmds): `/nest-api-docs`, `/pagos-api`, etc. Vacío en local. */
+/** Prefijo público HTTPS: `/nest-api-docs` (cierrelmds o nexusqa). Vacío en local. */
 export function normalizePublicPrefix(raw: string | undefined): string {
   const trimmed = String(raw ?? '').trim();
   if (!trimmed || trimmed === '/') return '';
@@ -28,7 +28,7 @@ export function resolvePublicApiPaths(options: {
   publicApiOrigin?: string;
 }): PublicApiPaths {
   const prefix = normalizePublicPrefix(options.publicApiPrefix);
-  const origin = String(options.publicApiOrigin ?? 'https://cierrelmds.exelixitech.com').replace(
+  const origin = String(options.publicApiOrigin ?? 'https://nexusqa.exelixitech.com').replace(
     /\/+$/,
     '',
   );

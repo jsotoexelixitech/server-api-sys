@@ -30,6 +30,7 @@ export class RefreshTokenStore implements OnModuleDestroy {
     apiKeyId: string,
     apikey: string,
     scopes: string[],
+    xcanalVenta?: string | null,
   ): Promise<NestAuthSession> {
     const id = randomBytes(16).toString('hex');
     const session: NestAuthSession = {
@@ -37,6 +38,7 @@ export class RefreshTokenStore implements OnModuleDestroy {
       apiKeyId,
       apikey,
       scopes,
+      xcanalVenta: xcanalVenta ?? null,
       createdAt: Date.now(),
       lastUsedAt: Date.now(),
     };
@@ -80,6 +82,7 @@ export class RefreshTokenStore implements OnModuleDestroy {
         apiKeyId: row.apiKeyId,
         apikey: row.apiKey.keyPrefix,
         scopes: row.apiKey.scopes,
+        xcanalVenta: row.apiKey.xcanalVenta ?? null,
         createdAt: row.createdAt.getTime(),
         lastUsedAt: Date.now(),
       };

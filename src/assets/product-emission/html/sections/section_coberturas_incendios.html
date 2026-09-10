@@ -1,0 +1,32 @@
+<!-- Nota: Todas las filas deben contener una suma de 8 columnas. 
+La suma de los width deben dar un 100%.
+Al afectar el width de la primera columna, afecta las consecuentes.
+Los colspan definen la cantidad de columnas que ocupa ese campo -->
+<div style="height: 100px">
+	<table class="section line15">
+		<thead>
+			<tr>
+				<th class="bold" width="5%">PLAN:</th>
+				<th width="75%">INCENDIO</th>
+				<th class="bold">MONEDA:</th>
+				<th>DÓLARES</th>
+			</tr>
+		</thead>
+	</table>
+	<table class="section line15">
+		<tbody>
+				<tr>
+				<td class="bold">Bienes - Coberturas</td>
+				<td class="bold" style="text-align: right;">Valores a Riesgos</td>
+				<td class="bold" style="text-align: right;">% Primer Riesgo</td>
+				<td class="bold" style="text-align: right;">Suma Asegurada</td>
+				<td></td>
+				<td class="bold" style="text-align: right;">Deducible % y monto mínimo</td>
+				<td class="bold" style="text-align: right;">Prima Anual</td>
+				</tr>
+			<tr>
+				{{coberturas_incendios}}
+			</tr>
+		</tbody>
+	</table>
+</div>

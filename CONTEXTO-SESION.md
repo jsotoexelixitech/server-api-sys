@@ -1,6 +1,6 @@
 # Contexto de sesión — nest-api (server-api-sys)
 
-> **Última actualización:** 27-jul-2026  
+> **Última actualización:** 1-ago-2026  
 > **Propósito:** handoff entre IDEs (Cursor ↔ Antigravity). Leer **antes** de continuar trabajo en emisión RCV / personas / viajero.
 
 ---
@@ -13,11 +13,11 @@
 | **Git** | Solo esta carpeta es repo (`server-api-sys`) |
 | **Remote** | `https://github.com/jsotoexelixitech/server-api-sys.git` |
 | **Rama** | `main` |
-| **HEAD remoto** | `767b66a` — *feat(personas): pre-emision Nexus y doc SP RCV/personas* |
+| **HEAD local** | `778a534` — *fix(scripts): verify-scopes-flow* |
 | **Servidor QA** | srv001 · `192.168.8.120:3002` · PM2 `sysip-nest-api` |
 | **Deploy** | `cd ~/server-api-sys && git pull && npm run build && pm2 restart sysip-nest-api` |
 | **Swagger (red interna)** | `http://192.168.8.120:3002/docs` |
-| **Swagger (HTTPS cierrelmds)** | `https://cierrelmds.exelixitech.com/nest-api-docs/docs` |
+| **Swagger (HTTPS cierrelmds)** | `https://cierrelmds.exelixitech.com/api-docs-nest-api/docs` |
 | **BD** | SQL Server Sis2000 — `sis2000_qa` en `172.30.149.67` |
 
 **Express legacy** (`backend-api-sys/src/`) existe pero el desarrollo activo de La Mundial API es **nest-api**.
@@ -50,8 +50,9 @@ Tras refactors grandes: `.\update-tags.ps1` en la raíz de `all-projects`.
 
 | Archivo | Rol |
 |---------|-----|
-| `HISTORIAL-CHATS.md` (raíz all-projects) | Resumen **todos** los chats Cursor |
+| `HISTORIAL-CHATS.md` (raíz all-projects) | Resumen **todos** los chats Cursor (6 sesiones) |
 | `SETUP-ANTIGRAVITY.md` (raíz all-projects) | Guía instalación paridad Cursor |
+| `.agents/skills/README.md` | 7 skills sincronizados Cursor ↔ Antigravity |
 | `AGENTS.md` + `GEMINI.md` (raíz all-projects) | Reglas workspace |
 | `.agents/rules/` | Reglas modulares (ctags, deploy, nest-api…) |
 | `backend-api-sys/.antigravity/backend_agent.md` | Agente back |
@@ -65,7 +66,7 @@ Tras refactors grandes: `.\update-tags.ps1` en la raíz de `all-projects`.
 
 ---
 
-## 3. Estado de la sesión (27-jul-2026)
+## 3. Estado de la sesión (1-ago-2026)
 
 ### 3.1 Viajero (producto 26, ramo 5) — validado QA 27-jul-2026
 
@@ -180,7 +181,7 @@ Referencia front legacy: `SysIP/.../receipt-viajero-local-form.component.ts`, `v
 - `adpoltar` = detalle tarifas/coberturas por recibo (filas múltiples).
 - Ejemplo explorado: `cnpoliza = 101000156610`, `cramo = 10`.
 
-### 3.3 Rollback de emisión — ELIMINADO (cambios locales sin commit)
+### 3.3 Rollback de emisión — ELIMINADO (en código main)
 
 **Decisión:** emisión **solo** vía SP Nexus; sin override `.env` al legacy.
 
@@ -198,25 +199,31 @@ SP_PRE_EMISION_AUTO_RCV    = 'sp_pre_emision_automovil_rcv_nexus'
 SP_EMISION_AUTO_RCV        = 'sp_emision_automovil_rcv_nexus'
 SP_PRE_EMISION_PERSONAS    = 'sp_pre_emision_personas_general_nexus'
 SP_EMISION_PERSONAS        = 'sp_emision_personas_general_nexus'
+SP_CALCULO_VIAJERO_PRORRATA = 'spCalculoViajeroProrrata'
 ```
-
-**Riesgo al quitar rollback:** ninguno si srv001 no tenía override legacy en `.env` (no lo tenía). Falla solo si los SP Nexus **no están desplegados** en Sis2000.
 
 **Pendiente opcional (no hecho):** eliminar `EMISSION_SOURCE=external` (RCV por HTTP a La Mundial en lugar de SP local). Sigue en `emissions.service.ts`; default = `local`.
 
-### 3.4 Archivos modificados (sin commit al cierre de sesión)
+### 3.4 Partner SDK y scopes OAuth
+
+| Recurso | Ubicación |
+|---------|-----------|
+| Publicar SDK npm | `docs/partner/GITHUB-PACKAGES.md` |
+| Template integrador | `docs/partner/partner-api-starter-template/` |
+| Paquete | `@jsotoexelixitech/nest-api-sdk` (GitHub Packages) |
+| E2E scopes | `scripts/verify-scopes-flow.sh` |
+
+En srv001: `.env` con `PARTNER_PACKAGES=@ORG/partner-api-xxx` (no en `ecosystem.config.js`).
+
+### 3.5 Archivos locales sin commit (1-ago-2026)
 
 ```
-src/config/sis2000-sp.constants.ts
-src/config/env.validation.ts
-src/modules/emissions/emissions.service.ts
-src/modules/personas/personas.service.ts
-src/modules/personas/personas.controller.ts
-src/modules/external/external.controller.ts
-docs/sql/sp_pre_emision_personas_general_nexus.sql
+docs/partner/partner-api-starter-template.zip (+ archivos template)
+docs/sql/consulta-ramo-interno.sql, consulta-ramos-planes.sql, spBuscaPlanesRamoInterno.sql
+scripts/consulta-ramos-planes.sh
 ```
 
-**Acción recomendada:** commit + push + deploy srv001 cuando el usuario lo pida.
+**Acción:** commit + push cuando el usuario lo pida.
 
 ---
 
@@ -248,7 +255,7 @@ speeValidatePersonGeneral
 ```
 
 **Catálogo:** `spBuscaProductosEntidad`, `spBuscaPlanProducto`, `spBuscaDetallePlan`, `spBuscaFrecuenciaPlan`, `spGetPlanesPerFunerario`  
-**Cotización:** `spCalculoPer`  
+**Cotización:** `spCalculoPer` · viajero prorrata: **`spCalculoViajeroProrrata`** (commit `5723c63`)  
 **Auth canal:** `spGetMaclientApi`
 
 ### Cobranza RCV — CONGELADA (regla 04-collection-rcv-frozen)
@@ -313,10 +320,12 @@ Scripts CREATE en `docs/sql/` (muchos sin trackear en git aún).
 2. DBA: `mausuplan` para producto 26 / planes `VIAJE*` con `centidad:C` + `citem:80080` (hoy solo funciona `P/80080`).
 3. DBA: frecuencia en `maplanes_frec` para `VIAJE1` (local) si se requiere en Exélixi.
 4. DBA: cargar `ndias: 15` en `maplanes_frec` para `VIAJ10` (hoy `ndias: null`).
-5. Commit + push cambios rollback SP (si aún sin commit).
-6. Front Exélixi: catálogo viajero vía `planes/producto` P/80080; filtrar `cramo === 5`.
-7. (Opcional) Rechazar fallback silencioso en `planes/por-dias` cuando no hay match (devolver 400).
-8. (Opcional) Eliminar `EMISSION_SOURCE=external` en RCV.
+5. Desplegar `spCalculoViajeroProrrata` en Sis2000 QA/prod.
+6. Commit archivos partner/SQL pendientes (cuando el usuario lo pida).
+7. Front Exélixi: catálogo viajero vía `planes/producto` P/80080; filtrar `cramo === 5`.
+8. Nexus: verify bloqueo inmediato al desactivar empresa; CORS `siniestros.exelixitech.com`.
+9. (Opcional) Rechazar fallback silencioso en `planes/por-dias` cuando no hay match (devolver 400).
+10. (Opcional) Eliminar `EMISSION_SOURCE=external` en RCV.
 
 ---
 

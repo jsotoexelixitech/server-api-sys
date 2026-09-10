@@ -21,6 +21,19 @@ import { AuthModule } from './modules/auth/auth.module';
 import { AdminModule } from './modules/admin/admin.module';
 import { DocsModule } from './modules/docs/docs.module';
 import { PrismaModule } from './database/prisma/prisma.module';
+import { ProductEmissionModule } from './modules/product-emission/product-emission.module';
+import { MailModule } from './modules/mail/mail.module';
+import { CanalModule } from './modules/canal/canal.module';
+import { ArysModule } from './modules/arys/arys.module';
+import { ViajeroNacionalModule } from './modules/viajero-nacional/viajero-nacional.module';
+import { DynamicSchemasModule } from './modules/dynamic-schemas/dynamic-schemas.module';
+import { ReportesSyncModule } from './modules/reportes-sync/reportes-sync.module';
+import { ReportesModule } from './modules/reportes/reportes.module';
+import { AseguradorasModule } from './modules/aseguradoras/aseguradoras.module';
+import { SiniestrosModule } from './modules/siniestros/siniestros.module';
+import { RecibosModule } from './modules/recibos/recibos.module';
+import { PolizasModule } from './modules/polizas/polizas.module';
+import { ComponentsModule } from './modules/components/components.module';
 
 @Module({
   imports: [
@@ -52,6 +65,19 @@ import { PrismaModule } from './database/prisma/prisma.module';
     DocsModule,
     PartnerHostModule,
     PartnerIntegrationModule,
+    ProductEmissionModule,
+    MailModule,
+    CanalModule,
+    ArysModule,
+    ViajeroNacionalModule,
+    DynamicSchemasModule,
+    ReportesSyncModule,
+    ReportesModule,
+    AseguradorasModule,
+    SiniestrosModule,
+    RecibosModule,
+    PolizasModule,
+    ComponentsModule,
   ],
 })
 export class AppModule {}
