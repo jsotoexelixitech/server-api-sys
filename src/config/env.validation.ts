@@ -112,4 +112,34 @@ export const envValidationSchema = Joi.object({
   SMTP_REPLY_TO: Joi.string().email().optional(),
   /** Endpoint PHP sendmail_sisip (modo sisip). Mismo contrato que SysIP email_php.service.js */
   URL_API_EMAIL: Joi.string().uri().optional(),
+
+  /** Reportes ET — PostgreSQL DB `reportes` (independiente de Sis2000 MSSQL). */
+  REPORTES_ENABLED: Joi.boolean().default(false),
+  REPORTES_PG_HOST: Joi.string().when('REPORTES_ENABLED', {
+    is: true,
+    then: Joi.required(),
+    otherwise: Joi.optional(),
+  }),
+  REPORTES_PG_PORT: Joi.number().default(5432),
+  REPORTES_PG_USER: Joi.string().when('REPORTES_ENABLED', {
+    is: true,
+    then: Joi.required(),
+    otherwise: Joi.optional(),
+  }),
+  REPORTES_PG_PASSWORD: Joi.string().when('REPORTES_ENABLED', {
+    is: true,
+    then: Joi.required(),
+    otherwise: Joi.optional(),
+  }),
+  REPORTES_PG_DATABASE: Joi.string().default('reportes'),
+  REPORTES_PG_SCHEMA: Joi.string().default('public'),
+  REPORTES_PG_ENCRYPT: Joi.boolean().default(false),
+  REPORTES_PG_TRUST_SERVER_CERTIFICATE: Joi.boolean().default(true),
+  REPORTES_SYNC_ENABLED: Joi.boolean().default(false),
+  REPORTES_SYNC_TTL_SECONDS: Joi.number().default(120),
+  REPORTES_SYNC_CATALOG_TTL_SECONDS: Joi.number().default(3600),
+  REPORTES_SYNC_TIMEOUT_MS: Joi.number().default(30000),
+  REPORTES_SYNC_BATCH_SIZE: Joi.number().default(1000),
+  GEMINI_API_KEY: Joi.string().allow('').optional(),
+  GEMINI_MODEL: Joi.string().default('gemini-2.5-flash-lite'),
 });
