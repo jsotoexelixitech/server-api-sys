@@ -32,11 +32,17 @@ BEGIN
         SET ifrecuencia = @ifrecuencia
         WHERE cpoliza = @cpoliza;
 
-        IF EXISTS (SELECT 1 FROM adcertificado WHERE cpoliza = @cpoliza)
+        IF OBJECT_ID(N'dbo.adcertificado', N'U') IS NOT NULL
         BEGIN
-            UPDATE adcertificado
-            SET ifrecuencia = @ifrecuencia
-            WHERE cpoliza = @cpoliza;
+            DECLARE @sqlCert NVARCHAR(MAX) = N'
+                UPDATE adcertificado
+                SET ifrecuencia = @ifrecuencia
+                WHERE cpoliza = @cpoliza';
+            EXEC sp_executesql
+                @sqlCert,
+                N'@ifrecuencia CHAR(1), @cpoliza NUMERIC(19,0)',
+                @ifrecuencia = @ifrecuencia,
+                @cpoliza = @cpoliza;
         END
 
         SET @pSuccess = 1;
