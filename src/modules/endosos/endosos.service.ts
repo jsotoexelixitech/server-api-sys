@@ -125,52 +125,22 @@ export class EndososService {
   }
 
   /**
-   * Actualiza ifrecuencia en adpoliza tras un endoso con fraccionamiento.
-   */
-  async actualizarFrecuenciaPoliza(params: {
-    cnpoliza: string;
-    ifrecuencia: string;
-    ncuotas?: number | null;
-    cusuario?: number;
-  }) {
-    try {
-      const req = this.db.request();
-      req.input('cnpoliza', T.NVarChar(50), params.cnpoliza);
-      req.input('ifrecuencia', T.Char(1), params.ifrecuencia);
-      req.input('ncuotas', T.Int, params.ncuotas ?? null);
-      req.input('cusuario', T.Int, params.cusuario || 1);
-      req.output('pSuccess', T.Bit);
-      req.output('pErrorMessage', T.NVarChar(T.MAX));
-
-      const res = await req.execute('sp_actualizar_frecuencia_poliza_endoso_nexus');
-      const success = Boolean(res.output?.['pSuccess']);
-      const message = String(res.output?.['pErrorMessage'] || '');
-
-      if (!success) {
-        throw new BadRequestException(message || 'Error al actualizar frecuencia de pago');
-      }
-
-      return { status: true, message, cnpoliza: params.cnpoliza, ifrecuencia: params.ifrecuencia };
-    } catch (err: any) {
-      if (err instanceof BadRequestException) throw err;
-      this.logger.error(`Error en actualizarFrecuenciaPoliza: ${err.message}`, err.stack);
-      throw new InternalServerErrorException(
-        err.message || 'Fallo al actualizar frecuencia de pago de la póliza.',
-      );
-    }
-  }
-
-  /**
    * Creación de un nuevo recibo de endoso.
+   * Plan e ifrecuencia se persisten en adpoliza dentro de sp_crear_recibo_endoso_nexus.
    */
   async crearRecibo(dto: CrearReciboEndosoDto) {
     try {
+      const ifrecuencia = this.resolveIfrecuencia(dto);
+      const ncuotas = this.resolveNcuotas(dto);
+
       const req = this.db.request();
       req.input('cnpoliza', T.NVarChar(50), dto.cnpoliza);
       req.input('mprima', T.Numeric(18, 2), dto.mprima);
       req.input('fdesde', T.Date, new Date(dto.fdesde));
       req.input('fhasta', T.Date, new Date(dto.fhasta));
       req.input('cplan', T.NVarChar(10), dto.cplan || null);
+      req.input('ifrecuencia', T.Char(1), ifrecuencia);
+      req.input('ncuotas', T.Int, ncuotas);
       req.input('cusuario', T.Int, dto.cusuario || 1);
       req.output('pCnrecibo', T.NVarChar(30));
       req.output('pCrecibo', T.Numeric(19, 0));
@@ -185,17 +155,6 @@ export class EndososService {
 
       if (!success) {
         throw new BadRequestException(message || 'Error al generar recibo de endoso');
-      }
-
-      const ifrecuencia = this.resolveIfrecuencia(dto);
-      const ncuotas = this.resolveNcuotas(dto);
-      if (ifrecuencia) {
-        await this.actualizarFrecuenciaPoliza({
-          cnpoliza: dto.cnpoliza,
-          ifrecuencia,
-          ncuotas,
-          cusuario: dto.cusuario,
-        });
       }
 
       return { status: true, message, cnrecibo, crecibo, ifrecuencia: ifrecuencia ?? undefined };

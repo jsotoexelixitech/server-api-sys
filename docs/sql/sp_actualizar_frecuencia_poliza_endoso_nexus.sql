@@ -1,5 +1,5 @@
--- Actualiza ifrecuencia en adpoliza tras endoso con fraccionamiento.
--- Desplegar en Sis2000 QA/prod antes de usar crearRecibo con ifrecuencia.
+-- DEPRECATED: usar sp_crear_recibo_endoso_nexus.sql (ifrecuencia en la misma transacción).
+-- Mantener solo si algún cliente legacy llama este SP directamente.
 
 CREATE OR ALTER PROCEDURE [dbo].[sp_actualizar_frecuencia_poliza_endoso_nexus]
     @cnpoliza           NVARCHAR(50),
