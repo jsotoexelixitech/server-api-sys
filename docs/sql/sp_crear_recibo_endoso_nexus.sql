@@ -51,19 +51,24 @@ BEGIN
 
         -- 2. Resolver cantidad de cuotas / recibos a generar
         DECLARE @totalCuotas INT = 1;
+        DECLARE @monthsPerCuota INT;
+        DECLARE @periodMonths INT;
 
         IF @ncuotas IS NOT NULL AND @ncuotas > 1
             SET @totalCuotas = @ncuotas;
         ELSE IF @ifrecuencia IS NOT NULL AND LTRIM(RTRIM(@ifrecuencia)) <> '' AND @ifrecuencia NOT IN ('A', 'E')
         BEGIN
-            DECLARE @monthsPerCuota INT = CASE UPPER(@ifrecuencia)
-                WHEN 'M' THEN 1
-                WHEN 'T' THEN 3
-                WHEN 'C' THEN 4
-                WHEN 'S' THEN 6
-                ELSE 12
-            END;
-            DECLARE @periodMonths INT = DATEDIFF(MONTH, @fdesde, @fhasta);
+            IF UPPER(@ifrecuencia) = 'M'
+                SET @monthsPerCuota = 1;
+            ELSE IF UPPER(@ifrecuencia) = 'T'
+                SET @monthsPerCuota = 3;
+            ELSE IF UPPER(@ifrecuencia) = 'C'
+                SET @monthsPerCuota = 4;
+            ELSE IF UPPER(@ifrecuencia) = 'S'
+                SET @monthsPerCuota = 6;
+            ELSE
+                SET @monthsPerCuota = 12;
+            SET @periodMonths = DATEDIFF(MONTH, @fdesde, @fhasta);
             IF @periodMonths < 1 SET @periodMonths = 1;
             SET @totalCuotas = CEILING(CAST(@periodMonths AS FLOAT) / @monthsPerCuota);
             IF @totalCuotas < 1 SET @totalCuotas = 1;
@@ -89,11 +94,21 @@ BEGIN
         DECLARE @cuotaIdx INT = 1;
         DECLARE @firstCnrecibo NVARCHAR(30) = NULL;
         DECLARE @firstCrecibo NUMERIC(19, 0) = NULL;
-        DECLARE @cnreciboRel NVARCHAR(30) = NULL;
+        DECLARE @newCnrecibo NVARCHAR(30);
+        DECLARE @newCrecibo NUMERIC(19, 0);
+        DECLARE @errCounter INT;
+        DECLARE @cuotaPrimaExt NUMERIC(18, 2);
+        DECLARE @cuotaPrimaBs NUMERIC(18, 2);
+        DECLARE @cuotaFdesde DATE;
+        DECLARE @cuotaFhasta DATE;
+        DECLARE @daysPerCuota INT = @totalDays / @totalCuotas;
+        IF @daysPerCuota < 1 SET @daysPerCuota = 1;
 
         WHILE @cuotaIdx <= @totalCuotas
         BEGIN
-            DECLARE @newCnrecibo NVARCHAR(30), @newCrecibo NUMERIC(19, 0), @errCounter INT;
+            SET @newCnrecibo = NULL;
+            SET @newCrecibo = NULL;
+            SET @errCounter = 0;
 
             EXEC dbo.sp_calcula_num_contador_nexus
                 @cramo = @cramo,
@@ -114,32 +129,33 @@ BEGIN
             BEGIN
                 SET @firstCnrecibo = TRIM(@newCnrecibo);
                 SET @firstCrecibo = @newCrecibo;
-                SET @cnreciboRel = TRIM(@newCnrecibo);
             END
 
-            DECLARE @cuotaPrimaExt NUMERIC(18, 2) = CASE WHEN @cuotaIdx = 1 THEN @firstPrimaExt ELSE @basePrimaExt END;
-            DECLARE @cuotaPrimaBs NUMERIC(18, 2) = ROUND(@cuotaPrimaExt * @ptasamon, 2);
+            IF @cuotaIdx = 1
+                SET @cuotaPrimaExt = @firstPrimaExt;
+            ELSE
+                SET @cuotaPrimaExt = @basePrimaExt;
 
-            DECLARE @cuotaFdesde DATE = DATEADD(DAY, (@cuotaIdx - 1) * (@totalDays / @totalCuotas), @fdesde);
-            DECLARE @cuotaFhasta DATE = CASE
-                WHEN @cuotaIdx = @totalCuotas THEN @fhasta
-                ELSE DATEADD(DAY, @cuotaIdx * (@totalDays / @totalCuotas), @fdesde)
-            END;
+            SET @cuotaPrimaBs = ROUND(@cuotaPrimaExt * @ptasamon, 2);
+            SET @cuotaFdesde = DATEADD(DAY, (@cuotaIdx - 1) * @daysPerCuota, @fdesde);
+
+            IF @cuotaIdx = @totalCuotas
+                SET @cuotaFhasta = @fhasta;
+            ELSE
+                SET @cuotaFhasta = DATEADD(DAY, @cuotaIdx * @daysPerCuota, @fdesde);
 
             INSERT INTO adrecibos (
                 crecibo, cnrecibo, cpoliza, cnpoliza, cramo, itipopol, csucur, ccerti_mae,
                 casegurado, ctenedor, cbeneficiario, cproductor, cplan, qcuotas,
                 fdesde, fhasta, fdesde_dev, fhasta_dev, femision, fingreso, cusuario, cprog,
-                iestadorec, ifrecuencia, cnrecibo_rel,
-                mprimabruta, mprimaneta, mprimareas, mmontoneto, mmontorec, mmontoapag, mpendiente,
+                iestadorec, mprimabruta, mprimaneta, mprimareas, mmontoneto, mmontorec, mmontoapag, mpendiente,
                 mprimabrutaext, mprimanetaext, mprimareasext, mmontonetoext, mmontorecext, mmontoapagext, mpendientext, ptasamon
             )
             VALUES (
                 @newCrecibo, TRIM(@newCnrecibo), @cpoliza, @cleanCnpoliza, @cramo, @itipopol, @csucur, @ccerti_mae,
                 @casegurado, @ctenedor, @cbeneficiario, @cproductor, ISNULL(@cplan, 'ESTANDAR'), @maxCuota,
                 @cuotaFdesde, @cuotaFhasta, @cuotaFdesde, @cuotaFhasta, GETDATE(), GETDATE(), @cusuario, 'EndosoRecibo',
-                'P', @ifrecuencia, @cnreciboRel,
-                @cuotaPrimaBs, @cuotaPrimaBs, @cuotaPrimaBs, @cuotaPrimaBs, @cuotaPrimaBs, @cuotaPrimaBs, @cuotaPrimaBs,
+                'P', @cuotaPrimaBs, @cuotaPrimaBs, @cuotaPrimaBs, @cuotaPrimaBs, @cuotaPrimaBs, @cuotaPrimaBs, @cuotaPrimaBs,
                 @cuotaPrimaExt, @cuotaPrimaExt, @cuotaPrimaExt, @cuotaPrimaExt, @cuotaPrimaExt, @cuotaPrimaExt, @cuotaPrimaExt, @ptasamon
             );
 
@@ -155,6 +171,17 @@ BEGIN
             UPDATE adpoliza
             SET cplan = LTRIM(RTRIM(@cplan))
             WHERE cpoliza = @cpoliza;
+        END
+
+        -- Inferir frecuencia si solo llegó ncuotas (> 1)
+        IF (@ifrecuencia IS NULL OR LTRIM(RTRIM(@ifrecuencia)) = '') AND @totalCuotas > 1
+        BEGIN
+            IF @totalCuotas >= 12
+                SET @ifrecuencia = 'M';
+            ELSE IF @totalCuotas >= 4
+                SET @ifrecuencia = 'T';
+            ELSE IF @totalCuotas >= 2
+                SET @ifrecuencia = 'S';
         END
 
         IF @ifrecuencia IS NOT NULL AND LTRIM(RTRIM(@ifrecuencia)) <> ''
@@ -174,10 +201,10 @@ BEGIN
         SET @pCnrecibo = @firstCnrecibo;
         SET @pCrecibo = @firstCrecibo;
         SET @pSuccess = 1;
-        SET @pErrorMessage = CASE
-            WHEN @totalCuotas > 1 THEN CONCAT('Recibos de endoso creados exitosamente (', @totalCuotas, ' cuotas).')
-            ELSE 'Recibo de endoso creado exitosamente.'
-        END;
+        IF @totalCuotas > 1
+            SET @pErrorMessage = 'Recibos de endoso creados exitosamente (' + CAST(@totalCuotas AS NVARCHAR(10)) + ' cuotas).';
+        ELSE
+            SET @pErrorMessage = 'Recibo de endoso creado exitosamente.';
 
         COMMIT TRANSACTION;
     END TRY
