@@ -5,6 +5,7 @@ import type Transporter from 'nodemailer/lib/mailer';
 import { renderPolicyWelcomeHtml } from './templates/policy-welcome.template';
 import type { SendPolicyEmailDto } from './dto/send-policy-email.dto';
 import type { SendFuneralPaymentLinkDto } from './dto/send-funeral-payment-link.dto';
+import type { SendFuneralReviewAlertDto } from './dto/send-funeral-review-alert.dto';
 import { buildFuneralPaymentLinkEmail } from './templates/funeral-payment-link.template';
 
 export type PolicyEmissionMailResult = {
@@ -101,6 +102,41 @@ export class MailService {
     } catch (err) {
       const msg = err instanceof Error ? err.message : String(err);
       this.logger.error(`Fallo correo link pago funerario: ${msg}`);
+      return { sent: false, mode: 'smtp', error: msg };
+    }
+  }
+
+  async sendFuneralReviewAlertEmail(
+    dto: SendFuneralReviewAlertDto,
+  ): Promise<PolicyEmissionMailResult> {
+    if (!this.isEnabled()) {
+      return { sent: false, mode: 'disabled', error: 'MAIL_ENABLED=false' };
+    }
+    const fromEmail = this.config.get<string>('SMTP_FROM', 'info@lamundialdeseguros.com');
+    const fromName = this.config.get<string>('SMTP_FROM_NAME', 'La Mundial de Seguros');
+    const replyTo = this.config.get<string>('SMTP_REPLY_TO', fromEmail);
+    const tomador = dto.tomadorNombre?.trim() || 'Tomador';
+    const planName = dto.planName?.trim() || 'Funerario';
+    const score = dto.scoreTotal?.trim() || '—';
+    const subject = `Funerario: solicitud referida pendiente de revisión (${planName})`;
+    const text = `Hay una solicitud funeraria referida.\nTomador: ${tomador}\nPlan: ${planName}\nScore: ${score}\nRevísla en la vista técnica de emisión.`;
+    const html = `<p>Hay una solicitud funeraria <strong>referida</strong> que requiere aprobación.</p>
+<p>Tomador: ${tomador}<br/>Plan: ${planName}<br/>Score: ${score}</p>
+<p>Ábrela en el módulo de autorización / vista técnica.</p>`;
+    try {
+      const info = await this.getTransporter().sendMail({
+        from: `"${fromName}" <${fromEmail}>`,
+        replyTo,
+        to: dto.to,
+        subject,
+        html,
+        text,
+      });
+      this.logger.log(`Alerta revisión funerario enviada a ${dto.to}`);
+      return { sent: true, mode: 'smtp', messageId: info.messageId };
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : String(err);
+      this.logger.error(`Fallo alerta revisión funerario: ${msg}`);
       return { sent: false, mode: 'smtp', error: msg };
     }
   }

@@ -3,6 +3,7 @@ import { ApiBody, ApiHeader, ApiOperation, ApiResponse, ApiTags } from '@nestjs/
 import { MailService } from './mail.service';
 import { SendPolicyEmailDto } from './dto/send-policy-email.dto';
 import { SendFuneralPaymentLinkDto } from './dto/send-funeral-payment-link.dto';
+import { SendFuneralReviewAlertDto } from './dto/send-funeral-review-alert.dto';
 import { NestProtected } from '../auth/decorators/nest-protected.decorator';
 import { NEST_AUTH_SCOPES } from '../auth/scopes/nest-auth-scopes.constants';
 import { APIKEY_HEADER } from '../../common/swagger/api-docs.constants';
@@ -50,6 +51,20 @@ export class MailController {
   @ApiBody({ type: SendFuneralPaymentLinkDto })
   async sendFuneralPaymentLink(@Body() dto: SendFuneralPaymentLinkDto) {
     const result = await this.mailService.sendFuneralPaymentLinkEmail(dto);
+    return { success: result.sent, ...result };
+  }
+
+  @Post('funeral-review-alert')
+  @NestProtected(NEST_AUTH_SCOPES.EMISSIONS_AUTO)
+  @HttpCode(HttpStatus.OK)
+  @ApiHeader(APIKEY_HEADER)
+  @ApiOperation({
+    summary: 'Alerta a autorizadores cuando una emisión funeraria es referida',
+    operationId: 'sendFuneralReviewAlertEmail',
+  })
+  @ApiBody({ type: SendFuneralReviewAlertDto })
+  async sendFuneralReviewAlert(@Body() dto: SendFuneralReviewAlertDto) {
+    const result = await this.mailService.sendFuneralReviewAlertEmail(dto);
     return { success: result.sent, ...result };
   }
 }
