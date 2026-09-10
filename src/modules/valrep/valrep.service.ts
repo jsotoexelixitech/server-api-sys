@@ -665,6 +665,7 @@ export class ValrepService {
 
   async getFrecuencia(cplan: string, cramo?: number) {
     const spName = this.spBuscaFrecuenciaPlanNexusName();
+    const ramoPersonas = 9;
     try {
       const T = this.db.types;
       const req = this.db.request();
@@ -681,6 +682,14 @@ export class ValrepService {
         ndias?: number | null;
       }[];
       if (Boolean(result.output['berror']) || !rows.length) {
+        // Personas/funerario (ramo 9): maplanes_frec suele estar vacío. SysIP
+        // persons-alt deja ANUAL y cotiza con ifrecuencia=A. No devolver 400.
+        if (Number(cramo) === ramoPersonas) {
+          this.logger.warn(
+            `getFrecuencia: plan=${cplan} cramo=9 sin filas en ${spName} — fallback ANUAL`,
+          );
+          return [{ cvalor: 'A', xdescripcion: 'ANUAL' }];
+        }
         throw new BadRequestException(
           String(result.output['mensaje'] ?? 'No se encontraron frecuencias para el plan.'),
         );
