@@ -111,17 +111,36 @@ export class EndososService {
     }
   }
 
+  private resolveIfrecuencia(dto: CrearReciboEndosoDto): string | null {
+    const raw = dto.ifrecuencia ?? dto.frecuencia;
+    if (raw == null || String(raw).trim() === '') return null;
+    return String(raw).trim().toUpperCase().charAt(0);
+  }
+
+  private resolveNcuotas(dto: CrearReciboEndosoDto): number | null {
+    const raw = dto.ncuotas ?? dto.cuotas;
+    if (raw == null || Number.isNaN(Number(raw))) return null;
+    const n = Math.floor(Number(raw));
+    return n > 0 ? n : null;
+  }
+
   /**
    * Creación de un nuevo recibo de endoso.
+   * Plan e ifrecuencia se persisten en adpoliza dentro de sp_crear_recibo_endoso_nexus.
    */
   async crearRecibo(dto: CrearReciboEndosoDto) {
     try {
+      const ifrecuencia = this.resolveIfrecuencia(dto);
+      const ncuotas = this.resolveNcuotas(dto);
+
       const req = this.db.request();
       req.input('cnpoliza', T.NVarChar(50), dto.cnpoliza);
       req.input('mprima', T.Numeric(18, 2), dto.mprima);
       req.input('fdesde', T.Date, new Date(dto.fdesde));
       req.input('fhasta', T.Date, new Date(dto.fhasta));
       req.input('cplan', T.NVarChar(10), dto.cplan || null);
+      req.input('ifrecuencia', T.Char(1), ifrecuencia);
+      req.input('ncuotas', T.Int, ncuotas);
       req.input('cusuario', T.Int, dto.cusuario || 1);
       req.output('pCnrecibo', T.NVarChar(30));
       req.output('pCrecibo', T.Numeric(19, 0));
@@ -138,7 +157,14 @@ export class EndososService {
         throw new BadRequestException(message || 'Error al generar recibo de endoso');
       }
 
-      return { status: true, message, cnrecibo, crecibo };
+      return {
+        status: true,
+        message,
+        cnrecibo,
+        crecibo,
+        ifrecuencia: ifrecuencia ?? undefined,
+        ncuotas: ncuotas ?? undefined,
+      };
     } catch (err: any) {
       if (err instanceof BadRequestException) throw err;
       this.logger.error(`Error en crearRecibo: ${err.message}`, err.stack);

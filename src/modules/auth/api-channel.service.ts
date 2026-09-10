@@ -39,9 +39,10 @@ export class ApiChannelService {
       }
     }
 
+    const safeKey = key.length > 100 ? key.substring(0, 100) : key;
     const T = this.db.types;
     const req = this.db.request();
-    req.input('xtoken', T.VarChar(100), key);
+    req.input('xtoken', T.VarChar(500), safeKey);
     const result = await req.query(`
       SELECT TOP 1 *
       FROM maclient_api
@@ -66,9 +67,10 @@ export class ApiChannelService {
       throw new Error('apikey nest-api no registrada o revocada.');
     }
 
+    const safeKey = key.length > 100 ? key.substring(0, 100) : key;
     const T = this.db.types;
     const req = this.db.request();
-    req.input('xtoken', T.VarChar(100), key);
+    req.input('xtoken', T.VarChar(500), safeKey);
     const result = await req.query(`
       SELECT TOP 1 xtoken FROM maclient_api WHERE xtoken = @xtoken
     `);
