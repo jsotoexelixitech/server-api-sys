@@ -111,10 +111,27 @@ export class EndososService {
     }
   }
 
-  private resolveIfrecuencia(dto: CrearReciboEndosoDto): string | null {
-    const raw = dto.ifrecuencia ?? dto.frecuencia;
-    if (raw == null || String(raw).trim() === '') return null;
-    return String(raw).trim().toUpperCase().charAt(0);
+  private resolveIfrecuencia(
+    dto: CrearReciboEndosoDto,
+    ncuotas?: number | null,
+  ): string | null {
+    const dtoAny = dto as CrearReciboEndosoDto & {
+      cfrecuencia?: string;
+      xfrecuencia?: string;
+    };
+    const raw =
+      dto.ifrecuencia ??
+      dto.frecuencia ??
+      dtoAny.cfrecuencia ??
+      dtoAny.xfrecuencia;
+    if (raw != null && String(raw).trim() !== '') {
+      return String(raw).trim().toUpperCase().charAt(0);
+    }
+    const n = ncuotas ?? this.resolveNcuotas(dto);
+    if (n != null && n >= 12) return 'M';
+    if (n != null && n >= 4) return 'T';
+    if (n != null && n >= 2) return 'S';
+    return null;
   }
 
   private resolveNcuotas(dto: CrearReciboEndosoDto): number | null {
@@ -130,8 +147,12 @@ export class EndososService {
    */
   async crearRecibo(dto: CrearReciboEndosoDto) {
     try {
-      const ifrecuencia = this.resolveIfrecuencia(dto);
       const ncuotas = this.resolveNcuotas(dto);
+      const ifrecuencia = this.resolveIfrecuencia(dto, ncuotas);
+
+      this.logger.log(
+        `crearRecibo cnpoliza=${dto.cnpoliza} ifrecuencia=${ifrecuencia ?? 'null'} ncuotas=${ncuotas ?? 'null'} mprima=${dto.mprima}`,
+      );
 
       const req = this.db.request();
       req.input('cnpoliza', T.NVarChar(50), dto.cnpoliza);

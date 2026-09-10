@@ -173,6 +173,17 @@ BEGIN
             WHERE cpoliza = @cpoliza;
         END
 
+        -- Inferir frecuencia si solo llegó ncuotas (> 1)
+        IF (@ifrecuencia IS NULL OR LTRIM(RTRIM(@ifrecuencia)) = '') AND @totalCuotas > 1
+        BEGIN
+            IF @totalCuotas >= 12
+                SET @ifrecuencia = 'M';
+            ELSE IF @totalCuotas >= 4
+                SET @ifrecuencia = 'T';
+            ELSE IF @totalCuotas >= 2
+                SET @ifrecuencia = 'S';
+        END
+
         IF @ifrecuencia IS NOT NULL AND LTRIM(RTRIM(@ifrecuencia)) <> ''
         BEGIN
             UPDATE adpoliza
