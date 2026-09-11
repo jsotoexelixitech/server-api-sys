@@ -55,6 +55,10 @@ export interface PlanPerItem {
   xplan: string;
   cramo: number;
   cmoneda?: string;
+  /** Máximo de dependientes (maplanes_per.nmax_dep). */
+  nmax_dep?: number | null;
+  /** Tope de personas: titular + nmax_dep. */
+  maxAsegurados?: number;
   parentescos?: Array<{ cparen: number; xparentesco: string; min_edad: number; max_edad: number }>;
 }
 
@@ -363,6 +367,7 @@ export class PersonasService {
           xplan: String(p['xplan'] ?? '').trim(),
           cramo: Number(p['cramo'] ?? ramo),
           cmoneda: String(p['cmoneda'] ?? '').trim() || undefined,
+          nmax_dep: this.intField(p['nmax_dep']),
           parentescos: parentescosByPlan.get(cplan) ?? [],
         };
       })
@@ -370,7 +375,7 @@ export class PersonasService {
     if (!planes.length) {
       throw new Error('spGetPlanesPerFunerario no devolvió planes');
     }
-    return planes;
+    return this.withMaxAsegurados(ramo, planes);
   }
 
   private async getPlanesPerByCodes(ramo: number): Promise<PlanPerItem[]> {
@@ -395,7 +400,43 @@ export class PersonasService {
         parentescos,
       });
     }
-    return planes;
+    return this.withMaxAsegurados(ramo, planes);
+  }
+
+  /** Lee nmax_dep de maplanes_per (sin ALTER SP) y calcula titular + dependientes. */
+  private async withMaxAsegurados(
+    ramo: number,
+    planes: PlanPerItem[],
+  ): Promise<PlanPerItem[]> {
+    const limits = await this.loadNmaxDepByPlan(ramo);
+    return planes.map((p) => {
+      const nmax = limits.has(p.cplan) ? limits.get(p.cplan) ?? null : (p.nmax_dep ?? null);
+      const maxAsegurados = nmax == null ? undefined : Math.max(1, 1 + nmax);
+      return { ...p, nmax_dep: nmax, maxAsegurados };
+    });
+  }
+
+  private async loadNmaxDepByPlan(ramo: number): Promise<Map<string, number | null>> {
+    const map = new Map<string, number | null>();
+    try {
+      const T = this.db.types;
+      const req = this.db.request();
+      req.input('cramo', T.Int, ramo);
+      const result = await req.query(`
+        SELECT LTRIM(RTRIM(cplan)) AS cplan, nmax_dep
+        FROM maplanes_per
+        WHERE cramo = @cramo AND iestado = 'V'
+      `);
+      for (const row of (result.recordset ?? []) as Record<string, unknown>[]) {
+        const cplan = String(row['cplan'] ?? '').trim();
+        if (!cplan) continue;
+        map.set(cplan, this.intField(row['nmax_dep']));
+      }
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : String(err);
+      this.logger.warn(`loadNmaxDepByPlan ramo=${ramo}: ${msg}`);
+    }
+    return map;
   }
 
   async getParenPlanPer(cramo: number, cplan: string) {
