@@ -4,6 +4,7 @@ import { MailService } from './mail.service';
 import { SendPolicyEmailDto } from './dto/send-policy-email.dto';
 import { SendFuneralPaymentLinkDto } from './dto/send-funeral-payment-link.dto';
 import { SendFuneralReviewAlertDto } from './dto/send-funeral-review-alert.dto';
+import { SendTemplatedMailDto } from './dto/send-templated-mail.dto';
 import { NestProtected } from '../auth/decorators/nest-protected.decorator';
 import { NEST_AUTH_SCOPES } from '../auth/scopes/nest-auth-scopes.constants';
 import { APIKEY_HEADER } from '../../common/swagger/api-docs.constants';
@@ -65,6 +66,23 @@ export class MailController {
   @ApiBody({ type: SendFuneralReviewAlertDto })
   async sendFuneralReviewAlert(@Body() dto: SendFuneralReviewAlertDto) {
     const result = await this.mailService.sendFuneralReviewAlertEmail(dto);
+    return { success: result.sent, ...result };
+  }
+
+  @Post('send')
+  @NestProtected(NEST_AUTH_SCOPES.EMISSIONS_AUTO)
+  @HttpCode(HttpStatus.OK)
+  @ApiHeader(APIKEY_HEADER)
+  @ApiOperation({
+    summary: 'Enviar correo con plantilla registrada (reutilizable)',
+    description:
+      'No acepta HTML libre. `template` elige el diseño (funeral-payment-link, funeral-review-alert o branded). ' +
+      'Los endpoints específicos de funerario siguen vigentes.',
+    operationId: 'sendTemplatedEmail',
+  })
+  @ApiBody({ type: SendTemplatedMailDto })
+  async sendTemplated(@Body() dto: SendTemplatedMailDto) {
+    const result = await this.mailService.sendTemplatedEmail(dto);
     return { success: result.sent, ...result };
   }
 }
