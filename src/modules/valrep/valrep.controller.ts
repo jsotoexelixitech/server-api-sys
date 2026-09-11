@@ -43,8 +43,9 @@ export class ValrepController {
   @ApiExcludeEndpoint()
   @HttpCode(HttpStatus.OK)
   @ApiOperation({
-    summary: 'Planes de personas vigentes (ramo 9 = Funerario)',
-    description: 'Devuelve los planes de personas con formato plan en lugar de planes.',
+    summary: 'Planes funerarios del canal (formato plan[])',
+    description:
+      'Igual que POST /personas/planes: productos y planes del canal SSO, no una lista fija de cplan.',
   })
   @ApiBody({ type: GetPlanesPerDto })
   @ApiResponse({
@@ -58,7 +59,7 @@ export class ValrepController {
   })
   @Api500()
   async getPlanesPer(@Body() dto: GetPlanesPerDto) {
-    const plan = await this.personasService.getPlanesPer(dto.cramo, dto.ctipo ?? null);
+    const plan = await this.personasService.getPlanesPer(dto);
     return { status: true, data: { plan } };
   }
 

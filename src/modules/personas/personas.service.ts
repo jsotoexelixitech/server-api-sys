@@ -4,9 +4,13 @@ import {
   InternalServerErrorException,
   Logger,
   UnauthorizedException,
+  Inject,
+  forwardRef,
 } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { MssqlService } from '../../database/mssql.service';
+import { ValrepService } from '../valrep/valrep.service';
+import { GetPlanesPerDto } from './dto/get-planes-per.dto';
 import { CotizacionPerDto } from './dto/cotizacion-per.dto';
 import { CreateEmissionPersonDto } from './dto/create-emission-person.dto';
 import { parseSPError } from '../../common/helpers/sp-error.helper';
@@ -81,6 +85,8 @@ export class PersonasService {
   constructor(
     private readonly db: MssqlService,
     private readonly config: ConfigService,
+    @Inject(forwardRef(() => ValrepService))
+    private readonly valrep: ValrepService,
   ) {}
 
   private intField(value: unknown): number | null {
@@ -303,102 +309,121 @@ export class PersonasService {
     return this.config.get<number>('LAMUNDIAL_RAMO_PERSON', 9);
   }
 
-  // Lista blanca de planes funerarios individuales a exponer (catálogo oficial de
-  // producción para cproducto=57: 4/6/7/8). En QA esos planes existen en
-  // maplanes_per (ramo 9, vigentes) aunque con cproducto distinto, por eso se
-  // filtran por cplan explícito y no por cproducto. Configurable por env.
-  private get funeralPlanCodes(): string[] {
-    return this.config
-      .get<string>('LAMUNDIAL_PLANES_FUNERARIO', '4,6,7,8')
-      .split(',')
-      .map((s) => s.trim())
-      .filter(Boolean);
+  private optionalText(value: unknown): string {
+    return value == null ? '' : String(value).trim();
   }
 
-  // ── Planes de personas (spGetPlanesPerFunerario) ───────────────────────────
+  /** Entidad Sis2000 del canal SSO (P/citem o productor, igual criterio que RCV). */
+  private resolveFuneralEntity(dto: GetPlanesPerDto): { centidad: string; citem: string } | null {
+    const centidad = this.optionalText(dto.centidad).toUpperCase();
+    const citem =
+      this.optionalText(dto.citem)
+      || (centidad === 'P' || centidad === 'C' ? this.optionalText(dto.cproductor) : '');
+    if (centidad && citem) return { centidad, citem };
 
-  async getPlanesPer(cramo?: number, _ctipo?: number | null): Promise<PlanPerItem[]> {
-    const ramo = cramo ?? this.defaultRamo;
-    try {
-      return await this.getPlanesPerFromFuneralSp(ramo);
-    } catch (err) {
-      const msg = err instanceof Error ? err.message : String(err);
-      this.logger.warn(`getPlanesPer: spGetPlanesPerFunerario falló, fallback por cplan. ${msg}`);
-      return this.getPlanesPerByCodes(ramo);
+    const productor =
+      this.optionalText(dto.cproductor)
+      || this.optionalText(this.config.get<string>('LAMUNDIAL_PRODUCTOR', '80080'));
+    if (productor) return { centidad: 'P', citem: productor };
+    return null;
+  }
+
+  private pickFuneralProduct(
+    productos: Record<string, unknown>[],
+    ramo: number,
+    hint: string,
+  ): Record<string, unknown> | null {
+    const list = Array.isArray(productos) ? productos : [];
+    if (hint) {
+      const hit = list.find((p) => this.optionalText(p['cproducto']) === hint);
+      if (hit) return hit;
     }
+    const byRamo = list.filter((p) => Number(p['cramo']) === ramo);
+    const named = list.filter((p) =>
+      /funerar/i.test(String(p['xproducto'] ?? p['xdescripcion_l'] ?? '')),
+    );
+    const pool = byRamo.length ? byRamo : named;
+    const namedInPool = pool.find((p) =>
+      /funerar/i.test(String(p['xproducto'] ?? p['xdescripcion_l'] ?? '')),
+    );
+    return namedInPool ?? pool[0] ?? null;
   }
 
-  private async getPlanesPerFromFuneralSp(ramo: number): Promise<PlanPerItem[]> {
-    const T = this.db.types;
-    const codes = this.funeralPlanCodes;
-    const req = this.db.request();
-    req.input('cramo', T.Int, ramo);
-    req.input(
-      'cplanes',
-      T.NVarChar(200),
-      codes.length > 0 ? codes.join(',') : null,
+  private mapCanalPlanToPer(row: Record<string, unknown>, ramo: number): PlanPerItem | null {
+    const cplan = this.optionalText(row['cplan']);
+    if (!cplan) return null;
+    const parentescos = Array.isArray(row['parentescos'])
+      ? (row['parentescos'] as Record<string, unknown>[]).map((p) => ({
+          cparen: Number(p['cparen']),
+          xparentesco: this.optionalText(p['xparentesco']),
+          min_edad: Number(p['min_edad']),
+          max_edad: Number(p['max_edad']),
+        }))
+      : [];
+    return {
+      cplan,
+      xplan: this.optionalText(row['xplan']),
+      cramo: Number(row['cramo'] ?? ramo),
+      cmoneda: this.optionalText(row['cmoneda']) || undefined,
+      nmax_dep: this.intField(row['nmax_dep']),
+      parentescos,
+    };
+  }
+
+  /**
+   * Planes funerarios del canal SSO: spBuscaProductosEntidad + spBuscaPlanProducto.
+   * No usa lista fija de cplan.
+   */
+  async getPlanesPer(
+    cramoOrDto?: number | GetPlanesPerDto,
+    _ctipo?: number | null,
+  ): Promise<PlanPerItem[]> {
+    const dto: GetPlanesPerDto =
+      typeof cramoOrDto === 'object' && cramoOrDto != null
+        ? cramoOrDto
+        : { cramo: cramoOrDto, ctipo: _ctipo ?? undefined };
+    const ramo = dto.cramo ?? this.defaultRamo;
+    const entity = this.resolveFuneralEntity(dto);
+    if (!entity) {
+      throw new BadRequestException(
+        'No hay entidad de canal (citem/centidad o cproductor) para consultar planes funerarios.',
+      );
+    }
+    return this.getPlanesPerByCanal(ramo, entity, this.optionalText(dto.cproducto));
+  }
+
+  private async getPlanesPerByCanal(
+    ramo: number,
+    entity: { centidad: string; citem: string },
+    cproductoHint: string,
+  ): Promise<PlanPerItem[]> {
+    const envHint = this.optionalText(this.config.get<string>('LAMUNDIAL_PRODUCTO_FUNERARIO', ''));
+    let cproducto = cproductoHint;
+    if (!cproducto) {
+      const productos = await this.valrep.getProductosPersonas(entity);
+      const picked = this.pickFuneralProduct(productos, ramo, envHint);
+      cproducto = this.optionalText(picked?.['cproducto']);
+    }
+    if (!cproducto) {
+      throw new BadRequestException(
+        `No se encontró producto funerario (ramo ${ramo}) para ${entity.centidad}/${entity.citem}.`,
+      );
+    }
+
+    this.logger.log(
+      `getPlanesPer canal=${entity.centidad}/${entity.citem} cproducto=${cproducto} cramo=${ramo}`,
     );
 
-    const result = await req.execute('spGetPlanesPerFunerario');
-    const planRows = (result.recordsets?.[0] ??
-      result.recordset ??
-      []) as Record<string, unknown>[];
-    const parentRows = (result.recordsets?.[1] ?? []) as Record<string, unknown>[];
-
-    const parentescosByPlan = new Map<string, PlanPerItem['parentescos']>();
-    for (const row of parentRows) {
-      const cplan = String(row['cplan'] ?? '').trim();
-      if (!cplan) continue;
-      const list = parentescosByPlan.get(cplan) ?? [];
-      list.push({
-        cparen: Number(row['cparen']),
-        xparentesco: String(row['xparentesco'] ?? '').trim(),
-        min_edad: Number(row['min_edad']),
-        max_edad: Number(row['max_edad']),
-      });
-      parentescosByPlan.set(cplan, list);
-    }
-
-    const planes = planRows
-      .map((p) => {
-        const cplan = String(p['cplan'] ?? '').trim();
-        return {
-          cplan,
-          xplan: String(p['xplan'] ?? '').trim(),
-          cramo: Number(p['cramo'] ?? ramo),
-          cmoneda: String(p['cmoneda'] ?? '').trim() || undefined,
-          nmax_dep: this.intField(p['nmax_dep']),
-          parentescos: parentescosByPlan.get(cplan) ?? [],
-        };
-      })
-      .filter((p) => p.cplan);
+    const { planes: raw } = await this.valrep.getPlanesProducto({
+      cproducto,
+      citem: entity.citem,
+      centidad: entity.centidad,
+    });
+    const planes = (raw ?? [])
+      .map((row) => this.mapCanalPlanToPer(row as Record<string, unknown>, ramo))
+      .filter((p): p is PlanPerItem => Boolean(p));
     if (!planes.length) {
-      throw new Error('spGetPlanesPerFunerario no devolvió planes');
-    }
-    return this.withMaxAsegurados(ramo, planes);
-  }
-
-  private async getPlanesPerByCodes(ramo: number): Promise<PlanPerItem[]> {
-    const planes: PlanPerItem[] = [];
-    for (const cplan of this.funeralPlanCodes) {
-      let parentescos: PlanPerItem['parentescos'] = [];
-      try {
-        const rows = await this.getParenPlanPer(ramo, cplan);
-        parentescos = rows.map((row) => ({
-          cparen: Number(row.cparen),
-          xparentesco: String(row.xparentesco ?? '').trim(),
-          min_edad: Number.NaN,
-          max_edad: Number.NaN,
-        }));
-      } catch {
-        parentescos = [];
-      }
-      planes.push({
-        cplan,
-        xplan: `Plan ${cplan}`,
-        cramo: ramo,
-        parentescos,
-      });
+      throw new BadRequestException('No se encontraron planes para el producto del canal.');
     }
     return this.withMaxAsegurados(ramo, planes);
   }
