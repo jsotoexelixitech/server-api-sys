@@ -175,8 +175,13 @@ export class EndososService {
       const ncuotas = AUTO_IFRECUENCIA_CUOTAS[ifrecuencia];
       const { fanopol, fmespol } = this.resolvePeriodo(dto);
 
+      const coberturasJson =
+        Array.isArray(dto.coberturas) && dto.coberturas.length > 0
+          ? JSON.stringify(dto.coberturas)
+          : null;
+
       this.logger.log(
-        `crearRecibo cnpoliza=${dto.cnpoliza} ifrecuencia=${ifrecuencia} ncuotas=${ncuotas} mprima=${dto.mprima}`,
+        `crearRecibo cnpoliza=${dto.cnpoliza} ifrecuencia=${ifrecuencia} ncuotas=${ncuotas} mprima=${dto.mprima} coberturas=${dto.coberturas?.length ?? 0}`,
       );
 
       const req = this.db.request();
@@ -190,6 +195,7 @@ export class EndososService {
       req.input('ifrecuencia', T.Char(1), ifrecuencia);
       req.input('ncuotas', T.Int, ncuotas);
       req.input('cusuario', T.Int, dto.cusuario || 1);
+      req.input('coberturas_json', T.NVarChar(T.MAX), coberturasJson);
       req.output('pCnrecibo', T.NVarChar(30));
       req.output('pCrecibo', T.Numeric(19, 0));
       req.output('pSuccess', T.Bit);
