@@ -452,10 +452,10 @@ export class PersonasService {
       );
     }
 
-    const cproducto = this.optionalText(dto.cproducto);
-    const productCodes = cproducto
-      ? [cproducto]
-      : await this.funeralProductCodesForEntity(entity);
+    const cproducto =
+      this.optionalText(dto.cproducto)
+      || this.optionalText(this.config.get<string>('LAMUNDIAL_PRODUCTO_FUNERARIO', '57'));
+    const productCodes = cproducto ? [cproducto] : [];
 
     if (!productCodes.length) {
       throw new BadRequestException(
@@ -492,17 +492,6 @@ export class PersonasService {
       throw new BadRequestException('No se encontraron planes para el canal / producto SSO.');
     }
     return this.withMaxAsegurados(planes);
-  }
-
-  private async funeralProductCodesForEntity(entity: {
-    centidad: string;
-    citem: string;
-  }): Promise<string[]> {
-    const productos = await this.valrep.getProductosPersonas(entity);
-    const codes = (Array.isArray(productos) ? productos : [])
-      .map((p) => this.optionalText(p['cproducto']))
-      .filter(Boolean);
-    return [...new Set(codes)];
   }
 
   /** Lee nmax_dep de maplanes_per (sin ALTER SP) y calcula titular + dependientes. */
