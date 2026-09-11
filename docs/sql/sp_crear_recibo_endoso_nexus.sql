@@ -261,15 +261,17 @@ BEGIN
         INNER JOIN matarifa C ON A.ccober = C.ccober AND A.cramo = C.cramo AND A.ctarifa = C.ctarifa
         INNER JOIN macoberturas e ON e.ccobertura = C.ccober AND e.cramo = C.cramo
         LEFT JOIN matarifa_d fd ON fd.ccober = C.ccober AND fd.cramo = C.cramo AND fd.ctarifa = C.ctarifa
-        OUTER APPLY (
+        LEFT JOIN (
             -- Cuadro anterior (aún sin anular en este punto del SP).
-            SELECT TOP 1 pc.msumaaseg, pc.msumaasegext
+            SELECT
+                pc.ccober,
+                pc.msumaaseg,
+                pc.msumaasegext,
+                ROW_NUMBER() OVER (PARTITION BY pc.ccober ORDER BY pc.crecibo DESC) AS rn
             FROM adpolcob pc
             INNER JOIN adrecibos r ON r.crecibo = pc.crecibo
             WHERE r.cpoliza = @cpoliza
-              AND pc.ccober = A.ccober
-            ORDER BY pc.crecibo DESC
-        ) prev
+        ) prev ON prev.ccober = A.ccober AND prev.rn = 1
         WHERE A.cramo = @cramo
           AND RTRIM(A.cplan) = RTRIM(@cplanRecibo);
 
