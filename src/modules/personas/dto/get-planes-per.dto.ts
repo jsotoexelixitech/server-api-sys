@@ -30,8 +30,8 @@ export class GetPlanesPerDto {
   citem?: string;
 
   @ApiPropertyOptional({
-    example: 'P',
-    description: 'Entidad Sis2000: P = productor, C = comercializador.',
+    example: 'C',
+    description: 'Entidad Sis2000: P = productor, C = canal, G = gestor. U (usuario) se resuelve vía magestor.',
   })
   @IsOptional()
   @Transform(({ value }) => optionalText(value))
@@ -64,4 +64,22 @@ export class GetPlanesPerDto {
   @Transform(({ value }) => optionalText(value))
   @IsString()
   cusuario?: string;
+
+  @ApiPropertyOptional({
+    example: 'marismendi@lamundialdeseguros.com',
+    description: 'Correo del gestor marketplace (magestor.xcorreo). Resuelve U → C/P.',
+  })
+  @IsOptional()
+  @Transform(({ value }) => optionalText(value))
+  @IsString()
+  cgestor_in?: string;
+
+  @ApiPropertyOptional({
+    example: '80080-27-0',
+    description: 'Código magestor (marketplace /usuario/:id).',
+  })
+  @IsOptional()
+  @Transform(({ value }) => optionalText(value))
+  @IsString()
+  cgestor?: string;
 }

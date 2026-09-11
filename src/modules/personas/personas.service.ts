@@ -313,18 +313,89 @@ export class PersonasService {
     return value == null ? '' : String(value).trim();
   }
 
-  /** Entidad Sis2000 del canal SSO (P/citem o productor, igual criterio que RCV). */
-  private resolveFuneralEntity(dto: GetPlanesPerDto): { centidad: string; citem: string } | null {
+  private sisPlanEntity(centidad: string, citem: string): boolean {
+    return (centidad === 'P' || centidad === 'C' || centidad === 'G') && Boolean(citem);
+  }
+
+  /**
+   * Marketplace SysIP: usuario (U) no es entidad de spBuscaPlan.
+   * Se resuelve como getItemGestor: magestor.xcorreo / cgestor → C+ccanalalt o P+productor.
+   */
+  private async resolveFuneralEntity(
+    dto: GetPlanesPerDto,
+  ): Promise<{ centidad: string; citem: string } | null> {
     const centidad = this.optionalText(dto.centidad).toUpperCase();
     const citem =
       this.optionalText(dto.citem)
-      || (centidad === 'P' || centidad === 'C' ? this.optionalText(dto.cproductor) : '');
-    if (centidad && citem) return { centidad, citem };
+      || (centidad === 'P' || centidad === 'C' || centidad === 'G'
+        ? this.optionalText(dto.cproductor)
+        : '');
+    if (this.sisPlanEntity(centidad, citem)) return { centidad, citem };
+
+    const fromGestor = await this.lookupMarketplaceGestor(dto);
+    if (fromGestor) return fromGestor;
 
     const productor =
       this.optionalText(dto.cproductor)
       || this.optionalText(this.config.get<string>('LAMUNDIAL_PRODUCTOR', '80080'));
     if (productor) return { centidad: 'P', citem: productor };
+    return null;
+  }
+
+  /** Igual que SysIP Valrep.getItemGestor + login (magestor.xcorreo / cgestor). */
+  private async lookupMarketplaceGestor(
+    dto: GetPlanesPerDto,
+  ): Promise<{ centidad: string; citem: string } | null> {
+    const email = this.optionalText(dto.cgestor_in).toLowerCase();
+    const cgestor = this.optionalText(dto.cgestor);
+    if (!email && !cgestor) return null;
+
+    try {
+      const T = this.db.types;
+      const req = this.db.request();
+      req.input('email', T.NVarChar(120), email);
+      req.input('cgestor', T.NVarChar(50), cgestor);
+      const result = await req.query(`
+        SELECT TOP 1
+          LTRIM(RTRIM(cgestor)) AS cgestor,
+          ccanalalt,
+          CASE
+            WHEN CHARINDEX('-', LTRIM(RTRIM(cgestor))) > 0
+              THEN LEFT(LTRIM(RTRIM(cgestor)), CHARINDEX('-', LTRIM(RTRIM(cgestor))) - 1)
+            ELSE LTRIM(RTRIM(cgestor))
+          END AS cproductor_gestor
+        FROM magestor
+        WHERE (@email <> '' AND LOWER(LTRIM(RTRIM(xcorreo))) = @email)
+           OR (@cgestor <> '' AND LTRIM(RTRIM(cgestor)) = @cgestor)
+        ORDER BY CASE
+          WHEN @email <> '' AND LOWER(LTRIM(RTRIM(xcorreo))) = @email THEN 0
+          ELSE 1
+        END
+      `);
+      const row = result.recordset?.[0] as Record<string, unknown> | undefined;
+      if (!row) return null;
+
+      const canal = this.intField(row['ccanalalt']);
+      if (canal != null && canal > 0) {
+        this.logger.log(`lookupMarketplaceGestor email=${email || '-'} → C/${canal}`);
+        return { centidad: 'C', citem: String(canal) };
+      }
+
+      const productor = this.optionalText(row['cproductor_gestor']);
+      if (productor && /^\d+$/.test(productor)) {
+        this.logger.log(`lookupMarketplaceGestor email=${email || '-'} → P/${productor}`);
+        return { centidad: 'P', citem: productor };
+      }
+
+      const gestor = this.optionalText(row['cgestor']);
+      if (gestor) {
+        this.logger.log(`lookupMarketplaceGestor email=${email || '-'} → G/${gestor}`);
+        return { centidad: 'G', citem: gestor };
+      }
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : String(err);
+      this.logger.warn(`lookupMarketplaceGestor: ${msg}`);
+    }
     return null;
   }
 
@@ -364,7 +435,7 @@ export class PersonasService {
         ? cramoOrDto
         : { cramo: cramoOrDto, ctipo: _ctipo ?? undefined };
     const ramo = dto.cramo ?? this.defaultRamo;
-    const entity = this.resolveFuneralEntity(dto);
+    const entity = await this.resolveFuneralEntity(dto);
     if (!entity) {
       throw new BadRequestException(
         'No hay entidad de canal (citem/centidad o cproductor) para consultar planes funerarios.',
