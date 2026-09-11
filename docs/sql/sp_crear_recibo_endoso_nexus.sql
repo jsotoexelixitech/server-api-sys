@@ -3,7 +3,8 @@
 -- nativa spGeneraCoberturasYRecibos_Auto_RCV2. @ncuotas solo se usa si no llega @ifrecuencia.
 -- @mprima = prima total del endoso, expresada en la moneda de la póliza (adpoliza.cmoneda).
 -- Recibos cobrados (iestadorec='C') que aún están vigentes se cortan: fhasta = @fdesde.
--- Coberturas: se insertan adpoltar/adpolcob por cada recibo nuevo (payload JSON o maplantar).
+-- Coberturas: por cada recibo nuevo se insertan adpoltar/adpolcob con el cuadro del plan destino
+-- (maplantar + matarifa), igual que la emisión nativa. No se reciben coberturas por parámetro.
 -- Desplegar en Sis2000 QA/prod.
 
 -- DROP + CREATE (en vez de CREATE OR ALTER): DBeaver no detecta "OR ALTER" como inicio de
@@ -23,7 +24,6 @@ CREATE PROCEDURE [dbo].[sp_crear_recibo_endoso_nexus]
     @ifrecuencia      CHAR(1) = NULL,
     @ncuotas          INT = NULL,
     @cusuario         INT = 1,
-    @coberturas_json  NVARCHAR(MAX) = NULL,
     @pCnrecibo        NVARCHAR(30) = NULL OUTPUT,
     @pCrecibo         NUMERIC(19, 0) = NULL OUTPUT,
     @pSuccess         BIT = 0 OUTPUT,
@@ -81,7 +81,6 @@ BEGIN
             @basePrimaExt   NUMERIC(18, 2),
             @firstPrimaExt  NUMERIC(18, 2),
             @mprimaTotalPol NUMERIC(18, 2),
-            @sumPrimaCobs   NUMERIC(18, 2),
             @cntCobs        INT,
             @baseCobPol     NUMERIC(18, 2),
             @firstCobPol    NUMERIC(18, 2),
@@ -229,148 +228,90 @@ BEGIN
         SET @basePrimaExt  = FLOOR((@mprimaTotalExt / @totalCuotas) * 100) / 100;
         SET @firstPrimaExt = @mprimaTotalExt - (@basePrimaExt * (@totalCuotas - 1));
 
-        -- 4b. Cuadro de coberturas del endoso (payload Nest o catálogo maplantar del plan).
+        -- 4b. Cuadro de coberturas del endoso, tomado del catálogo del plan destino.
+        -- Mismo origen que la emisión nativa: maplantar + matarifa (+ matarifa_d, macoberturas).
+        -- La suma asegurada se hereda del cuadro vigente de la póliza cuando la cobertura ya existía.
         -- Montos en #cobs = moneda de la póliza (igual que @mprima).
-        IF @coberturas_json IS NOT NULL
-           AND LEN(LTRIM(RTRIM(@coberturas_json))) > 2
-           AND ISJSON(@coberturas_json) = 1
-        BEGIN
-            INSERT INTO #cobs (
-                ccober, ctarifa, ccoberimp, ietiqtarimp, qordenimp, ctarifaint,
-                msuma_pol, mprima_anual, pprima, bfraded, mdedu_fran, mdedu_franext, pdedu_fran,
-                isuma, cramoint, ccoberturaint, bprimarea
-            )
-            SELECT
-                COALESCE(j.ccobertura, j.ccober),
-                mt.ctarifa,
-                C.ccoberimp,
-                C.ietiqtarimp,
-                C.qordenimp,
-                C.ctarifaint,
-                COALESCE(j.msumaaseg, j.msumaasegurada, j.masegurada, 0),
-                COALESCE(j.mprima, j.prima, 0),
-                fd.pprima,
-                fd.bfraded,
-                fd.mdedu_fran,
-                fd.mdedu_franext,
-                fd.pdedu_fran,
-                e.isuma,
-                e.cramoint,
-                e.ccoberturaint,
-                C.bprimarea
-            FROM OPENJSON(@coberturas_json) WITH (
-                ccobertura      INT            '$.ccobertura',
-                ccober          INT            '$.ccober',
-                msumaaseg       NUMERIC(18, 2) '$.msumaaseg',
-                msumaasegurada  NUMERIC(18, 2) '$.msumaasegurada',
-                masegurada      NUMERIC(18, 2) '$.masegurada',
-                mprima          NUMERIC(18, 2) '$.mprima',
-                prima           NUMERIC(18, 2) '$.prima'
-            ) j
-            OUTER APPLY (
-                SELECT TOP 1 A.ctarifa
-                FROM maplantar A
-                WHERE A.cramo = @cramo
-                  AND RTRIM(A.cplan) = RTRIM(@cplanRecibo)
-                  AND A.ccober = COALESCE(j.ccobertura, j.ccober)
-            ) mt
-            OUTER APPLY (
-                -- ccoberimp/ietiqtarimp/qordenimp/ctarifaint viven en matarifa, no en maplantar.
-                SELECT TOP 1 t.bprimarea, t.ccoberimp, t.ietiqtarimp, t.qordenimp, t.ctarifaint
-                FROM matarifa t
-                WHERE t.ccober = COALESCE(j.ccobertura, j.ccober)
-                  AND t.cramo = @cramo
-                  AND (mt.ctarifa IS NULL OR t.ctarifa = mt.ctarifa)
-            ) C
-            OUTER APPLY (
-                SELECT TOP 1 fd.pprima, fd.bfraded, fd.mdedu_fran, fd.mdedu_franext, fd.pdedu_fran
-                FROM matarifa_d fd
-                WHERE fd.ccober = COALESCE(j.ccobertura, j.ccober)
-                  AND fd.cramo = @cramo
-                  AND (mt.ctarifa IS NULL OR fd.ctarifa = mt.ctarifa)
-            ) fd
-            OUTER APPLY (
-                SELECT TOP 1 e.isuma, e.cramoint, e.ccoberturaint
-                FROM macoberturas e
-                WHERE e.ccobertura = COALESCE(j.ccobertura, j.ccober)
-                  AND e.cramo = @cramo
-            ) e
-            WHERE COALESCE(j.ccobertura, j.ccober) IS NOT NULL;
-        END
+        INSERT INTO #cobs (
+            ccober, ctarifa, ccoberimp, ietiqtarimp, qordenimp, ctarifaint,
+            msuma_pol, mprima_anual, pprima, bfraded, mdedu_fran, mdedu_franext, pdedu_fran,
+            isuma, cramoint, ccoberturaint, bprimarea
+        )
+        SELECT
+            A.ccober,
+            A.ctarifa,
+            -- ccoberimp/ietiqtarimp/qordenimp/ctarifaint viven en matarifa, no en maplantar.
+            C.ccoberimp,
+            C.ietiqtarimp,
+            C.qordenimp,
+            C.ctarifaint,
+            CASE WHEN @esBs = 1 THEN ISNULL(prev.msumaaseg, 0) ELSE ISNULL(prev.msumaasegext, 0) END,
+            0,
+            fd.pprima,
+            fd.bfraded,
+            fd.mdedu_fran,
+            fd.mdedu_franext,
+            fd.pdedu_fran,
+            e.isuma,
+            e.cramoint,
+            e.ccoberturaint,
+            C.bprimarea
+        FROM maplantar A
+        INNER JOIN maarancel B ON A.ccober = B.ccober AND A.cramo = B.cramo AND B.iestado = 'V'
+        INNER JOIN matarifa C ON A.ccober = C.ccober AND A.cramo = C.cramo AND A.ctarifa = C.ctarifa
+        INNER JOIN macoberturas e ON e.ccobertura = C.ccober AND e.cramo = C.cramo
+        LEFT JOIN matarifa_d fd ON fd.ccober = C.ccober AND fd.cramo = C.cramo AND fd.ctarifa = C.ctarifa
+        OUTER APPLY (
+            -- Cuadro anterior (aún sin anular en este punto del SP).
+            SELECT TOP 1 pc.msumaaseg, pc.msumaasegext
+            FROM adpolcob pc
+            INNER JOIN adrecibos r ON r.crecibo = pc.crecibo
+            WHERE r.cpoliza = @cpoliza
+              AND pc.ccober = A.ccober
+            ORDER BY pc.crecibo DESC
+        ) prev
+        WHERE A.cramo = @cramo
+          AND RTRIM(A.cplan) = RTRIM(@cplanRecibo);
 
-        IF NOT EXISTS (SELECT 1 FROM #cobs)
-           AND @cplanRecibo IS NOT NULL
-           AND EXISTS (
-               SELECT 1 FROM maplantar
-               WHERE cramo = @cramo AND RTRIM(cplan) = RTRIM(@cplanRecibo)
-           )
-        BEGIN
-            INSERT INTO #cobs (
-                ccober, ctarifa, ccoberimp, ietiqtarimp, qordenimp, ctarifaint,
-                msuma_pol, mprima_anual, pprima, bfraded, mdedu_fran, mdedu_franext, pdedu_fran,
-                isuma, cramoint, ccoberturaint, bprimarea
-            )
-            SELECT
-                A.ccober,
-                A.ctarifa,
-                C.ccoberimp,
-                C.ietiqtarimp,
-                C.qordenimp,
-                C.ctarifaint,
-                0,
-                0,
-                fd.pprima,
-                fd.bfraded,
-                fd.mdedu_fran,
-                fd.mdedu_franext,
-                fd.pdedu_fran,
-                e.isuma,
-                e.cramoint,
-                e.ccoberturaint,
-                C.bprimarea
-            FROM maplantar A
-            INNER JOIN maarancel B ON A.ccober = B.ccober AND A.cramo = B.cramo AND B.iestado = 'V'
-            INNER JOIN matarifa C ON A.ccober = C.ccober AND A.cramo = C.cramo AND A.ctarifa = C.ctarifa
-            INNER JOIN macoberturas e ON e.ccobertura = C.ccober AND e.cramo = C.cramo
-            LEFT JOIN matarifa_d fd ON fd.ccober = C.ccober AND fd.cramo = C.cramo AND fd.ctarifa = C.ctarifa
-            WHERE A.cramo = @cramo
-              AND RTRIM(A.cplan) = RTRIM(@cplanRecibo);
-        END
-
-        -- Si el payload no trajo primas, repartir la prima total del endoso en partes iguales.
+        -- Prima por cobertura: se reparte la prima del endoso entre las coberturas del plan.
         SET @mprimaTotalPol = @mprima;
-        SELECT @sumPrimaCobs = ISNULL(SUM(mprima_anual), 0), @cntCobs = COUNT(*) FROM #cobs;
+        SELECT @cntCobs = COUNT(*) FROM #cobs;
 
-        IF @cntCobs > 0 AND @sumPrimaCobs <= 0 AND @mprimaTotalPol > 0
+        IF @cntCobs > 0 AND @mprimaTotalPol > 0
         BEGIN
             SET @baseCobPol = FLOOR((@mprimaTotalPol / @cntCobs) * 100) / 100;
             SET @firstCobPol = @mprimaTotalPol - (@baseCobPol * (@cntCobs - 1));
 
-            UPDATE c
-            SET mprima_anual = CASE WHEN c.idx = 1 THEN @firstCobPol ELSE @baseCobPol END
-            FROM #cobs c;
+            UPDATE #cobs
+            SET mprima_anual = CASE WHEN idx = 1 THEN @firstCobPol ELSE @baseCobPol END;
         END
 
         -- 5. Anular coberturas de recibos pendientes y luego los recibos (mismo período).
-        UPDATE c
-        SET c.iestado = 'A'
-        FROM adpolcob c
-        INNER JOIN adrecibos r ON r.crecibo = c.crecibo
-        WHERE c.iestado = 'V'
-          AND r.cpoliza = @cpoliza
-          AND r.fanopol = @polFanopol
-          AND r.fmespol = @polFmespol
-          AND r.iestadorec = 'P';
+        UPDATE adpolcob
+        SET iestado = 'A'
+        WHERE iestado = 'V'
+          AND EXISTS (
+              SELECT 1
+              FROM adrecibos r
+              WHERE r.crecibo = adpolcob.crecibo
+                AND r.cpoliza = @cpoliza
+                AND r.fanopol = @polFanopol
+                AND r.fmespol = @polFmespol
+                AND r.iestadorec = 'P'
+          );
 
-        UPDATE t
-        SET t.istattar = 'A'
-        FROM adpoltar t
-        INNER JOIN adrecibos r ON r.crecibo = t.crecibo
-        WHERE t.istattar = 'V'
-          AND r.cpoliza = @cpoliza
-          AND r.fanopol = @polFanopol
-          AND r.fmespol = @polFmespol
-          AND r.iestadorec = 'P';
+        UPDATE adpoltar
+        SET istattar = 'A'
+        WHERE istattar = 'V'
+          AND EXISTS (
+              SELECT 1
+              FROM adrecibos r
+              WHERE r.crecibo = adpoltar.crecibo
+                AND r.cpoliza = @cpoliza
+                AND r.fanopol = @polFanopol
+                AND r.fmespol = @polFmespol
+                AND r.iestadorec = 'P'
+          );
 
         UPDATE adrecibos
         SET iestadorec = 'A',
