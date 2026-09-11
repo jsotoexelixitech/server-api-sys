@@ -328,25 +328,19 @@ export class PersonasService {
     return null;
   }
 
-  private pickFuneralProduct(
+  /** Productos de la entidad con el ramo pedido (funerario = 9). El hint JWT solo aplica si es de ese ramo. */
+  private funeralProductsForRamo(
     productos: Record<string, unknown>[],
     ramo: number,
     hint: string,
-  ): Record<string, unknown> | null {
+  ): Record<string, unknown>[] {
     const list = Array.isArray(productos) ? productos : [];
-    if (hint) {
-      const hit = list.find((p) => this.optionalText(p['cproducto']) === hint);
-      if (hit) return hit;
-    }
     const byRamo = list.filter((p) => Number(p['cramo']) === ramo);
-    const named = list.filter((p) =>
-      /funerar/i.test(String(p['xproducto'] ?? p['xdescripcion_l'] ?? '')),
-    );
-    const pool = byRamo.length ? byRamo : named;
-    const namedInPool = pool.find((p) =>
-      /funerar/i.test(String(p['xproducto'] ?? p['xdescripcion_l'] ?? '')),
-    );
-    return namedInPool ?? pool[0] ?? null;
+    if (hint) {
+      const hit = byRamo.find((p) => this.optionalText(p['cproducto']) === hint);
+      if (hit) return [hit];
+    }
+    return byRamo;
   }
 
   private mapCanalPlanToPer(row: Record<string, unknown>, ramo: number): PlanPerItem | null {
@@ -400,47 +394,40 @@ export class PersonasService {
     cproductoHint: string,
   ): Promise<PlanPerItem[]> {
     const envHint = this.optionalText(this.config.get<string>('LAMUNDIAL_PRODUCTO_FUNERARIO', ''));
-    let cproducto = cproductoHint;
-    if (!cproducto) {
-      const productos = await this.valrep.getProductosPersonas(entity);
-      const picked = this.pickFuneralProduct(productos, ramo, envHint);
-      cproducto = this.optionalText(picked?.['cproducto']);
-    }
-    if (!cproducto) {
+    const hint = cproductoHint || envHint;
+    const productos = await this.valrep.getProductosPersonas(entity);
+    const selected = this.funeralProductsForRamo(productos, ramo, hint);
+    const productCodes = selected
+      .map((p) => this.optionalText(p['cproducto']))
+      .filter(Boolean);
+    if (!productCodes.length) {
       throw new BadRequestException(
         `No se encontró producto funerario (ramo ${ramo}) para ${entity.centidad}/${entity.citem}.`,
       );
     }
 
     this.logger.log(
-      `getPlanesPer canal=${entity.centidad}/${entity.citem} cproducto=${cproducto} cramo=${ramo}`,
+      `getPlanesPer canal=${entity.centidad}/${entity.citem} cproducto=${productCodes.join(',')} cramo=${ramo}`,
     );
 
-    const { planes: raw } = await this.valrep.getPlanesProducto({
-      cproducto,
-      citem: entity.citem,
-      centidad: entity.centidad,
-    });
-    let planes = (raw ?? [])
-      .map((row) => this.mapCanalPlanToPer(row as Record<string, unknown>, ramo))
-      .filter((p): p is PlanPerItem => Boolean(p));
-
-    if (!planes.length && cproductoHint) {
-      this.logger.warn(
-        `getPlanesPer cproducto=${cproducto} no tiene planes ramo ${ramo}; reintento por productos de la entidad`,
-      );
-      const productos = await this.valrep.getProductosPersonas(entity);
-      const picked = this.pickFuneralProduct(productos, ramo, envHint);
-      const retryProducto = this.optionalText(picked?.['cproducto']);
-      if (retryProducto && retryProducto !== cproducto) {
-        const retry = await this.valrep.getPlanesProducto({
-          cproducto: retryProducto,
+    const seen = new Set<string>();
+    const planes: PlanPerItem[] = [];
+    for (const cproducto of productCodes) {
+      try {
+        const { planes: raw } = await this.valrep.getPlanesProducto({
+          cproducto,
           citem: entity.citem,
           centidad: entity.centidad,
         });
-        planes = (retry.planes ?? [])
-          .map((row) => this.mapCanalPlanToPer(row as Record<string, unknown>, ramo))
-          .filter((p): p is PlanPerItem => Boolean(p));
+        for (const row of raw ?? []) {
+          const mapped = this.mapCanalPlanToPer(row as Record<string, unknown>, ramo);
+          if (!mapped || seen.has(mapped.cplan)) continue;
+          seen.add(mapped.cplan);
+          planes.push(mapped);
+        }
+      } catch (err) {
+        const msg = err instanceof Error ? err.message : String(err);
+        this.logger.warn(`getPlanesPer cproducto=${cproducto}: ${msg}`);
       }
     }
 
