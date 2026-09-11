@@ -6,7 +6,13 @@
 -- Coberturas: se insertan adpoltar/adpolcob por cada recibo nuevo (payload JSON o maplantar).
 -- Desplegar en Sis2000 QA/prod.
 
-CREATE OR ALTER PROCEDURE [dbo].[sp_crear_recibo_endoso_nexus]
+-- DROP + CREATE (en vez de CREATE OR ALTER): DBeaver no detecta "OR ALTER" como inicio de
+-- bloque y parte el script en cada ';' del cuerpo (SQL Error 102 near ';').
+IF OBJECT_ID(N'dbo.sp_crear_recibo_endoso_nexus', N'P') IS NOT NULL
+    DROP PROCEDURE dbo.sp_crear_recibo_endoso_nexus;
+GO
+
+CREATE PROCEDURE [dbo].[sp_crear_recibo_endoso_nexus]
     @cnpoliza         NVARCHAR(50),
     @fanopol          INT = NULL,
     @fmespol          INT = NULL,
@@ -59,7 +65,61 @@ BEGIN
             @polFmespol     INT,
             @polFdesde      DATE,
             @polFhasta      DATE,
-            @polCplan       NVARCHAR(10);
+            @polCplan       NVARCHAR(10),
+            @esBs           BIT,
+            @cplanRecibo    NVARCHAR(10),
+            @ptasamon_pago  NUMERIC(18, 6),
+            @itiponegocio   CHAR(2),
+            @imodcobro      CHAR(2),
+            @ctipoproductor INT,
+            @pcomision      NUMERIC(8, 6),
+            @ccerti         NUMERIC(19, 0),
+            @cdoccob        INT,
+            @totalCuotas    INT,
+            @monthsPerCuota INT,
+            @mprimaTotalExt NUMERIC(18, 2),
+            @basePrimaExt   NUMERIC(18, 2),
+            @firstPrimaExt  NUMERIC(18, 2),
+            @mprimaTotalPol NUMERIC(18, 2),
+            @sumPrimaCobs   NUMERIC(18, 2),
+            @cntCobs        INT,
+            @baseCobPol     NUMERIC(18, 2),
+            @firstCobPol    NUMERIC(18, 2),
+            @cuotaIdx       INT,
+            @firstCnrecibo  NVARCHAR(30),
+            @firstCrecibo   NUMERIC(19, 0),
+            @newCnrecibo    NVARCHAR(30),
+            @newCrecibo     NUMERIC(19, 0),
+            @errCounter     INT,
+            @cuotaPrimaExt  NUMERIC(18, 2),
+            @cuotaPrimaBs   NUMERIC(18, 2),
+            @cuotaComExt    NUMERIC(18, 2),
+            @cuotaComBs     NUMERIC(18, 2),
+            @cuotaFdesde    DATE,
+            @cuotaFhasta    DATE,
+            @sqlCert        NVARCHAR(MAX);
+
+        -- Temp tables al inicio: evita DECLARE de table-variable a mitad del SP (SSMS/parseo).
+        CREATE TABLE #cobs (
+            ccober          INT            NOT NULL,
+            ctarifa         CHAR(4)        NULL,
+            ccoberimp       CHAR(4)        NULL,
+            ietiqtarimp     CHAR(1)        NULL,
+            qordenimp       SMALLINT       NULL,
+            ctarifaint      CHAR(4)        NULL,
+            msuma_pol       NUMERIC(18, 2) NOT NULL,
+            mprima_anual    NUMERIC(18, 2) NOT NULL,
+            pprima          NUMERIC(18, 6) NULL,
+            bfraded         CHAR(1)        NULL,
+            mdedu_fran      NUMERIC(18, 2) NULL,
+            mdedu_franext   NUMERIC(18, 2) NULL,
+            pdedu_fran      NUMERIC(18, 6) NULL,
+            isuma           CHAR(1)        NULL,
+            cramoint        INT            NULL,
+            ccoberturaint   INT            NULL,
+            bprimarea       BIT            NULL,
+            idx             INT            IDENTITY(1, 1) NOT NULL
+        );
 
         SELECT TOP 1
             @cpoliza       = cpoliza,
@@ -99,24 +159,19 @@ BEGIN
             END,
             fanopol DESC, fmespol DESC;
 
+        SET @esBs = 0;
+        IF LTRIM(RTRIM(ISNULL(@cmoneda, ''))) = 'Bs'
+            SET @esBs = 1;
+
         IF @cpoliza IS NULL
         BEGIN
             RAISERROR('No se encontró la póliza indicada para generar el recibo de endoso.', 16, 1);
         END
 
         -- Plan del endoso; si no viene, se conserva el de la póliza.
-        DECLARE @cplanRecibo NVARCHAR(10) = COALESCE(NULLIF(LTRIM(RTRIM(@cplan)), ''), @polCplan);
+        SET @cplanRecibo = COALESCE(NULLIF(LTRIM(RTRIM(@cplan)), ''), @polCplan);
 
         -- 2. Datos que solo viven a nivel de recibo: se heredan del último recibo de la póliza.
-        DECLARE
-            @ptasamon_pago  NUMERIC(18, 6),
-            @itiponegocio   CHAR(2),
-            @imodcobro      CHAR(2),
-            @ctipoproductor INT,
-            @pcomision      NUMERIC(8, 6),
-            @ccerti         NUMERIC(19, 0),
-            @cdoccob        INT;
-
         SELECT TOP 1
             @ptasamon_pago  = ptasamon_pago,
             @itiponegocio   = itiponegocio,
@@ -155,52 +210,27 @@ BEGIN
             ELSE                  SET @ifrecuencia = 'A';
         END
 
-        DECLARE @totalCuotas INT = 1;
+        SET @totalCuotas = 1;
 
         IF @ifrecuencia = 'M' SET @totalCuotas = 12;
         ELSE IF @ifrecuencia = 'T' SET @totalCuotas = 4;
         ELSE IF @ifrecuencia = 'C' SET @totalCuotas = 3;
         ELSE IF @ifrecuencia = 'S' SET @totalCuotas = 2;
 
-        DECLARE @monthsPerCuota INT = 12 / @totalCuotas;
+        SET @monthsPerCuota = 12 / @totalCuotas;
 
         -- 4. Prima total del endoso en ambas monedas (misma conversión que la emisión nativa).
-        DECLARE @mprimaTotalExt NUMERIC(18, 2);
-
         IF LTRIM(RTRIM(ISNULL(@cmoneda, ''))) = 'Bs'
             SET @mprimaTotalExt = ROUND(@mprima / NULLIF(@ptasamon, 0), 2);
         ELSE
             SET @mprimaTotalExt = @mprima;
 
         -- Reparto por cuota: la 1ª absorbe los centavos, igual que el wizard de endosos.
-        DECLARE @basePrimaExt  NUMERIC(18, 2) = FLOOR((@mprimaTotalExt / @totalCuotas) * 100) / 100;
-        DECLARE @firstPrimaExt NUMERIC(18, 2) = @mprimaTotalExt - (@basePrimaExt * (@totalCuotas - 1));
+        SET @basePrimaExt  = FLOOR((@mprimaTotalExt / @totalCuotas) * 100) / 100;
+        SET @firstPrimaExt = @mprimaTotalExt - (@basePrimaExt * (@totalCuotas - 1));
 
         -- 4b. Cuadro de coberturas del endoso (payload Nest o catálogo maplantar del plan).
         -- Montos en #cobs = moneda de la póliza (igual que @mprima).
-        CREATE TABLE #cobs (
-            ccober          INT            NOT NULL,
-            ctarifa         CHAR(4)        NULL,
-            ccoberimp       CHAR(4)        NULL,
-            ietiqtarimp     CHAR(1)        NULL,
-            qordenimp       SMALLINT       NULL,
-            ctarifaint      CHAR(4)        NULL,
-            msuma_pol       NUMERIC(18, 2) NOT NULL DEFAULT 0,
-            mprima_anual    NUMERIC(18, 2) NOT NULL DEFAULT 0,
-            pprima          NUMERIC(18, 6) NULL,
-            bfraded         CHAR(1)        NULL,
-            mdedu_fran      NUMERIC(18, 2) NULL,
-            mdedu_franext   NUMERIC(18, 2) NULL,
-            pdedu_fran      NUMERIC(18, 6) NULL,
-            isuma           CHAR(1)        NULL,
-            cramoint        INT            NULL,
-            ccoberturaint   INT            NULL,
-            bprimarea       BIT            NULL,
-            idx             INT            IDENTITY(1, 1) NOT NULL
-        );
-
-        DECLARE @esBs BIT = CASE WHEN LTRIM(RTRIM(ISNULL(@cmoneda, ''))) = 'Bs' THEN 1 ELSE 0 END;
-
         IF @coberturas_json IS NOT NULL
            AND LEN(LTRIM(RTRIM(@coberturas_json))) > 2
            AND ISJSON(@coberturas_json) = 1
@@ -213,10 +243,10 @@ BEGIN
             SELECT
                 COALESCE(j.ccobertura, j.ccober),
                 mt.ctarifa,
-                mt.ccoberimp,
-                mt.ietiqtarimp,
-                mt.qordenimp,
-                mt.ctarifaint,
+                C.ccoberimp,
+                C.ietiqtarimp,
+                C.qordenimp,
+                C.ctarifaint,
                 COALESCE(j.msumaaseg, j.msumaasegurada, j.masegurada, 0),
                 COALESCE(j.mprima, j.prima, 0),
                 fd.pprima,
@@ -238,19 +268,19 @@ BEGIN
                 prima           NUMERIC(18, 2) '$.prima'
             ) j
             OUTER APPLY (
-                SELECT TOP 1
-                    A.ctarifa, A.ccoberimp, A.ietiqtarimp, A.qordenimp, A.ctarifaint
+                SELECT TOP 1 A.ctarifa
                 FROM maplantar A
                 WHERE A.cramo = @cramo
                   AND RTRIM(A.cplan) = RTRIM(@cplanRecibo)
                   AND A.ccober = COALESCE(j.ccobertura, j.ccober)
             ) mt
             OUTER APPLY (
-                SELECT TOP 1 C.bprimarea
-                FROM matarifa C
-                WHERE C.ccober = COALESCE(j.ccobertura, j.ccober)
-                  AND C.cramo = @cramo
-                  AND (mt.ctarifa IS NULL OR C.ctarifa = mt.ctarifa)
+                -- ccoberimp/ietiqtarimp/qordenimp/ctarifaint viven en matarifa, no en maplantar.
+                SELECT TOP 1 t.bprimarea, t.ccoberimp, t.ietiqtarimp, t.qordenimp, t.ctarifaint
+                FROM matarifa t
+                WHERE t.ccober = COALESCE(j.ccobertura, j.ccober)
+                  AND t.cramo = @cramo
+                  AND (mt.ctarifa IS NULL OR t.ctarifa = mt.ctarifa)
             ) C
             OUTER APPLY (
                 SELECT TOP 1 fd.pprima, fd.bfraded, fd.mdedu_fran, fd.mdedu_franext, fd.pdedu_fran
@@ -283,10 +313,10 @@ BEGIN
             SELECT
                 A.ccober,
                 A.ctarifa,
-                A.ccoberimp,
-                A.ietiqtarimp,
-                A.qordenimp,
-                A.ctarifaint,
+                C.ccoberimp,
+                C.ietiqtarimp,
+                C.qordenimp,
+                C.ctarifaint,
                 0,
                 0,
                 fd.pprima,
@@ -308,41 +338,47 @@ BEGIN
         END
 
         -- Si el payload no trajo primas, repartir la prima total del endoso en partes iguales.
-        DECLARE @mprimaTotalPol NUMERIC(18, 2) = @mprima;
-        DECLARE @sumPrimaCobs NUMERIC(18, 2) = (SELECT ISNULL(SUM(mprima_anual), 0) FROM #cobs);
-        DECLARE @cntCobs INT = (SELECT COUNT(*) FROM #cobs);
+        SET @mprimaTotalPol = @mprima;
+        SELECT @sumPrimaCobs = ISNULL(SUM(mprima_anual), 0), @cntCobs = COUNT(*) FROM #cobs;
 
         IF @cntCobs > 0 AND @sumPrimaCobs <= 0 AND @mprimaTotalPol > 0
         BEGIN
-            DECLARE @baseCobPol NUMERIC(18, 2) = FLOOR((@mprimaTotalPol / @cntCobs) * 100) / 100;
-            DECLARE @firstCobPol NUMERIC(18, 2) = @mprimaTotalPol - (@baseCobPol * (@cntCobs - 1));
+            SET @baseCobPol = FLOOR((@mprimaTotalPol / @cntCobs) * 100) / 100;
+            SET @firstCobPol = @mprimaTotalPol - (@baseCobPol * (@cntCobs - 1));
 
             UPDATE c
             SET mprima_anual = CASE WHEN c.idx = 1 THEN @firstCobPol ELSE @baseCobPol END
             FROM #cobs c;
         END
 
-        -- 5. Anular los recibos pendientes del mismo período y sus coberturas.
-        DECLARE @anulados TABLE (crecibo NUMERIC(19, 0) PRIMARY KEY);
+        -- 5. Anular coberturas de recibos pendientes y luego los recibos (mismo período).
+        UPDATE c
+        SET c.iestado = 'A'
+        FROM adpolcob c
+        INNER JOIN adrecibos r ON r.crecibo = c.crecibo
+        WHERE c.iestado = 'V'
+          AND r.cpoliza = @cpoliza
+          AND r.fanopol = @polFanopol
+          AND r.fmespol = @polFmespol
+          AND r.iestadorec = 'P';
+
+        UPDATE t
+        SET t.istattar = 'A'
+        FROM adpoltar t
+        INNER JOIN adrecibos r ON r.crecibo = t.crecibo
+        WHERE t.istattar = 'V'
+          AND r.cpoliza = @cpoliza
+          AND r.fanopol = @polFanopol
+          AND r.fmespol = @polFmespol
+          AND r.iestadorec = 'P';
 
         UPDATE adrecibos
         SET iestadorec = 'A',
             fanulacion = GETDATE()
-        OUTPUT deleted.crecibo INTO @anulados
         WHERE cpoliza = @cpoliza
           AND fanopol = @polFanopol
           AND fmespol = @polFmespol
           AND iestadorec = 'P';
-
-        UPDATE adpolcob
-        SET iestado = 'A'
-        WHERE iestado = 'V'
-          AND crecibo IN (SELECT crecibo FROM @anulados);
-
-        UPDATE adpoltar
-        SET istattar = 'A'
-        WHERE istattar = 'V'
-          AND crecibo IN (SELECT crecibo FROM @anulados);
 
         -- 5b. Recibos cobrados que siguen vigentes: cortar fhasta en la fecha del endoso.
         -- No se anulan (ya están cobrados); solo se cierra su vigencia para que no se solape
@@ -357,18 +393,10 @@ BEGIN
           AND fhasta > @fdesde;
 
         -- 6. Generar un recibo por cuota, partiendo la vigencia en tramos de 12/cuotas meses.
-        DECLARE @cuotaIdx      INT = 1;
-        DECLARE @firstCnrecibo NVARCHAR(30) = NULL;
-        DECLARE @firstCrecibo  NUMERIC(19, 0) = NULL;
-        DECLARE @newCnrecibo   NVARCHAR(30);
-        DECLARE @newCrecibo    NUMERIC(19, 0);
-        DECLARE @errCounter    INT;
-        DECLARE @cuotaPrimaExt NUMERIC(18, 2);
-        DECLARE @cuotaPrimaBs  NUMERIC(18, 2);
-        DECLARE @cuotaComExt   NUMERIC(18, 2);
-        DECLARE @cuotaComBs    NUMERIC(18, 2);
-        DECLARE @cuotaFdesde   DATE = @fdesde;
-        DECLARE @cuotaFhasta   DATE;
+        SET @cuotaIdx = 1;
+        SET @firstCnrecibo = NULL;
+        SET @firstCrecibo = NULL;
+        SET @cuotaFdesde = @fdesde;
 
         WHILE @cuotaIdx <= @totalCuotas
         BEGIN
@@ -590,7 +618,7 @@ BEGIN
 
         IF OBJECT_ID(N'dbo.adcertificado', N'U') IS NOT NULL
         BEGIN
-            DECLARE @sqlCert NVARCHAR(MAX) = N'
+            SET @sqlCert = N'
                 UPDATE adcertificado
                 SET ifrecuencia = @ifrecuencia
                 WHERE cpoliza = @cpoliza';
