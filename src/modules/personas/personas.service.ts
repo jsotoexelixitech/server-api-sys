@@ -328,21 +328,6 @@ export class PersonasService {
     return null;
   }
 
-  /** Productos de la entidad con el ramo pedido (funerario = 9). El hint JWT solo aplica si es de ese ramo. */
-  private funeralProductsForRamo(
-    productos: Record<string, unknown>[],
-    ramo: number,
-    hint: string,
-  ): Record<string, unknown>[] {
-    const list = Array.isArray(productos) ? productos : [];
-    const byRamo = list.filter((p) => Number(p['cramo']) === ramo);
-    if (hint) {
-      const hit = byRamo.find((p) => this.optionalText(p['cproducto']) === hint);
-      if (hit) return [hit];
-    }
-    return byRamo;
-  }
-
   private mapCanalPlanToPer(row: Record<string, unknown>, ramo: number): PlanPerItem | null {
     const cplan = this.optionalText(row['cplan']);
     if (!cplan) return null;
@@ -367,8 +352,8 @@ export class PersonasService {
   }
 
   /**
-   * Planes funerarios del canal SSO: spBuscaProductosEntidad + spBuscaPlanProducto.
-   * No usa lista fija de cplan.
+   * Planes funerarios del canal SSO — mismo SP que RCV (spBuscaPlan).
+   * No usa lista fija de cplan ni recorre productos uno a uno.
    */
   async getPlanesPer(
     cramoOrDto?: number | GetPlanesPerDto,
@@ -385,54 +370,53 @@ export class PersonasService {
         'No hay entidad de canal (citem/centidad o cproductor) para consultar planes funerarios.',
       );
     }
-    return this.getPlanesPerByCanal(ramo, entity, this.optionalText(dto.cproducto));
-  }
 
-  private async getPlanesPerByCanal(
-    ramo: number,
-    entity: { centidad: string; citem: string },
-    cproductoHint: string,
-  ): Promise<PlanPerItem[]> {
-    const envHint = this.optionalText(this.config.get<string>('LAMUNDIAL_PRODUCTO_FUNERARIO', ''));
-    const hint = cproductoHint || envHint;
-    const productos = await this.valrep.getProductosPersonas(entity);
-    const selected = this.funeralProductsForRamo(productos, ramo, hint);
-    const productCodes = selected
-      .map((p) => this.optionalText(p['cproducto']))
-      .filter(Boolean);
-    if (!productCodes.length) {
-      throw new BadRequestException(
-        `No se encontró producto funerario (ramo ${ramo}) para ${entity.centidad}/${entity.citem}.`,
-      );
+    const productorRaw = this.optionalText(dto.cproductor) || entity.citem;
+    const productor = Number(productorRaw);
+    if (!Number.isFinite(productor) || productor < 1) {
+      throw new BadRequestException('cproductor inválido para consultar planes funerarios.');
     }
 
+    const cusuario =
+      this.optionalText(dto.cusuario)
+      || this.optionalText(this.config.get<string>('LAMUNDIAL_CUSUARIO', '7'))
+      || '7';
+    const hint = this.optionalText(dto.cproducto);
+
     this.logger.log(
-      `getPlanesPer canal=${entity.centidad}/${entity.citem} cproducto=${productCodes.join(',')} cramo=${ramo}`,
+      `getPlanesPer spBuscaPlan canal=${entity.centidad}/${entity.citem} cproductor=${productor} cusuario=${cusuario} cramo=${ramo}`,
     );
+
+    let raw: Record<string, unknown>[] = [];
+    try {
+      raw = await this.valrep.getPlanesV2({
+        cramo: ramo,
+        cproductor: productor,
+        cusuario,
+        centidad: entity.centidad,
+        citem: entity.citem,
+      });
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : String(err);
+      this.logger.warn(`getPlanesPer spBuscaPlan: ${msg}`);
+      throw new BadRequestException('No se encontraron planes para el canal / usuario SSO.');
+    }
 
     const seen = new Set<string>();
     const planes: PlanPerItem[] = [];
-    for (const cproducto of productCodes) {
-      try {
-        const { planes: raw } = await this.valrep.getPlanesProducto({
-          cproducto,
-          citem: entity.citem,
-          centidad: entity.centidad,
-        });
-        for (const row of raw ?? []) {
-          const mapped = this.mapCanalPlanToPer(row as Record<string, unknown>, ramo);
-          if (!mapped || seen.has(mapped.cplan)) continue;
-          seen.add(mapped.cplan);
-          planes.push(mapped);
-        }
-      } catch (err) {
-        const msg = err instanceof Error ? err.message : String(err);
-        this.logger.warn(`getPlanesPer cproducto=${cproducto}: ${msg}`);
+    for (const row of raw ?? []) {
+      if (hint) {
+        const rowProducto = this.optionalText(row['cproducto']);
+        if (rowProducto && rowProducto !== hint) continue;
       }
+      const mapped = this.mapCanalPlanToPer(row, ramo);
+      if (!mapped || seen.has(mapped.cplan)) continue;
+      seen.add(mapped.cplan);
+      planes.push(mapped);
     }
 
     if (!planes.length) {
-      throw new BadRequestException('No se encontraron planes para el producto del canal.');
+      throw new BadRequestException('No se encontraron planes para el canal / usuario SSO.');
     }
     return this.withMaxAsegurados(ramo, planes);
   }

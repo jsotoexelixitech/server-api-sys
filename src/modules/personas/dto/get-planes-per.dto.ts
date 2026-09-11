@@ -55,4 +55,13 @@ export class GetPlanesPerDto {
   @Transform(({ value }) => optionalText(value))
   @IsString()
   cproductor?: string;
+
+  @ApiPropertyOptional({
+    example: '7',
+    description: 'Usuario Sis2000 del JWT (mismo parámetro que RCV / spBuscaPlan).',
+  })
+  @IsOptional()
+  @Transform(({ value }) => optionalText(value))
+  @IsString()
+  cusuario?: string;
 }

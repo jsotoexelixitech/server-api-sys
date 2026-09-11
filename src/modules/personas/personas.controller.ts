@@ -24,8 +24,8 @@ export class PersonasController {
   @ApiOperation({
     summary: 'Planes funerarios del canal SSO (ramo 9)',
     description:
-      'Consulta productos y planes del canal (spBuscaProductosEntidad + spBuscaPlanProducto), ' +
-      'con parentescos y tope de asegurados. Requiere citem/centidad o cproductor (o LAMUNDIAL_PRODUCTOR).',
+      'Lista planes del canal con el mismo SP que RCV (spBuscaPlan: cramo, cproductor, cusuario, centidad, citem). ' +
+      'Añade parentescos y tope de asegurados. Requiere citem/centidad o cproductor (o LAMUNDIAL_PRODUCTOR).',
   })
   @ApiBody({ type: GetPlanesPerDto })
   @ApiResponse({
