@@ -845,7 +845,14 @@ export class ValrepService {
         throw new BadRequestException(mensaje || 'No se encuentra planes asociados');
       }
 
-      const planes = await this.enrichPlanesWithDetalleSp(recordset);
+      const rawCodes = recordset
+        .map((row) => String(row['cplan'] ?? '').trim())
+        .filter(Boolean);
+      this.logger.log(
+        `spBuscaPlanProducto cproducto=${cproducto} centidad=${centidad} citem=${citem} raw=${rawCodes.join(',')}`,
+      );
+
+      const planes = await this.enrichWithParentescos(recordset);
       if (mensaje) this.logger.log(`spBuscaPlanProducto: ${mensaje}`);
       return { planes, mensaje };
     } catch (err) {
