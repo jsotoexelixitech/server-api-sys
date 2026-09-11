@@ -463,8 +463,16 @@ export class PersonasService {
       );
     }
 
+    const cramoSysip = cproducto === '57' ? 45 : (dto.cramo ?? null);
     this.logger.log(
-      `getPlanesPer spBuscaPlanProducto canal=${entity.centidad}/${entity.citem} cproducto=${productCodes.join(',')} cramo=${dto.cramo ?? 'auto'}`,
+      `getPlanesPer valrep/planes/producto ${JSON.stringify({
+        cproductor: null,
+        cramo: cramoSysip,
+        cusuario: dto.cusuario ?? null,
+        cproducto,
+        centidad: entity.centidad,
+        citem: entity.citem,
+      })}`,
     );
 
     const seen = new Set<string>();
