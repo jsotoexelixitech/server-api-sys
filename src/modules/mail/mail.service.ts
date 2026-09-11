@@ -7,6 +7,7 @@ import type { SendPolicyEmailDto } from './dto/send-policy-email.dto';
 import type { SendFuneralPaymentLinkDto } from './dto/send-funeral-payment-link.dto';
 import type { SendFuneralReviewAlertDto } from './dto/send-funeral-review-alert.dto';
 import { buildFuneralPaymentLinkEmail } from './templates/funeral-payment-link.template';
+import { buildFuneralReviewAlertEmail } from './templates/funeral-review-alert.template';
 
 export type PolicyEmissionMailResult = {
   sent: boolean;
@@ -115,14 +116,12 @@ export class MailService {
     const fromEmail = this.config.get<string>('SMTP_FROM', 'info@lamundialdeseguros.com');
     const fromName = this.config.get<string>('SMTP_FROM_NAME', 'La Mundial de Seguros');
     const replyTo = this.config.get<string>('SMTP_REPLY_TO', fromEmail);
-    const tomador = dto.tomadorNombre?.trim() || 'Tomador';
-    const planName = dto.planName?.trim() || 'Funerario';
-    const score = dto.scoreTotal?.trim() || '—';
-    const subject = `Funerario: solicitud referida pendiente de revisión (${planName})`;
-    const text = `Hay una solicitud funeraria referida.\nTomador: ${tomador}\nPlan: ${planName}\nScore: ${score}\nRevísla en la vista técnica de emisión.`;
-    const html = `<p>Hay una solicitud funeraria <strong>referida</strong> que requiere aprobación.</p>
-<p>Tomador: ${tomador}<br/>Plan: ${planName}<br/>Score: ${score}</p>
-<p>Ábrela en el módulo de autorización / vista técnica.</p>`;
+    const { subject, html, text } = buildFuneralReviewAlertEmail({
+      tomadorNombre: dto.tomadorNombre?.trim() || 'Tomador',
+      planName: dto.planName?.trim() || 'Funerario',
+      scoreTotal: dto.scoreTotal?.trim() || '—',
+      callCenterPhone: this.config.get<string>('CALL_CENTER_PHONE'),
+    });
     try {
       const info = await this.getTransporter().sendMail({
         from: `"${fromName}" <${fromEmail}>`,
