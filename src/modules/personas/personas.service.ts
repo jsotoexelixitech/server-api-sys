@@ -399,11 +399,21 @@ export class PersonasService {
     return null;
   }
 
-  private mapCanalPlanToPer(row: Record<string, unknown>, ramo: number): PlanPerItem | null {
+  private mapCanalPlanToPer(
+    row: Record<string, unknown>,
+    ramoHint?: number | null,
+  ): PlanPerItem | null {
     const cplan = this.optionalText(row['cplan']);
     if (!cplan) return null;
-    const rowRamo = Number(row['cramo'] ?? ramo);
-    if (Number.isFinite(rowRamo) && rowRamo !== ramo) return null;
+    const rowRamo = Number(row['cramo'] ?? ramoHint ?? this.defaultRamo);
+    if (
+      ramoHint != null
+      && Number.isFinite(rowRamo)
+      && Number.isFinite(ramoHint)
+      && rowRamo !== ramoHint
+    ) {
+      return null;
+    }
     const parentescos = Array.isArray(row['parentescos'])
       ? (row['parentescos'] as Record<string, unknown>[]).map((p) => ({
           cparen: Number(p['cparen']),
@@ -423,8 +433,9 @@ export class PersonasService {
   }
 
   /**
-   * Planes funerarios del canal SSO — mismo SP que RCV (spBuscaPlan).
-   * No usa lista fija de cplan ni recorre productos uno a uno.
+   * Planes funerarios — mismo body que SysIP getPlanV2:
+   * POST /valrep/planes/producto { cproducto, centidad, citem, cramo, cusuario, cproductor: null }.
+   * SP: spBuscaPlanProducto (no spBuscaPlan / no cproductor 80080).
    */
   async getPlanesPer(
     cramoOrDto?: number | GetPlanesPerDto,
@@ -434,7 +445,6 @@ export class PersonasService {
       typeof cramoOrDto === 'object' && cramoOrDto != null
         ? cramoOrDto
         : { cramo: cramoOrDto, ctipo: _ctipo ?? undefined };
-    const ramo = dto.cramo ?? this.defaultRamo;
     const entity = await this.resolveFuneralEntity(dto);
     if (!entity) {
       throw new BadRequestException(
@@ -442,62 +452,67 @@ export class PersonasService {
       );
     }
 
-    const productorRaw = this.optionalText(dto.cproductor) || entity.citem;
-    const productor = Number(productorRaw);
-    if (!Number.isFinite(productor) || productor < 1) {
-      throw new BadRequestException('cproductor inválido para consultar planes funerarios.');
-    }
+    const cproducto = this.optionalText(dto.cproducto);
+    const productCodes = cproducto
+      ? [cproducto]
+      : await this.funeralProductCodesForEntity(entity);
 
-    const cusuario =
-      this.optionalText(dto.cusuario)
-      || this.optionalText(this.config.get<string>('LAMUNDIAL_CUSUARIO', '7'))
-      || '7';
-    const hint = this.optionalText(dto.cproducto);
+    if (!productCodes.length) {
+      throw new BadRequestException(
+        `No se encontró producto funerario para ${entity.centidad}/${entity.citem}.`,
+      );
+    }
 
     this.logger.log(
-      `getPlanesPer spBuscaPlan canal=${entity.centidad}/${entity.citem} cproductor=${productor} cusuario=${cusuario} cramo=${ramo}`,
+      `getPlanesPer spBuscaPlanProducto canal=${entity.centidad}/${entity.citem} cproducto=${productCodes.join(',')} cramo=${dto.cramo ?? 'auto'}`,
     );
-
-    let raw: Record<string, unknown>[] = [];
-    try {
-      raw = await this.valrep.getPlanesV2({
-        cramo: ramo,
-        cproductor: productor,
-        cusuario,
-        centidad: entity.centidad,
-        citem: entity.citem,
-      });
-    } catch (err) {
-      const msg = err instanceof Error ? err.message : String(err);
-      this.logger.warn(`getPlanesPer spBuscaPlan: ${msg}`);
-      throw new BadRequestException('No se encontraron planes para el canal / usuario SSO.');
-    }
 
     const seen = new Set<string>();
     const planes: PlanPerItem[] = [];
-    for (const row of raw ?? []) {
-      if (hint) {
-        const rowProducto = this.optionalText(row['cproducto']);
-        if (rowProducto && rowProducto !== hint) continue;
+    for (const code of productCodes) {
+      try {
+        const { planes: raw } = await this.valrep.getPlanesProducto({
+          cproducto: code,
+          citem: entity.citem,
+          centidad: entity.centidad,
+        });
+        for (const row of raw ?? []) {
+          const mapped = this.mapCanalPlanToPer(row as Record<string, unknown>, null);
+          if (!mapped || seen.has(mapped.cplan)) continue;
+          seen.add(mapped.cplan);
+          planes.push(mapped);
+        }
+      } catch (err) {
+        const msg = err instanceof Error ? err.message : String(err);
+        this.logger.warn(`getPlanesPer cproducto=${code}: ${msg}`);
       }
-      const mapped = this.mapCanalPlanToPer(row, ramo);
-      if (!mapped || seen.has(mapped.cplan)) continue;
-      seen.add(mapped.cplan);
-      planes.push(mapped);
     }
 
     if (!planes.length) {
-      throw new BadRequestException('No se encontraron planes para el canal / usuario SSO.');
+      throw new BadRequestException('No se encontraron planes para el canal / producto SSO.');
     }
-    return this.withMaxAsegurados(ramo, planes);
+    return this.withMaxAsegurados(planes);
+  }
+
+  private async funeralProductCodesForEntity(entity: {
+    centidad: string;
+    citem: string;
+  }): Promise<string[]> {
+    const productos = await this.valrep.getProductosPersonas(entity);
+    const codes = (Array.isArray(productos) ? productos : [])
+      .map((p) => this.optionalText(p['cproducto']))
+      .filter(Boolean);
+    return [...new Set(codes)];
   }
 
   /** Lee nmax_dep de maplanes_per (sin ALTER SP) y calcula titular + dependientes. */
-  private async withMaxAsegurados(
-    ramo: number,
-    planes: PlanPerItem[],
-  ): Promise<PlanPerItem[]> {
-    const limits = await this.loadNmaxDepByPlan(ramo);
+  private async withMaxAsegurados(planes: PlanPerItem[]): Promise<PlanPerItem[]> {
+    const limits = new Map<string, number | null>();
+    const ramos = [...new Set(planes.map((p) => p.cramo).filter((n) => Number.isFinite(n)))];
+    for (const ramo of ramos) {
+      const byRamo = await this.loadNmaxDepByPlan(ramo);
+      byRamo.forEach((value, key) => limits.set(key, value));
+    }
     return planes.map((p) => {
       const nmax = limits.has(p.cplan) ? limits.get(p.cplan) ?? null : (p.nmax_dep ?? null);
       const maxAsegurados = nmax == null ? undefined : Math.max(1, 1 + nmax);
