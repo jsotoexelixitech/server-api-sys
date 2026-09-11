@@ -352,6 +352,8 @@ export class PersonasService {
   private mapCanalPlanToPer(row: Record<string, unknown>, ramo: number): PlanPerItem | null {
     const cplan = this.optionalText(row['cplan']);
     if (!cplan) return null;
+    const rowRamo = Number(row['cramo'] ?? ramo);
+    if (Number.isFinite(rowRamo) && rowRamo !== ramo) return null;
     const parentescos = Array.isArray(row['parentescos'])
       ? (row['parentescos'] as Record<string, unknown>[]).map((p) => ({
           cparen: Number(p['cparen']),
@@ -363,7 +365,7 @@ export class PersonasService {
     return {
       cplan,
       xplan: this.optionalText(row['xplan']),
-      cramo: Number(row['cramo'] ?? ramo),
+      cramo: rowRamo,
       cmoneda: this.optionalText(row['cmoneda']) || undefined,
       nmax_dep: this.intField(row['nmax_dep']),
       parentescos,
@@ -419,9 +421,29 @@ export class PersonasService {
       citem: entity.citem,
       centidad: entity.centidad,
     });
-    const planes = (raw ?? [])
+    let planes = (raw ?? [])
       .map((row) => this.mapCanalPlanToPer(row as Record<string, unknown>, ramo))
       .filter((p): p is PlanPerItem => Boolean(p));
+
+    if (!planes.length && cproductoHint) {
+      this.logger.warn(
+        `getPlanesPer cproducto=${cproducto} no tiene planes ramo ${ramo}; reintento por productos de la entidad`,
+      );
+      const productos = await this.valrep.getProductosPersonas(entity);
+      const picked = this.pickFuneralProduct(productos, ramo, envHint);
+      const retryProducto = this.optionalText(picked?.['cproducto']);
+      if (retryProducto && retryProducto !== cproducto) {
+        const retry = await this.valrep.getPlanesProducto({
+          cproducto: retryProducto,
+          citem: entity.citem,
+          centidad: entity.centidad,
+        });
+        planes = (retry.planes ?? [])
+          .map((row) => this.mapCanalPlanToPer(row as Record<string, unknown>, ramo))
+          .filter((p): p is PlanPerItem => Boolean(p));
+      }
+    }
+
     if (!planes.length) {
       throw new BadRequestException('No se encontraron planes para el producto del canal.');
     }
