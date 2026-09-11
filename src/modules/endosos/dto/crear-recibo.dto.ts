@@ -1,7 +1,78 @@
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
 import { Type } from 'class-transformer';
-import { IsIn, IsInt, IsNumber, IsOptional, IsString, Min } from 'class-validator';
+import {
+  IsArray,
+  IsIn,
+  IsInt,
+  IsNumber,
+  IsOptional,
+  IsString,
+  Min,
+  ValidateNested,
+} from 'class-validator';
 import { AUTO_IFRECUENCIA_VALUES } from '../../valrep/constants/auto-ifrecuencia.constants';
+
+/** Cobertura del cuadro a persistir en adpolcob/adpoltar al crear el recibo. */
+export class CoberturaReciboEndosoDto {
+  @ApiPropertyOptional({ example: 6, description: 'Código de cobertura (ccobertura)' })
+  @IsOptional()
+  @Type(() => Number)
+  @IsInt()
+  ccobertura?: number;
+
+  @ApiPropertyOptional({ example: 6, description: 'Alias de ccobertura' })
+  @IsOptional()
+  @Type(() => Number)
+  @IsInt()
+  ccober?: number;
+
+  @ApiPropertyOptional({ example: 'RCV DAÑOS A PERSONAS' })
+  @IsOptional()
+  @IsString()
+  xcobertura?: string;
+
+  @ApiPropertyOptional({ example: 7000, description: 'Suma asegurada (moneda póliza)' })
+  @IsOptional()
+  @Type(() => Number)
+  @IsNumber()
+  msumaaseg?: number;
+
+  @ApiPropertyOptional({ example: 7000 })
+  @IsOptional()
+  @Type(() => Number)
+  @IsNumber()
+  msumaasegurada?: number;
+
+  @ApiPropertyOptional({ example: 7000 })
+  @IsOptional()
+  @Type(() => Number)
+  @IsNumber()
+  masegurada?: number;
+
+  @ApiPropertyOptional({ example: 25.5, description: 'Prima de la cobertura (moneda póliza, período completo)' })
+  @IsOptional()
+  @Type(() => Number)
+  @IsNumber()
+  mprima?: number;
+
+  @ApiPropertyOptional({ example: 25.5 })
+  @IsOptional()
+  @Type(() => Number)
+  @IsNumber()
+  prima?: number;
+
+  @ApiPropertyOptional({ example: 1.5 })
+  @IsOptional()
+  @Type(() => Number)
+  @IsNumber()
+  ptasa?: number;
+
+  @ApiPropertyOptional({ example: 1.5 })
+  @IsOptional()
+  @Type(() => Number)
+  @IsNumber()
+  tasa?: number;
+}
 
 export class CrearReciboEndosoDto {
   @ApiProperty({ example: '18-1-0000079163', description: 'Número de póliza exacto (cnpoliza)' })
@@ -89,4 +160,15 @@ export class CrearReciboEndosoDto {
   @Type(() => Number)
   @IsInt()
   fmespoliza?: number;
+
+  @ApiPropertyOptional({
+    type: [CoberturaReciboEndosoDto],
+    description:
+      'Cuadro de coberturas a persistir en adpolcob/adpoltar. Si no llega, el SP usa maplantar del plan.',
+  })
+  @IsOptional()
+  @IsArray()
+  @ValidateNested({ each: true })
+  @Type(() => CoberturaReciboEndosoDto)
+  coberturas?: CoberturaReciboEndosoDto[];
 }
