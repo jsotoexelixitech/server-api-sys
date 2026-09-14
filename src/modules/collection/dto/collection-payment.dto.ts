@@ -94,4 +94,13 @@ export class CollectionPaymentDto {
   @IsOptional()
   @IsString()
   cbanco_dest_ref?: string;
+
+  @ApiPropertyOptional({
+    example: 'farmacia',
+    description:
+      'Origen del pago: farmacia (tarjeta RCV bfactura=1, xreferencia = nfactura fiscal).',
+  })
+  @IsOptional()
+  @IsString()
+  origen_pago?: 'farmacia' | 'mobile';
 }
