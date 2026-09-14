@@ -162,6 +162,33 @@ export class EmissionsService {
     return {};
   }
 
+  /** cpoliza + casegurado para activate tarjeta RCV post-emisión. */
+  private async lookupPolicyTarjetaKeys(
+    cnpoliza: string,
+  ): Promise<{ cpoliza?: number; casegurado?: number }> {
+    const poliza = String(cnpoliza ?? '').trim();
+    if (!poliza) return {};
+
+    const T = this.db.types;
+    const req = this.db.request();
+    req.input('cnpoliza', T.NVarChar(30), poliza);
+    const result = await req.query(`
+      SELECT TOP 1 p.cpoliza, p.casegurado
+      FROM adpoliza p
+      WHERE RTRIM(p.cnpoliza) = RTRIM(@cnpoliza)
+      ORDER BY p.fingreso DESC
+    `);
+    const row = result.recordset?.[0] as Record<string, unknown> | undefined;
+    if (!row) return {};
+
+    const cpoliza = Number(row['cpoliza']);
+    const casegurado = Number(row['casegurado']);
+    return {
+      ...(Number.isFinite(cpoliza) && cpoliza > 0 ? { cpoliza } : {}),
+      ...(Number.isFinite(casegurado) && casegurado > 0 ? { casegurado } : {}),
+    };
+  }
+
   /** Fallback: última póliza/recibo por placa tras emisión RCV2. */
   private async lookupEmissionByPlaca(xplaca: string): Promise<Record<string, unknown>> {
     const T = this.db.types;
@@ -1554,6 +1581,8 @@ export class EmissionsService {
 
     this.scheduleArysMembershipRegistration(cnpoliza, b);
 
+    const tarjetaKeys = await this.lookupPolicyTarjetaKeys(cnpoliza);
+
     return {
       message: 'Póliza generada exitosamente',
       cnpoliza,
@@ -1563,6 +1592,7 @@ export class EmissionsService {
       ncuota,
       fanopol,
       fmespol,
+      ...tarjetaKeys,
     };
   }
 
