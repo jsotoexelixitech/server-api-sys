@@ -194,7 +194,7 @@ export class CollectionService {
          referencia_banco, monto, fecha_movimiento, descripcion, refpk, ifuente, fcreacion)
       SELECT
         @dni, @tel_orig, @tel_dest, @banco_orig, @banco_dest,
-        @referencia, @monto, @fecha, 'Factura farmacia RCV tarjeta', @referencia, 'FARMACIA-RVC', GETDATE()
+        @referencia, @monto, @fecha, 'Factura farmacia RCV tarjeta', @referencia, 'FARMACIA', GETDATE()
       WHERE NOT EXISTS (
         SELECT 1 FROM pago_movil WHERE referencia_banco = @referencia
       )
