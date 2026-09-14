@@ -161,6 +161,48 @@ export class CollectionService {
     this.logger.log(`ensureMobilePayment: ref=${ref} registrado en pago_movil (Exelixi)`);
   }
 
+  /**
+   * Tarjeta RCV farmacia (bfactura=1): la referencia de ingreso de caja es el nfactura fiscal.
+   * Registra en pago_movil para que spCobroSis_Ad acepte la xreferencia.
+   */
+  private async ensureFarmaciaFacturaRegistered(body: CollectionPaymentDto): Promise<void> {
+    const ref = body.xreferencia.trim();
+    if (await this.isPaymentRegistered(ref)) return;
+
+    const T = this.db.types;
+    const fechaMov = new Date(`${body.fpago}T12:00:00`);
+    const farmaciaBankRef =
+      process.env.LAMUNDIAL_FARMACIA_BANCO_REF?.trim() || '0000';
+    const destBank =
+      body.cbanco_dest_ref?.trim() ||
+      process.env.LAMUNDIAL_PAYMENTS_DEST_BANCO ||
+      '0171';
+
+    const ins = this.db.request();
+    ins.input('dni', T.VarChar(20), body.cci_rif?.trim() ?? null);
+    ins.input('tel_orig', T.VarChar(20), body.xtelefono?.trim() ?? null);
+    ins.input('tel_dest', T.VarChar(20), body.telefono_dest?.trim() ?? '04143966962');
+    ins.input('banco_orig', T.VarChar(10), farmaciaBankRef);
+    ins.input('banco_dest', T.VarChar(10), destBank);
+    ins.input('referencia', T.VarChar(50), ref);
+    ins.input('monto', T.Numeric(18, 2), body.mpago);
+    ins.input('fecha', T.DateTime, fechaMov);
+
+    await ins.query(`
+      INSERT INTO pago_movil
+        (dni, telefono_origen, telefono_destino, banco_origen, banco_destino,
+         referencia_banco, monto, fecha_movimiento, descripcion, refpk, ifuente, fcreacion)
+      SELECT
+        @dni, @tel_orig, @tel_dest, @banco_orig, @banco_dest,
+        @referencia, @monto, @fecha, 'Factura farmacia RCV tarjeta', @referencia, 'FARMACIA-RVC', GETDATE()
+      WHERE NOT EXISTS (
+        SELECT 1 FROM pago_movil WHERE referencia_banco = @referencia
+      )
+    `);
+
+    this.logger.log(`ensureFarmaciaFactura: ref=${ref} registrado en pago_movil (farmacia)`);
+  }
+
   /** La referencia debe existir en pago_movil o trsypago (mismo criterio que SysIP). */
   private async assertPaymentRegistered(xreferencia: string): Promise<void> {
     if (!(await this.isPaymentRegistered(xreferencia))) {
@@ -423,7 +465,11 @@ export class CollectionService {
         'mpago debe ser el monto pagado en bolívares (Bs) según la verificación bancaria.',
       );
     }
-    await this.ensureMobilePaymentRegistered(body);
+    if (body.origen_pago === 'farmacia') {
+      await this.ensureFarmaciaFacturaRegistered(body);
+    } else {
+      await this.ensureMobilePaymentRegistered(body);
+    }
     await this.assertPaymentRegistered(body.xreferencia.trim());
     return this.buildCollectionPayloadInternal(apikey, body);
   }
