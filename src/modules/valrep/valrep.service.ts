@@ -524,6 +524,46 @@ export class ValrepService {
     }
   }
 
+  /** Tope de dependientes Sis2000 (`maplanes_per.nmax_dep`) en cada plan. */
+  private async enrichWithNmaxDep(planes: PlanItem[]): Promise<PlanItem[]> {
+    const ramos = [
+      ...new Set(
+        planes
+          .map((plan) => Number(plan['cramo']))
+          .filter((cramo) => Number.isFinite(cramo)),
+      ),
+    ];
+    for (const cramo of ramos) {
+      try {
+        const T = this.db.types;
+        const req = this.db.request();
+        req.input('cramo', T.Int, cramo);
+        const result = await req.query<{ cplan: string; nmax_dep: number | null }>(`
+          SELECT LTRIM(RTRIM(cplan)) AS cplan, nmax_dep
+          FROM maplanes_per
+          WHERE cramo = @cramo AND iestado = 'V'
+        `);
+        const limits = new Map<string, number | null>();
+        for (const row of result.recordset ?? []) {
+          const cplan = String(row.cplan ?? '').trim();
+          if (!cplan) continue;
+          const nmax = row.nmax_dep == null ? null : Number(row.nmax_dep);
+          limits.set(cplan, Number.isFinite(nmax as number) ? nmax : null);
+        }
+        for (const plan of planes) {
+          if (Number(plan['cramo']) !== cramo) continue;
+          const cplan = String(plan['cplan'] ?? '').trim();
+          if (!limits.has(cplan)) continue;
+          plan['nmax_dep'] = limits.get(cplan) ?? null;
+        }
+      } catch (err) {
+        const msg = err instanceof Error ? err.message : String(err);
+        this.logger.warn(`enrichWithNmaxDep ramo=${cramo}: ${msg}`);
+      }
+    }
+    return planes;
+  }
+
   private async enrichWithParentescos(planes: PlanItem[]): Promise<PlanItem[]> {
     for (const plan of planes) {
       try {
@@ -852,7 +892,9 @@ export class ValrepService {
         `spBuscaPlanProducto cproducto=${cproducto} centidad=${centidad} citem=${citem} raw=${rawCodes.join(',')}`,
       );
 
-      const planes = await this.enrichWithParentescos(recordset);
+      const planes = await this.enrichWithNmaxDep(
+        await this.enrichWithParentescos(recordset),
+      );
       if (mensaje) this.logger.log(`spBuscaPlanProducto: ${mensaje}`);
       return { planes, mensaje };
     } catch (err) {
