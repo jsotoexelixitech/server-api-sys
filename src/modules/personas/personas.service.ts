@@ -204,21 +204,28 @@ export class PersonasService {
   ): string | null {
     if (!lista.length) return null;
     const mapped = lista.map((b) => ({
-      tipo_cedula_beneficiario: String(b.icedula_beneficiario ?? b.tipoDoc ?? 'V').charAt(0),
-      rif_beneficiario: this.intField(b.xrif_beneficiario ?? b.identificacion),
-      nombre_beneficiario: b.xnombre_beneficiario ?? b.nombre ?? null,
-      apellido_beneficiario: b.xapellido_beneficiario ?? b.apellido ?? null,
+      tipo_cedula_beneficiario: String(
+        b.icedula_beneficiario ?? b.tipo_cedula_beneficiario ?? b.tipoDoc ?? 'V',
+      ).charAt(0),
+      rif_beneficiario: this.intField(
+        b.xrif_beneficiario ?? b.rif_beneficiario ?? b.identificacion,
+      ),
+      nombre_beneficiario: b.xnombre_beneficiario ?? b.nombre_beneficiario ?? b.nombre ?? null,
+      apellido_beneficiario: b.xapellido_beneficiario ?? b.apellido_beneficiario ?? b.apellido ?? null,
       sexo_beneficiario: String(
-        b.isexo_beneficiario ?? (b.sexo ? String(b.sexo)[0].toUpperCase() : 'M'),
+        b.isexo_beneficiario ?? b.sexo_beneficiario ?? (b.sexo ? String(b.sexo)[0].toUpperCase() : 'M'),
       ).charAt(0),
       estado_civil_beneficiario: String(b.iestado_civil_beneficiario ?? 'S').charAt(0),
       fnac_beneficiario: b.fnac_beneficiario ?? b.fechaNac ?? null,
-      nparentesco_beneficiario: getPar(b.nparentesco_beneficiario ?? b.parentesco),
+      nparentesco_beneficiario: getPar(
+        b.nparentesco_beneficiario ?? b.cparen_beneficiario ?? b.parentesco,
+      ),
       ...this.mapBeneficiarioGeo(b),
       direccion_beneficiario:
         b.direccion_beneficiario ?? b.xdireccion_beneficiario ?? b.direccion ?? null,
-      telefono_beneficiario: b.xtelefono_beneficiario ?? b.telefono ?? null,
-      correo_beneficiario: b.xcorreo_beneficiario ?? b.email ?? null,
+      telefono_beneficiario:
+        b.xtelefono_beneficiario ?? b.telefono_beneficiario ?? b.telefono ?? null,
+      correo_beneficiario: b.xcorreo_beneficiario ?? b.correo_beneficiario ?? b.email ?? null,
       pporce_beneficiario: Number(b.pporce_beneficiario ?? b.pporcen ?? b.pporce) || 0,
     }));
     return JSON.stringify(mapped);

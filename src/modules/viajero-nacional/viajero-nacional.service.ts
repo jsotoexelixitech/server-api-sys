@@ -10,7 +10,10 @@ import {
 import { GetViaje3PlanDto } from './dto/get-viaje3-plan.dto';
 import { CotizacionViaje3Dto } from './dto/cotizacion-viaje3.dto';
 import { EmitViaje3Dto } from './dto/emit-viaje3.dto';
-import { flattenMarketplaceCanal } from './viajero-canal.mapper';
+import {
+  flattenMarketplaceCanal,
+  normalizeViajeroBeneficiarios,
+} from './viajero-canal.mapper';
 
 @Injectable()
 export class ViajeroNacionalService {
@@ -103,7 +106,7 @@ export class ViajeroNacionalService {
     body: Record<string, unknown>,
     plan: ViajeroRiesgosPlan,
   ): Record<string, unknown> {
-    const withCanal = this.flattenCanal(body);
+    const withCanal = normalizeViajeroBeneficiarios(this.flattenCanal(body));
     const femision = String(withCanal['fecha_emision'] ?? withCanal['femision'] ?? '').trim();
     const fdesde = this.resolveFdesde(
       String(withCanal['fdesde'] ?? femision ?? '').trim() || undefined,

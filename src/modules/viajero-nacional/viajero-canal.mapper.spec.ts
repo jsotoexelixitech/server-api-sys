@@ -1,4 +1,7 @@
-import { flattenMarketplaceCanal } from './viajero-canal.mapper';
+import {
+  flattenMarketplaceCanal,
+  normalizeViajeroBeneficiarios,
+} from './viajero-canal.mapper';
 
 describe('flattenMarketplaceCanal', () => {
   it('aplana canal anidado', () => {
@@ -61,5 +64,40 @@ describe('flattenMarketplaceCanal', () => {
   it('centidad G usa citem como cgestor', () => {
     const out = flattenMarketplaceCanal({ centidad: 'G', citem: 'gestor-9' });
     expect(out.cgestor).toBe('gestor-9');
+  });
+});
+
+describe('normalizeViajeroBeneficiarios', () => {
+  it('arma beneficiarios[] desde campos planos', () => {
+    const out = normalizeViajeroBeneficiarios({
+      rif_beneficiario: 17777888,
+      tipo_cedula_beneficiario: 'V',
+      nombre_beneficiario: 'ANA',
+      apellido_beneficiario: 'PEREZ',
+      sexo_beneficiario: 'F',
+      cparen_beneficiario: 2,
+      correo_beneficiario: 'ben3@exelixi.local',
+    });
+    const lista = out.beneficiarios as Record<string, unknown>[];
+    expect(lista).toHaveLength(1);
+    expect(lista[0].xrif_beneficiario).toBe(17777888);
+    expect(lista[0].xnombre_beneficiario).toBe('ANA');
+    expect(lista[0].nparentesco_beneficiario).toBe(2);
+    expect(lista[0].pporce_beneficiario).toBe(100);
+  });
+
+  it('respeta beneficiarios[] si ya viene con RIF', () => {
+    const out = normalizeViajeroBeneficiarios({
+      rif_beneficiario: 1,
+      beneficiarios: [{ xrif_beneficiario: 999, xnombre_beneficiario: 'LUZ' }],
+    });
+    const lista = out.beneficiarios as Record<string, unknown>[];
+    expect(lista).toHaveLength(1);
+    expect(lista[0].xrif_beneficiario).toBe(999);
+  });
+
+  it('no inventa beneficiario si no hay RIF', () => {
+    const out = normalizeViajeroBeneficiarios({ nombre_titular: 'CARLOS' });
+    expect(out.beneficiarios).toBeUndefined();
   });
 });

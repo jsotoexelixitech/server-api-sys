@@ -78,3 +78,112 @@ export function flattenMarketplaceCanal(
     ...(cgestor !== undefined ? { cgestor } : {}),
   };
 }
+
+function hasBeneficiarioRif(row: Record<string, unknown>): boolean {
+  return firstDefined(
+    row['xrif_beneficiario'],
+    row['rif_beneficiario'],
+    row['identificacion'],
+  ) !== undefined;
+}
+
+function mapBeneficiarioRow(src: Record<string, unknown>): Record<string, unknown> {
+  const rif = firstDefined(
+    src['xrif_beneficiario'],
+    src['rif_beneficiario'],
+    src['identificacion'],
+  );
+  const tipo = firstDefined(
+    src['icedula_beneficiario'],
+    src['tipo_cedula_beneficiario'],
+    src['tipoDoc'],
+    'V',
+  );
+  const parentesco = firstDefined(
+    src['nparentesco_beneficiario'],
+    src['cparen_beneficiario'],
+    src['parentesco'],
+    5,
+  );
+  const pporce = firstDefined(
+    src['pporce_beneficiario'],
+    src['pporcen'],
+    src['pporce'],
+    100,
+  );
+  const sexo = firstDefined(src['isexo_beneficiario'], src['sexo_beneficiario'], src['sexo'], 'M');
+  const nombre = firstDefined(src['xnombre_beneficiario'], src['nombre_beneficiario'], src['nombre']);
+  const apellido = firstDefined(
+    src['xapellido_beneficiario'],
+    src['apellido_beneficiario'],
+    src['apellido'],
+  );
+  const tel = firstDefined(
+    src['xtelefono_beneficiario'],
+    src['telefono_beneficiario'],
+    src['telefono'],
+  );
+  const correo = firstDefined(
+    src['xcorreo_beneficiario'],
+    src['correo_beneficiario'],
+    src['email'],
+  );
+  const dir = firstDefined(
+    src['direccion_beneficiario'],
+    src['xdireccion_beneficiario'],
+    src['direccion'],
+  );
+  const estado = firstDefined(
+    src['estado_beneficiario'],
+    src['cestado_beneficiario'],
+    src['cestado'],
+  );
+  const ciudad = firstDefined(
+    src['ciudad_beneficiario'],
+    src['cciudad_beneficiario'],
+    src['cciudad'],
+  );
+  return {
+    ...src,
+    xrif_beneficiario: rif,
+    identificacion: rif,
+    icedula_beneficiario: tipo,
+    xnombre_beneficiario: nombre,
+    nombre,
+    xapellido_beneficiario: apellido,
+    apellido,
+    isexo_beneficiario: sexo,
+    fnac_beneficiario: firstDefined(src['fnac_beneficiario'], src['fechaNac']),
+    nparentesco_beneficiario: parentesco,
+    parentesco,
+    pporce_beneficiario: pporce,
+    estado_beneficiario: estado,
+    cestado_beneficiario: estado,
+    ciudad_beneficiario: ciudad,
+    cciudad_beneficiario: ciudad,
+    direccion_beneficiario: dir,
+    xtelefono_beneficiario: tel,
+    telefono: tel,
+    xcorreo_beneficiario: correo,
+    email: correo,
+  };
+}
+
+/**
+ * El SP de personas solo lee `beneficiarios[]`.
+ * Si mandan campos planos (rif_beneficiario, nombre_beneficiario, …) se arma un ítem.
+ */
+export function normalizeViajeroBeneficiarios(
+  body: Record<string, unknown>,
+): Record<string, unknown> {
+  const raw = body['beneficiarios'];
+  const lista = Array.isArray(raw)
+    ? raw.filter((row): row is Record<string, unknown> => !!row && typeof row === 'object')
+    : [];
+  const mapped = lista.filter(hasBeneficiarioRif).map(mapBeneficiarioRow);
+  if (mapped.length > 0) {
+    return { ...body, beneficiarios: mapped };
+  }
+  if (!hasBeneficiarioRif(body)) return body;
+  return { ...body, beneficiarios: [mapBeneficiarioRow(body)] };
+}
