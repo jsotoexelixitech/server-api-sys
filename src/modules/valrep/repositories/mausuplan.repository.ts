@@ -20,10 +20,59 @@ export class MausuplanRepository {
   constructor(private readonly db: MssqlService) {}
 
   /**
+   * Centidades a probar en mausuplan para un csubitem.
+   * Gestor compuesto (348-342) se guarda con centidad G en Sis2000, no P.
+   */
+  private resolveCentidadCandidates(citem: string, centidad?: string): string[] {
+    const item = citem.trim();
+    const hinted = centidad?.trim().toUpperCase() ?? '';
+    const out: string[] = [];
+
+    if (item.includes('-') && !item.includes('@')) {
+      out.push('G');
+    }
+    if (hinted && !out.includes(hinted)) {
+      out.push(hinted);
+    }
+    for (const fallback of ['P', 'C']) {
+      if (!out.includes(fallback)) out.push(fallback);
+    }
+    return out;
+  }
+
+  /**
    * Planes marcados en mausuplan con itipouso='E' (excluir) para el gestor indicado.
    * Paridad Nexus Product.getFilteredProducts — consulta parametrizada.
    */
   async getExcludedPlans(query: ExcludedPlansQuery): Promise<string[]> {
+    const cproducto = query.cproducto.trim();
+    const citem = query.citem.trim();
+
+    if (!cproducto || !citem) {
+      return [];
+    }
+
+    const centidades = this.resolveCentidadCandidates(citem, query.centidad);
+    const merged = new Set<string>();
+
+    for (const centidad of centidades) {
+      const codes = await this.queryExcludedPlans({
+        cproducto,
+        centidad,
+        citem,
+      });
+      for (const code of codes) merged.add(code);
+      if (merged.size > 0) break;
+    }
+
+    const result = [...merged];
+    this.logger.log(
+      `getExcludedPlans centidad=${centidades.join('|')} citem=${citem} cproducto=${cproducto} → ${result.length} plan(es) excluidos`,
+    );
+    return result;
+  }
+
+  private async queryExcludedPlans(query: ExcludedPlansQuery): Promise<string[]> {
     const cproducto = query.cproducto.trim();
     const centidad = query.centidad.trim().toUpperCase();
     const citem = query.citem.trim();
@@ -78,16 +127,12 @@ export class MausuplanRepository {
 
     try {
       const result = await req.query<{ cplan: string }>(sql);
-      const codes = (result.recordset ?? [])
+      return (result.recordset ?? [])
         .map((row) => String(row.cplan ?? '').trim())
         .filter(Boolean);
-      this.logger.log(
-        `getExcludedPlans centidad=${centidad} citem=${citem} cproducto=${cproducto} → ${codes.length} plan(es) excluidos`,
-      );
-      return codes;
     } catch (err) {
       const msg = err instanceof Error ? err.message : String(err);
-      this.logger.error(`getExcludedPlans: ${msg}`);
+      this.logger.error(`getExcludedPlans centidad=${centidad}: ${msg}`);
       throw err;
     }
   }

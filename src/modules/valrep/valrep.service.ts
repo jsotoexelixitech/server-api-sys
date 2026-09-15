@@ -810,7 +810,8 @@ export class ValrepService {
     }
 
     const centidad = opts.centidad?.trim();
-    if (!centidad) {
+    const isGestorCompuesto = csubitem.includes('-') && !csubitem.includes('@');
+    if (!centidad && !isGestorCompuesto) {
       throw new BadRequestException(
         'centidad es requerida cuando se envía csubitem (depende del usuario logueado).',
       );
@@ -818,7 +819,7 @@ export class ValrepService {
 
     const excluded = await this.mausuplanRepo.getExcludedPlans({
       cproducto: opts.cproducto,
-      centidad: centidad.toUpperCase(),
+      centidad: centidad?.toUpperCase() ?? 'G',
       citem: csubitem,
     });
 
