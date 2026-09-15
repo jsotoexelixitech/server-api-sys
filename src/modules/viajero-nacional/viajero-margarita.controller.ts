@@ -20,7 +20,7 @@ export class ViajeroMargaritaController {
   @ApiOperation({
     summary: 'Emitir viajero 7 días',
     description:
-      'Emisión personas. Ramo, plan y vigencia de 7 días corridos (fhasta = fdesde + 7) los fija el servidor. Canal opcional en el body (`canal` o campos planos); no usa JWT.',
+      'Emisión personas. Solo 7 días corridos (fhasta = fdesde + 7). Si envían ndias o fhasta distintos, 400. Canal opcional en el body; no usa JWT.',
     operationId: 'viajero7DiasEmision',
   })
   @ApiHeader(APIKEY_HEADER)

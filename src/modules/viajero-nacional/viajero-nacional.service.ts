@@ -1,4 +1,4 @@
-import { Injectable, Logger } from '@nestjs/common';
+import { Injectable, Logger, BadRequestException } from '@nestjs/common';
 import { ValrepService } from '../valrep/valrep.service';
 import { PersonasService } from '../personas/personas.service';
 import { CotizacionPerDto } from '../personas/dto/cotizacion-per.dto';
@@ -107,6 +107,7 @@ export class ViajeroNacionalService {
     const fdesde = this.resolveFdesde(
       String(withCanal['fdesde'] ?? femision ?? '').trim() || undefined,
     );
+    this.assertCoverageDays(withCanal, plan, fdesde);
     return {
       ...withCanal,
       cramo: plan.cramo,
@@ -161,7 +162,51 @@ export class ViajeroNacionalService {
     return new Date().toISOString().slice(0, 10);
   }
 
-  /** Cobertura comercial: 3 o 7 días corridos. fhasta = fdesde + ndias (07→14 = 7 días). */
+  /**
+   * Rechaza ndias o vigencia distinta a 3 o 7 según el endpoint.
+   * Si no envían ndias/fhasta, el servidor fija la cobertura correcta.
+   */
+  private assertCoverageDays(
+    body: Record<string, unknown>,
+    plan: ViajeroRiesgosPlan,
+    fdesde: string,
+  ): void {
+    const sentNdias = this.toOptionalInt(body['ndias']);
+    if (sentNdias != null && sentNdias !== plan.ndias) {
+      throw new BadRequestException(
+        `Esta API solo emite ${plan.ndias} días (${plan.xplan}). Recibido ndias=${sentNdias}.`,
+      );
+    }
+    const fhastaRaw = String(body['fhasta'] ?? '').trim();
+    if (!fhastaRaw) return;
+    const fhasta = fhastaRaw.slice(0, 10);
+    const sentDays = this.diffCoverageDays(fdesde, fhasta);
+    if (sentDays !== plan.ndias) {
+      throw new BadRequestException(
+        `Esta API solo emite ${plan.ndias} días (${plan.xplan}). Vigencia ${fdesde}–${fhasta} = ${sentDays} días.`,
+      );
+    }
+  }
+
+  private toOptionalInt(value: unknown): number | null {
+    if (value === undefined || value === null || value === '') return null;
+    const n = typeof value === 'number' ? value : Number.parseInt(String(value), 10);
+    return Number.isFinite(n) ? n : null;
+  }
+
+  private diffCoverageDays(fdesde: string, fhasta: string): number {
+    const from = Date.parse(`${fdesde}T00:00:00Z`);
+    const to = Date.parse(`${fhasta}T00:00:00Z`);
+    if (!Number.isFinite(from) || !Number.isFinite(to)) {
+      throw new BadRequestException('fdesde y fhasta deben ser fechas YYYY-MM-DD.');
+    }
+    if (to < from) {
+      throw new BadRequestException('fhasta no puede ser anterior a fdesde.');
+    }
+    return Math.round((to - from) / 86400000);
+  }
+
+  /** fhasta = fdesde + ndias (07→14 = 7 días corridos). */
   private addCoverageDays(fdesde: string, ndias: number): string {
     const d = new Date(`${fdesde}T00:00:00Z`);
     d.setUTCDate(d.getUTCDate() + ndias);

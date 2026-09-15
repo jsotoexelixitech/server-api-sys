@@ -20,6 +20,14 @@ export class EmitViaje3Dto extends OmitType(CreateEmissionPersonDto, [
   plan?: string;
 
   @ApiPropertyOptional({
+    description: 'Si se envía, debe ser exactamente 3 o 7 según el endpoint. Si no, 400.',
+  })
+  @IsOptional()
+  @Type(() => Number)
+  @IsInt()
+  ndias?: number;
+
+  @ApiPropertyOptional({
     type: CanalViajeroDto,
     description: 'Canal Sis2000 en el JSON (API aislada, no JWT). También se aceptan los mismos campos planos.',
   })
