@@ -26,7 +26,7 @@ export class ViajeroNacionalService {
     return {
       ...plan,
       fdesde,
-      fhasta: this.addInclusiveDays(fdesde, plan.ndias),
+      fhasta: this.addCoverageDays(fdesde, plan.ndias),
     };
   }
 
@@ -116,7 +116,7 @@ export class ViajeroNacionalService {
       ifrecuencia: plan.ifrecuencia,
       cmoneda: withCanal['cmoneda'] ?? plan.cmoneda,
       fdesde,
-      fhasta: String(withCanal['fhasta'] ?? '').trim() || this.addInclusiveDays(fdesde, plan.ndias),
+      fhasta: this.addCoverageDays(fdesde, plan.ndias),
       ndias: plan.ndias,
       fecha_emision: femision || fdesde,
     };
@@ -161,10 +161,10 @@ export class ViajeroNacionalService {
     return new Date().toISOString().slice(0, 10);
   }
 
-  /** Vigencia inclusiva: ndias desde fdesde → fhasta = fdesde + (ndias - 1). */
-  private addInclusiveDays(fdesde: string, ndias: number): string {
+  /** Cobertura comercial: 3 o 7 días corridos. fhasta = fdesde + ndias (07→14 = 7 días). */
+  private addCoverageDays(fdesde: string, ndias: number): string {
     const d = new Date(`${fdesde}T00:00:00Z`);
-    d.setUTCDate(d.getUTCDate() + ndias - 1);
+    d.setUTCDate(d.getUTCDate() + ndias);
     return d.toISOString().slice(0, 10);
   }
 }
