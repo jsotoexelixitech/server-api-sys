@@ -237,6 +237,7 @@ export class ValrepController {
     summary: 'Funerario paso 2 · Planes por producto',
     description:
       'Planes asociados al producto seleccionado, con parentescos y rangos de edad permitidos.\n\n' +
+      'Con `csubitem` + `centidad` se excluyen planes restringidos al gestor (mausuplan itipouso=E).\n\n' +
       '**Siguiente paso:** `POST /valrep/planes/detalle` con `cramo` y `cplan`.',
     operationId: 'funerarioValrepPlanesProducto',
   })
@@ -300,7 +301,9 @@ export class ValrepController {
     summary: 'Paso 3 · Planes RCV disponibles',
     description:
       'Planes de automóvil disponibles con parentescos y coberturas. ' +
-      'El `cplan` devuelto se usa en frecuencia, cotización y emisión.',
+      'El `cplan` devuelto se usa en frecuencia, cotización y emisión.\n\n' +
+      'Con `csubitem` + `centidad` se excluyen planes restringidos al gestor (mausuplan itipouso=E). ' +
+      'RCV (cramo 18) usa cproducto 24 para la exclusión; otros ramos requieren `cproducto` en el body.',
     operationId: 'valrepPlanesV2',
   })
   @ApiBody({ type: GetPlanesV2Dto })
@@ -321,8 +324,11 @@ export class ValrepController {
   })
   @ApiCommonErrors()
   async getPlanesV2(@Body() dto: GetPlanesV2Dto) {
-    const plan = await this.valrepService.getPlanesV2(dto);
-    return { status: true, data: { plan } };
+    const { planes, mensaje } = await this.valrepService.getPlanesV2(dto);
+    return {
+      status: true,
+      data: { plan: planes, message: mensaje ?? null, mensaje: mensaje ?? null },
+    };
   }
 
   // ── POST /api/v1/valrep/frecuencia ─────────────────────────────────────
