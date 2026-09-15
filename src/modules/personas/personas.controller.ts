@@ -39,7 +39,7 @@ export class PersonasController {
   })
   @Api500()
   async getPlanes(@Body() dto: GetPlanesPerDto) {
-    const planes = await this.personasService.getPlanesPer(dto.cramo, dto.ctipo ?? null);
+    const planes = await this.personasService.getPlanesPer(dto);
     return { status: true, data: { planes } };
   }
 

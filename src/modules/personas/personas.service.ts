@@ -9,6 +9,7 @@ import { ConfigService } from '@nestjs/config';
 import { MssqlService } from '../../database/mssql.service';
 import { CotizacionPerDto } from './dto/cotizacion-per.dto';
 import { CreateEmissionPersonDto } from './dto/create-emission-person.dto';
+import { GetPlanesPerDto } from './dto/get-planes-per.dto';
 import { parseSPError } from '../../common/helpers/sp-error.helper';
 import { buildPolicyPdfUrl } from '../../common/helpers/policy-url.helper';
 import {
@@ -55,6 +56,8 @@ export interface PlanPerItem {
   xplan: string;
   cramo: number;
   cmoneda?: string;
+  nmax_dep?: number | null;
+  maxAsegurados?: number;
   parentescos?: Array<{ cparen: number; xparentesco: string; min_edad: number; max_edad: number }>;
 }
 
@@ -289,10 +292,21 @@ export class PersonasService {
       .filter(Boolean);
   }
 
-  // ── Planes de personas (spGetPlanesPerFunerario) ───────────────────────────
+  // ── Planes de personas ─────────────────────────────────────────────────────
 
-  async getPlanesPer(cramo?: number, _ctipo?: number | null): Promise<PlanPerItem[]> {
-    const ramo = cramo ?? this.defaultRamo;
+  async getPlanesPer(
+    cramoOrDto?: number | GetPlanesPerDto,
+    _ctipo?: number | null,
+  ): Promise<PlanPerItem[]> {
+    const dto: GetPlanesPerDto =
+      typeof cramoOrDto === 'object' && cramoOrDto
+        ? cramoOrDto
+        : { cramo: cramoOrDto, ctipo: _ctipo };
+    const cproducto = String(dto.cproducto ?? '').trim();
+    if (cproducto) {
+      return this.getPlanesPerFromProducto(dto);
+    }
+    const ramo = dto.cramo ?? this.defaultRamo;
     try {
       return await this.getPlanesPerFromFuneralSp(ramo);
     } catch (err) {
@@ -300,6 +314,103 @@ export class PersonasService {
       this.logger.warn(`getPlanesPer: spGetPlanesPerFunerario falló, fallback por cplan. ${msg}`);
       return this.getPlanesPerByCodes(ramo);
     }
+  }
+
+  /** Catálogo del canal: spBuscaPlanProducto + detalle (nmax_dep / parentescos). */
+  private async getPlanesPerFromProducto(dto: GetPlanesPerDto): Promise<PlanPerItem[]> {
+    const cproducto = String(dto.cproducto ?? '').trim();
+    const centidad = String(dto.centidad ?? '').trim() || null;
+    const citem = String(dto.citem ?? '').trim() || null;
+    const T = this.db.types;
+    const req = this.db.request();
+    req.input('cproducto', T.NVarChar(10), cproducto);
+    req.input('citem', T.NVarChar(20), citem);
+    req.input('centidad', T.Char(1), centidad);
+    req.output('mensaje', T.NVarChar(60), '');
+
+    const result = await req.execute('spBuscaPlanProducto');
+    const mensaje = String(result.output['mensaje'] ?? '').trim();
+    const rows = (result.recordset ?? []) as Record<string, unknown>[];
+    if (!rows.length) {
+      throw new BadRequestException(mensaje || 'No se encuentra planes asociados');
+    }
+    if (mensaje) this.logger.log(`spBuscaPlanProducto: ${mensaje}`);
+
+    const planes: PlanPerItem[] = [];
+    for (const row of rows) {
+      const cplan = String(row['cplan'] ?? '').trim();
+      if (!cplan) continue;
+      const cramo = Number(row['cramo'] ?? dto.cramo ?? this.defaultRamo);
+      let xplan = String(row['xplan'] ?? '').trim() || `Plan ${cplan}`;
+      let nmax_dep =
+        row['nmax_dep'] != null && Number.isFinite(Number(row['nmax_dep']))
+          ? Number(row['nmax_dep'])
+          : null;
+      let parentescos: NonNullable<PlanPerItem['parentescos']> = [];
+      let cmoneda = String(row['cmoneda'] ?? '').trim() || undefined;
+      try {
+        const detalle = await this.fetchDetallePlanRow(cramo, cplan);
+        if (detalle.xplan) xplan = detalle.xplan;
+        if (detalle.cmoneda) cmoneda = detalle.cmoneda;
+        if (detalle.nmax_dep != null) nmax_dep = detalle.nmax_dep;
+        parentescos = detalle.parentescos;
+      } catch (err) {
+        const msg = err instanceof Error ? err.message : String(err);
+        this.logger.warn(`detalle plan ${cplan}: ${msg}`);
+      }
+      const maxAsegurados =
+        nmax_dep != null && Number.isFinite(nmax_dep) ? Math.max(1, 1 + nmax_dep) : undefined;
+      planes.push({
+        cplan,
+        xplan,
+        cramo,
+        cmoneda,
+        nmax_dep,
+        maxAsegurados,
+        parentescos,
+      });
+    }
+    if (!planes.length) {
+      throw new BadRequestException('spBuscaPlanProducto no devolvió planes');
+    }
+    return planes;
+  }
+
+  private async fetchDetallePlanRow(
+    cramo: number,
+    cplan: string,
+  ): Promise<{
+    xplan?: string;
+    cmoneda?: string;
+    nmax_dep: number | null;
+    parentescos: NonNullable<PlanPerItem['parentescos']>;
+  }> {
+    const T = this.db.types;
+    const req = this.db.request();
+    req.input('cramo', T.Int, cramo);
+    req.input('cplan', T.VarChar(10), cplan);
+    req.output('berror', T.Bit, false);
+    req.output('mensaje', T.NVarChar(60), '');
+    const result = await req.execute('spBuscaDetallePlan');
+    if (Boolean(result.output['berror'])) {
+      throw new Error(String(result.output['mensaje'] ?? 'Sin detalle de plan'));
+    }
+    const sets = result.recordsets as Array<Record<string, unknown>[]> | undefined;
+    const head = (sets?.[0] ?? result.recordset ?? [])[0] as Record<string, unknown> | undefined;
+    const parentRows = (sets?.[1] ?? []) as Record<string, unknown>[];
+    const nmaxRaw = head?.['nmax_dep'];
+    return {
+      xplan: String(head?.['xplan'] ?? '').trim() || undefined,
+      cmoneda: String(head?.['cmoneda'] ?? '').trim() || undefined,
+      nmax_dep:
+        nmaxRaw != null && Number.isFinite(Number(nmaxRaw)) ? Number(nmaxRaw) : null,
+      parentescos: parentRows.map((row) => ({
+        cparen: Number(row['cparen']),
+        xparentesco: String(row['xparentesco'] ?? '').trim(),
+        min_edad: Number(row['min_edad']),
+        max_edad: Number(row['max_edad']),
+      })),
+    };
   }
 
   private async getPlanesPerFromFuneralSp(ramo: number): Promise<PlanPerItem[]> {

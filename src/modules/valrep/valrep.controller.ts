@@ -58,7 +58,7 @@ export class ValrepController {
   })
   @Api500()
   async getPlanesPer(@Body() dto: GetPlanesPerDto) {
-    const plan = await this.personasService.getPlanesPer(dto.cramo, dto.ctipo ?? null);
+    const plan = await this.personasService.getPlanesPer(dto);
     return { status: true, data: { plan } };
   }
 
