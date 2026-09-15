@@ -281,18 +281,6 @@ export class PersonasService {
     return this.config.get<number>('LAMUNDIAL_RAMO_PERSON', 9);
   }
 
-  // Lista blanca de planes funerarios individuales a exponer (catálogo oficial de
-  // producción para cproducto=57: 4/6/7/8). En QA esos planes existen en
-  // maplanes_per (ramo 9, vigentes) aunque con cproducto distinto, por eso se
-  // filtran por cplan explícito y no por cproducto. Configurable por env.
-  private get funeralPlanCodes(): string[] {
-    return this.config
-      .get<string>('LAMUNDIAL_PLANES_FUNERARIO', '4,6,7,8')
-      .split(',')
-      .map((s) => s.trim())
-      .filter(Boolean);
-  }
-
   // ── Planes de personas ─────────────────────────────────────────────────────
 
   async getPlanesPer(
@@ -303,18 +291,10 @@ export class PersonasService {
       typeof cramoOrDto === 'object' && cramoOrDto
         ? cramoOrDto
         : { cramo: cramoOrDto, ctipo: _ctipo };
-    const cproducto = String(dto.cproducto ?? '').trim();
-    if (cproducto) {
-      return this.getPlanesPerFromProducto(dto);
+    if (!String(dto.cproducto ?? '').trim()) {
+      dto.cproducto = this.config.get<string>('LAMUNDIAL_PRODUCTO_FUNERARIO', '57');
     }
-    const ramo = dto.cramo ?? this.defaultRamo;
-    try {
-      return await this.getPlanesPerFromFuneralSp(ramo);
-    } catch (err) {
-      const msg = err instanceof Error ? err.message : String(err);
-      this.logger.warn(`getPlanesPer: spGetPlanesPerFunerario falló, fallback por cplan. ${msg}`);
-      return this.getPlanesPerByCodes(ramo);
-    }
+    return this.getPlanesPerFromProducto(dto);
   }
 
   private spBuscaPlanProductoNexusName(): string {
@@ -324,11 +304,16 @@ export class PersonasService {
     );
   }
 
-  /** Catálogo del canal: sp_busca_plan_producto_nexus + detalle (nmax_dep / parentescos). */
+  /** Catálogo del canal: solo sp_busca_plan_producto_nexus (sin lista blanca ni nombres inventados). */
   private async getPlanesPerFromProducto(dto: GetPlanesPerDto): Promise<PlanPerItem[]> {
     const cproducto = String(dto.cproducto ?? '').trim();
-    const centidad = String(dto.centidad ?? '').trim() || null;
-    const citem = String(dto.citem ?? '').trim() || null;
+    const centidad = String(dto.centidad ?? '').trim();
+    const citem = String(dto.citem ?? '').trim();
+    if (!centidad || !citem) {
+      throw new BadRequestException(
+        'centidad y citem son obligatorios para consultar planes funerarios.',
+      );
+    }
     const spName = this.spBuscaPlanProductoNexusName();
     const T = this.db.types;
     const req = this.db.request();
@@ -337,7 +322,16 @@ export class PersonasService {
     req.input('centidad', T.Char(1), centidad);
     req.output('mensaje', T.NVarChar(60), '');
 
-    const result = await req.execute(spName);
+    let result: Awaited<ReturnType<typeof req.execute>>;
+    try {
+      result = await req.execute(spName);
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : String(err);
+      this.logger.error(`${spName}: ${msg}`);
+      throw new InternalServerErrorException(
+        `Error al consultar planes con ${spName}.`,
+      );
+    }
     const mensaje = String(result.output['mensaje'] ?? '').trim();
     const rows = (result.recordset ?? []) as Record<string, unknown>[];
     if (!rows.length) {
@@ -350,7 +344,7 @@ export class PersonasService {
       const cplan = String(row['cplan'] ?? '').trim();
       if (!cplan) continue;
       const cramo = Number(row['cramo'] ?? dto.cramo ?? this.defaultRamo);
-      let xplan = String(row['xplan'] ?? '').trim() || `Plan ${cplan}`;
+      let xplan = String(row['xplan'] ?? '').trim();
       let nmax_dep =
         row['nmax_dep'] != null && Number.isFinite(Number(row['nmax_dep']))
           ? Number(row['nmax_dep'])
@@ -371,7 +365,7 @@ export class PersonasService {
         nmax_dep != null && Number.isFinite(nmax_dep) ? Math.max(1, 1 + nmax_dep) : undefined;
       planes.push({
         cplan,
-        xplan,
+        xplan: xplan || cplan,
         cramo,
         cmoneda,
         nmax_dep,
@@ -420,80 +414,6 @@ export class PersonasService {
         max_edad: Number(row['max_edad']),
       })),
     };
-  }
-
-  private async getPlanesPerFromFuneralSp(ramo: number): Promise<PlanPerItem[]> {
-    const T = this.db.types;
-    const codes = this.funeralPlanCodes;
-    const req = this.db.request();
-    req.input('cramo', T.Int, ramo);
-    req.input(
-      'cplanes',
-      T.NVarChar(200),
-      codes.length > 0 ? codes.join(',') : null,
-    );
-
-    const result = await req.execute('spGetPlanesPerFunerario');
-    const planRows = (result.recordsets?.[0] ??
-      result.recordset ??
-      []) as Record<string, unknown>[];
-    const parentRows = (result.recordsets?.[1] ?? []) as Record<string, unknown>[];
-
-    const parentescosByPlan = new Map<string, PlanPerItem['parentescos']>();
-    for (const row of parentRows) {
-      const cplan = String(row['cplan'] ?? '').trim();
-      if (!cplan) continue;
-      const list = parentescosByPlan.get(cplan) ?? [];
-      list.push({
-        cparen: Number(row['cparen']),
-        xparentesco: String(row['xparentesco'] ?? '').trim(),
-        min_edad: Number(row['min_edad']),
-        max_edad: Number(row['max_edad']),
-      });
-      parentescosByPlan.set(cplan, list);
-    }
-
-    const planes = planRows
-      .map((p) => {
-        const cplan = String(p['cplan'] ?? '').trim();
-        return {
-          cplan,
-          xplan: String(p['xplan'] ?? '').trim(),
-          cramo: Number(p['cramo'] ?? ramo),
-          cmoneda: String(p['cmoneda'] ?? '').trim() || undefined,
-          parentescos: parentescosByPlan.get(cplan) ?? [],
-        };
-      })
-      .filter((p) => p.cplan);
-    if (!planes.length) {
-      throw new Error('spGetPlanesPerFunerario no devolvió planes');
-    }
-    return planes;
-  }
-
-  private async getPlanesPerByCodes(ramo: number): Promise<PlanPerItem[]> {
-    const planes: PlanPerItem[] = [];
-    for (const cplan of this.funeralPlanCodes) {
-      let parentescos: PlanPerItem['parentescos'] = [];
-      try {
-        const rows = await this.getParenPlanPer(ramo, cplan);
-        parentescos = rows.map((row) => ({
-          cparen: Number(row.cparen),
-          xparentesco: String(row.xparentesco ?? '').trim(),
-          min_edad: Number.NaN,
-          max_edad: Number.NaN,
-        }));
-      } catch {
-        parentescos = [];
-      }
-      planes.push({
-        cplan,
-        xplan: `Plan ${cplan}`,
-        cramo: ramo,
-        parentescos,
-      });
-    }
-    return planes;
   }
 
   async getParenPlanPer(cramo: number, cplan: string) {
