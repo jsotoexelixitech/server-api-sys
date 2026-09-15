@@ -12,7 +12,7 @@ export const SP_VALIDATE_AUTOMOVIL_LEGACY = 'speeValidateAutomovilGeneral';
 
 export const SP_PRE_EMISION_AUTO_RCV = 'sp_pre_emision_automovil_rcv_nexus';
 
-/** Contador POL_VEH / recibo / proceso (Sis2000). Lo usa pre-emisión RCV y el reintento de colisión. */
+/** Contador Sis2000 (POLIZA ramo 25 3/7 días; POL_VEH solo auto). */
 export const SP_CONTADOR_NEXUS = 'sp_contador_nexus';
 
 /** Invocado al final del pre-SP (no desde nest-api directamente). */

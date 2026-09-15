@@ -31,6 +31,14 @@ export function isViajeMargaritaPlan(
   return String(plan ?? '').trim().toUpperCase() === VIAJE_MARGARITA_PLAN;
 }
 
+/** APIs fijas 3 días (VIAJE3) y 7 días (VIAJE4), ramo 25. */
+export function isViajeDiasPlan(
+  cramo: number | null | undefined,
+  plan: string | null | undefined,
+): boolean {
+  return isViajeNacionalPlan(cramo, plan) || isViajeMargaritaPlan(cramo, plan);
+}
+
 export function isViajeLocalPlan(
   cramo: number | null | undefined,
   plan: string | null | undefined,
