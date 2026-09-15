@@ -2,6 +2,9 @@
  * Planes fijos ramo 25 (RIESGOS ESPECIALES).
  * No mezclar con viajero internacional ramo 5 (VIAJE4–VIAJ10 de ese ramo).
  */
+
+/** Productor Sis2000 cuando el marketplace entra por canal (centidad=C), igual que SysIP. */
+export const MARKETPLACE_DEFAULT_PRODUCTOR = 80080;
 export type ViajeroRiesgosPlan = {
   cramo: 25;
   xramo: string;

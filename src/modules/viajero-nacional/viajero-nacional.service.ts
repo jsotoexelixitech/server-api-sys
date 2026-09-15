@@ -10,6 +10,7 @@ import {
 import { GetViaje3PlanDto } from './dto/get-viaje3-plan.dto';
 import { CotizacionViaje3Dto } from './dto/cotizacion-viaje3.dto';
 import { EmitViaje3Dto } from './dto/emit-viaje3.dto';
+import { flattenMarketplaceCanal } from './viajero-canal.mapper';
 
 @Injectable()
 export class ViajeroNacionalService {
@@ -123,37 +124,9 @@ export class ViajeroNacionalService {
     };
   }
 
-  /**
-   * Prioridad: campo plano del body, luego objeto `canal`.
-   * `productor` es lo que lee `createEmissionPerson` hacia el SP (`cproductor`).
-   */
+  /** Prioridad: planos → `canal` → `gestor` → atajo marketplace `centidad`/`citem`/`csub`. */
   private flattenCanal(body: Record<string, unknown>): Record<string, unknown> {
-    const canal =
-      body['canal'] && typeof body['canal'] === 'object'
-        ? (body['canal'] as Record<string, unknown>)
-        : {};
-    const pick = (...keys: string[]) => {
-      for (const key of keys) {
-        const value = body[key] ?? canal[key];
-        if (value !== undefined && value !== null && value !== '') return value;
-      }
-      return undefined;
-    };
-    const productor = pick('productor', 'cproductor');
-    const ctipocanal = pick('ctipocanal');
-    const ccanalalt = pick('ccanalalt', 'ccanalalt_in');
-    const cscanalalt = pick('cscanalalt', 'cscanalalt_in');
-    const cusuario = pick('cusuario');
-    const cgestor = pick('cgestor', 'cgestor_in');
-    return {
-      ...body,
-      ...(productor !== undefined ? { productor, cproductor: productor } : {}),
-      ...(ctipocanal !== undefined ? { ctipocanal } : {}),
-      ...(ccanalalt !== undefined ? { ccanalalt, ccanalalt_in: ccanalalt } : {}),
-      ...(cscanalalt !== undefined ? { cscanalalt, cscanalalt_in: cscanalalt } : {}),
-      ...(cusuario !== undefined ? { cusuario } : {}),
-      ...(cgestor !== undefined ? { cgestor } : {}),
-    };
+    return flattenMarketplaceCanal(body);
   }
 
   private resolveFdesde(value?: string): string {

@@ -63,4 +63,37 @@ export class CanalViajeroDto {
   @IsOptional()
   @IsString()
   cgestor_in?: string;
+
+  @ApiPropertyOptional({ example: 'C', description: 'Marketplace: P productor · C canal · G gestor.' })
+  @IsOptional()
+  @IsString()
+  centidad?: string;
+
+  @ApiPropertyOptional({ description: 'Marketplace: productor si P, canal si C, gestor si G.' })
+  @IsOptional()
+  citem?: string | number;
+
+  @ApiPropertyOptional({ description: 'Marketplace: subcanal (csub).' })
+  @IsOptional()
+  csub?: string | number;
+}
+
+/** Objeto `gestor` de SysIP marketplace (post-emisión en La Mundial). */
+export class GestorViajeroDto {
+  @ApiPropertyOptional({ example: 24 })
+  @IsOptional()
+  @Type(() => Number)
+  @IsInt()
+  ccanalalt?: number | null;
+
+  @ApiPropertyOptional({ example: 2 })
+  @IsOptional()
+  @Type(() => Number)
+  @IsInt()
+  cscanalalt?: number | null;
+
+  @ApiPropertyOptional({ description: 'Código magestor. El SP de personas no lo persiste.' })
+  @IsOptional()
+  @IsString()
+  cgestor?: string;
 }

@@ -19,7 +19,7 @@ export class ViajeroNacionalController {
   @ApiOperation({
     summary: 'Emitir viajero 3 días',
     description:
-      'Emisión personas. Solo 3 días corridos (fhasta = fdesde + 3). Si envían ndias o fhasta distintos, 400. Canal opcional en el body; no usa JWT.',
+      'Emisión personas. Solo 3 días corridos (fhasta = fdesde + 3). Canal marketplace en el JSON: canal{}, gestor{} o centidad/citem/csub (P/C/G). No usa JWT.',
     operationId: 'viajero3DiasEmision',
   })
   @ApiHeader(APIKEY_HEADER)

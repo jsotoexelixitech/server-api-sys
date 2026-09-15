@@ -2,7 +2,7 @@ import { ApiPropertyOptional, OmitType } from '@nestjs/swagger';
 import { Type } from 'class-transformer';
 import { IsInt, IsOptional, IsString, ValidateNested } from 'class-validator';
 import { CreateEmissionPersonDto } from '../../personas/dto/create-emission-person.dto';
-import { CanalViajeroDto } from './canal-viajero.dto';
+import { CanalViajeroDto, GestorViajeroDto } from './canal-viajero.dto';
 
 /** Emisión viajero fijo: cramo y plan los fija el servidor. Canal opcional en el body. */
 export class EmitViaje3Dto extends OmitType(CreateEmissionPersonDto, [
@@ -63,4 +63,26 @@ export class EmitViaje3Dto extends OmitType(CreateEmissionPersonDto, [
   @IsOptional()
   @IsString()
   cgestor_in?: string;
+
+  @ApiPropertyOptional({
+    type: GestorViajeroDto,
+    description: 'Alias SysIP marketplace: gestor.ccanalalt / cscanalalt / cgestor.',
+  })
+  @IsOptional()
+  @ValidateNested()
+  @Type(() => GestorViajeroDto)
+  gestor?: GestorViajeroDto;
+
+  @ApiPropertyOptional({ example: 'C', description: 'Marketplace: P productor · C canal · G gestor.' })
+  @IsOptional()
+  @IsString()
+  centidad?: string;
+
+  @ApiPropertyOptional({ description: 'Marketplace: productor si P, canal si C, gestor si G.' })
+  @IsOptional()
+  citem?: string | number;
+
+  @ApiPropertyOptional({ description: 'Subcanal marketplace (query csub).' })
+  @IsOptional()
+  csub?: string | number;
 }
