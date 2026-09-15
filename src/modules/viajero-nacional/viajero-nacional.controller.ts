@@ -18,7 +18,8 @@ export class ViajeroNacionalController {
   @NestProtected(NEST_AUTH_SCOPES.EMISSIONS_PERSON)
   @ApiOperation({
     summary: 'Emitir viajero 3 días',
-    description: 'Emisión personas. Ramo, plan y vigencia de 3 días los fija el servidor.',
+    description:
+      'Emisión personas. Ramo, plan y vigencia de 3 días los fija el servidor. Canal opcional en el body (`canal` o campos planos); no usa JWT.',
     operationId: 'viajero3DiasEmision',
   })
   @ApiHeader(APIKEY_HEADER)

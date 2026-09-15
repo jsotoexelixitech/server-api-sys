@@ -96,27 +96,62 @@ export class ViajeroNacionalService {
   /**
    * Fija ramo, plan, frecuencia y vigencia del contrato.
    * El cliente no puede emitir otro plan por esta API.
+   * Canal: aplana `canal` / alias planos hacia lo que ya consume emisión de personas.
    */
   private lockEmissionFields(
     body: Record<string, unknown>,
     plan: ViajeroRiesgosPlan,
   ): Record<string, unknown> {
-    const femision = String(body['fecha_emision'] ?? body['femision'] ?? '').trim();
+    const withCanal = this.flattenCanal(body);
+    const femision = String(withCanal['fecha_emision'] ?? withCanal['femision'] ?? '').trim();
     const fdesde = this.resolveFdesde(
-      String(body['fdesde'] ?? femision ?? '').trim() || undefined,
+      String(withCanal['fdesde'] ?? femision ?? '').trim() || undefined,
     );
     return {
-      ...body,
+      ...withCanal,
       cramo: plan.cramo,
       plan: plan.cplan,
       cplan: plan.cplan,
       frecuencia: plan.ifrecuencia,
       ifrecuencia: plan.ifrecuencia,
-      cmoneda: body['cmoneda'] ?? plan.cmoneda,
+      cmoneda: withCanal['cmoneda'] ?? plan.cmoneda,
       fdesde,
-      fhasta: String(body['fhasta'] ?? '').trim() || this.addInclusiveDays(fdesde, plan.ndias),
+      fhasta: String(withCanal['fhasta'] ?? '').trim() || this.addInclusiveDays(fdesde, plan.ndias),
       ndias: plan.ndias,
       fecha_emision: femision || fdesde,
+    };
+  }
+
+  /**
+   * Prioridad: campo plano del body, luego objeto `canal`.
+   * `productor` es lo que lee `createEmissionPerson` hacia el SP (`cproductor`).
+   */
+  private flattenCanal(body: Record<string, unknown>): Record<string, unknown> {
+    const canal =
+      body['canal'] && typeof body['canal'] === 'object'
+        ? (body['canal'] as Record<string, unknown>)
+        : {};
+    const pick = (...keys: string[]) => {
+      for (const key of keys) {
+        const value = body[key] ?? canal[key];
+        if (value !== undefined && value !== null && value !== '') return value;
+      }
+      return undefined;
+    };
+    const productor = pick('productor', 'cproductor');
+    const ctipocanal = pick('ctipocanal');
+    const ccanalalt = pick('ccanalalt', 'ccanalalt_in');
+    const cscanalalt = pick('cscanalalt', 'cscanalalt_in');
+    const cusuario = pick('cusuario');
+    const cgestor = pick('cgestor', 'cgestor_in');
+    return {
+      ...body,
+      ...(productor !== undefined ? { productor, cproductor: productor } : {}),
+      ...(ctipocanal !== undefined ? { ctipocanal } : {}),
+      ...(ccanalalt !== undefined ? { ccanalalt, ccanalalt_in: ccanalalt } : {}),
+      ...(cscanalalt !== undefined ? { cscanalalt, cscanalalt_in: cscanalalt } : {}),
+      ...(cusuario !== undefined ? { cusuario } : {}),
+      ...(cgestor !== undefined ? { cgestor } : {}),
     };
   }
 

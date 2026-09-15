@@ -19,7 +19,8 @@ export class ViajeroMargaritaController {
   @NestProtected(NEST_AUTH_SCOPES.EMISSIONS_PERSON)
   @ApiOperation({
     summary: 'Emitir viajero 7 días',
-    description: 'Emisión personas. Ramo, plan y vigencia de 7 días los fija el servidor.',
+    description:
+      'Emisión personas. Ramo, plan y vigencia de 7 días los fija el servidor. Canal opcional en el body (`canal` o campos planos); no usa JWT.',
     operationId: 'viajero7DiasEmision',
   })
   @ApiHeader(APIKEY_HEADER)
