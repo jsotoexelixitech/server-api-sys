@@ -49,28 +49,10 @@ export class GetPlanesV2Dto {
   citem?: string;
 
   @ApiPropertyOptional({
-    example: 'P',
-    description: 'Entidad del actor (P=productor, C=canal, G=global). Requerida con csubitem.',
+    example: 'G',
+    description: 'Código de entidad (G = general)',
   })
   @IsOptional()
   @IsString()
   centidad?: string;
-
-  @ApiPropertyOptional({
-    example: '80080',
-    description:
-      'Código gestor/sub-ítem (mausuplan.citem) para excluir planes restringidos al usuario. Requiere centidad.',
-  })
-  @IsOptional()
-  @IsString()
-  csubitem?: string;
-
-  @ApiPropertyOptional({
-    example: '57',
-    description:
-      'Código producto Sis2000. Obligatorio cuando cramo !== 18 y se envía csubitem (exclusión por gestor).',
-  })
-  @IsOptional()
-  @IsString()
-  cproducto?: string;
 }
