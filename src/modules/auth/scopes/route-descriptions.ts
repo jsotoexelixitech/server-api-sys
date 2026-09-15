@@ -14,10 +14,12 @@ const ROUTE_LABELS: Record<string, string> = {
   'POST /api/v1/valrep/productos': 'Productos RCV disponibles',
   'POST /api/v1/valrep/matipoemision': 'Tipo de emisión por canal/productor',
   'POST /api/v1/valrep/matipopago-entidades': 'Métodos de pago por canal/productor',
-  'POST /api/v1/valrep/planes/producto': 'Planes de un producto',
+  'POST /api/v1/valrep/planes/producto':
+    'Planes de un producto (exclusión opcional por csubitem/centidad vía mausuplan)',
   'GET /api/v1/canal/visibility': 'Visibilidad de canal (planes, emisión y pago)',
   'POST /api/v1/valrep/planes/detalle': 'Detalle de plan tarifario',
-  'POST /api/v1/valrep/planes/v2': 'Planes (formato v2)',
+  'POST /api/v1/valrep/planes/v2':
+    'Planes RCV v2 (exclusión opcional por csubitem/centidad vía mausuplan)',
   'POST /api/v1/valrep/planesPer': 'Planes personas (legacy)',
   'POST /api/v1/valrep/frecuencia': 'Frecuencias de pago',
   'POST /api/v1/valrep/cotizacion': 'Cotización RCV',
