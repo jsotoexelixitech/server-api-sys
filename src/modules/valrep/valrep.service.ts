@@ -9,6 +9,7 @@ import { MssqlService } from '../../database/mssql.service';
 import { parseSPError } from '../../common/helpers/sp-error.helper';
 import {
   SP_BUSCA_FRECUENCIA_PLAN_NEXUS,
+  SP_BUSCA_PLAN_PRODUCTO_NEXUS,
   SP_CALCULO_AUTO_NEXUS,
   SP_GET_SUSTANCIAS_NEXUS,
 } from '../../config/sis2000-sp.constants';
@@ -319,6 +320,13 @@ export class ValrepService {
     return (
       process.env.MSSQL_SP_BUSCA_FRECUENCIA_PLAN_NEXUS?.trim() ||
       SP_BUSCA_FRECUENCIA_PLAN_NEXUS
+    );
+  }
+
+  private spBuscaPlanProductoNexusName(): string {
+    return (
+      process.env.MSSQL_SP_BUSCA_PLAN_PRODUCTO_NEXUS?.trim() ||
+      SP_BUSCA_PLAN_PRODUCTO_NEXUS
     );
   }
 
@@ -821,7 +829,7 @@ export class ValrepService {
     }
   }
 
-  /** Paso 2 funerario — spBuscaPlanProducto + parentescos vía spBuscaDetallePlan. */
+  /** Paso 2 funerario — sp_busca_plan_producto_nexus + detalle. */
   async getPlanesProducto(body: {
     cproducto: string;
     citem?: string;
@@ -829,6 +837,7 @@ export class ValrepService {
   }): Promise<{ planes: PlanItem[]; mensaje: string }> {
     const cproducto = String(body.cproducto).trim();
     const { citem, centidad } = this.resolveEntidadItem(body);
+    const spName = this.spBuscaPlanProductoNexusName();
 
     try {
       const T = this.db.types;
@@ -838,7 +847,7 @@ export class ValrepService {
       req.input('centidad', T.Char(1), centidad);
       req.output('mensaje', T.NVarChar(60), '');
 
-      const result = await req.execute('spBuscaPlanProducto');
+      const result = await req.execute(spName);
       const mensaje: string = result.output['mensaje'] ?? '';
       const recordset = (result.recordset ?? []) as PlanItem[];
       if (!recordset.length) {
@@ -846,12 +855,12 @@ export class ValrepService {
       }
 
       const planes = await this.enrichPlanesWithDetalleSp(recordset);
-      if (mensaje) this.logger.log(`spBuscaPlanProducto: ${mensaje}`);
+      if (mensaje) this.logger.log(`${spName}: ${mensaje}`);
       return { planes, mensaje };
     } catch (err) {
       if (err instanceof BadRequestException) throw err;
       const msg = err instanceof Error ? err.message : String(err);
-      this.logger.error(`getPlanesProducto cproducto=${cproducto}: ${msg}`);
+      this.logger.error(`getPlanesProducto ${spName} cproducto=${cproducto}: ${msg}`);
       throw new InternalServerErrorException(
         'Error al obtener planes del producto.',
       );

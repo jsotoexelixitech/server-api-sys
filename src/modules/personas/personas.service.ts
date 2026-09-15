@@ -13,6 +13,7 @@ import { GetPlanesPerDto } from './dto/get-planes-per.dto';
 import { parseSPError } from '../../common/helpers/sp-error.helper';
 import { buildPolicyPdfUrl } from '../../common/helpers/policy-url.helper';
 import {
+  SP_BUSCA_PLAN_PRODUCTO_NEXUS,
   SP_CALCULO_VIAJERO_PRORRATA,
   SP_PRE_EMISION_PERSONAS,
 } from '../../config/sis2000-sp.constants';
@@ -316,11 +317,19 @@ export class PersonasService {
     }
   }
 
-  /** Catálogo del canal: spBuscaPlanProducto + detalle (nmax_dep / parentescos). */
+  private spBuscaPlanProductoNexusName(): string {
+    return (
+      this.config.get<string>('MSSQL_SP_BUSCA_PLAN_PRODUCTO_NEXUS')?.trim()
+      || SP_BUSCA_PLAN_PRODUCTO_NEXUS
+    );
+  }
+
+  /** Catálogo del canal: sp_busca_plan_producto_nexus + detalle (nmax_dep / parentescos). */
   private async getPlanesPerFromProducto(dto: GetPlanesPerDto): Promise<PlanPerItem[]> {
     const cproducto = String(dto.cproducto ?? '').trim();
     const centidad = String(dto.centidad ?? '').trim() || null;
     const citem = String(dto.citem ?? '').trim() || null;
+    const spName = this.spBuscaPlanProductoNexusName();
     const T = this.db.types;
     const req = this.db.request();
     req.input('cproducto', T.NVarChar(10), cproducto);
@@ -328,13 +337,13 @@ export class PersonasService {
     req.input('centidad', T.Char(1), centidad);
     req.output('mensaje', T.NVarChar(60), '');
 
-    const result = await req.execute('spBuscaPlanProducto');
+    const result = await req.execute(spName);
     const mensaje = String(result.output['mensaje'] ?? '').trim();
     const rows = (result.recordset ?? []) as Record<string, unknown>[];
     if (!rows.length) {
       throw new BadRequestException(mensaje || 'No se encuentra planes asociados');
     }
-    if (mensaje) this.logger.log(`spBuscaPlanProducto: ${mensaje}`);
+    if (mensaje) this.logger.log(`${spName}: ${mensaje}`);
 
     const planes: PlanPerItem[] = [];
     for (const row of rows) {
@@ -371,7 +380,7 @@ export class PersonasService {
       });
     }
     if (!planes.length) {
-      throw new BadRequestException('spBuscaPlanProducto no devolvió planes');
+      throw new BadRequestException(`${spName} no devolvió planes`);
     }
     return planes;
   }

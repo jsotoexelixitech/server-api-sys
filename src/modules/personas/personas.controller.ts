@@ -24,8 +24,8 @@ export class PersonasController {
   @ApiOperation({
     summary: 'Planes de personas vigentes (ramo 9 = Funerario)',
     description:
-      'Planes de personas vigentes para el ramo indicado (9 = funerario por defecto), ' +
-      'con parentescos y rangos de edad permitidos.',
+      'Con cproducto: catálogo del canal vía sp_busca_plan_producto_nexus ' +
+      '(cproducto + centidad + citem) y detalle de parentescos / nmax_dep.',
   })
   @ApiBody({ type: GetPlanesPerDto })
   @ApiResponse({

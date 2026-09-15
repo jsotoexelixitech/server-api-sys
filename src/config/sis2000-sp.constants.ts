@@ -51,6 +51,9 @@ export const SP_GET_SUSTANCIAS_NEXUS = 'sp_get_sustancias_nexus';
 /** Frecuencias de pago por plan RCV (POST /valrep/frecuencia). */
 export const SP_BUSCA_FRECUENCIA_PLAN_NEXUS = 'sp_busca_frecuencia_plan_nexus';
 
+/** Planes funerarios por producto + canal (POST /personas/planes y /valrep/planes/producto). */
+export const SP_BUSCA_PLAN_PRODUCTO_NEXUS = 'sp_busca_plan_producto_nexus';
+
 // ── Condominio ──────────────────────────────────────────────────────────────
 export const SP_BUSCA_PLANES_CONDOMINIO = 'sp_busca_planes_condominio_nexus';
 export const SP_CALCULO_COTIZACION_CONDOMINIO = 'sp_calculo_cotizacion_condominio_nexus';

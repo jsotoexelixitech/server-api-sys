@@ -1,7 +1,7 @@
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
 import { IsNotEmpty, IsOptional, IsString } from 'class-validator';
 
-/** Body para POST /valrep/planes/producto (funerario — spBuscaPlanProducto). */
+/** Body para POST /valrep/planes/producto (funerario — sp_busca_plan_producto_nexus). */
 export class GetPlanesProductoDto {
   @ApiProperty({
     example: '57',

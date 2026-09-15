@@ -27,7 +27,7 @@ export class GetPlanesPerDto {
 
   @ApiPropertyOptional({
     example: '57',
-    description: 'Producto Sis2000. Con esto se usa spBuscaPlanProducto.',
+    description: 'Producto Sis2000. Con esto se usa sp_busca_plan_producto_nexus.',
   })
   @IsOptional()
   @Transform(optionalString)
