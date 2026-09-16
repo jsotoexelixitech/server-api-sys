@@ -4,6 +4,7 @@ import { MailService } from './mail.service';
 import { SendPolicyEmailDto } from './dto/send-policy-email.dto';
 import { SendFuneralPaymentLinkDto } from './dto/send-funeral-payment-link.dto';
 import { SendFuneralReviewAlertDto } from './dto/send-funeral-review-alert.dto';
+import { SendFuneralRejectedDto } from './dto/send-funeral-rejected.dto';
 import { SendTemplatedMailDto } from './dto/send-templated-mail.dto';
 import { NestProtected } from '../auth/decorators/nest-protected.decorator';
 import { NEST_AUTH_SCOPES } from '../auth/scopes/nest-auth-scopes.constants';
@@ -69,6 +70,20 @@ export class MailController {
     return { success: result.sent, ...result };
   }
 
+  @Post('funeral-rejected')
+  @NestProtected(NEST_AUTH_SCOPES.EMISSIONS_AUTO)
+  @HttpCode(HttpStatus.OK)
+  @ApiHeader(APIKEY_HEADER)
+  @ApiOperation({
+    summary: 'Avisar al tomador que la solicitud funeraria no fue aprobada',
+    operationId: 'sendFuneralRejectedEmail',
+  })
+  @ApiBody({ type: SendFuneralRejectedDto })
+  async sendFuneralRejected(@Body() dto: SendFuneralRejectedDto) {
+    const result = await this.mailService.sendFuneralRejectedEmail(dto);
+    return { success: result.sent, ...result };
+  }
+
   @Post('send')
   @NestProtected(NEST_AUTH_SCOPES.EMISSIONS_AUTO)
   @HttpCode(HttpStatus.OK)
@@ -76,7 +91,7 @@ export class MailController {
   @ApiOperation({
     summary: 'Enviar correo con plantilla registrada (reutilizable)',
     description:
-      'No acepta HTML libre. `template` elige el diseño (funeral-payment-link, funeral-review-alert o branded). ' +
+      'No acepta HTML libre. `template` elige el diseño (funeral-payment-link, funeral-review-alert, funeral-rejected o branded). ' +
       'Los endpoints específicos de funerario siguen vigentes.',
     operationId: 'sendTemplatedEmail',
   })
