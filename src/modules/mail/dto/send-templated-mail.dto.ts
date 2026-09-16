@@ -15,6 +15,7 @@ import {
 export const MAIL_TEMPLATE_IDS = [
   'funeral-payment-link',
   'funeral-review-alert',
+  'funeral-rejected',
   'branded',
 ] as const;
 
@@ -58,6 +59,7 @@ export class SendTemplatedMailDto {
     description:
       'Variables de la plantilla. funeral-review-alert: tomadorNombre, planName, scoreTotal. ' +
       'funeral-payment-link: name, planName, paymentUrl, expiresAt. ' +
+      'funeral-rejected: tomadorNombre, planName, reason. ' +
       'branded: subject, eyebrow, title, intro, fields[], ctaLabel, ctaUrl, extraNote.',
     example: { tomadorNombre: 'Joel Yepes', planName: 'Funerario Individual', scoreTotal: '25.5' },
   })

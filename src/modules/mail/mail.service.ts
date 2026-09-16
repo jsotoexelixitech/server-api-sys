@@ -6,8 +6,10 @@ import { renderPolicyWelcomeHtml } from './templates/policy-welcome.template';
 import type { SendPolicyEmailDto } from './dto/send-policy-email.dto';
 import type { SendFuneralPaymentLinkDto } from './dto/send-funeral-payment-link.dto';
 import type { SendFuneralReviewAlertDto } from './dto/send-funeral-review-alert.dto';
+import type { SendFuneralRejectedDto } from './dto/send-funeral-rejected.dto';
 import { buildFuneralPaymentLinkEmail } from './templates/funeral-payment-link.template';
 import { buildFuneralReviewAlertEmail } from './templates/funeral-review-alert.template';
+import { buildFuneralRejectedEmail } from './templates/funeral-rejected.template';
 import { buildLamundialBrandedEmail } from './templates/lamundial-branded.template';
 import type { SendTemplatedMailDto } from './dto/send-templated-mail.dto';
 
@@ -88,6 +90,21 @@ export class MailService {
     });
   }
 
+  async sendFuneralRejectedEmail(
+    dto: SendFuneralRejectedDto,
+  ): Promise<PolicyEmissionMailResult> {
+    return this.sendTemplatedEmail({
+      to: dto.to,
+      toName: dto.tomadorNombre,
+      template: 'funeral-rejected',
+      data: {
+        tomadorNombre: dto.tomadorNombre,
+        planName: dto.planName,
+        reason: dto.reason,
+      },
+    });
+  }
+
   async sendTemplatedEmail(dto: SendTemplatedMailDto): Promise<PolicyEmissionMailResult> {
     if (!this.isEnabled()) {
       return { sent: false, mode: 'disabled', error: 'MAIL_ENABLED=false' };
@@ -154,6 +171,15 @@ export class MailService {
         tomadorNombre: str('tomadorNombre', 'Tomador'),
         planName: str('planName', 'Funerario'),
         scoreTotal: str('scoreTotal', '—'),
+        callCenterPhone: phone,
+      });
+    }
+
+    if (dto.template === 'funeral-rejected') {
+      return buildFuneralRejectedEmail({
+        tomadorNombre: str('tomadorNombre', 'Cliente'),
+        planName: str('planName', 'Funerario'),
+        reason: str('reason'),
         callCenterPhone: phone,
       });
     }
