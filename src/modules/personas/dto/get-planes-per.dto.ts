@@ -26,26 +26,65 @@ export class GetPlanesPerDto {
   ctipo?: number | null;
 
   @ApiPropertyOptional({
-    example: '57',
-    description: 'Producto Sis2000. Con esto se usa sp_busca_plan_producto_nexus.',
+    example: '80080',
+    description: 'Ítem Sis2000 del canal SSO (productor o comercializador).',
   })
   @IsOptional()
   @Transform(optionalString)
   @IsString()
-  cproducto?: string;
+  citem?: string;
 
-  @ApiPropertyOptional({ example: 'C', description: 'Entidad del canal (P/C/G).' })
+  @ApiPropertyOptional({
+    example: 'C',
+    description: 'Entidad Sis2000: P = productor, C = canal, G = gestor. U (usuario) se resuelve vía magestor.',
+  })
   @IsOptional()
   @Transform(optionalString)
   @IsString()
   centidad?: string;
 
   @ApiPropertyOptional({
-    example: '27',
-    description: 'Ítem del canal (productor/corredor/gestor).',
+    example: '57',
+    description: 'Producto funerario del JWT. Si falta, se resuelve con spBuscaProductosEntidad.',
   })
   @IsOptional()
   @Transform(optionalString)
   @IsString()
-  citem?: string;
+  cproducto?: string;
+
+  @ApiPropertyOptional({
+    example: '80080',
+    description: 'Productor SSO. Fallback a LAMUNDIAL_PRODUCTOR si no hay citem/centidad.',
+  })
+  @IsOptional()
+  @Transform(optionalString)
+  @IsString()
+  cproductor?: string;
+
+  @ApiPropertyOptional({
+    example: '7',
+    description: 'Usuario Sis2000 del JWT (mismo parámetro que RCV / spBuscaPlan).',
+  })
+  @IsOptional()
+  @Transform(optionalString)
+  @IsString()
+  cusuario?: string;
+
+  @ApiPropertyOptional({
+    example: 'marismendi@lamundialdeseguros.com',
+    description: 'Correo del gestor marketplace (magestor.xcorreo). Resuelve U → C/P.',
+  })
+  @IsOptional()
+  @Transform(optionalString)
+  @IsString()
+  cgestor_in?: string;
+
+  @ApiPropertyOptional({
+    example: '80080-27-0',
+    description: 'Código magestor (marketplace /usuario/:id).',
+  })
+  @IsOptional()
+  @Transform(optionalString)
+  @IsString()
+  cgestor?: string;
 }

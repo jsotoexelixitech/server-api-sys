@@ -22,10 +22,10 @@ export class PersonasController {
   @Post('planes')
   @HttpCode(HttpStatus.OK)
   @ApiOperation({
-    summary: 'Planes de personas vigentes (ramo 9 = Funerario)',
+    summary: 'Planes funerarios del canal SSO (ramo 9)',
     description:
-      'Con cproducto: catálogo del canal vía sp_busca_plan_producto_nexus ' +
-      '(cproducto + centidad + citem) y detalle de parentescos / nmax_dep.',
+      'Lista planes como SysIP getPlanV2: sp_busca_plan_producto_nexus (cproducto + centidad + citem). ' +
+      'Resuelve gestor marketplace (U → C/P/G). Añade parentescos y tope de asegurados.',
   })
   @ApiBody({ type: GetPlanesPerDto })
   @ApiResponse({

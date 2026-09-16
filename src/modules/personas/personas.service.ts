@@ -4,9 +4,13 @@ import {
   InternalServerErrorException,
   Logger,
   UnauthorizedException,
+  Inject,
+  forwardRef,
 } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { MssqlService } from '../../database/mssql.service';
+import { ValrepService } from '../valrep/valrep.service';
+import { GetPlanesPerDto } from './dto/get-planes-per.dto';
 import { CotizacionPerDto } from './dto/cotizacion-per.dto';
 import { CreateEmissionPersonDto } from './dto/create-emission-person.dto';
 import { GetPlanesPerDto } from './dto/get-planes-per.dto';
@@ -59,7 +63,9 @@ export interface PlanPerItem {
   xplan: string;
   cramo: number;
   cmoneda?: string;
+  /** Máximo de dependientes (maplanes_per.nmax_dep). */
   nmax_dep?: number | null;
+  /** Tope de personas: titular + nmax_dep. */
   maxAsegurados?: number;
   parentescos?: Array<{ cparen: number; xparentesco: string; min_edad: number; max_edad: number }>;
 }
@@ -83,6 +89,8 @@ export class PersonasService {
   constructor(
     private readonly db: MssqlService,
     private readonly config: ConfigService,
+    @Inject(forwardRef(() => ValrepService))
+    private readonly valrep: ValrepService,
   ) {}
 
   private intField(value: unknown): number | null {
@@ -188,24 +196,46 @@ export class PersonasService {
     return {};
   }
 
+  private decimalField(value: unknown): number | null {
+    if (value == null || String(value).trim() === '') return null;
+    const n = Number(String(value).replace(',', '.'));
+    return Number.isFinite(n) ? n : null;
+  }
+
   /** JSON de asegurados al formato OPENJSON del pre-SP personas. */
   private mapAseguradosForSp(
     lista: Record<string, unknown>[],
     getPar: (p: unknown) => number,
   ): string | null {
     if (!lista.length) return null;
-    const mapped = lista.map((a) => ({
-      tipo_cedula_asegurado: String(a.icedula_asegurado ?? a.tipoDoc ?? 'V').charAt(0),
-      rif_asegurado: this.intField(a.xrif_asegurado ?? a.identificacion),
-      nombre_asegurado: a.xnombre_asegurado ?? a.nombre ?? null,
-      apellido_asegurado: a.xapellido_asegurado ?? a.apellido ?? null,
-      sexo_asegurado: String(
-        a.isexo_asegurado ?? (a.sexo ? String(a.sexo)[0].toUpperCase() : 'M'),
-      ).charAt(0),
-      estado_civil_asegurado: String(a.iestado_civil_asegurado ?? 'S').charAt(0),
-      fnac_asegurado: a.fnac_asegurado ?? a.fechaNac ?? null,
-      nparentesco_asegurado: getPar(a.nparentesco_asegurado ?? a.parentesco),
-    }));
+    const mapped = lista.map((a) => {
+      const estado = this.intField(
+        a.estado_asegurado ?? a.cestado ?? a.estado,
+      );
+      const ciudad = this.intField(
+        a.ciudad_asegurado ?? a.cciudad ?? a.ciudad,
+      );
+      return {
+        tipo_cedula_asegurado: String(a.icedula_asegurado ?? a.tipoDoc ?? 'V').charAt(0),
+        rif_asegurado: this.intField(a.xrif_asegurado ?? a.identificacion),
+        nombre_asegurado: a.xnombre_asegurado ?? a.nombre ?? null,
+        apellido_asegurado: a.xapellido_asegurado ?? a.apellido ?? null,
+        sexo_asegurado: String(
+          a.isexo_asegurado ?? (a.sexo ? String(a.sexo)[0].toUpperCase() : 'M'),
+        ).charAt(0),
+        estado_civil_asegurado: String(a.iestado_civil_asegurado ?? a.estadoCivil ?? 'S').charAt(0),
+        fnac_asegurado: a.fnac_asegurado ?? a.fechaNac ?? null,
+        nparentesco_asegurado: getPar(a.nparentesco_asegurado ?? a.parentesco),
+        estado_asegurado: estado,
+        ciudad_asegurado: ciudad,
+        direccion_asegurado:
+          a.direccion_asegurado ?? a.xdireccion_asegurado ?? a.direccion ?? null,
+        telefono_asegurado: a.xtelefono_asegurado ?? a.telefono_asegurado ?? a.telefono ?? null,
+        correo_asegurado: a.xcorreo_asegurado ?? a.correo_asegurado ?? a.email ?? null,
+        npeso_asegurado: this.decimalField(a.npeso_asegurado ?? a.peso),
+        nestatura_asegurado: this.decimalField(a.nestatura_asegurado ?? a.estatura),
+      };
+    });
     return JSON.stringify(mapped);
   }
 
@@ -364,139 +394,235 @@ export class PersonasService {
     return this.config.get<number>('LAMUNDIAL_RAMO_PERSON', 9);
   }
 
-  // ── Planes de personas ─────────────────────────────────────────────────────
+  private optionalText(value: unknown): string {
+    return value == null ? '' : String(value).trim();
+  }
 
+  private sisPlanEntity(centidad: string, citem: string): boolean {
+    return (centidad === 'P' || centidad === 'C' || centidad === 'G') && Boolean(citem);
+  }
+
+  /**
+   * Marketplace SysIP: usuario (U) no es entidad de spBuscaPlan.
+   * Se resuelve como getItemGestor: magestor.xcorreo / cgestor → C+ccanalalt o P+productor.
+   */
+  private async resolveFuneralEntity(
+    dto: GetPlanesPerDto,
+  ): Promise<{ centidad: string; citem: string } | null> {
+    const centidad = this.optionalText(dto.centidad).toUpperCase();
+    const citem =
+      this.optionalText(dto.citem)
+      || (centidad === 'P' || centidad === 'C' || centidad === 'G'
+        ? this.optionalText(dto.cproductor)
+        : '');
+    if (this.sisPlanEntity(centidad, citem)) return { centidad, citem };
+
+    const fromGestor = await this.lookupMarketplaceGestor(dto);
+    if (fromGestor) return fromGestor;
+
+    const productor =
+      this.optionalText(dto.cproductor)
+      || this.optionalText(this.config.get<string>('LAMUNDIAL_PRODUCTOR', '80080'));
+    if (productor) return { centidad: 'P', citem: productor };
+    return null;
+  }
+
+  /** Igual que SysIP Valrep.getItemGestor + login (magestor.xcorreo / cgestor). */
+  private async lookupMarketplaceGestor(
+    dto: GetPlanesPerDto,
+  ): Promise<{ centidad: string; citem: string } | null> {
+    const email = this.optionalText(dto.cgestor_in).toLowerCase();
+    const cgestor = this.optionalText(dto.cgestor);
+    if (!email && !cgestor) return null;
+
+    try {
+      const T = this.db.types;
+      const req = this.db.request();
+      req.input('email', T.NVarChar(120), email);
+      req.input('cgestor', T.NVarChar(50), cgestor);
+      const result = await req.query(`
+        SELECT TOP 1
+          LTRIM(RTRIM(cgestor)) AS cgestor,
+          ccanalalt,
+          CASE
+            WHEN CHARINDEX('-', LTRIM(RTRIM(cgestor))) > 0
+              THEN LEFT(LTRIM(RTRIM(cgestor)), CHARINDEX('-', LTRIM(RTRIM(cgestor))) - 1)
+            ELSE LTRIM(RTRIM(cgestor))
+          END AS cproductor_gestor
+        FROM magestor
+        WHERE (@email <> '' AND LOWER(LTRIM(RTRIM(xcorreo))) = @email)
+           OR (@cgestor <> '' AND LTRIM(RTRIM(cgestor)) = @cgestor)
+        ORDER BY CASE
+          WHEN @email <> '' AND LOWER(LTRIM(RTRIM(xcorreo))) = @email THEN 0
+          ELSE 1
+        END
+      `);
+      const row = result.recordset?.[0] as Record<string, unknown> | undefined;
+      if (!row) return null;
+
+      const canal = this.intField(row['ccanalalt']);
+      if (canal != null && canal > 0) {
+        this.logger.log(`lookupMarketplaceGestor email=${email || '-'} → C/${canal}`);
+        return { centidad: 'C', citem: String(canal) };
+      }
+
+      const productor = this.optionalText(row['cproductor_gestor']);
+      if (productor && /^\d+$/.test(productor)) {
+        this.logger.log(`lookupMarketplaceGestor email=${email || '-'} → P/${productor}`);
+        return { centidad: 'P', citem: productor };
+      }
+
+      const gestor = this.optionalText(row['cgestor']);
+      if (gestor) {
+        this.logger.log(`lookupMarketplaceGestor email=${email || '-'} → G/${gestor}`);
+        return { centidad: 'G', citem: gestor };
+      }
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : String(err);
+      this.logger.warn(`lookupMarketplaceGestor: ${msg}`);
+    }
+    return null;
+  }
+
+  private mapCanalPlanToPer(
+    row: Record<string, unknown>,
+    ramoHint?: number | null,
+  ): PlanPerItem | null {
+    const cplan = this.optionalText(row['cplan']);
+    if (!cplan) return null;
+    const rowRamo = Number(row['cramo'] ?? ramoHint ?? this.defaultRamo);
+    if (
+      ramoHint != null
+      && Number.isFinite(rowRamo)
+      && Number.isFinite(ramoHint)
+      && rowRamo !== ramoHint
+    ) {
+      return null;
+    }
+    const parentescos = Array.isArray(row['parentescos'])
+      ? (row['parentescos'] as Record<string, unknown>[]).map((p) => ({
+          cparen: Number(p['cparen']),
+          xparentesco: this.optionalText(p['xparentesco']),
+          min_edad: Number(p['min_edad']),
+          max_edad: Number(p['max_edad']),
+        }))
+      : [];
+    return {
+      cplan,
+      xplan: this.optionalText(row['xplan']),
+      cramo: rowRamo,
+      cmoneda: this.optionalText(row['cmoneda']) || undefined,
+      nmax_dep: this.intField(row['nmax_dep']),
+      parentescos,
+    };
+  }
+
+  /**
+   * Planes funerarios — mismo body que SysIP getPlanV2:
+   * POST /valrep/planes/producto { cproducto, centidad, citem, cramo, cusuario, cproductor: null }.
+   * SP: spBuscaPlanProducto (no spBuscaPlan / no cproductor 80080).
+   */
   async getPlanesPer(
     cramoOrDto?: number | GetPlanesPerDto,
     _ctipo?: number | null,
   ): Promise<PlanPerItem[]> {
     const dto: GetPlanesPerDto =
-      typeof cramoOrDto === 'object' && cramoOrDto
+      typeof cramoOrDto === 'object' && cramoOrDto != null
         ? cramoOrDto
-        : { cramo: cramoOrDto, ctipo: _ctipo };
-    if (!String(dto.cproducto ?? '').trim()) {
-      dto.cproducto = this.config.get<string>('LAMUNDIAL_PRODUCTO_FUNERARIO', '57');
-    }
-    return this.getPlanesPerFromProducto(dto);
-  }
-
-  private spBuscaPlanProductoNexusName(): string {
-    return (
-      this.config.get<string>('MSSQL_SP_BUSCA_PLAN_PRODUCTO_NEXUS')?.trim()
-      || SP_BUSCA_PLAN_PRODUCTO_NEXUS
-    );
-  }
-
-  /** Catálogo del canal: solo sp_busca_plan_producto_nexus (sin lista blanca ni nombres inventados). */
-  private async getPlanesPerFromProducto(dto: GetPlanesPerDto): Promise<PlanPerItem[]> {
-    const cproducto = String(dto.cproducto ?? '').trim();
-    const centidad = String(dto.centidad ?? '').trim();
-    const citem = String(dto.citem ?? '').trim();
-    if (!centidad || !citem) {
+        : { cramo: cramoOrDto, ctipo: _ctipo ?? undefined };
+    const entity = await this.resolveFuneralEntity(dto);
+    if (!entity) {
       throw new BadRequestException(
-        'centidad y citem son obligatorios para consultar planes funerarios.',
+        'No hay entidad de canal (citem/centidad o cproductor) para consultar planes funerarios.',
       );
     }
-    const spName = this.spBuscaPlanProductoNexusName();
-    const T = this.db.types;
-    const req = this.db.request();
-    req.input('cproducto', T.NVarChar(10), cproducto);
-    req.input('citem', T.NVarChar(20), citem);
-    req.input('centidad', T.Char(1), centidad);
-    req.output('mensaje', T.NVarChar(60), '');
 
-    let result: Awaited<ReturnType<typeof req.execute>>;
-    try {
-      result = await req.execute(spName);
-    } catch (err) {
-      const msg = err instanceof Error ? err.message : String(err);
-      this.logger.error(`${spName}: ${msg}`);
-      throw new InternalServerErrorException(
-        `Error al consultar planes con ${spName}.`,
+    const cproducto =
+      this.optionalText(dto.cproducto)
+      || this.optionalText(this.config.get<string>('LAMUNDIAL_PRODUCTO_FUNERARIO', '57'));
+    const productCodes = cproducto ? [cproducto] : [];
+
+    if (!productCodes.length) {
+      throw new BadRequestException(
+        `No se encontró producto funerario para ${entity.centidad}/${entity.citem}.`,
       );
     }
-    const mensaje = String(result.output['mensaje'] ?? '').trim();
-    const rows = (result.recordset ?? []) as Record<string, unknown>[];
-    if (!rows.length) {
-      throw new BadRequestException(mensaje || 'No se encuentra planes asociados');
-    }
-    if (mensaje) this.logger.log(`${spName}: ${mensaje}`);
 
+    const cramoSysip = cproducto === '57' ? 45 : (dto.cramo ?? null);
+    this.logger.log(
+      `getPlanesPer valrep/planes/producto ${JSON.stringify({
+        cproductor: null,
+        cramo: cramoSysip,
+        cusuario: dto.cusuario ?? null,
+        cproducto,
+        centidad: entity.centidad,
+        citem: entity.citem,
+      })}`,
+    );
+
+    const seen = new Set<string>();
     const planes: PlanPerItem[] = [];
-    for (const row of rows) {
-      const cplan = String(row['cplan'] ?? '').trim();
-      if (!cplan) continue;
-      const cramo = Number(row['cramo'] ?? dto.cramo ?? this.defaultRamo);
-      let xplan = String(row['xplan'] ?? '').trim();
-      let nmax_dep =
-        row['nmax_dep'] != null && Number.isFinite(Number(row['nmax_dep']))
-          ? Number(row['nmax_dep'])
-          : null;
-      let parentescos: NonNullable<PlanPerItem['parentescos']> = [];
-      let cmoneda = String(row['cmoneda'] ?? '').trim() || undefined;
+    for (const code of productCodes) {
       try {
-        const detalle = await this.fetchDetallePlanRow(cramo, cplan);
-        if (detalle.xplan) xplan = detalle.xplan;
-        if (detalle.cmoneda) cmoneda = detalle.cmoneda;
-        if (detalle.nmax_dep != null) nmax_dep = detalle.nmax_dep;
-        parentescos = detalle.parentescos;
+        const { planes: raw } = await this.valrep.getPlanesProducto({
+          cproducto: code,
+          citem: entity.citem,
+          centidad: entity.centidad,
+        });
+        for (const row of raw ?? []) {
+          const mapped = this.mapCanalPlanToPer(row as Record<string, unknown>, null);
+          if (!mapped || seen.has(mapped.cplan)) continue;
+          seen.add(mapped.cplan);
+          planes.push(mapped);
+        }
       } catch (err) {
         const msg = err instanceof Error ? err.message : String(err);
-        this.logger.warn(`detalle plan ${cplan}: ${msg}`);
+        this.logger.warn(`getPlanesPer cproducto=${code}: ${msg}`);
       }
-      const maxAsegurados =
-        nmax_dep != null && Number.isFinite(nmax_dep) ? Math.max(1, 1 + nmax_dep) : undefined;
-      planes.push({
-        cplan,
-        xplan: xplan || cplan,
-        cramo,
-        cmoneda,
-        nmax_dep,
-        maxAsegurados,
-        parentescos,
-      });
     }
+
     if (!planes.length) {
-      throw new BadRequestException(`${spName} no devolvió planes`);
+      throw new BadRequestException('No se encontraron planes para el canal / producto SSO.');
     }
-    return planes;
+    return this.withMaxAsegurados(planes);
   }
 
-  private async fetchDetallePlanRow(
-    cramo: number,
-    cplan: string,
-  ): Promise<{
-    xplan?: string;
-    cmoneda?: string;
-    nmax_dep: number | null;
-    parentescos: NonNullable<PlanPerItem['parentescos']>;
-  }> {
-    const T = this.db.types;
-    const req = this.db.request();
-    req.input('cramo', T.Int, cramo);
-    req.input('cplan', T.VarChar(10), cplan);
-    req.output('berror', T.Bit, false);
-    req.output('mensaje', T.NVarChar(60), '');
-    const result = await req.execute('spBuscaDetallePlan');
-    if (Boolean(result.output['berror'])) {
-      throw new Error(String(result.output['mensaje'] ?? 'Sin detalle de plan'));
+  /** Lee nmax_dep de maplanes_per (sin ALTER SP) y calcula titular + dependientes. */
+  private async withMaxAsegurados(planes: PlanPerItem[]): Promise<PlanPerItem[]> {
+    const limits = new Map<string, number | null>();
+    const ramos = [...new Set(planes.map((p) => p.cramo).filter((n) => Number.isFinite(n)))];
+    for (const ramo of ramos) {
+      const byRamo = await this.loadNmaxDepByPlan(ramo);
+      byRamo.forEach((value, key) => limits.set(key, value));
     }
-    const sets = result.recordsets as Array<Record<string, unknown>[]> | undefined;
-    const head = (sets?.[0] ?? result.recordset ?? [])[0] as Record<string, unknown> | undefined;
-    const parentRows = (sets?.[1] ?? []) as Record<string, unknown>[];
-    const nmaxRaw = head?.['nmax_dep'];
-    return {
-      xplan: String(head?.['xplan'] ?? '').trim() || undefined,
-      cmoneda: String(head?.['cmoneda'] ?? '').trim() || undefined,
-      nmax_dep:
-        nmaxRaw != null && Number.isFinite(Number(nmaxRaw)) ? Number(nmaxRaw) : null,
-      parentescos: parentRows.map((row) => ({
-        cparen: Number(row['cparen']),
-        xparentesco: String(row['xparentesco'] ?? '').trim(),
-        min_edad: Number(row['min_edad']),
-        max_edad: Number(row['max_edad']),
-      })),
-    };
+    return planes.map((p) => {
+      const nmax = limits.has(p.cplan) ? limits.get(p.cplan) ?? null : (p.nmax_dep ?? null);
+      const maxAsegurados = nmax == null ? undefined : Math.max(1, 1 + nmax);
+      return { ...p, nmax_dep: nmax, maxAsegurados };
+    });
+  }
+
+  private async loadNmaxDepByPlan(ramo: number): Promise<Map<string, number | null>> {
+    const map = new Map<string, number | null>();
+    try {
+      const T = this.db.types;
+      const req = this.db.request();
+      req.input('cramo', T.Int, ramo);
+      const result = await req.query(`
+        SELECT LTRIM(RTRIM(cplan)) AS cplan, nmax_dep
+        FROM maplanes_per
+        WHERE cramo = @cramo AND iestado = 'V'
+      `);
+      for (const row of (result.recordset ?? []) as Record<string, unknown>[]) {
+        const cplan = String(row['cplan'] ?? '').trim();
+        if (!cplan) continue;
+        map.set(cplan, this.intField(row['nmax_dep']));
+      }
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : String(err);
+      this.logger.warn(`loadNmaxDepByPlan ramo=${ramo}: ${msg}`);
+    }
+    return map;
   }
 
   async getParenPlanPer(cramo: number, cplan: string) {
@@ -1065,7 +1191,14 @@ export class PersonasService {
             fnac_asegurado: a.fnac_asegurado ? String(a.fnac_asegurado) : (a.fechaNac ? String(a.fechaNac) : null),
             isexo_asegurado: String(a.isexo_asegurado ?? (a.sexo ? String(a.sexo)[0].toUpperCase() : 'M')),
             nparentesco_asegurado: Number(getPar(a.nparentesco_asegurado ?? a.parentesco)),
-            iestado_civil_asegurado: String(a.iestado_civil_asegurado ?? 'S')
+            iestado_civil_asegurado: String(a.iestado_civil_asegurado ?? a.estadoCivil ?? 'S'),
+            estado_asegurado: a.estado_asegurado ?? a.cestado ?? a.estado ?? null,
+            ciudad_asegurado: a.ciudad_asegurado ?? a.cciudad ?? a.ciudad ?? null,
+            direccion_asegurado: a.direccion_asegurado ?? a.direccion ?? null,
+            telefono_asegurado: a.xtelefono_asegurado ?? a.telefono ?? null,
+            correo_asegurado: a.xcorreo_asegurado ?? a.email ?? null,
+            npeso_asegurado: a.npeso_asegurado ?? a.peso ?? null,
+            nestatura_asegurado: a.nestatura_asegurado ?? a.estatura ?? null,
           })),
           beneficiarios: beneficiarios.map((a: any) => ({
             icedula_beneficiario: String(a.icedula_beneficiario ?? a.tipoDoc ?? 'V'),

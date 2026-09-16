@@ -16,8 +16,20 @@ export class GetPlanesProductoDto {
   @IsString()
   citem?: string;
 
-  @ApiPropertyOptional({ example: 'P', description: 'Entidad asociada al ítem (opcional).' })
+  @ApiPropertyOptional({
+    example: 'P',
+    description: 'Entidad del actor (P=productor, C=canal). Requerida con csubitem.',
+  })
   @IsOptional()
   @IsString()
   centidad?: string;
+
+  @ApiPropertyOptional({
+    example: '80080',
+    description:
+      'Código gestor/sub-ítem (mausuplan.citem) para excluir planes restringidos al usuario. Requiere centidad.',
+  })
+  @IsOptional()
+  @IsString()
+  csubitem?: string;
 }

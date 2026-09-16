@@ -194,7 +194,7 @@ export class CollectionService {
          referencia_banco, monto, fecha_movimiento, descripcion, refpk, ifuente, fcreacion)
       SELECT
         @dni, @tel_orig, @tel_dest, @banco_orig, @banco_dest,
-        @referencia, @monto, @fecha, 'Factura farmacia RCV tarjeta', @referencia, 'FARMACIA', GETDATE()
+        @referencia, @monto, @fecha, 'Factura farmacia RCV tarjeta', @referencia, 'FARMACIA-RVC', GETDATE()
       WHERE NOT EXISTS (
         SELECT 1 FROM pago_movil WHERE referencia_banco = @referencia
       )
@@ -434,7 +434,9 @@ export class CollectionService {
   private async resolveApiClient(apikey: string): Promise<ApiClientRow> {
     const T = this.db.types;
     const req = this.db.request();
-    req.input('xtoken', T.VarChar(100), apikey);
+    const safeKey = String(apikey ?? '').trim();
+    const truncatedKey = safeKey.length > 100 ? safeKey.substring(0, 100) : safeKey;
+    req.input('xtoken', T.VarChar(500), truncatedKey);
     // maclient_api en QA no tiene ctipopago; SysIP usa SELECT * y LAMUNDIAL default.
     const result = await req.query(`
       SELECT TOP 1 cproductor, cci_rif, cbanco_destino, cprog

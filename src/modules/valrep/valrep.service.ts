@@ -14,8 +14,13 @@ import {
   SP_GET_SUSTANCIAS_NEXUS,
 } from '../../config/sis2000-sp.constants';
 import { GetPlanesV2Dto } from './dto/get-planes-v2.dto';
+import { GetPlanesProductoDto } from './dto/get-planes-producto.dto';
 import { GetCotizacionAutoDto } from './dto/get-cotizacion-auto.dto';
 import { CalculatePlanCoberturasDto } from './dto/calculate-plan-coberturas.dto';
+import {
+  MausuplanRepository,
+  RCV_AUTO_CPRODUCTO,
+} from './repositories/mausuplan.repository';
 
 export interface CotizacionResult {
   mprimaext: number;
@@ -33,6 +38,11 @@ export interface PlanItem {
   [key: string]: unknown;
   parentescos?: ParentescoPlan[];
   coberturas?: CoberturaPlan[];
+}
+
+export interface PlanesQueryResult {
+  planes: PlanItem[];
+  mensaje: string;
 }
 
 interface ParentescoPlan {
@@ -85,9 +95,13 @@ export interface CalculatePlanCoberturasResponse {
 export class ValrepService {
   private readonly logger = new Logger(ValrepService.name);
 
+  private static readonly EMPTY_AFTER_CSUBITEM_MSG =
+    'No hay planes disponibles para este usuario según las restricciones del gestor.';
+
   constructor(
     private readonly db: MssqlService,
     private readonly config: ConfigService,
+    private readonly mausuplanRepo: MausuplanRepository,
   ) {}
 
   /** Placeholder Sis2000 en catálogos geo — no es estado/ciudad válido. */
@@ -100,7 +114,7 @@ export class ValrepService {
     return parseInt(this.config.get<string>('LAMUNDIAL_RAMO_BINACIONAL', '28') ?? '28', 10);
   }
 
-  async getPlanesV2(body: GetPlanesV2Dto): Promise<PlanItem[]> {
+  async getPlanesV2(body: GetPlanesV2Dto): Promise<PlanesQueryResult> {
     try {
       const req = this.db.request();
       const T = this.db.types;
@@ -144,9 +158,16 @@ export class ValrepService {
       }
 
       const recordset = result.recordset ?? [];
-      const planes = await this.enrichWithParentescos(recordset);
-      return await this.enrichWithCoberturas(planes);
+      let planes = await this.enrichWithParentescos(recordset);
+      planes = await this.enrichWithCoberturas(planes);
+
+      return this.applyCsubitemExclusion(planes, {
+        csubitem: body.csubitem,
+        centidad: body.centidad,
+        cproducto: this.resolveCproductoForExclusion(body),
+      }, mensaje);
     } catch (err) {
+      if (err instanceof BadRequestException) throw err;
       const msg = err instanceof Error ? err.message : String(err);
       this.logger.error(`getPlanesV2 error: ${msg}`);
       throw new InternalServerErrorException(
@@ -532,6 +553,46 @@ export class ValrepService {
     }
   }
 
+  /** Tope de dependientes Sis2000 (`maplanes_per.nmax_dep`) en cada plan. */
+  private async enrichWithNmaxDep(planes: PlanItem[]): Promise<PlanItem[]> {
+    const ramos = [
+      ...new Set(
+        planes
+          .map((plan) => Number(plan['cramo']))
+          .filter((cramo) => Number.isFinite(cramo)),
+      ),
+    ];
+    for (const cramo of ramos) {
+      try {
+        const T = this.db.types;
+        const req = this.db.request();
+        req.input('cramo', T.Int, cramo);
+        const result = await req.query<{ cplan: string; nmax_dep: number | null }>(`
+          SELECT LTRIM(RTRIM(cplan)) AS cplan, nmax_dep
+          FROM maplanes_per
+          WHERE cramo = @cramo AND iestado = 'V'
+        `);
+        const limits = new Map<string, number | null>();
+        for (const row of result.recordset ?? []) {
+          const cplan = String(row.cplan ?? '').trim();
+          if (!cplan) continue;
+          const nmax = row.nmax_dep == null ? null : Number(row.nmax_dep);
+          limits.set(cplan, Number.isFinite(nmax as number) ? nmax : null);
+        }
+        for (const plan of planes) {
+          if (Number(plan['cramo']) !== cramo) continue;
+          const cplan = String(plan['cplan'] ?? '').trim();
+          if (!limits.has(cplan)) continue;
+          plan['nmax_dep'] = limits.get(cplan) ?? null;
+        }
+      } catch (err) {
+        const msg = err instanceof Error ? err.message : String(err);
+        this.logger.warn(`enrichWithNmaxDep ramo=${cramo}: ${msg}`);
+      }
+    }
+    return planes;
+  }
+
   private async enrichWithParentescos(planes: PlanItem[]): Promise<PlanItem[]> {
     for (const plan of planes) {
       try {
@@ -718,6 +779,80 @@ export class ValrepService {
 
   // ── Funerario: catálogo valrep (pasos 1–3, solo SP) ───────────────────────
 
+  /**
+   * Producto Sis2000 para consultar exclusiones en mausuplan (itipouso=E).
+   * RCV nacional (cramo 18) → producto '24'.
+   */
+  private resolveCproductoForExclusion(body: {
+    cramo?: number;
+    cproducto?: string;
+    csubitem?: string;
+  }): string {
+    if (!body.csubitem?.trim()) {
+      return body.cproducto?.trim() ?? RCV_AUTO_CPRODUCTO;
+    }
+    if (body.cramo === 18) {
+      return RCV_AUTO_CPRODUCTO;
+    }
+    const cp = body.cproducto?.trim();
+    if (!cp) {
+      throw new BadRequestException(
+        'cproducto es requerido cuando cramo !== 18 y se envía csubitem.',
+      );
+    }
+    return cp;
+  }
+
+  /**
+   * Excluye planes restringidos al gestor (mausuplan itipouso=E).
+   * Prioridad sobre canal/visibility en consumidores downstream.
+   */
+  private async applyCsubitemExclusion(
+    planes: PlanItem[],
+    opts: { csubitem?: string; centidad?: string; cproducto: string },
+    spMensaje: string,
+  ): Promise<PlanesQueryResult> {
+    const csubitem = opts.csubitem?.trim();
+    if (!csubitem) {
+      return { planes, mensaje: spMensaje };
+    }
+
+    const centidad = opts.centidad?.trim();
+    const isGestorCompuesto = csubitem.includes('-') && !csubitem.includes('@');
+    if (!centidad && !isGestorCompuesto) {
+      throw new BadRequestException(
+        'centidad es requerida cuando se envía csubitem (depende del usuario logueado).',
+      );
+    }
+
+    const excluded = await this.mausuplanRepo.getExcludedPlans({
+      cproducto: opts.cproducto,
+      centidad: centidad?.toUpperCase() ?? 'G',
+      citem: csubitem,
+    });
+
+    if (!excluded.length) {
+      return { planes, mensaje: spMensaje };
+    }
+
+    const excludedSet = new Set(excluded.map((c) => c.trim()));
+    const filtered = planes.filter(
+      (p) => !excludedSet.has(String(p['cplan'] ?? '').trim()),
+    );
+
+    if (!filtered.length) {
+      this.logger.warn(
+        `applyCsubitemExclusion: todos los planes excluidos centidad=${centidad} csubitem=${csubitem}`,
+      );
+      return {
+        planes: [],
+        mensaje: ValrepService.EMPTY_AFTER_CSUBITEM_MSG,
+      };
+    }
+
+    return { planes: filtered, mensaje: spMensaje };
+  }
+
   private resolveEntidadItem(body: { citem?: string; centidad?: string }) {
     let citem: string | null = null;
     let centidad: string | null = null;
@@ -829,12 +964,8 @@ export class ValrepService {
     }
   }
 
-  /** Paso 2 funerario — sp_busca_plan_producto_nexus + detalle. */
-  async getPlanesProducto(body: {
-    cproducto: string;
-    citem?: string;
-    centidad?: string;
-  }): Promise<{ planes: PlanItem[]; mensaje: string }> {
+  /** Paso 2 funerario — sp_busca_plan_producto_nexus + parentescos / nmax_dep. */
+  async getPlanesProducto(body: GetPlanesProductoDto): Promise<PlanesQueryResult> {
     const cproducto = String(body.cproducto).trim();
     const { citem, centidad } = this.resolveEntidadItem(body);
     const spName = this.spBuscaPlanProductoNexusName();
@@ -854,9 +985,23 @@ export class ValrepService {
         throw new BadRequestException(mensaje || 'No se encuentra planes asociados');
       }
 
-      const planes = await this.enrichPlanesWithDetalleSp(recordset);
+      const rawCodes = recordset
+        .map((row) => String(row['cplan'] ?? '').trim())
+        .filter(Boolean);
+      this.logger.log(
+        `${spName} cproducto=${cproducto} centidad=${centidad} citem=${citem} raw=${rawCodes.join(',')}`,
+      );
+
+      let planes = await this.enrichWithNmaxDep(
+        await this.enrichWithParentescos(recordset),
+      );
       if (mensaje) this.logger.log(`${spName}: ${mensaje}`);
-      return { planes, mensaje };
+
+      return this.applyCsubitemExclusion(planes, {
+        csubitem: body.csubitem,
+        centidad: body.centidad,
+        cproducto,
+      }, mensaje);
     } catch (err) {
       if (err instanceof BadRequestException) throw err;
       const msg = err instanceof Error ? err.message : String(err);
