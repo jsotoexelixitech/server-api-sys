@@ -13,7 +13,6 @@ import { ValrepService } from '../valrep/valrep.service';
 import { GetPlanesPerDto } from './dto/get-planes-per.dto';
 import { CotizacionPerDto } from './dto/cotizacion-per.dto';
 import { CreateEmissionPersonDto } from './dto/create-emission-person.dto';
-import { GetPlanesPerDto } from './dto/get-planes-per.dto';
 import { parseSPError } from '../../common/helpers/sp-error.helper';
 import { buildPolicyPdfUrl } from '../../common/helpers/policy-url.helper';
 import {
