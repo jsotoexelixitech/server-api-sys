@@ -190,6 +190,13 @@ export class EndososService {
       req.input('ifrecuencia', T.Char(1), ifrecuencia);
       req.input('ncuotas', T.Int, ncuotas);
       req.input('cusuario', T.Int, dto.cusuario || 1);
+      req.input('coberAdicional', T.VarChar(2), dto.coberAdicional || null);
+      req.input('msumaaseg', T.Numeric(18, 2), dto.msumaaseg ?? null);
+      req.input('tasaCa', T.Numeric(18, 2), dto.tasaCa ?? 0);
+      req.input('tasaPt', T.Numeric(18, 2), dto.tasaPt ?? 0);
+      req.input('tasaPp', T.Numeric(18, 2), dto.tasaPp ?? 0);
+      req.input('precargorcv', T.Numeric(18, 2), dto.precargorcv ?? 0);
+      req.input('ntoneladas', T.Int, dto.ntoneladas ?? 0);
       req.output('pCnrecibo', T.NVarChar(30));
       req.output('pCrecibo', T.Numeric(19, 0));
       req.output('pSuccess', T.Bit);
