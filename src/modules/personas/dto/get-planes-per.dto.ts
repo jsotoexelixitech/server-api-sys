@@ -2,20 +2,25 @@ import { ApiPropertyOptional } from '@nestjs/swagger';
 import { Transform } from 'class-transformer';
 import { IsInt, IsOptional, IsString, Min } from 'class-validator';
 
-function optionalText(value: unknown): string | undefined {
+function optionalString({ value }: { value: unknown }): string | undefined {
   if (value == null || value === '') return undefined;
-  const text = String(value).trim();
-  return text || undefined;
+  return String(value).trim() || undefined;
 }
 
 export class GetPlanesPerDto {
-  @ApiPropertyOptional({ example: 9, description: 'Código de ramo (9 = Funerario). Por defecto 9.' })
+  @ApiPropertyOptional({
+    example: 45,
+    description: 'Código de ramo (9 = funerario genérico; 45 con cproducto 57).',
+  })
   @IsOptional()
   @IsInt()
   @Min(1)
   cramo?: number;
 
-  @ApiPropertyOptional({ example: null, description: 'Tipo (opcional). Normalmente null para personas.' })
+  @ApiPropertyOptional({
+    example: null,
+    description: 'Tipo (opcional). Normalmente null para personas.',
+  })
   @IsOptional()
   @IsInt()
   ctipo?: number | null;
@@ -25,7 +30,7 @@ export class GetPlanesPerDto {
     description: 'Ítem Sis2000 del canal SSO (productor o comercializador).',
   })
   @IsOptional()
-  @Transform(({ value }) => optionalText(value))
+  @Transform(optionalString)
   @IsString()
   citem?: string;
 
@@ -34,7 +39,7 @@ export class GetPlanesPerDto {
     description: 'Entidad Sis2000: P = productor, C = canal, G = gestor. U (usuario) se resuelve vía magestor.',
   })
   @IsOptional()
-  @Transform(({ value }) => optionalText(value))
+  @Transform(optionalString)
   @IsString()
   centidad?: string;
 
@@ -43,7 +48,7 @@ export class GetPlanesPerDto {
     description: 'Producto funerario del JWT. Si falta, se resuelve con spBuscaProductosEntidad.',
   })
   @IsOptional()
-  @Transform(({ value }) => optionalText(value))
+  @Transform(optionalString)
   @IsString()
   cproducto?: string;
 
@@ -52,7 +57,7 @@ export class GetPlanesPerDto {
     description: 'Productor SSO. Fallback a LAMUNDIAL_PRODUCTOR si no hay citem/centidad.',
   })
   @IsOptional()
-  @Transform(({ value }) => optionalText(value))
+  @Transform(optionalString)
   @IsString()
   cproductor?: string;
 
@@ -61,7 +66,7 @@ export class GetPlanesPerDto {
     description: 'Usuario Sis2000 del JWT (mismo parámetro que RCV / spBuscaPlan).',
   })
   @IsOptional()
-  @Transform(({ value }) => optionalText(value))
+  @Transform(optionalString)
   @IsString()
   cusuario?: string;
 
@@ -70,7 +75,7 @@ export class GetPlanesPerDto {
     description: 'Correo del gestor marketplace (magestor.xcorreo). Resuelve U → C/P.',
   })
   @IsOptional()
-  @Transform(({ value }) => optionalText(value))
+  @Transform(optionalString)
   @IsString()
   cgestor_in?: string;
 
@@ -79,7 +84,7 @@ export class GetPlanesPerDto {
     description: 'Código magestor (marketplace /usuario/:id).',
   })
   @IsOptional()
-  @Transform(({ value }) => optionalText(value))
+  @Transform(optionalString)
   @IsString()
   cgestor?: string;
 }

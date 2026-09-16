@@ -33,6 +33,9 @@ export const envValidationSchema = Joi.object({
   MSSQL_SP_BUSCA_FRECUENCIA_PLAN_NEXUS: Joi.string().default(
     'sp_busca_frecuencia_plan_nexus',
   ),
+  MSSQL_SP_BUSCA_PLAN_PRODUCTO_NEXUS: Joi.string().default(
+    'sp_busca_plan_producto_nexus',
+  ),
 
   /** local = INSERT directo Sis2000 (default). external = HTTP La Mundial QA. */
   EMISSION_SOURCE: Joi.string().valid('local', 'external').default('local'),

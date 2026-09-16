@@ -12,6 +12,9 @@ export const SP_VALIDATE_AUTOMOVIL_LEGACY = 'speeValidateAutomovilGeneral';
 
 export const SP_PRE_EMISION_AUTO_RCV = 'sp_pre_emision_automovil_rcv_nexus';
 
+/** Contador Sis2000 (POLIZA ramo 25 3/7 días; POL_VEH solo auto). */
+export const SP_CONTADOR_NEXUS = 'sp_contador_nexus';
+
 /** Invocado al final del pre-SP (no desde nest-api directamente). */
 export const SP_EMISION_AUTO_RCV = 'sp_emision_automovil_rcv_nexus';
 
@@ -47,6 +50,9 @@ export const SP_GET_SUSTANCIAS_NEXUS = 'sp_get_sustancias_nexus';
 
 /** Frecuencias de pago por plan RCV (POST /valrep/frecuencia). */
 export const SP_BUSCA_FRECUENCIA_PLAN_NEXUS = 'sp_busca_frecuencia_plan_nexus';
+
+/** Planes funerarios por producto + canal (POST /personas/planes y /valrep/planes/producto). */
+export const SP_BUSCA_PLAN_PRODUCTO_NEXUS = 'sp_busca_plan_producto_nexus';
 
 // ── Condominio ──────────────────────────────────────────────────────────────
 export const SP_BUSCA_PLANES_CONDOMINIO = 'sp_busca_planes_condominio_nexus';
