@@ -331,13 +331,36 @@ export class EndososService {
         throw new BadRequestException(message || 'Error al cambiar datos de la póliza');
       }
 
-      this.rmsGateway.notifyPolizaActualizada(dto.cnpoliza);
+      this.rmsGateway.notifyPolizaActualizada(
+        dto.cnpoliza,
+        this.patchPersonasEndoso(dto),
+      );
       return { status: true, message, cnpoliza: dto.cnpoliza };
     } catch (err: any) {
       if (err instanceof BadRequestException) throw err;
       this.logger.error(`Error en cambioDatosPoliza: ${err.message}`, err.stack);
       throw new InternalServerErrorException(err.message || 'Fallo al cambiar datos de la póliza.');
     }
+  }
+
+  /** El SP a veces no reescribe maclient.xcliente; RMS debe usar el nombre del endoso. */
+  private patchPersonasEndoso(dto: CambioDatosPolizaDto): Record<string, unknown> {
+    const tipo = String(dto.tipoCambio ?? '').trim().toUpperCase();
+    const icedula = String(dto.icedula || 'V').trim().charAt(0) || 'V';
+    const cid = `${icedula}-${dto.cci_rif}`;
+    const nombre = String(dto.xcliente ?? '').trim();
+    if (tipo === 'TOMADOR') {
+      return { xtomador: nombre, cid_tomador: cid, icedula_tomador: icedula };
+    }
+    if (tipo === 'BENEFICIARIO') {
+      return { xbeneficiario: nombre, cid_ben: cid, icedula_ben: icedula };
+    }
+    return {
+      xasegurado: nombre,
+      xtitular: nombre,
+      cid_aseg: cid,
+      icedula_aseg: icedula,
+    };
   }
 
   /**

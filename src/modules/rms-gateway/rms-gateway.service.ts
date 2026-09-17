@@ -24,24 +24,32 @@ export class RmsGatewayService {
 
   /**
    * Notifica un cambio de póliza. Nunca lanza: un fallo de RMS no revierte Sis2000.
+   * `patch` pisa nombres/cédulas leídos de Sis2000 (el SP a veces no actualiza maclient.xcliente).
    */
-  notifyPolizaActualizada(cnpoliza: string): void {
-    void this.syncPoliza(cnpoliza).catch((err) => {
+  notifyPolizaActualizada(
+    cnpoliza: string,
+    patch?: Record<string, unknown>,
+  ): void {
+    void this.syncPoliza(cnpoliza, patch).catch((err) => {
       const msg = err instanceof Error ? err.message : String(err);
       this.logger.warn(`RMS notify póliza ${cnpoliza} falló: ${msg}`);
     });
   }
 
-  async syncPoliza(cnpoliza: string): Promise<void> {
+  async syncPoliza(
+    cnpoliza: string,
+    patch?: Record<string, unknown>,
+  ): Promise<void> {
     if (!this.client.isEnabled()) return;
     const poliza = String(cnpoliza ?? '').trim();
     if (!poliza) return;
 
-    const row = await this.loadPoliza(poliza);
-    if (!row) {
+    const loaded = await this.loadPoliza(poliza);
+    if (!loaded) {
       this.logger.warn(`RMS notify: Sis2000 sin póliza ${poliza}`);
       return;
     }
+    const row = { ...loaded, ...(patch ?? {}) };
     const cramo = Number(row['cramo'] ?? row['Cramo'] ?? 0);
     if (!this.ramoPermitido(cramo)) {
       this.logger.log(`RMS notify omitido ramo=${cramo} cnpoliza=${poliza}`);
