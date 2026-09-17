@@ -87,7 +87,13 @@ export class EndososService {
       return { poliza, certificado, recibos };
     } catch (err: any) {
       if (err instanceof NotFoundException) throw err;
-      this.logger.error(`Error en getPolizaByCnpoliza: ${err.message}`, err.stack);
+      const msg = String(err?.message ?? '');
+      this.logger.warn(`getPolizaByCnpoliza SP falló (${msg}); fallback adpoliza`);
+      const row = await this.rmsGateway.loadPolizaRow(cnpoliza);
+      if (row) {
+        return { poliza: row, certificado: null, recibos: [] };
+      }
+      this.logger.error(`Error en getPolizaByCnpoliza: ${msg}`, err.stack);
       throw new InternalServerErrorException(err.message || 'Error al obtener detalle de la póliza.');
     }
   }

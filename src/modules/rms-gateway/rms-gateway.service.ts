@@ -67,13 +67,60 @@ export class RmsGatewayService {
     return allow.has(cramo);
   }
 
+  /**
+   * Preferimos el SP de endosos; si falla (p. ej. join a `mamarca` en ramos salud)
+   * leemos `adpoliza` + `maclient`.
+   */
+  async loadPolizaRow(cnpoliza: string): Promise<Record<string, unknown> | null> {
+    try {
+      const req = this.db.request();
+      req.input('cnpoliza', T.NVarChar(50), cnpoliza);
+      const res = await req.execute('sp_obtener_poliza_endosos_nexus');
+      const row = res.recordsets?.[0]?.[0] as Record<string, unknown> | undefined;
+      if (row) return row;
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : String(err);
+      this.logger.warn(`RMS load SP omitido cnpoliza=${cnpoliza}: ${msg}`);
+    }
+    return this.loadPolizaAdpoliza(cnpoliza);
+  }
+
   private async loadPoliza(
     cnpoliza: string,
   ): Promise<Record<string, unknown> | null> {
+    return this.loadPolizaRow(cnpoliza);
+  }
+
+  private async loadPolizaAdpoliza(
+    cnpoliza: string,
+  ): Promise<Record<string, unknown> | null> {
     const req = this.db.request();
-    req.input('cnpoliza', T.NVarChar(50), cnpoliza);
-    const res = await req.execute('sp_obtener_poliza_endosos_nexus');
-    const row = res.recordsets?.[0]?.[0] as Record<string, unknown> | undefined;
-    return row ?? null;
+    req.input('cnpoliza', T.NVarChar(30), cnpoliza);
+    const res = await req.query(`
+      SELECT TOP 1
+        LTRIM(RTRIM(p.cnpoliza)) AS cnpoliza,
+        p.cpoliza,
+        p.cramo,
+        p.fanopol,
+        p.fmespol,
+        p.iestado,
+        p.casegurado,
+        p.ctendor,
+        p.cproductor,
+        LTRIM(RTRIM(p.cplan)) AS cplan,
+        CONVERT(varchar(10), p.fdesde, 23) AS fdesde,
+        CONVERT(varchar(10), p.fhasta, 23) AS fhasta,
+        a.cci_rif,
+        a.icedula,
+        a.ipersona,
+        a.xcliente,
+        a.xnombre,
+        a.xapellido
+      FROM adpoliza p
+      LEFT JOIN maclient a ON a.cci_rif = p.casegurado
+      WHERE LTRIM(RTRIM(p.cnpoliza)) = LTRIM(RTRIM(@cnpoliza))
+      ORDER BY p.fanopol DESC, p.fmespol DESC
+    `);
+    return (res.recordset?.[0] as Record<string, unknown> | undefined) ?? null;
   }
 }
