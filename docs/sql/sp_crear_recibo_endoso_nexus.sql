@@ -125,7 +125,13 @@ BEGIN
             @sumaPesos      NUMERIC(18, 6),
             @cuotaPrimaPol  NUMERIC(18, 2),
             @restoCobPol    NUMERIC(18, 2),
-            @idxMayorPeso   INT;
+            @idxMayorPeso   INT,
+            @preservarCasco BIT,
+            @primaCascoRefPol NUMERIC(18, 2),
+            @idxMayorPesoRcv INT,
+            @poolRcv        NUMERIC(18, 2),
+            @sumaCascoCuota NUMERIC(18, 2),
+            @factorCuota    NUMERIC(18, 6);
 
         -- Temp tables al inicio: evita DECLARE de table-variable a mitad del SP (SSMS/parseo).
         CREATE TABLE #cobs (
@@ -534,8 +540,44 @@ BEGIN
             SET @sumaPesos = @cntCobs;
         END
 
+        -- Plan upgrade RCV con casco ya contratado: suma y prima de casco del recibo de referencia.
+        SET @preservarCasco = 0;
+        SET @primaCascoRefPol = 0;
+
+        IF @coberAdicional <> 'RC' AND @creciboRef IS NOT NULL
+            SET @preservarCasco = 1;
+
+        IF @preservarCasco = 1
+        BEGIN
+            UPDATE c
+            SET
+                c.msuma_pol = CASE
+                    WHEN @esBs = 1 THEN ISNULL(ref.msumaaseg, c.msuma_pol)
+                    ELSE ISNULL(ref.msumaasegext, c.msuma_pol)
+                END,
+                c.peso = 0
+            FROM #cobs c
+            INNER JOIN adpolcob ref
+                ON ref.ccober = c.ccober
+               AND ref.crecibo = @creciboRef
+               AND ref.iestado <> 'A'
+            WHERE c.ccober IN (1, 2, 3, 4, 5, 16, 28);
+
+            SELECT @primaCascoRefPol = ISNULL(SUM(
+                CASE WHEN @esBs = 1 THEN ref.mprimabruta ELSE ref.mprimabrutaext END
+            ), 0)
+            FROM adpolcob ref
+            WHERE ref.crecibo = @creciboRef
+              AND ref.iestado <> 'A'
+              AND ref.ccober IN (1, 2, 3, 4, 5, 16, 28);
+        END
+
         -- El residuo del redondeo se carga a la cobertura de mayor peso.
         SELECT TOP 1 @idxMayorPeso = idx FROM #cobs ORDER BY peso DESC, idx;
+        SELECT TOP 1 @idxMayorPesoRcv = idx
+        FROM #cobs
+        WHERE ccober NOT IN (1, 2, 3, 4, 5, 16, 28)
+        ORDER BY peso DESC, idx;
 
         -- 5. Anular coberturas de recibos pendientes y luego los recibos (mismo período).
         -- iestado <> 'A' y no = 'V': la emisión nativa deja las coberturas en 'N' hasta el cobro.
@@ -585,6 +627,31 @@ BEGIN
           AND fdesde <= @fdesde
           AND fhasta > @fdesde;
 
+        -- 5c. Cerrar el cuadro del recibo cobrado en la misma fecha (evita doble conteo en PDF).
+        UPDATE pc
+        SET pc.fhasta = @fdesde
+        FROM adpolcob pc
+        INNER JOIN adrecibos r ON r.crecibo = pc.crecibo
+        WHERE r.cpoliza = @cpoliza
+          AND r.fanopol = @polFanopol
+          AND r.fmespol = @polFmespol
+          AND r.iestadorec = 'C'
+          AND r.fhasta = @fdesde
+          AND pc.iestado <> 'A'
+          AND pc.fhasta > @fdesde;
+
+        UPDATE pt
+        SET pt.fhasta = @fdesde
+        FROM adpoltar pt
+        INNER JOIN adrecibos r ON r.crecibo = pt.crecibo
+        WHERE r.cpoliza = @cpoliza
+          AND r.fanopol = @polFanopol
+          AND r.fmespol = @polFmespol
+          AND r.iestadorec = 'C'
+          AND r.fhasta = @fdesde
+          AND pt.istattar <> 'A'
+          AND pt.fhasta > @fdesde;
+
         -- 6. Generar un recibo por cuota, partiendo la vigencia en tramos de 12/cuotas meses.
         SET @cuotaIdx = 1;
         SET @firstCnrecibo = NULL;
@@ -633,14 +700,61 @@ BEGIN
             BEGIN
                 SET @cuotaPrimaPol = CASE WHEN @esBs = 1 THEN @cuotaPrimaBs ELSE @cuotaPrimaExt END;
 
-                UPDATE #cobs
-                SET prima_cuota = FLOOR((@cuotaPrimaPol * peso / @sumaPesos) * 100) / 100;
+                IF @preservarCasco = 1 AND @primaCascoRefPol > 0 AND @creciboRef IS NOT NULL
+                BEGIN
+                    SET @factorCuota = @cuotaPrimaPol / NULLIF(@mprimaTotalPol, 0);
+                    IF @factorCuota IS NULL OR @factorCuota <= 0
+                        SET @factorCuota = 1;
 
-                SELECT @restoCobPol = @cuotaPrimaPol - SUM(prima_cuota) FROM #cobs;
+                    UPDATE c
+                    SET c.prima_cuota = ROUND(
+                        (CASE WHEN @esBs = 1 THEN ref.mprimabruta ELSE ref.mprimabrutaext END)
+                        * @factorCuota, 2)
+                    FROM #cobs c
+                    INNER JOIN adpolcob ref
+                        ON ref.ccober = c.ccober
+                       AND ref.crecibo = @creciboRef
+                       AND ref.iestado <> 'A'
+                    WHERE c.ccober IN (1, 2, 3, 4, 5, 16, 28);
 
-                UPDATE #cobs
-                SET prima_cuota = prima_cuota + @restoCobPol
-                WHERE idx = @idxMayorPeso;
+                    SELECT @sumaCascoCuota = ISNULL(SUM(prima_cuota), 0) FROM #cobs
+                    WHERE ccober IN (1, 2, 3, 4, 5, 16, 28);
+
+                    SET @poolRcv = @cuotaPrimaPol - @sumaCascoCuota;
+
+                    UPDATE #cobs
+                    SET prima_cuota = 0
+                    WHERE ccober NOT IN (1, 2, 3, 4, 5, 16, 28);
+
+                    SELECT @sumaPesos = ISNULL(SUM(peso), 0) FROM #cobs
+                    WHERE ccober NOT IN (1, 2, 3, 4, 5, 16, 28);
+
+                    IF @poolRcv > 0 AND ISNULL(@sumaPesos, 0) > 0
+                    BEGIN
+                        UPDATE #cobs
+                        SET prima_cuota = FLOOR((@poolRcv * peso / @sumaPesos) * 100) / 100
+                        WHERE ccober NOT IN (1, 2, 3, 4, 5, 16, 28);
+
+                        SELECT @restoCobPol = @poolRcv - SUM(prima_cuota) FROM #cobs
+                        WHERE ccober NOT IN (1, 2, 3, 4, 5, 16, 28);
+
+                        IF @idxMayorPesoRcv IS NOT NULL
+                            UPDATE #cobs
+                            SET prima_cuota = prima_cuota + @restoCobPol
+                            WHERE idx = @idxMayorPesoRcv;
+                    END
+                END
+                ELSE
+                BEGIN
+                    UPDATE #cobs
+                    SET prima_cuota = FLOOR((@cuotaPrimaPol * peso / @sumaPesos) * 100) / 100;
+
+                    SELECT @restoCobPol = @cuotaPrimaPol - SUM(prima_cuota) FROM #cobs;
+
+                    UPDATE #cobs
+                    SET prima_cuota = prima_cuota + @restoCobPol
+                    WHERE idx = @idxMayorPeso;
+                END
             END
 
             -- La última cuota cierra en la vigencia del endoso; los tramos nunca la sobrepasan.
