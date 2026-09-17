@@ -60,20 +60,26 @@ export function buildPolizaWebhookPayload(
   if (!cnpoliza && !cpoliza) return null;
 
   const ctendor =
+    asText(pick(row, 'cid_tomador')) ||
     formatDoc(
       pick(row, 'icedula_tomador'),
       pick(row, 'cci_rif_tomador', 'ctendor', 'ctenedor'),
-    ) || asText(pick(row, 'ctendor', 'ctenedor'));
+    ) ||
+    asText(pick(row, 'ctendor', 'ctenedor'));
   const casegurado =
+    asText(pick(row, 'cid_aseg', 'cid')) ||
     formatDoc(
       pick(row, 'icedula_aseg', 'icedula'),
       pick(row, 'cci_rif_aseg', 'cci_rif', 'casegurado'),
-    ) || asText(pick(row, 'casegurado'));
+    ) ||
+    asText(pick(row, 'casegurado'));
   const cbeneficiario =
+    asText(pick(row, 'cid_ben')) ||
     formatDoc(
       pick(row, 'icedula_ben'),
       pick(row, 'cci_rif_ben', 'cbeneficiario'),
-    ) || asText(pick(row, 'cbeneficiario'));
+    ) ||
+    asText(pick(row, 'cbeneficiario'));
 
   const xtenedor = asText(pick(row, 'xtomador', 'xtenedor', 'xcliente_tomador'));
   const xasegurado = asText(pick(row, 'xasegurado', 'xcliente_aseg', 'xcliente'));
@@ -101,25 +107,25 @@ export function buildPolizaWebhookPayload(
     personaRiesgo(
       'tomador',
       pick(row, 'icedula_tomador'),
-      pick(row, 'cci_rif_tomador', 'ctendor'),
+      pick(row, 'cid_tomador', 'cci_rif_tomador', 'ctendor'),
       xtenedor,
     ),
     personaRiesgo(
       'titular',
       pick(row, 'icedula_titular', 'icedula_aseg', 'icedula'),
-      pick(row, 'cci_rif_titular', 'cci_rif_aseg', 'cci_rif', 'casegurado'),
+      pick(row, 'cid_aseg', 'cid', 'cci_rif_titular', 'cci_rif_aseg', 'cci_rif', 'casegurado'),
       xtitular,
     ),
     personaRiesgo(
       'asegurado',
       pick(row, 'icedula_aseg', 'icedula'),
-      pick(row, 'cci_rif_aseg', 'cci_rif', 'casegurado'),
+      pick(row, 'cid_aseg', 'cid', 'cci_rif_aseg', 'cci_rif', 'casegurado'),
       xasegurado,
     ),
     personaRiesgo(
       'beneficiario',
       pick(row, 'icedula_ben'),
-      pick(row, 'cci_rif_ben', 'cbeneficiario'),
+      pick(row, 'cid_ben', 'cci_rif_ben', 'cbeneficiario'),
       xbeneficiario,
     ),
   ].filter((p): p is Record<string, unknown> => Boolean(p));

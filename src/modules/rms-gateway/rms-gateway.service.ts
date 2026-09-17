@@ -82,22 +82,28 @@ export class RmsGatewayService {
         p.fanopol,
         p.fmespol,
         p.iestado,
-        p.ctendor,
+        p.ctenedor,
         p.casegurado,
         p.cbeneficiario,
         CONVERT(varchar(10), p.fdesde, 23) AS fdesde,
         CONVERT(varchar(10), p.fhasta, 23) AS fhasta,
         t.cci_rif AS cci_rif_tomador,
-        t.icedula AS icedula_tomador,
+        LTRIM(RTRIM(t.cid)) AS cid_tomador,
+        LEFT(LTRIM(RTRIM(t.cid)), 1) AS icedula_tomador,
+        t.ipersona AS ipersona_tomador,
         t.xcliente AS xtomador,
         s.cci_rif AS cci_rif_aseg,
-        s.icedula AS icedula_aseg,
+        LTRIM(RTRIM(s.cid)) AS cid_aseg,
+        LEFT(LTRIM(RTRIM(s.cid)), 1) AS icedula_aseg,
+        s.ipersona AS ipersona_aseg,
         s.xcliente AS xasegurado,
         b.cci_rif AS cci_rif_ben,
-        b.icedula AS icedula_ben,
+        LTRIM(RTRIM(b.cid)) AS cid_ben,
+        LEFT(LTRIM(RTRIM(b.cid)), 1) AS icedula_ben,
+        b.ipersona AS ipersona_ben,
         b.xcliente AS xbeneficiario
       FROM adpoliza p
-      LEFT JOIN maclient t ON t.cci_rif = p.ctendor
+      LEFT JOIN maclient t ON t.cci_rif = p.ctenedor
       LEFT JOIN maclient s ON s.cci_rif = p.casegurado
       LEFT JOIN maclient b ON b.cci_rif = p.cbeneficiario
       WHERE LTRIM(RTRIM(p.cnpoliza)) = LTRIM(RTRIM(@cnpoliza))

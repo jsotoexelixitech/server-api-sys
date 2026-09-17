@@ -4,6 +4,21 @@ import {
 } from './rms-gateway.mapper';
 
 describe('rms-gateway.mapper', () => {
+  it('usa cid de maclient cuando no hay icedula', () => {
+    const body = buildPolizaWebhookPayload({
+      cnpoliza: '45-1-1100015761',
+      cid_tomador: 'V-111',
+      cid_aseg: 'V-222',
+      cid_ben: 'V-333',
+      xtomador: 'TOMADOR QA',
+      xasegurado: 'ASEGURADO QA',
+      xbeneficiario: 'BENEF QA',
+    });
+    expect(body?.poliza_detalle.poliza.ctendor).toBe('V-111');
+    expect(body?.poliza_detalle.poliza.casegurado).toBe('V-222');
+    expect(body?.poliza_detalle.poliza.cbeneficiario).toBe('V-333');
+  });
+
   it('arma tomador, titular, asegurado y beneficiario sin vehículo', () => {
     const body = buildPolizaWebhookPayload({
       cnpoliza: '45-1-1100015761',
