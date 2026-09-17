@@ -69,6 +69,7 @@ export class EndososService {
 
   /**
    * Consulta detallada de póliza por número de póliza (cnpoliza).
+   * El SP de autos hace join a mamarca; en salud caemos a adpoliza+maclient.
    */
   async getPolizaByCnpoliza(cnpoliza: string) {
     try {
@@ -88,7 +89,7 @@ export class EndososService {
     } catch (err: any) {
       if (err instanceof NotFoundException) throw err;
       const msg = String(err?.message ?? '');
-      this.logger.warn(`getPolizaByCnpoliza SP falló (${msg}); fallback adpoliza`);
+      this.logger.warn(`getPolizaByCnpoliza SP falló (${msg}); fallback personas`);
       const row = await this.rmsGateway.loadPolizaRow(cnpoliza);
       if (row) {
         return { poliza: row, certificado: null, recibos: [] };

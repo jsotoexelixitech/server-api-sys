@@ -30,7 +30,7 @@ describe('RmsGatewayClient', () => {
     await client.postPolizas({
       evento: 'poliza.actualizada',
       cpoliza: '1',
-      poliza_detalle: { poliza: { poliza: '45-1-1' } },
+      poliza_detalle: { poliza: { poliza: '45-1-1' }, riesgo: [] },
     });
     expect(fetchMock).toHaveBeenCalledWith(
       'http://127.0.0.1:3033/rms-gateway-services/api/v1/webhooks/polizas',

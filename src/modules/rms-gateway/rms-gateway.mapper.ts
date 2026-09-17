@@ -4,6 +4,7 @@ export type RmsPolizaWebhookBody = {
   poliza?: string;
   poliza_detalle: {
     poliza: Record<string, unknown>;
+    riesgo: Array<Record<string, unknown>>;
   };
 };
 
@@ -34,22 +35,21 @@ function formatDoc(icedula: unknown, rif: unknown): string | undefined {
   return `${nac}-${num}`;
 }
 
-function formatDate(value: unknown): string | undefined {
-  if (value == null) return undefined;
-  if (value instanceof Date && !Number.isNaN(value.getTime())) {
-    return value.toISOString().slice(0, 10);
-  }
-  const text = asText(value);
-  if (!text) return undefined;
-  if (/^\d{4}-\d{2}-\d{2}/.test(text)) return text.slice(0, 10);
-  const parsed = new Date(text);
-  if (Number.isNaN(parsed.getTime())) return undefined;
-  return parsed.toISOString().slice(0, 10);
+function personaRiesgo(
+  tipo: string,
+  icedula: unknown,
+  rif: unknown,
+  nombre: unknown,
+): Record<string, unknown> | null {
+  const cid = formatDoc(icedula, rif) || asText(rif);
+  const xpersona = asText(nombre);
+  if (!cid && !xpersona) return null;
+  return { Tipo_pers: tipo, cid, xpersona };
 }
 
 /**
- * Arma el body que espera RMS `POST /webhooks/polizas`
- * a partir del recordset de `sp_obtener_poliza_endosos_nexus`.
+ * Solo personas de la póliza (tomador, titular/asegurado, beneficiario).
+ * Sin vehículo ni mamarca.
  */
 export function buildPolizaWebhookPayload(
   row: Record<string, unknown>,
@@ -60,34 +60,75 @@ export function buildPolizaWebhookPayload(
   if (!cnpoliza && !cpoliza) return null;
 
   const ctendor =
-    asText(pick(row, 'ctendor', 'ctenedor')) ||
-    formatDoc(pick(row, 'icedula_tomador', 'icedula'), pick(row, 'cci_rif', 'ctomador', 'casegurado'));
+    formatDoc(
+      pick(row, 'icedula_tomador'),
+      pick(row, 'cci_rif_tomador', 'ctendor', 'ctenedor'),
+    ) || asText(pick(row, 'ctendor', 'ctenedor'));
   const casegurado =
-    asText(pick(row, 'casegurado')) ||
-    formatDoc(pick(row, 'icedula_aseg', 'icedula'), pick(row, 'cci_rif_aseg', 'cci_rif'));
+    formatDoc(
+      pick(row, 'icedula_aseg', 'icedula'),
+      pick(row, 'cci_rif_aseg', 'cci_rif', 'casegurado'),
+    ) || asText(pick(row, 'casegurado'));
+  const cbeneficiario =
+    formatDoc(
+      pick(row, 'icedula_ben'),
+      pick(row, 'cci_rif_ben', 'cbeneficiario'),
+    ) || asText(pick(row, 'cbeneficiario'));
+
+  const xtenedor = asText(pick(row, 'xtomador', 'xtenedor', 'xcliente_tomador'));
+  const xasegurado = asText(pick(row, 'xasegurado', 'xcliente_aseg', 'xcliente'));
+  const xtitular = asText(pick(row, 'xtitular')) || xasegurado;
+  const xbeneficiario = asText(pick(row, 'xbeneficiario', 'xcliente_ben'));
 
   const poliza: Record<string, unknown> = {
     poliza: cnpoliza,
     codPoliza: cpoliza || cnpoliza,
     cramo: Number(pick(row, 'cramo') ?? 0) || undefined,
-    tipopol: asText(pick(row, 'tipopol', 'xtipopol', 'tipocontrato')) || 'INDIVIDUAL',
+    tipopol: 'INDIVIDUAL',
     ctendor,
     casegurado,
-    xtenedor: asText(pick(row, 'xtenedor', 'xtomador', 'xcliente')),
-    xasegurado: asText(pick(row, 'xasegurado', 'xcliente')),
-    cproductor: asText(pick(row, 'cproductor')),
-    moneda: asText(pick(row, 'moneda', 'cmoneda', 'xmoneda')),
-    fdesde: formatDate(pick(row, 'fdesde', 'fdesdepol', 'finicio')),
-    fhasta: formatDate(pick(row, 'fhasta', 'fhastapol', 'ffin')),
-    emision: formatDate(pick(row, 'femision', 'femite', 'emision')),
+    cbeneficiario,
+    xtenedor,
+    xtitular,
+    xasegurado,
+    xbeneficiario,
     iestado: asText(pick(row, 'iestado', 'cd_estatus', 'estatus')),
+    fdesde: asText(pick(row, 'fdesde')),
+    fhasta: asText(pick(row, 'fhasta')),
   };
+
+  const riesgo = [
+    personaRiesgo(
+      'tomador',
+      pick(row, 'icedula_tomador'),
+      pick(row, 'cci_rif_tomador', 'ctendor'),
+      xtenedor,
+    ),
+    personaRiesgo(
+      'titular',
+      pick(row, 'icedula_titular', 'icedula_aseg', 'icedula'),
+      pick(row, 'cci_rif_titular', 'cci_rif_aseg', 'cci_rif', 'casegurado'),
+      xtitular,
+    ),
+    personaRiesgo(
+      'asegurado',
+      pick(row, 'icedula_aseg', 'icedula'),
+      pick(row, 'cci_rif_aseg', 'cci_rif', 'casegurado'),
+      xasegurado,
+    ),
+    personaRiesgo(
+      'beneficiario',
+      pick(row, 'icedula_ben'),
+      pick(row, 'cci_rif_ben', 'cbeneficiario'),
+      xbeneficiario,
+    ),
+  ].filter((p): p is Record<string, unknown> => Boolean(p));
 
   return {
     evento,
     cpoliza: cpoliza || cnpoliza,
     poliza: cnpoliza,
-    poliza_detalle: { poliza },
+    poliza_detalle: { poliza, riesgo },
   };
 }
 
@@ -99,3 +140,4 @@ export function parseRamosPermitidos(raw?: string | null): Set<number> {
   }
   return set;
 }
+

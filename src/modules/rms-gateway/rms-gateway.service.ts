@@ -68,32 +68,10 @@ export class RmsGatewayService {
   }
 
   /**
-   * Preferimos el SP de endosos; si falla (p. ej. join a `mamarca` en ramos salud)
-   * leemos `adpoliza` + `maclient`.
+   * Solo personas: tomador, titular/asegurado y beneficiario.
+   * No usa el SP de endosos (ese hace join a mamarca / vehículo).
    */
   async loadPolizaRow(cnpoliza: string): Promise<Record<string, unknown> | null> {
-    try {
-      const req = this.db.request();
-      req.input('cnpoliza', T.NVarChar(50), cnpoliza);
-      const res = await req.execute('sp_obtener_poliza_endosos_nexus');
-      const row = res.recordsets?.[0]?.[0] as Record<string, unknown> | undefined;
-      if (row) return row;
-    } catch (err) {
-      const msg = err instanceof Error ? err.message : String(err);
-      this.logger.warn(`RMS load SP omitido cnpoliza=${cnpoliza}: ${msg}`);
-    }
-    return this.loadPolizaAdpoliza(cnpoliza);
-  }
-
-  private async loadPoliza(
-    cnpoliza: string,
-  ): Promise<Record<string, unknown> | null> {
-    return this.loadPolizaRow(cnpoliza);
-  }
-
-  private async loadPolizaAdpoliza(
-    cnpoliza: string,
-  ): Promise<Record<string, unknown> | null> {
     const req = this.db.request();
     req.input('cnpoliza', T.NVarChar(30), cnpoliza);
     const res = await req.query(`
@@ -104,23 +82,33 @@ export class RmsGatewayService {
         p.fanopol,
         p.fmespol,
         p.iestado,
-        p.casegurado,
         p.ctendor,
-        p.cproductor,
-        LTRIM(RTRIM(p.cplan)) AS cplan,
+        p.casegurado,
+        p.cbeneficiario,
         CONVERT(varchar(10), p.fdesde, 23) AS fdesde,
         CONVERT(varchar(10), p.fhasta, 23) AS fhasta,
-        a.cci_rif,
-        a.icedula,
-        a.ipersona,
-        a.xcliente,
-        a.xnombre,
-        a.xapellido
+        t.cci_rif AS cci_rif_tomador,
+        t.icedula AS icedula_tomador,
+        t.xcliente AS xtomador,
+        s.cci_rif AS cci_rif_aseg,
+        s.icedula AS icedula_aseg,
+        s.xcliente AS xasegurado,
+        b.cci_rif AS cci_rif_ben,
+        b.icedula AS icedula_ben,
+        b.xcliente AS xbeneficiario
       FROM adpoliza p
-      LEFT JOIN maclient a ON a.cci_rif = p.casegurado
+      LEFT JOIN maclient t ON t.cci_rif = p.ctendor
+      LEFT JOIN maclient s ON s.cci_rif = p.casegurado
+      LEFT JOIN maclient b ON b.cci_rif = p.cbeneficiario
       WHERE LTRIM(RTRIM(p.cnpoliza)) = LTRIM(RTRIM(@cnpoliza))
       ORDER BY p.fanopol DESC, p.fmespol DESC
     `);
     return (res.recordset?.[0] as Record<string, unknown> | undefined) ?? null;
+  }
+
+  private async loadPoliza(
+    cnpoliza: string,
+  ): Promise<Record<string, unknown> | null> {
+    return this.loadPolizaRow(cnpoliza);
   }
 }
