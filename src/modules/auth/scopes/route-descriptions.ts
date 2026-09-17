@@ -46,6 +46,9 @@ const ROUTE_LABELS: Record<string, string> = {
   'POST /api/v1/external/createEmissionAuto': 'Emitir póliza RCV',
   'GET /api/v1/arys/coberturas/:param/:param': 'Primas Arys (Coberturas) para membresía RCV',
   'POST /api/v1/arys/membership/register': 'Registrar membresía Arys post-emisión RCV',
+  'POST /api/v1/mail/funeral-review-alert': 'Alerta a mesa técnica funerario',
+  'POST /api/v1/mail/funeral-payment-link': 'Link de pago funerario al tomador',
+  'POST /api/v1/mail/funeral-rejected': 'Aviso al tomador de solicitud funeraria rechazada',
   // emissions:condominio
   'GET /api/v1/condominio/productos': 'Productos de condominio',
   'GET /api/v1/condominio/frecuencias': 'Frecuencias de pago condominio',

@@ -198,6 +198,7 @@ export function grantMatchesRoute(
   if (scopeMatches(granted, requiredScope)) return true;
 
   const methodUpper = String(method).toUpperCase();
+  const requestPath = normalizeHttpPath(path);
   for (const grant of granted) {
     const normalized = String(grant ?? '').trim();
     if (!normalized.includes(' ')) continue;
@@ -207,5 +208,19 @@ export function grantMatchesRoute(
     const grantPath = normalized.slice(space + 1);
     if (pathMatchesRouteTemplate(grantPath, path)) return true;
   }
+
+  // Plantillas funerario hermanas: si la key ya envía review-alert o payment-link, también rechazo.
+  if (
+    methodUpper === 'POST' &&
+    /\/api\/v1\/mail\/funeral-[a-z0-9-]+$/i.test(requestPath)
+  ) {
+    for (const grant of granted) {
+      const normalized = String(grant ?? '').trim();
+      if (!normalized.toUpperCase().startsWith('POST ')) continue;
+      const grantPath = normalizeHttpPath(normalized.slice(5));
+      if (/\/api\/v1\/mail\/funeral-[a-z0-9-]+$/i.test(grantPath)) return true;
+    }
+  }
+
   return false;
 }
