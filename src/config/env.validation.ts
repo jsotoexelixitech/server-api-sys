@@ -142,4 +142,11 @@ export const envValidationSchema = Joi.object({
   REPORTES_SYNC_BATCH_SIZE: Joi.number().default(1000),
   GEMINI_API_KEY: Joi.string().allow('').optional(),
   GEMINI_MODEL: Joi.string().default('gemini-2.5-flash-lite'),
+
+  /** Aviso HTTP a RMS Gateway tras cambio de póliza en endosos (no toca Sis2000). */
+  RMS_GATEWAY_ENABLED: Joi.boolean().default(true),
+  RMS_GATEWAY_BASE_URL: Joi.string().allow('').optional(),
+  RMS_GATEWAY_WEBHOOK_SECRET: Joi.string().allow('').optional(),
+  RMS_GATEWAY_RAMOS: Joi.string().allow('').default('5,7,8,9,45'),
+  RMS_GATEWAY_TIMEOUT_MS: Joi.number().integer().min(1000).default(8000),
 });

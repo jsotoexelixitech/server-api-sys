@@ -15,12 +15,16 @@ import {
   AUTO_IFRECUENCIA_VALUES,
   AutoIfrecuenciaCode,
 } from '../valrep/constants/auto-ifrecuencia.constants';
+import { RmsGatewayService } from '../rms-gateway/rms-gateway.service';
 
 @Injectable()
 export class EndososService {
   private readonly logger = new Logger(EndososService.name);
 
-  constructor(private readonly db: MssqlService) {}
+  constructor(
+    private readonly db: MssqlService,
+    private readonly rmsGateway: RmsGatewayService,
+  ) {}
 
   /**
    * Búsqueda general de pólizas con filtros y paginado.
@@ -250,6 +254,7 @@ export class EndososService {
         throw new BadRequestException(message || 'Error al anular póliza');
       }
 
+      this.rmsGateway.notifyPolizaActualizada(dto.cnpoliza);
       return { status: true, message, cnpoliza: dto.cnpoliza };
     } catch (err: any) {
       if (err instanceof BadRequestException) throw err;
@@ -279,6 +284,7 @@ export class EndososService {
         throw new BadRequestException(message || 'Error al reactivar la póliza');
       }
 
+      this.rmsGateway.notifyPolizaActualizada(dto.cnpoliza);
       return { status: true, message, cnpoliza: dto.cnpoliza };
     } catch (err: any) {
       if (err instanceof BadRequestException) throw err;
@@ -318,6 +324,7 @@ export class EndososService {
         throw new BadRequestException(message || 'Error al cambiar datos de la póliza');
       }
 
+      this.rmsGateway.notifyPolizaActualizada(dto.cnpoliza);
       return { status: true, message, cnpoliza: dto.cnpoliza };
     } catch (err: any) {
       if (err instanceof BadRequestException) throw err;
