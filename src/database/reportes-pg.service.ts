@@ -483,6 +483,45 @@ export class ReportesPgService implements OnModuleInit, OnModuleDestroy {
     return normalizeResult(result);
   }
 
+  /**
+   * Orden estable de refcursors OUT/INOUT (p. ej. KPI en [0], detalle en [1]).
+   * Object.values() no garantiza el orden de los parámetros del SP.
+   */
+  private resolveProcedureCursorNames(
+    routine: PgRoutineRow,
+    row: Record<string, unknown> | null,
+  ): string[] {
+    if (!row) return [];
+
+    const argnames = parsePgArray(routine?.argnames);
+    const parsedModes = parsePgArray(routine?.argmodes);
+    const argmodes = parsedModes.length
+      ? parsedModes
+      : (routine?.argtypes || []).map(() => 'i');
+
+    const ordered: string[] = [];
+    for (let i = 0; i < argnames.length; i += 1) {
+      const mode = argmodes[i];
+      if (mode !== 'o' && mode !== 't' && mode !== 'b') continue;
+      const argName = argnames[i];
+      if (!argName) continue;
+      const raw =
+        row[argName] ??
+        row[argName.toLowerCase()] ??
+        row[argName.toUpperCase()];
+      if (typeof raw === 'string' && raw.trim() !== '') {
+        ordered.push(raw.trim());
+      }
+    }
+
+    if (ordered.length > 0) return ordered;
+
+    return Object.values(row).filter(
+      (value): value is string =>
+        typeof value === 'string' && value.trim() !== '',
+    );
+  }
+
   private async executeProcedure(
     client: PoolClient,
     routine: PgRoutineRow,
@@ -505,11 +544,7 @@ export class ReportesPgService implements OnModuleInit, OnModuleDestroy {
     const sql = `CALL ${quoteIdentifier(schemaName)}.${quoteIdentifier(routineName)}(${sqlArgs.join(', ')})`;
     const result = await client.query(sql, values);
     const row = result.rows?.[0] || null;
-    const cursorNames = row
-      ? Object.values(row).filter(
-          (value) => typeof value === 'string' && value.trim() !== '',
-        )
-      : [];
+    const cursorNames = this.resolveProcedureCursorNames(routine, row);
 
     if (!cursorNames.length) {
       return normalizeResult(result);

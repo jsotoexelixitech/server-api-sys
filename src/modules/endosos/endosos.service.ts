@@ -15,12 +15,16 @@ import {
   AUTO_IFRECUENCIA_VALUES,
   AutoIfrecuenciaCode,
 } from '../valrep/constants/auto-ifrecuencia.constants';
+import { RmsGatewayService } from '../rms-gateway/rms-gateway.service';
 
 @Injectable()
 export class EndososService {
   private readonly logger = new Logger(EndososService.name);
 
-  constructor(private readonly db: MssqlService) {}
+  constructor(
+    private readonly db: MssqlService,
+    private readonly rmsGateway: RmsGatewayService,
+  ) {}
 
   /**
    * Búsqueda general de pólizas con filtros y paginado.
@@ -65,6 +69,7 @@ export class EndososService {
 
   /**
    * Consulta detallada de póliza por número de póliza (cnpoliza).
+   * El SP de autos hace join a mamarca; en salud caemos a adpoliza+maclient.
    */
   async getPolizaByCnpoliza(cnpoliza: string) {
     try {
@@ -83,7 +88,13 @@ export class EndososService {
       return { poliza, certificado, recibos };
     } catch (err: any) {
       if (err instanceof NotFoundException) throw err;
-      this.logger.error(`Error en getPolizaByCnpoliza: ${err.message}`, err.stack);
+      const msg = String(err?.message ?? '');
+      this.logger.warn(`getPolizaByCnpoliza SP falló (${msg}); fallback personas`);
+      const row = await this.rmsGateway.loadPolizaRow(cnpoliza);
+      if (row) {
+        return { poliza: row, certificado: null, recibos: [] };
+      }
+      this.logger.error(`Error en getPolizaByCnpoliza: ${msg}`, err.stack);
       throw new InternalServerErrorException(err.message || 'Error al obtener detalle de la póliza.');
     }
   }
@@ -190,6 +201,13 @@ export class EndososService {
       req.input('ifrecuencia', T.Char(1), ifrecuencia);
       req.input('ncuotas', T.Int, ncuotas);
       req.input('cusuario', T.Int, dto.cusuario || 1);
+      req.input('coberAdicional', T.VarChar(2), dto.coberAdicional || null);
+      req.input('msumaaseg', T.Numeric(18, 2), dto.msumaaseg ?? null);
+      req.input('tasaCa', T.Numeric(18, 2), dto.tasaCa ?? 0);
+      req.input('tasaPt', T.Numeric(18, 2), dto.tasaPt ?? 0);
+      req.input('tasaPp', T.Numeric(18, 2), dto.tasaPp ?? 0);
+      req.input('precargorcv', T.Numeric(18, 2), dto.precargorcv ?? 0);
+      req.input('ntoneladas', T.Int, dto.ntoneladas ?? 0);
       req.output('pCnrecibo', T.NVarChar(30));
       req.output('pCrecibo', T.Numeric(19, 0));
       req.output('pSuccess', T.Bit);
@@ -243,6 +261,7 @@ export class EndososService {
         throw new BadRequestException(message || 'Error al anular póliza');
       }
 
+      this.rmsGateway.notifyPolizaActualizada(dto.cnpoliza);
       return { status: true, message, cnpoliza: dto.cnpoliza };
     } catch (err: any) {
       if (err instanceof BadRequestException) throw err;
@@ -272,6 +291,7 @@ export class EndososService {
         throw new BadRequestException(message || 'Error al reactivar la póliza');
       }
 
+      this.rmsGateway.notifyPolizaActualizada(dto.cnpoliza);
       return { status: true, message, cnpoliza: dto.cnpoliza };
     } catch (err: any) {
       if (err instanceof BadRequestException) throw err;
@@ -311,12 +331,36 @@ export class EndososService {
         throw new BadRequestException(message || 'Error al cambiar datos de la póliza');
       }
 
+      this.rmsGateway.notifyPolizaActualizada(
+        dto.cnpoliza,
+        this.patchPersonasEndoso(dto),
+      );
       return { status: true, message, cnpoliza: dto.cnpoliza };
     } catch (err: any) {
       if (err instanceof BadRequestException) throw err;
       this.logger.error(`Error en cambioDatosPoliza: ${err.message}`, err.stack);
       throw new InternalServerErrorException(err.message || 'Fallo al cambiar datos de la póliza.');
     }
+  }
+
+  /** El SP a veces no reescribe maclient.xcliente; RMS debe usar el nombre del endoso. */
+  private patchPersonasEndoso(dto: CambioDatosPolizaDto): Record<string, unknown> {
+    const tipo = String(dto.tipoCambio ?? '').trim().toUpperCase();
+    const icedula = String(dto.icedula || 'V').trim().charAt(0) || 'V';
+    const cid = `${icedula}-${dto.cci_rif}`;
+    const nombre = String(dto.xcliente ?? '').trim();
+    if (tipo === 'TOMADOR') {
+      return { xtomador: nombre, cid_tomador: cid, icedula_tomador: icedula };
+    }
+    if (tipo === 'BENEFICIARIO') {
+      return { xbeneficiario: nombre, cid_ben: cid, icedula_ben: icedula };
+    }
+    return {
+      xasegurado: nombre,
+      xtitular: nombre,
+      cid_aseg: cid,
+      icedula_aseg: icedula,
+    };
   }
 
   /**

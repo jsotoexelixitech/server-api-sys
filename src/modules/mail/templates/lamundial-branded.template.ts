@@ -121,17 +121,22 @@ export function buildLamundialBrandedEmail(params: LamundialBrandedParams): Buil
 <html lang="es">
 <head>
   <meta charset="utf-8">
+  <meta http-equiv="Content-Type" content="text/html; charset=utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>${escapeHtml(params.subject)}</title>
 </head>
-<body style="margin:0;padding:24px 12px;background:#f3f4f6;font-family:Arial,Helvetica,sans-serif;color:${BRAND_BLUE};">
+<body style="margin:0;padding:24px 12px;background:#f3f4f6;font-family:Arial,Helvetica,sans-serif;color:#111111;">
+  <p style="margin:0 0 16px;font-size:16px;line-height:1.6;color:#111111;">
+    ${escapeHtml(params.intro)}
+  </p>
   <table role="presentation" width="100%" cellspacing="0" cellpadding="0">
     <tr>
       <td align="center">
         <table role="presentation" width="560" cellspacing="0" cellpadding="0" style="max-width:560px;width:100%;background:#ffffff;">
           <tr>
             <td style="padding:28px 32px 20px;text-align:center;">
-              <img src="${LOGO_URL}" alt="La Mundial de Seguros" style="width:220px;max-width:72%;height:auto;border:0;display:inline-block;">
+              <p style="margin:0 0 12px;font-size:18px;font-weight:800;color:${BRAND_BLUE};">La Mundial de Seguros</p>
+              <img src="${LOGO_URL}" alt="La Mundial de Seguros" width="220" style="width:220px;max-width:72%;height:auto;border:0;display:inline-block;">
             </td>
           </tr>
           <tr>
@@ -157,7 +162,7 @@ export function buildLamundialBrandedEmail(params: LamundialBrandedParams): Buil
           </tr>
           <tr>
             <td style="padding:18px 32px 0;text-align:center;">
-              <p style="margin:0;font-size:15px;line-height:1.7;color:${BRAND_BLUE};">${escapeHtml(params.intro)}</p>
+              <p style="margin:0;font-size:15px;line-height:1.7;color:#111111;">${escapeHtml(params.intro)}</p>
             </td>
           </tr>
           ${fieldsHtml}

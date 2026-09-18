@@ -89,4 +89,56 @@ export class CrearReciboEndosoDto {
   @Type(() => Number)
   @IsInt()
   fmespoliza?: number;
+
+  @ApiPropertyOptional({
+    example: 'CA',
+    description: 'Modalidad casco para el tarifador: RC solo RCV, CA/PT/PP conservan casco existente.',
+    enum: ['RC', 'CA', 'PT', 'PP'],
+  })
+  @IsOptional()
+  @IsString()
+  @IsIn(['RC', 'CA', 'PT', 'PP'])
+  coberAdicional?: string;
+
+  @ApiPropertyOptional({ example: 30816, description: 'Suma asegurada del vehículo / casco' })
+  @IsOptional()
+  @Type(() => Number)
+  @IsNumber()
+  @Min(0)
+  msumaaseg?: number;
+
+  @ApiPropertyOptional({ example: 2.4, description: 'Tasa cobertura amplia (%)' })
+  @IsOptional()
+  @Type(() => Number)
+  @IsNumber()
+  @Min(0)
+  tasaCa?: number;
+
+  @ApiPropertyOptional({ example: 0, description: 'Tasa pérdida total (%)' })
+  @IsOptional()
+  @Type(() => Number)
+  @IsNumber()
+  @Min(0)
+  tasaPt?: number;
+
+  @ApiPropertyOptional({ example: 0, description: 'Tasa pérdida parcial (%)' })
+  @IsOptional()
+  @Type(() => Number)
+  @IsNumber()
+  @Min(0)
+  tasaPp?: number;
+
+  @ApiPropertyOptional({ example: 0, description: 'Recargo RCV (%)' })
+  @IsOptional()
+  @Type(() => Number)
+  @IsNumber()
+  @Min(0)
+  precargorcv?: number;
+
+  @ApiPropertyOptional({ example: 0, description: 'Toneladas del vehículo' })
+  @IsOptional()
+  @Type(() => Number)
+  @IsInt()
+  @Min(0)
+  ntoneladas?: number;
 }
