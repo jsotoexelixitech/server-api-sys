@@ -86,6 +86,8 @@ const ROUTE_LABELS: Record<string, string> = {
   'GET /api/endosos/polizas/:param': 'Detalle de póliza para endoso',
   'POST /api/endosos/recibos/anular': 'Anular recibo',
   'POST /api/endosos/recibos': 'Generar recibo de endoso',
+  'POST /api/endoso-recibos/crearRecibo':
+    'Generar recibo de endoso (alias legacy)',
   'POST /api/endosos/poliza/anular': 'Anular póliza',
   'POST /api/endosos/poliza/reactivar': 'Reactivar póliza anulada',
   'POST /api/endosos/poliza/datos': 'Actualizar datos de póliza',
