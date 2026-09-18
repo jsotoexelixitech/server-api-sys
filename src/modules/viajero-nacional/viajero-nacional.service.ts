@@ -1,4 +1,4 @@
-import { Injectable, Logger } from '@nestjs/common';
+import { Injectable, Logger, BadRequestException } from '@nestjs/common';
 import { ValrepService } from '../valrep/valrep.service';
 import { PersonasService } from '../personas/personas.service';
 import { CotizacionPerDto } from '../personas/dto/cotizacion-per.dto';
@@ -10,6 +10,10 @@ import {
 import { GetViaje3PlanDto } from './dto/get-viaje3-plan.dto';
 import { CotizacionViaje3Dto } from './dto/cotizacion-viaje3.dto';
 import { EmitViaje3Dto } from './dto/emit-viaje3.dto';
+import {
+  flattenMarketplaceCanal,
+  normalizeViajeroBeneficiarios,
+} from './viajero-canal.mapper';
 
 @Injectable()
 export class ViajeroNacionalService {
@@ -26,7 +30,7 @@ export class ViajeroNacionalService {
     return {
       ...plan,
       fdesde,
-      fhasta: this.addInclusiveDays(fdesde, plan.ndias),
+      fhasta: this.addCoverageDays(fdesde, plan.ndias),
     };
   }
 
@@ -96,28 +100,36 @@ export class ViajeroNacionalService {
   /**
    * Fija ramo, plan, frecuencia y vigencia del contrato.
    * El cliente no puede emitir otro plan por esta API.
+   * Canal: aplana `canal` / alias planos hacia lo que ya consume emisión de personas.
    */
   private lockEmissionFields(
     body: Record<string, unknown>,
     plan: ViajeroRiesgosPlan,
   ): Record<string, unknown> {
-    const femision = String(body['fecha_emision'] ?? body['femision'] ?? '').trim();
+    const withCanal = normalizeViajeroBeneficiarios(this.flattenCanal(body));
+    const femision = String(withCanal['fecha_emision'] ?? withCanal['femision'] ?? '').trim();
     const fdesde = this.resolveFdesde(
-      String(body['fdesde'] ?? femision ?? '').trim() || undefined,
+      String(withCanal['fdesde'] ?? femision ?? '').trim() || undefined,
     );
+    this.assertCoverageDays(withCanal, plan, fdesde);
     return {
-      ...body,
+      ...withCanal,
       cramo: plan.cramo,
       plan: plan.cplan,
       cplan: plan.cplan,
       frecuencia: plan.ifrecuencia,
       ifrecuencia: plan.ifrecuencia,
-      cmoneda: body['cmoneda'] ?? plan.cmoneda,
+      cmoneda: withCanal['cmoneda'] ?? plan.cmoneda,
       fdesde,
-      fhasta: String(body['fhasta'] ?? '').trim() || this.addInclusiveDays(fdesde, plan.ndias),
+      fhasta: this.addCoverageDays(fdesde, plan.ndias),
       ndias: plan.ndias,
       fecha_emision: femision || fdesde,
     };
+  }
+
+  /** Prioridad: planos → `canal` → `gestor` → atajo marketplace `centidad`/`citem`/`csub`. */
+  private flattenCanal(body: Record<string, unknown>): Record<string, unknown> {
+    return flattenMarketplaceCanal(body);
   }
 
   private resolveFdesde(value?: string): string {
@@ -126,10 +138,54 @@ export class ViajeroNacionalService {
     return new Date().toISOString().slice(0, 10);
   }
 
-  /** Vigencia inclusiva: ndias desde fdesde → fhasta = fdesde + (ndias - 1). */
-  private addInclusiveDays(fdesde: string, ndias: number): string {
+  /**
+   * Rechaza ndias o vigencia distinta a 3 o 7 según el endpoint.
+   * Si no envían ndias/fhasta, el servidor fija la cobertura correcta.
+   */
+  private assertCoverageDays(
+    body: Record<string, unknown>,
+    plan: ViajeroRiesgosPlan,
+    fdesde: string,
+  ): void {
+    const sentNdias = this.toOptionalInt(body['ndias']);
+    if (sentNdias != null && sentNdias !== plan.ndias) {
+      throw new BadRequestException(
+        `Esta API solo emite ${plan.ndias} días (${plan.xplan}). Recibido ndias=${sentNdias}.`,
+      );
+    }
+    const fhastaRaw = String(body['fhasta'] ?? '').trim();
+    if (!fhastaRaw) return;
+    const fhasta = fhastaRaw.slice(0, 10);
+    const sentDays = this.diffCoverageDays(fdesde, fhasta);
+    if (sentDays !== plan.ndias) {
+      throw new BadRequestException(
+        `Esta API solo emite ${plan.ndias} días (${plan.xplan}). Vigencia ${fdesde}–${fhasta} = ${sentDays} días.`,
+      );
+    }
+  }
+
+  private toOptionalInt(value: unknown): number | null {
+    if (value === undefined || value === null || value === '') return null;
+    const n = typeof value === 'number' ? value : Number.parseInt(String(value), 10);
+    return Number.isFinite(n) ? n : null;
+  }
+
+  private diffCoverageDays(fdesde: string, fhasta: string): number {
+    const from = Date.parse(`${fdesde}T00:00:00Z`);
+    const to = Date.parse(`${fhasta}T00:00:00Z`);
+    if (!Number.isFinite(from) || !Number.isFinite(to)) {
+      throw new BadRequestException('fdesde y fhasta deben ser fechas YYYY-MM-DD.');
+    }
+    if (to < from) {
+      throw new BadRequestException('fhasta no puede ser anterior a fdesde.');
+    }
+    return Math.round((to - from) / 86400000);
+  }
+
+  /** fhasta = fdesde + ndias (07→14 = 7 días corridos). */
+  private addCoverageDays(fdesde: string, ndias: number): string {
     const d = new Date(`${fdesde}T00:00:00Z`);
-    d.setUTCDate(d.getUTCDate() + ndias - 1);
+    d.setUTCDate(d.getUTCDate() + ndias);
     return d.toISOString().slice(0, 10);
   }
 }

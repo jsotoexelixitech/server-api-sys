@@ -9,6 +9,7 @@ import { MssqlService } from '../../database/mssql.service';
 import { parseSPError } from '../../common/helpers/sp-error.helper';
 import {
   SP_BUSCA_FRECUENCIA_PLAN_NEXUS,
+  SP_BUSCA_PLAN_PRODUCTO_NEXUS,
   SP_CALCULO_AUTO_NEXUS,
   SP_GET_SUSTANCIAS_NEXUS,
 } from '../../config/sis2000-sp.constants';
@@ -340,6 +341,13 @@ export class ValrepService {
     return (
       process.env.MSSQL_SP_BUSCA_FRECUENCIA_PLAN_NEXUS?.trim() ||
       SP_BUSCA_FRECUENCIA_PLAN_NEXUS
+    );
+  }
+
+  private spBuscaPlanProductoNexusName(): string {
+    return (
+      process.env.MSSQL_SP_BUSCA_PLAN_PRODUCTO_NEXUS?.trim() ||
+      SP_BUSCA_PLAN_PRODUCTO_NEXUS
     );
   }
 
@@ -956,10 +964,11 @@ export class ValrepService {
     }
   }
 
-  /** Paso 2 funerario — spBuscaPlanProducto + parentescos vía spBuscaDetallePlan. */
+  /** Paso 2 funerario — sp_busca_plan_producto_nexus + parentescos / nmax_dep. */
   async getPlanesProducto(body: GetPlanesProductoDto): Promise<PlanesQueryResult> {
     const cproducto = String(body.cproducto).trim();
     const { citem, centidad } = this.resolveEntidadItem(body);
+    const spName = this.spBuscaPlanProductoNexusName();
 
     try {
       const T = this.db.types;
@@ -969,7 +978,7 @@ export class ValrepService {
       req.input('centidad', T.Char(1), centidad);
       req.output('mensaje', T.NVarChar(60), '');
 
-      const result = await req.execute('spBuscaPlanProducto');
+      const result = await req.execute(spName);
       const mensaje: string = result.output['mensaje'] ?? '';
       const recordset = (result.recordset ?? []) as PlanItem[];
       if (!recordset.length) {
@@ -980,13 +989,13 @@ export class ValrepService {
         .map((row) => String(row['cplan'] ?? '').trim())
         .filter(Boolean);
       this.logger.log(
-        `spBuscaPlanProducto cproducto=${cproducto} centidad=${centidad} citem=${citem} raw=${rawCodes.join(',')}`,
+        `${spName} cproducto=${cproducto} centidad=${centidad} citem=${citem} raw=${rawCodes.join(',')}`,
       );
 
       let planes = await this.enrichWithNmaxDep(
         await this.enrichWithParentescos(recordset),
       );
-      if (mensaje) this.logger.log(`spBuscaPlanProducto: ${mensaje}`);
+      if (mensaje) this.logger.log(`${spName}: ${mensaje}`);
 
       return this.applyCsubitemExclusion(planes, {
         csubitem: body.csubitem,
@@ -996,7 +1005,7 @@ export class ValrepService {
     } catch (err) {
       if (err instanceof BadRequestException) throw err;
       const msg = err instanceof Error ? err.message : String(err);
-      this.logger.error(`getPlanesProducto cproducto=${cproducto}: ${msg}`);
+      this.logger.error(`getPlanesProducto ${spName} cproducto=${cproducto}: ${msg}`);
       throw new InternalServerErrorException(
         'Error al obtener planes del producto.',
       );

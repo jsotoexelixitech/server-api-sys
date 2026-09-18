@@ -24,8 +24,8 @@ export class PersonasController {
   @ApiOperation({
     summary: 'Planes funerarios del canal SSO (ramo 9)',
     description:
-      'Lista planes como SysIP getPlanV2: spBuscaPlanProducto (cproducto + centidad + citem). ' +
-      'cproductor puede ir null. Añade parentescos y tope de asegurados.',
+      'Lista planes como SysIP getPlanV2: sp_busca_plan_producto_nexus (cproducto + centidad + citem). ' +
+      'Resuelve gestor marketplace (U → C/P/G). Añade parentescos y tope de asegurados.',
   })
   @ApiBody({ type: GetPlanesPerDto })
   @ApiResponse({

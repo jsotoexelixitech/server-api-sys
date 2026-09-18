@@ -16,7 +16,9 @@ import { CreateEmissionPersonDto } from './dto/create-emission-person.dto';
 import { parseSPError } from '../../common/helpers/sp-error.helper';
 import { buildPolicyPdfUrl } from '../../common/helpers/policy-url.helper';
 import {
+  SP_BUSCA_PLAN_PRODUCTO_NEXUS,
   SP_CALCULO_VIAJERO_PRORRATA,
+  SP_CONTADOR_NEXUS,
   SP_PRE_EMISION_PERSONAS,
 } from '../../config/sis2000-sp.constants';
 import {
@@ -24,6 +26,7 @@ import {
   assertViajeroCotizacion,
   assertViajeroEmission,
   assertViajeroProrrataCotizacion,
+  isViajeDiasPlan,
   isViajeLocalPlan,
   isViajeroPlan,
   isViajeroProrrataPlan,
@@ -93,6 +96,80 @@ export class PersonasService {
     if (value == null || String(value).trim() === '') return null;
     const n = parseInt(String(value), 10);
     return Number.isNaN(n) ? null : n;
+  }
+
+  /**
+   * Sucursal que usa el pre-SP de personas (macanalalt / maproduc).
+   * Solo lectura; VIAJE3/VIAJE4 necesitan el mismo csucur que Sis2000.
+   */
+  private async resolvePersonasSucursal(
+    ccanalalt: number | null,
+    cproductor: number,
+  ): Promise<number> {
+    const T = this.db.types;
+    const req = this.db.request();
+    if (ccanalalt != null) {
+      req.input('ccanalalt', T.Int, ccanalalt);
+      const result = await req.query(`
+        SELECT TOP 1 COALESCE(csucur, 1) AS csucur
+        FROM macanalalt
+        WHERE ccanalalt = @ccanalalt
+      `);
+      return Number(result.recordset?.[0]?.['csucur'] ?? 1) || 1;
+    }
+    req.input('cproductor', T.Int, cproductor);
+    const result = await req.query(`
+      SELECT TOP 1 COALESCE(csucur, 1) AS csucur
+      FROM maproduc
+      WHERE cproductor = @cproductor
+    `);
+    return Number(result.recordset?.[0]?.['csucur'] ?? 1) || 1;
+  }
+
+  /** Numeración VIAJE3/VIAJE4 (ramo 25 → POLIZA). */
+  private async allocViajeDiasCounter(opts: {
+    cramo: number;
+    csucur: number;
+    fdesde: string;
+  }): Promise<{ cpoliza: number; cnpoliza: string; cproces: number }> {
+    const T = this.db.types;
+    const req = this.db.request();
+    req.input('cramo', T.Int, opts.cramo);
+    req.input('csucur', T.Numeric(4, 0), opts.csucur);
+    req.input('fdesde', T.Date, new Date(String(opts.fdesde).slice(0, 10)));
+    const result = await req.query(`
+      DECLARE @cpoliza NUMERIC(19);
+      DECLARE @cnpoliza NVARCHAR(17);
+      DECLARE @crecibo NUMERIC(19);
+      DECLARE @cnrecibo NVARCHAR(17);
+      DECLARE @cproces NUMERIC(13);
+
+      EXEC ${SP_CONTADOR_NEXUS}
+        @cpoliza OUTPUT,
+        @cnpoliza OUTPUT,
+        @crecibo OUTPUT,
+        @cnrecibo OUTPUT,
+        @cproces OUTPUT,
+        @csucur,
+        @fdesde,
+        @cramo,
+        'POLIZA';
+
+      SELECT @cpoliza AS cpoliza, @cnpoliza AS cnpoliza, @cproces AS cproces;
+    `);
+    const row = result.recordset?.[0];
+    const cnpoliza = String(row?.['cnpoliza'] ?? '').trim();
+    const cpoliza = Number(row?.['cpoliza']);
+    const cproces = Number(row?.['cproces']);
+    if (!cnpoliza || !Number.isFinite(cpoliza) || !Number.isFinite(cproces)) {
+      throw new InternalServerErrorException(
+        `Viajero 3/7 días: ${SP_CONTADOR_NEXUS} no devolvió cpoliza/cnpoliza/cproces.`,
+      );
+    }
+    this.logger.log(
+      `allocViajeDiasCounter: EXEC ${SP_CONTADOR_NEXUS} POLIZA cramo=${opts.cramo} csucur=${opts.csucur} cnpoliza=${cnpoliza}`,
+    );
+    return { cpoliza, cnpoliza, cproces };
   }
 
   /** Flags char(1) que espera el SP de pre-emisión personas. */
@@ -232,21 +309,28 @@ export class PersonasService {
   ): string | null {
     if (!lista.length) return null;
     const mapped = lista.map((b) => ({
-      tipo_cedula_beneficiario: String(b.icedula_beneficiario ?? b.tipoDoc ?? 'V').charAt(0),
-      rif_beneficiario: this.intField(b.xrif_beneficiario ?? b.identificacion),
-      nombre_beneficiario: b.xnombre_beneficiario ?? b.nombre ?? null,
-      apellido_beneficiario: b.xapellido_beneficiario ?? b.apellido ?? null,
+      tipo_cedula_beneficiario: String(
+        b.icedula_beneficiario ?? b.tipo_cedula_beneficiario ?? b.tipoDoc ?? 'V',
+      ).charAt(0),
+      rif_beneficiario: this.intField(
+        b.xrif_beneficiario ?? b.rif_beneficiario ?? b.identificacion,
+      ),
+      nombre_beneficiario: b.xnombre_beneficiario ?? b.nombre_beneficiario ?? b.nombre ?? null,
+      apellido_beneficiario: b.xapellido_beneficiario ?? b.apellido_beneficiario ?? b.apellido ?? null,
       sexo_beneficiario: String(
-        b.isexo_beneficiario ?? (b.sexo ? String(b.sexo)[0].toUpperCase() : 'M'),
+        b.isexo_beneficiario ?? b.sexo_beneficiario ?? (b.sexo ? String(b.sexo)[0].toUpperCase() : 'M'),
       ).charAt(0),
       estado_civil_beneficiario: String(b.iestado_civil_beneficiario ?? 'S').charAt(0),
       fnac_beneficiario: b.fnac_beneficiario ?? b.fechaNac ?? null,
-      nparentesco_beneficiario: getPar(b.nparentesco_beneficiario ?? b.parentesco),
+      nparentesco_beneficiario: getPar(
+        b.nparentesco_beneficiario ?? b.cparen_beneficiario ?? b.parentesco,
+      ),
       ...this.mapBeneficiarioGeo(b),
       direccion_beneficiario:
         b.direccion_beneficiario ?? b.xdireccion_beneficiario ?? b.direccion ?? null,
-      telefono_beneficiario: b.xtelefono_beneficiario ?? b.telefono ?? null,
-      correo_beneficiario: b.xcorreo_beneficiario ?? b.email ?? null,
+      telefono_beneficiario:
+        b.xtelefono_beneficiario ?? b.telefono_beneficiario ?? b.telefono ?? null,
+      correo_beneficiario: b.xcorreo_beneficiario ?? b.correo_beneficiario ?? b.email ?? null,
       pporce_beneficiario: Number(b.pporce_beneficiario ?? b.pporcen ?? b.pporce) || 0,
     }));
     return JSON.stringify(mapped);
@@ -1207,6 +1291,26 @@ export class PersonasService {
         const preEmisionSp = SP_PRE_EMISION_PERSONAS;
         this.logger.log(`=== INICIO EMISION LOCAL SP ${preEmisionSp} ===`);
 
+        let cpolizaVal: number | null = null;
+        let cnpolizaVal: string | null = null;
+        let cprocesVal: number | null = null;
+        if (isViajeDiasPlan(cramoEmision, planEmision)) {
+          const cproductorVal =
+            this.intField(b['productor'] ?? canal['cproductor']) ?? 80080;
+          const csucur = await this.resolvePersonasSucursal(
+            this.intField(ccanalalt),
+            cproductorVal,
+          );
+          const nums = await this.allocViajeDiasCounter({
+            cramo: cramoEmision,
+            csucur,
+            fdesde,
+          });
+          cpolizaVal = nums.cpoliza;
+          cnpolizaVal = nums.cnpoliza;
+          cprocesVal = nums.cproces;
+        }
+
         const req = this.db.request();
         const params: Record<string, { type: unknown; value: unknown }> = {
           cnpoliza_rel: { type: T.NVarChar(30), value: b['poliza'] ? String(b['poliza']) : null },
@@ -1274,9 +1378,9 @@ export class PersonasService {
             value: String(canal['ifuente_api'] ?? canal['ifuente'] ?? 'API').slice(0, 10),
           },
           fingreso: { type: T.DateTime, value: new Date() },
-          cpoliza: { type: T.Numeric(19, 0), value: null },
-          cnpoliza: { type: T.VarChar(30), value: null },
-          cproces: { type: T.Numeric(13, 0), value: null },
+          cpoliza: { type: T.Numeric(19, 0), value: cpolizaVal },
+          cnpoliza: { type: T.VarChar(30), value: cnpolizaVal },
+          cproces: { type: T.Numeric(13, 0), value: cprocesVal },
           asegurados: {
             type: T.NVarChar(5000),
             value: this.mapAseguradosForSp(asegurados as Record<string, unknown>[], getPar),
@@ -1292,7 +1396,7 @@ export class PersonasService {
         );
 
         this.logger.log(
-          `createEmissionPerson: EXEC ${preEmisionSp} plan=${b['plan']} rif=${b['rif_titular']}`,
+          `createEmissionPerson: EXEC ${preEmisionSp} plan=${b['plan']} rif=${b['rif_titular']}${cnpolizaVal ? ` cnpoliza=${cnpolizaVal}` : ''}`,
         );
 
         let spResult: {

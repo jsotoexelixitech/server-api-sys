@@ -10,6 +10,7 @@ import { MssqlService } from '../../database/mssql.service';
 import { formatValidateAutoError, parseSPError } from '../../common/helpers/sp-error.helper';
 import { buildPolicyPdfUrl, resolveClubArysPdfUrl } from '../../common/helpers/policy-url.helper';
 import {
+  SP_CONTADOR_NEXUS,
   SP_PRE_EMISION_AUTO_RCV,
   SP_REPAIR_RCV_COBERTURAS,
   SP_SEARCH_AUTOMOBILE_PROPIETARY,
@@ -160,6 +161,33 @@ export class EmissionsService {
       return result.recordset[0];
     }
     return {};
+  }
+
+  /** cpoliza + casegurado para activate tarjeta RCV post-emisión. */
+  private async lookupPolicyTarjetaKeys(
+    cnpoliza: string,
+  ): Promise<{ cpoliza?: number; casegurado?: number }> {
+    const poliza = String(cnpoliza ?? '').trim();
+    if (!poliza) return {};
+
+    const T = this.db.types;
+    const req = this.db.request();
+    req.input('cnpoliza', T.NVarChar(30), poliza);
+    const result = await req.query(`
+      SELECT TOP 1 p.cpoliza, p.casegurado
+      FROM adpoliza p
+      WHERE RTRIM(p.cnpoliza) = RTRIM(@cnpoliza)
+      ORDER BY p.fingreso DESC
+    `);
+    const row = result.recordset?.[0] as Record<string, unknown> | undefined;
+    if (!row) return {};
+
+    const cpoliza = Number(row['cpoliza']);
+    const casegurado = Number(row['casegurado']);
+    return {
+      ...(Number.isFinite(cpoliza) && cpoliza > 0 ? { cpoliza } : {}),
+      ...(Number.isFinite(casegurado) && casegurado > 0 ? { casegurado } : {}),
+    };
   }
 
   /** Fallback: última póliza/recibo por placa tras emisión RCV2. */
@@ -874,34 +902,49 @@ export class EmissionsService {
     }
   }
 
-  /** Sincroniza macontadores POL_VEH con el máximo cnpoliza conocido (adpóliza + cola). */
-  private async syncPolVehCounter(cramo: number): Promise<void> {
+  /**
+   * Avanza el contador POL_VEH con `sp_contador_nexus` (mismo EXEC que el pre-SP RCV).
+   * No hace UPDATE directo a macontadores.
+   */
+  private async syncPolVehCounter(
+    cramo: number,
+    fdesde?: string | null,
+    csucur = 1,
+  ): Promise<void> {
+    const T = this.db.types;
     const req = this.db.request();
-    req.input('cramo', this.db.types.Int, cramo);
+    req.input('cramo', T.Int, cramo);
+    req.input('csucur', T.Numeric(4, 0), csucur);
+    req.input(
+      'fdesde',
+      T.Date,
+      fdesde ? new Date(String(fdesde).slice(0, 10)) : new Date(),
+    );
     const result = await req.query(`
-      DECLARE @max BIGINT;
+      DECLARE @cpoliza NUMERIC(19);
+      DECLARE @cnpoliza NVARCHAR(17);
+      DECLARE @crecibo NUMERIC(19);
+      DECLARE @cnrecibo NVARCHAR(17);
+      DECLARE @cproces NUMERIC(13);
 
-      SELECT @max = MAX(TRY_CAST(RIGHT(cnpoliza, 10) AS BIGINT))
-      FROM adpoliza
-      WHERE cramo = @cramo AND cnpoliza LIKE CAST(@cramo AS VARCHAR) + '-%';
+      EXEC ${SP_CONTADOR_NEXUS}
+        @cpoliza OUTPUT,
+        @cnpoliza OUTPUT,
+        @crecibo OUTPUT,
+        @cnrecibo OUTPUT,
+        @cproces OUTPUT,
+        @csucur,
+        @fdesde,
+        @cramo,
+        'POL_VEH';
 
-      DECLARE @maxPending BIGINT;
-      SELECT @maxPending = MAX(TRY_CAST(RIGHT(cnpoliza, 10) AS BIGINT))
-      FROM TMEMISION_AUTOMOVIL_RCV2
-      WHERE cramo = @cramo
-        AND cnpoliza IS NOT NULL
-        AND LTRIM(RTRIM(cnpoliza)) <> ''
-        AND cnpoliza LIKE CAST(@cramo AS VARCHAR) + '-%';
-
-      IF @maxPending > ISNULL(@max, 0) SET @max = @maxPending;
-
-      IF @max IS NOT NULL
-        UPDATE macontadores SET qcontador = @max WHERE ccontador = 'POL_VEH';
-
-      SELECT ISNULL(qcontador, 0) AS qcontador FROM macontadores WHERE ccontador = 'POL_VEH';
+      SELECT @cpoliza AS cpoliza, @cnpoliza AS cnpoliza, @crecibo AS crecibo,
+             @cnrecibo AS cnrecibo, @cproces AS cproces;
     `);
-    const q = result.recordset?.[0]?.['qcontador'];
-    this.logger.log(`syncPolVehCounter: cramo=${cramo} qcontador=${q ?? '?'}`);
+    const row = result.recordset?.[0];
+    this.logger.log(
+      `syncPolVehCounter: EXEC ${SP_CONTADOR_NEXUS} cramo=${cramo} cnpoliza=${row?.['cnpoliza'] ?? '?'}`,
+    );
   }
 
   private async bumpPolVehCounter(): Promise<void> {
@@ -1473,9 +1516,9 @@ export class EmissionsService {
     );
     this.logger.log(`emitLocal SP params ${preEmisionSp}: ${JSON.stringify(spPayload)}`);
 
-    await this.syncPolVehCounter(
-      this.intField(this.pick(b, 'cramo', 'ramo')) ?? defaultRamo,
-    );
+    const cramoEmit = this.intField(this.pick(b, 'cramo', 'ramo')) ?? defaultRamo;
+    const fdesdeEmit =
+      this.dateField(b['fdesde']) ?? this.dateField(b['fecha_emision'] ?? femision);
 
     let spResult: {
       recordset?: Record<string, unknown>[];
@@ -1487,10 +1530,8 @@ export class EmissionsService {
       const msg = parseSPError(err);
       this.throwIfBinacEmissionBlockedBySis2000(b, msg);
       if (!this.isCounterCollisionMessage(msg)) throw err;
-      this.logger.warn(`emitLocal: contador POL_VEH desfasado (${msg}); reintento tras sync`);
-      await this.syncPolVehCounter(
-        this.intField(this.pick(b, 'cramo', 'ramo')) ?? defaultRamo,
-      );
+      this.logger.warn(`emitLocal: contador POL_VEH desfasado (${msg}); reintento tras ${SP_CONTADOR_NEXUS}`);
+      await this.syncPolVehCounter(cramoEmit, fdesdeEmit);
       const retryReq = this.db.request();
       Object.entries(params).forEach(([key, field]) =>
         retryReq.input(key, (field as { type: unknown }).type, (field as { value: unknown }).value),
@@ -1556,6 +1597,8 @@ export class EmissionsService {
 
     this.scheduleArysMembershipRegistration(cnpoliza, b);
 
+    const tarjetaKeys = await this.lookupPolicyTarjetaKeys(cnpoliza);
+
     return {
       message: 'Póliza generada exitosamente',
       cnpoliza,
@@ -1565,6 +1608,7 @@ export class EmissionsService {
       ncuota,
       fanopol,
       fmespol,
+      ...tarjetaKeys,
     };
   }
 

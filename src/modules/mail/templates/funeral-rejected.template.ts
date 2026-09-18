@@ -19,7 +19,7 @@ export function buildFuneralRejectedEmail(
   const reason = params.reason?.trim() || '';
 
   return buildLamundialBrandedEmail({
-    subject: `La Mundial - Solicitud funerario no aprobada - ${planName}`,
+    subject: `La Mundial · Solicitud funerario no aprobada — ${planName}`,
     eyebrow: 'Seguro Funerario',
     title: `Estimado ${tomador.toUpperCase()}.`,
     intro:
