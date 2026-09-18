@@ -77,6 +77,7 @@ export function inferScopeFromPath(normalizedPath: string): string | undefined {
   if (/\/api\/v1\/canal\//i.test(path)) return 'catalog:read';
   if (/\/api\/v1\/inma\//i.test(path)) return 'catalog:read';
   if (/\/api\/(?:v1\/)?endosos\//i.test(path)) return 'endosos:write';
+  if (/\/api\/(?:v1\/)?endoso-recibos\//i.test(path)) return 'endosos:write';
   if (/\/api\/v1\/report\//i.test(path)) return 'report:write';
   if (/\/api\/v1\/dynamic-schemas\//i.test(path)) return 'report:write';
   if (/\/api\/v1\/siniestros\//i.test(path)) return 'report:write';
@@ -161,7 +162,8 @@ function defaultScopeMeta(
   if (scopeId === 'endosos:write') {
     return {
       label: 'Endosos',
-      description: 'Endpoints bajo /api/endosos/ o /api/v1/endosos/',
+      description:
+        'Endpoints bajo /api/endosos/, /api/v1/endosos/ o /api/endoso-recibos/',
     };
   }
 

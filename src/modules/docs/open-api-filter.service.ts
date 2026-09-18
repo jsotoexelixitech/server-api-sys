@@ -44,6 +44,7 @@ export class OpenApiFilterService {
       if (this.isAlwaysHidden(pathKey)) continue;
 
       const nextPathItem: Record<string, unknown> = {};
+      let hasHttpOp = false;
 
       for (const [method, operation] of Object.entries(pathItem)) {
         if (!HTTP_METHODS.has(method)) {
@@ -57,12 +58,13 @@ export class OpenApiFilterService {
           this.canViewOperation(grantedScopes, method, pathKey, scopeIndex)
         ) {
           nextPathItem[method] = operation;
+          hasHttpOp = true;
           const tags = (operation as { tags?: string[] }).tags;
           tags?.forEach((tag) => visibleTags.add(tag));
         }
       }
 
-      if (Object.keys(nextPathItem).length > 0) {
+      if (hasHttpOp) {
         filteredPaths[pathKey] = nextPathItem as typeof pathItem;
       }
     }
@@ -111,7 +113,8 @@ export class OpenApiFilterService {
     const requiredScope =
       scopeIndex.get(lookupKey) ?? inferScopeFromPath(normalizedPath);
 
-    if (!requiredScope) return true;
+    // Sin scope clasificado no se publica en Swagger por token (evita fugas tipo endoso-recibos).
+    if (!requiredScope) return false;
     return grantMatchesRoute(
       grantedScopes,
       method,

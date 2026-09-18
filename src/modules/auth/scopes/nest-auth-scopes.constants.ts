@@ -12,7 +12,7 @@ export const NEST_AUTH_SCOPES = {
   RENOVATIONS_WRITE: 'renovations:write',
   /** Catálogos INMA / valrep (consultas auxiliares de emisión). */
   CATALOG_READ: 'catalog:read',
-  /** Endosos bajo /api/endosos/ o /api/v1/endosos/. */
+  /** Endosos bajo /api/endosos/, /api/v1/endosos/ o /api/endoso-recibos/. */
   ENDOSOS_WRITE: 'endosos:write',
   /** Reportes partner (/api/v1/report/) y reportes ET (dynamic-schemas, siniestros, etc.). */
   REPORT_WRITE: 'report:write',
