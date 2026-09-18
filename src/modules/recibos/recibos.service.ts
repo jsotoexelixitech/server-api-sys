@@ -1,5 +1,5 @@
 // @ts-nocheck
-/* Ported from ET-Backend recibos.service.js — business logic preserved. */
+/** RPT_RECIBOS — fuente de verdad en server-api-sys (components + dynamic-schemas). */
 import { forwardRef, Inject, Injectable } from '@nestjs/common';
 import { ReportesPgService } from '../../database/reportes-pg.service';
 import { DynamicSchemasService } from '../dynamic-schemas/dynamic-schemas.service';
@@ -284,6 +284,14 @@ function pickValue(row, ...keys) {
       return row[key];
     }
   }
+  const rowKeys = Object.keys(row);
+  for (const key of keys) {
+    const lk = String(key).toLowerCase();
+    const found = rowKeys.find((candidate) => candidate.toLowerCase() === lk);
+    if (found && row[found] !== undefined && row[found] !== null) {
+      return row[found];
+    }
+  }
   return undefined;
 }
 
@@ -484,7 +492,18 @@ function mapGridRow(row, index) {
       'mprimabrutaext',
     )),
     moneda: normalizeText(pickValue(row, 'Moneda', 'moneda', 'cmoneda', 'moneda_codigo', 'moneda_descripcion')),
-    coberturas: normalizeText(pickValue(row, 'coberturas', 'Coberturas', 'cobertura', 'xcoberturas')),
+    coberturas: (() => {
+      const raw = pickValue(row, 'coberturas', 'Coberturas', 'cobertura', 'xcoberturas');
+      if (raw == null) return '';
+      if (typeof raw === 'string') return raw.trim();
+      if (Array.isArray(raw)) {
+        return raw
+          .map((item) => (item == null ? '' : String(item).trim()))
+          .filter(Boolean)
+          .join(' / ');
+      }
+      return String(raw).trim();
+    })(),
   };
 }
 
