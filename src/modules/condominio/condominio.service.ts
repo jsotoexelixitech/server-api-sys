@@ -87,17 +87,21 @@ export class CondominioService {
     return (acc || text).slice(0, XAVECALLE_MAX).trim() || fallback;
   }
 
-  /** Apartamento → número de certificado Core (004 → 4). */
+  /** Apartamento → número de certificado Core (004 → 4). Ignora hash legacy en ncertificado si hay apto. */
   private resolveCertificadoApto(dto: CreateEmissionCondominioDto): number | null {
-    const direct =
-      dto.ncertificado ?? dto.certificado ?? dto.napartamento ?? null;
-    if (direct != null && Number.isFinite(Number(direct)) && Number(direct) > 0) {
-      return Math.trunc(Number(direct));
-    }
     const fromText = String(dto.apartamento ?? '').replace(/\D/g, '');
-    if (!fromText) return null;
-    const n = parseInt(fromText, 10);
-    return Number.isFinite(n) && n > 0 ? n : null;
+    if (fromText) {
+      const n = parseInt(fromText, 10);
+      if (Number.isFinite(n) && n > 0) return n;
+    }
+    if (dto.napartamento != null && Number(dto.napartamento) > 0) {
+      return Math.trunc(Number(dto.napartamento));
+    }
+    const legacy = dto.ncertificado ?? dto.certificado;
+    if (legacy != null && Number(legacy) > 0 && Number(legacy) <= 9999) {
+      return Math.trunc(Number(legacy));
+    }
+    return null;
   }
 
   /**
@@ -124,18 +128,18 @@ export class CondominioService {
     const result = await req.query(`
       SELECT TOP 1
         LTRIM(RTRIM(p.cnpoliza)) AS cnpoliza,
-        cert.ccerti AS ccerti
+        c.ccerti AS ccerti
       FROM adpoliza p
-      INNER JOIN adcertificado cert
-        ON cert.cpoliza = p.cpoliza
-        AND cert.fanopol = p.fanopol
-        AND cert.fmespol = p.fmespol
+      INNER JOIN adpolcob c
+        ON c.cpoliza = p.cpoliza
+        AND c.fanopol = p.fanopol
+        AND c.fmespol = p.fmespol
       WHERE p.casegurado = @rif
         AND p.cramo = @cramo
         AND LTRIM(RTRIM(p.cplan)) = LTRIM(RTRIM(@cplan))
         AND p.iestado = 'V'
         AND p.fhasta > @fdesde
-        AND cert.ccerti = @ccerti
+        AND c.ccerti = @ccerti
       ORDER BY p.fhasta DESC
     `);
 

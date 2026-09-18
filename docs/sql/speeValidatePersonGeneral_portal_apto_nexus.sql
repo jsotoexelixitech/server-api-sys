@@ -67,16 +67,16 @@ BEGIN
 				IF EXISTS (
 					SELECT 1
 					FROM adpoliza p
-					INNER JOIN adcertificado cert
-						ON cert.cpoliza = p.cpoliza
-						AND cert.fanopol = p.fanopol
-						AND cert.fmespol = p.fmespol
+					INNER JOIN adpolcob c
+						ON c.cpoliza = p.cpoliza
+						AND c.fanopol = p.fanopol
+						AND c.fmespol = p.fmespol
 					WHERE p.casegurado = @xrif_titular
 						AND p.cramo = @cramo
 						AND p.cplan = @cplan
 						AND p.fhasta > @fdesde
 						AND p.iestado = 'V'
-						AND cert.ccerti = @ncertificado
+						AND c.ccerti = @ncertificado
 				) BEGIN
 					SET @error = 'Se ha detectado la existencia de una póliza vigente con el mismo asegurado, plan y apartamento.'
 				END
