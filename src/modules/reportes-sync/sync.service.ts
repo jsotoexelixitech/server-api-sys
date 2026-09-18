@@ -165,14 +165,17 @@ export class SyncService {
     const columnMap =
       (entityConfig.columnMap as Record<string, unknown>) ||
       (entityConfig.mapeo_columnas as Record<string, unknown>);
+    const fromAdapter = adapter.mapRow(entidad, row, connectionConfig);
     if (
       columnMap &&
       typeof columnMap === 'object' &&
       Object.keys(columnMap).length > 0
     ) {
-      return mapRowFromConfig(entidad, row, entityConfig);
+      const fromConfig = mapRowFromConfig(entidad, row, entityConfig);
+      // columnMap suele declarar solo un subconjunto; el adapter completa campos de upsert (p. ej. coberturas).
+      return { ...fromAdapter, ...fromConfig };
     }
-    return adapter.mapRow(entidad, row, connectionConfig);
+    return fromAdapter;
   }
 
   private normalizeCatalogMapped(
