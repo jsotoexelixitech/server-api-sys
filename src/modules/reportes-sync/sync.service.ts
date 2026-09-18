@@ -155,6 +155,26 @@ export class SyncService {
     );
   }
 
+  private mergeAdapterWithColumnMap(
+    fromAdapter: Record<string, unknown>,
+    fromConfig: Record<string, unknown>,
+  ): Record<string, unknown> {
+    const merged = { ...fromAdapter };
+    for (const [key, value] of Object.entries(fromConfig)) {
+      if (value === undefined || value === null) continue;
+      if (
+        typeof value === 'string' &&
+        value.trim() === '' &&
+        merged[key] != null &&
+        String(merged[key]).trim() !== ''
+      ) {
+        continue;
+      }
+      merged[key] = value;
+    }
+    return merged;
+  }
+
   private mapRowForSync(
     entidad: string,
     row: Record<string, unknown>,
@@ -172,8 +192,7 @@ export class SyncService {
       Object.keys(columnMap).length > 0
     ) {
       const fromConfig = mapRowFromConfig(entidad, row, entityConfig);
-      // columnMap suele declarar solo un subconjunto; el adapter completa campos de upsert (p. ej. coberturas).
-      return { ...fromAdapter, ...fromConfig };
+      return this.mergeAdapterWithColumnMap(fromAdapter, fromConfig);
     }
     return fromAdapter;
   }
