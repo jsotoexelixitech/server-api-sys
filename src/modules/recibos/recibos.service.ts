@@ -805,12 +805,22 @@ function normalizeProcedureGraphicRows(rows) {
 
 function hasMeaningfulGraphicRows(rows) {
   if (!Array.isArray(rows) || rows.length === 0) return false;
-  return rows.some((row) => (
-    row
-    && typeof row === 'object'
-    && !Array.isArray(row)
-    && Object.values(row).some((value) => !isEmptyValue(value))
-  ));
+  return rows.some((row) => {
+    if (!row || typeof row !== 'object' || Array.isArray(row)) return false;
+    const values = Object.values(row);
+    if (values.some((value) => !isEmptyValue(value))) return true;
+    // Conservar filas con dimensión (p. ej. periodo) aunque SUM devolvió NULL → el front pinta 0.
+    return Object.keys(row).some((key) => {
+      const nk = normalizeText(key).toLowerCase();
+      return nk === 'periodo'
+        || nk.includes('canal')
+        || nk.includes('producto')
+        || nk.includes('frecuencia')
+        || nk.includes('productor')
+        || nk.includes('mora')
+        || nk.includes('dias');
+    });
+  });
 }
 
 function traceProcedureRecordsets(recordsets) {
