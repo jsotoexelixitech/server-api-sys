@@ -21,6 +21,8 @@ import {
   MausuplanRepository,
   RCV_AUTO_CPRODUCTO,
 } from './repositories/mausuplan.repository';
+import { GetProductosPersonasDto } from './dto/get-productos-personas.dto';
+import { MarketplaceCanalResolver } from './marketplace-canal.resolver';
 
 export interface CotizacionResult {
   mprimaext: number;
@@ -102,6 +104,7 @@ export class ValrepService {
     private readonly db: MssqlService,
     private readonly config: ConfigService,
     private readonly mausuplanRepo: MausuplanRepository,
+    private readonly marketplaceCanal: MarketplaceCanalResolver,
   ) {}
 
   /** Placeholder Sis2000 en catálogos geo — no es estado/ciudad válido. */
@@ -926,10 +929,11 @@ export class ValrepService {
 
   /** Paso 1 funerario — spBuscaProductosEntidad (SysIP getProductos). */
   async getProductosPersonas(
-    body: { citem: string; centidad: string },
+    body: GetProductosPersonasDto,
   ): Promise<Record<string, unknown>[]> {
-    const citem = String(body.citem).trim();
-    const centidad = String(body.centidad).trim().toUpperCase();
+    const resolved = await this.marketplaceCanal.resolve(body);
+    const citem = resolved.citem;
+    const centidad = resolved.centidad;
 
     try {
       const T = this.db.types;
