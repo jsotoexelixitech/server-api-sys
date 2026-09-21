@@ -174,6 +174,77 @@ export class RmsSiniestroValidarDto {
   fnotificacion?: string;
 }
 
+export class RmsSiniestroEmitirDto {
+  @ApiProperty({ example: '7-1-1000002421' })
+  @IsString()
+  cnpoliza: string;
+
+  @ApiPropertyOptional({ example: '2026-09-21 00:00:00' })
+  @IsOptional()
+  @IsString()
+  focurencia?: string;
+
+  @ApiPropertyOptional({ example: '2026-09-21' })
+  @IsOptional()
+  @IsString()
+  focurrencia?: string;
+
+  @ApiPropertyOptional({ example: '2026-09-21 16:00:00' })
+  @IsOptional()
+  @IsString()
+  fnotificacion?: string;
+
+  @ApiPropertyOptional({ example: 'J-24174934' })
+  @IsOptional()
+  @IsString()
+  asegurado?: string;
+
+  @ApiPropertyOptional({ example: 'BS' })
+  @IsOptional()
+  @IsString()
+  cmoneda?: string;
+
+  @ApiPropertyOptional({ example: 'Prueba QA 24174934' })
+  @IsOptional()
+  @IsString()
+  xobserva?: string;
+
+  @ApiPropertyOptional({ example: 'S' })
+  @IsOptional()
+  @IsString()
+  itiposiniestro?: string;
+
+  @ApiPropertyOptional({ example: 0 })
+  @IsOptional()
+  @IsInt()
+  ccausa?: number;
+
+  @ApiPropertyOptional({ example: 50 })
+  @IsOptional()
+  @IsNumber()
+  mmontosiniestro?: number;
+
+  @ApiPropertyOptional({ example: 58 })
+  @IsOptional()
+  @IsInt()
+  cpais?: number;
+
+  @ApiPropertyOptional({ example: 1 })
+  @IsOptional()
+  @IsInt()
+  cestado?: number;
+
+  @ApiPropertyOptional({ example: 1 })
+  @IsOptional()
+  @IsInt()
+  cciudad?: number;
+
+  @ApiPropertyOptional({ example: 999 })
+  @IsOptional()
+  @IsInt()
+  cusuario?: number;
+}
+
 export class RmsSyncDrenarDto {
   @ApiPropertyOptional({ example: 20 })
   @IsOptional()

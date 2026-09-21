@@ -79,7 +79,7 @@ export function inferScopeFromPath(normalizedPath: string): string | undefined {
   if (/\/api\/(?:v1\/)?endosos\//i.test(path)) return 'endosos:write';
   if (/\/api\/(?:v1\/)?endoso-recibos\//i.test(path)) return 'endosos:write';
   if (/\/api\/(?:v1\/)?rms-sync\//i.test(path)) return 'endosos:write';
-  if (/\/api\/v1\/siniestros\/validar/i.test(path)) return 'endosos:write';
+  if (/\/api\/v1\/siniestros\/(validar|emitir)/i.test(path)) return 'endosos:write';
   if (/\/api\/v1\/report\//i.test(path)) return 'report:write';
   if (/\/api\/v1\/dynamic-schemas\//i.test(path)) return 'report:write';
   if (/\/api\/v1\/siniestros\//i.test(path)) return 'report:write';

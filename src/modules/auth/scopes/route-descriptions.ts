@@ -97,7 +97,8 @@ const ROUTE_LABELS: Record<string, string> = {
   'GET /api/endosos/planes/:param/coberturas': 'Coberturas del plan',
   'POST /api/endosos/planes/calcular': 'Calcular prima del endoso',
   'POST /api/rms-sync/siniestros': 'Avisar a RMS un siniestro ya emitido',
-  'POST /api/v1/siniestros/validar': 'Prevalidar póliza Sis2000 (RMS → Mundial)',
+  'POST /api/v1/siniestros/validar': 'Prevalidar siniestro Sis2000 (póliza, vigencia, recibo)',
+  'POST /api/v1/siniestros/emitir': 'Alta de siniestro en Sis2000 (spGeneraSiniestro)',
   // partner
   'GET /api/v1/partner/starter/health': 'Health check módulo partner',
   'GET /api/v1/partner/starter/ping': 'Ping módulo partner',
