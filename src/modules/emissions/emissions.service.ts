@@ -237,7 +237,7 @@ export class EmissionsService {
     const plan = String(this.pick(body, 'cplan', 'plan') ?? '')
       .trim()
       .toUpperCase();
-    if (['RCVBAS', 'RUSPAT'].includes(plan)) return true;
+    if (['RCVBAS', 'RUSPAT', 'FARMPA', 'FARMMO'].includes(plan)) return true;
     const centidad = String(this.pick(body, 'centidad') ?? '').trim().toUpperCase();
     return centidad === 'P';
   }
