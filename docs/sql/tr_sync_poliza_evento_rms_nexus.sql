@@ -1,6 +1,6 @@
--- Probar en Sis2000_DES (permisos completos). Combo de la conexión = Sis2000_DES.
+-- NO publicar en QA. El entregable QA es sp_encola_poliza_rms_nexus.sql (tabla + SP, sin trigger).
+-- Este archivo queda solo como prueba DES si alguien pide trigger de captura.
 -- Los triggers de TABLA no salen en la carpeta "Database triggers" (eso es DDL de BD).
--- Tras ejecutar: Tablas → adpoliza → Triggers → tr_adpoliza_sync_rms_nexus
 
 USE [Sis2000_DES];
 GO

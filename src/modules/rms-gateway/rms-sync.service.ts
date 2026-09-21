@@ -23,6 +23,7 @@ import {
   type RolPersonaSync,
 } from './rms-sync.diff';
 import type { RmsSyncDesdeRmsDto } from './dto/rms-sync.dto';
+import type { RmsPolizaWebhookBody } from './rms-gateway.mapper';
 
 const ROLES: RolPersonaSync[] = ['tomador', 'asegurado', 'beneficiario'];
 
@@ -217,7 +218,12 @@ export class RmsSyncService {
       const cnpoliza = String(row['cnpoliza'] ?? '').trim();
       const origen = String(row['origen'] ?? '');
       try {
-        await this.rms.syncPoliza(cnpoliza);
+        const body = this.payloadWebhook(row);
+        if (body) {
+          await this.rms.syncPayload(body, cnpoliza);
+        } else {
+          await this.rms.syncPoliza(cnpoliza);
+        }
         await this.marcarEvento(id, 'OK');
         resultados.push({ tabla: 'evento', id, cnpoliza, origen, ok: true });
       } catch (err) {
@@ -408,6 +414,24 @@ export class RmsSyncService {
   private async nombreBase(): Promise<string> {
     const res = await this.db.request().query('SELECT DB_NAME() AS name');
     return String(res.recordset?.[0]?.['name'] ?? '');
+  }
+
+  private payloadWebhook(row: Record<string, unknown>): RmsPolizaWebhookBody | null {
+    const raw = row['payload_json'];
+    if (raw == null || String(raw).trim() === '') return null;
+    try {
+      const parsed = typeof raw === 'string' ? JSON.parse(String(raw)) : raw;
+      if (
+        parsed &&
+        typeof parsed === 'object' &&
+        (parsed as { poliza_detalle?: unknown }).poliza_detalle
+      ) {
+        return parsed as RmsPolizaWebhookBody;
+      }
+    } catch {
+      return null;
+    }
+    return null;
   }
 
   private async listarEventosPendientes(

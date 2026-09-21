@@ -6,6 +6,7 @@ import { RmsGatewayClient } from './rms-gateway.client';
 import {
   buildPolizaWebhookPayload,
   parseRamosPermitidos,
+  type RmsPolizaWebhookBody,
 } from './rms-gateway.mapper';
 
 /**
@@ -65,6 +66,24 @@ export class RmsGatewayService {
       `nest-poliza-${poliza}-${Date.now()}`,
     );
     this.logger.log(`RMS notify OK cnpoliza=${poliza} resultado=${JSON.stringify(result)}`);
+  }
+
+  /** POST al webhook el snapshot que armó el SP (personas + coberturas). */
+  async syncPayload(body: RmsPolizaWebhookBody, cnpoliza: string): Promise<void> {
+    if (!this.client.isEnabled()) {
+      throw new Error('RMS gateway deshabilitado o sin URL/secreto');
+    }
+    if (!body?.poliza_detalle) {
+      throw new Error(`payload_json sin poliza_detalle cnpoliza=${cnpoliza}`);
+    }
+    const poliza = String(cnpoliza ?? '').trim();
+    const result = await this.client.postPolizas(
+      body,
+      `nest-evento-${poliza}-${Date.now()}`,
+    );
+    this.logger.log(
+      `RMS notify payload OK cnpoliza=${poliza} resultado=${JSON.stringify(result)}`,
+    );
   }
 
   private ramoPermitido(cramo: number): boolean {

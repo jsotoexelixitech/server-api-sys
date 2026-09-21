@@ -71,8 +71,8 @@ export class RmsSyncController {
 
   @Get('eventos')
   @ApiOperation({
-    summary: 'Pendientes del trigger Sis2000 (sync_poliza_evento_rms_nexus)',
-    description: 'No escribe. Devuelve la BD a la que está conectado nest-api.',
+    summary: 'Pendientes del buzón Sis2000 (sync_poliza_evento_rms_nexus)',
+    description: 'No escribe. Devuelve la BD a la que está conectado nest-api (NAME_BD).',
   })
   @ApiCrudErrors()
   async eventos() {
@@ -85,7 +85,7 @@ export class RmsSyncController {
   @ApiOperation({
     summary: 'Drenar eventos del trigger y outbox PENDIENTE hacia RMS',
     description:
-      'Lee sync_poliza_evento_rms_nexus (trigger) y sync_persona_rms_nexus. Sin cron.',
+      'Lee sync_poliza_evento_rms_nexus (SP encola) y sync_persona_rms_nexus. Sin cron.',
   })
   @ApiBody({ type: RmsSyncDrenarDto })
   @ApiCrudErrors()
