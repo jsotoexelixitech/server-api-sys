@@ -6,6 +6,8 @@ import { GetCotizacionAutoDto } from './dto/get-cotizacion-auto.dto';
 import { CalculatePlanCoberturasDto } from './dto/calculate-plan-coberturas.dto';
 import { GetFrecuenciaDto } from './dto/get-frecuencia.dto';
 import { GetProductosPersonasDto } from './dto/get-productos-personas.dto';
+import { GetProductosMarketplaceDto } from './dto/get-productos-marketplace.dto';
+import { MarketplaceProductosService } from './marketplace-productos.service';
 import { GetPlanesProductoDto } from './dto/get-planes-producto.dto';
 import { GetMatipoemisionDto } from './dto/get-matipoemision.dto';
 import { GetMatipopagoEntidadesDto } from './dto/get-matipopago-entidades.dto';
@@ -23,6 +25,7 @@ export class ValrepController {
   constructor(
     private readonly valrepService: ValrepService,
     private readonly personasService: PersonasService,
+    private readonly marketplaceProductos: MarketplaceProductosService,
   ) {}
 
   // ── GET /api/v1/valrep/matipos ─────────────────────────────────────────
@@ -229,6 +232,42 @@ export class ValrepController {
   async getProductosPersonas(@Body() dto: GetProductosPersonasDto) {
     const productos = await this.valrepService.getProductosPersonas(dto);
     return { status: true, data: productos };
+  }
+
+  @Post('productos/marketplace')
+  @HttpCode(HttpStatus.OK)
+  @ApiOperation({
+    summary: 'Marketplace La Mundial · Productos enriquecidos (maproductos)',
+    description:
+      'Equivalente SysIP `Valrep.getProducts`: catálogo con planes permitidos, campos de presentación y opcionalmente `url` + `qr`. ' +
+      '**No sustituye** `POST /valrep/productos` (SP spBuscaProductosEntidad).',
+    operationId: 'valrepProductosMarketplace',
+  })
+  @ApiBody({ type: GetProductosMarketplaceDto })
+  @ApiResponse({
+    status: 200,
+    schema: {
+      example: {
+        status: true,
+        data: {
+          productos: [
+            {
+              cproducto: '57',
+              cramo: 45,
+              xdescripcion_l: 'Seguro Funerario',
+              mmonto_inicial: '8,39$',
+              xurl_presentacion: 'https://canva.link/…',
+            },
+          ],
+          cantidad: 1,
+        },
+      },
+    },
+  })
+  @ApiCommonErrors()
+  async getProductosMarketplace(@Body() dto: GetProductosMarketplaceDto) {
+    const data = await this.marketplaceProductos.getProductosMarketplace(dto);
+    return { status: true, data };
   }
 
   @Post('planes/producto')

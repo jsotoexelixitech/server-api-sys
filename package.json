@@ -42,6 +42,7 @@
   },
   "dependencies": {
     "@exelixi/partner-api-starter": "file:packages/partner-api-starter",
+    "@google/genai": "^1.50.1",
     "@jsotoexelixitech/nest-api-sdk": "file:packages/nest-api-sdk",
     "@nestjs/common": "^10.4.4",
     "@nestjs/config": "^3.2.3",
@@ -58,17 +59,17 @@
     "joi": "^17.13.3",
     "libreoffice-convert": "^1.8.2",
     "mssql": "^10.0.4",
-    "@google/genai": "^1.50.1",
-    "pg": "^8.13.1",
-    "xlsx": "^0.18.5",
-    "xlsx-js-style": "^1.2.0",
     "nodemailer": "^9.0.5",
     "pdf2json": "^4.0.3",
     "pdfmake": "^0.3.11",
+    "pg": "^8.13.1",
     "pizzip": "^3.2.0",
     "puppeteer": "^25.4.0",
+    "qrcode": "^1.5.4",
     "reflect-metadata": "^0.2.2",
-    "rxjs": "^7.8.1"
+    "rxjs": "^7.8.1",
+    "xlsx": "^0.18.5",
+    "xlsx-js-style": "^1.2.0"
   },
   "devDependencies": {
     "@nestjs/cli": "^10.4.5",
@@ -80,6 +81,7 @@
     "@types/node": "^20.16.10",
     "@types/nodemailer": "^8.0.1",
     "@types/pg": "^8.11.10",
+    "@types/qrcode": "^1.5.6",
     "@typescript-eslint/eslint-plugin": "^8.8.0",
     "@typescript-eslint/parser": "^8.8.0",
     "eslint": "^8.57.1",
