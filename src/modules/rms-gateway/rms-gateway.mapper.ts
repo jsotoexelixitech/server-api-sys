@@ -3,10 +3,28 @@ export type RmsPolizaWebhookBody = {
   cpoliza?: string;
   poliza?: string;
   poliza_detalle: {
-    poliza: Record<string, unknown>;
+    poliza: Record<string, unknown> | Array<Record<string, unknown>>;
     riesgo: Array<Record<string, unknown>>;
+    Coberturas?: Array<Record<string, unknown>>;
   };
 };
+
+/**
+ * El gateway QA (Jorge) solo lee arrays: flatten() ignora un objeto plano.
+ * nest arma poliza_detalle.poliza como objeto; lo envolvemos al POST.
+ */
+export function wrapPolizaDetalleForGateway(
+  body: RmsPolizaWebhookBody,
+): RmsPolizaWebhookBody {
+  const det = body.poliza_detalle;
+  if (!det) return body;
+  const poliza = det.poliza;
+  if (Array.isArray(poliza) || !poliza || typeof poliza !== 'object') return body;
+  return {
+    ...body,
+    poliza_detalle: { ...det, poliza: [poliza] },
+  };
+}
 
 function pick(
   row: Record<string, unknown>,

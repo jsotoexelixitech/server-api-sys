@@ -32,6 +32,9 @@ describe('RmsGatewayClient', () => {
       cpoliza: '1',
       poliza_detalle: { poliza: { poliza: '45-1-1' }, riesgo: [] },
     });
+    const sent = JSON.parse(fetchMock.mock.calls[0][1].body as string);
+    expect(Array.isArray(sent.poliza_detalle.poliza)).toBe(true);
+    expect(sent.poliza_detalle.poliza[0].poliza).toBe('45-1-1');
     expect(fetchMock).toHaveBeenCalledWith(
       'http://127.0.0.1:3033/rms-gateway-services/api/v1/webhooks/polizas',
       expect.objectContaining({

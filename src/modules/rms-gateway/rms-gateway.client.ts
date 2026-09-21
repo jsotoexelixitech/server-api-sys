@@ -1,6 +1,9 @@
 import { Injectable } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
-import type { RmsPolizaWebhookBody } from './rms-gateway.mapper';
+import {
+  wrapPolizaDetalleForGateway,
+  type RmsPolizaWebhookBody,
+} from './rms-gateway.mapper';
 
 @Injectable()
 export class RmsGatewayClient {
@@ -53,7 +56,11 @@ export class RmsGatewayClient {
   }
 
   async postPolizas(body: RmsPolizaWebhookBody, eventId?: string): Promise<unknown> {
-    return this.post('/api/v1/webhooks/polizas', body, eventId);
+    return this.post(
+      '/api/v1/webhooks/polizas',
+      wrapPolizaDetalleForGateway(body),
+      eventId,
+    );
   }
 
   async postSiniestros(
