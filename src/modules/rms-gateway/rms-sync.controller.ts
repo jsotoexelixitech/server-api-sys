@@ -69,11 +69,23 @@ export class RmsSyncController {
     return { status: true, data };
   }
 
+  @Get('eventos')
+  @ApiOperation({
+    summary: 'Pendientes del trigger Sis2000 (sync_poliza_evento_rms_nexus)',
+    description: 'No escribe. Devuelve la BD a la que está conectado nest-api.',
+  })
+  @ApiCrudErrors()
+  async eventos() {
+    const data = await this.sync.listarEventos();
+    return { status: true, data };
+  }
+
   @Post('drenar')
   @HttpCode(HttpStatus.OK)
   @ApiOperation({
-    summary: 'Reintentar outbox PENDIENTE',
-    description: 'Sin cron: llama este endpoint cuando vuelva la red.',
+    summary: 'Drenar eventos del trigger y outbox PENDIENTE hacia RMS',
+    description:
+      'Lee sync_poliza_evento_rms_nexus (trigger) y sync_persona_rms_nexus. Sin cron.',
   })
   @ApiBody({ type: RmsSyncDrenarDto })
   @ApiCrudErrors()

@@ -199,10 +199,35 @@ export class RmsSyncService {
     }, id);
   }
 
+  async listarEventos(limit = 20) {
+    const take = Math.min(Math.max(limit, 1), 50);
+    const base = await this.nombreBase();
+    const pendientes = await this.listarEventosPendientes(take);
+    return { database: base, pendientes };
+  }
+
   async drenar(limit = 20) {
     const take = Math.min(Math.max(limit, 1), 50);
-    const rows = await this.listarPendientes(take);
+    const base = await this.nombreBase();
     const resultados: Array<Record<string, unknown>> = [];
+
+    const eventos = await this.listarEventosPendientes(take);
+    for (const row of eventos) {
+      const id = Number(row['id']);
+      const cnpoliza = String(row['cnpoliza'] ?? '').trim();
+      const origen = String(row['origen'] ?? '');
+      try {
+        await this.rms.syncPoliza(cnpoliza);
+        await this.marcarEvento(id, 'OK');
+        resultados.push({ tabla: 'evento', id, cnpoliza, origen, ok: true });
+      } catch (err) {
+        const msg = err instanceof Error ? err.message : String(err);
+        await this.marcarEvento(id, 'PENDIENTE', msg);
+        resultados.push({ tabla: 'evento', id, cnpoliza, origen, ok: false, error: msg });
+      }
+    }
+
+    const rows = await this.listarPendientes(take);
     for (const row of rows) {
       const id = Number(row['id']);
       const direccion = String(row['direccion'] ?? '');
@@ -240,7 +265,12 @@ export class RmsSyncService {
         resultados.push({ id, cnpoliza, direccion, ok: false, error: msg });
       }
     }
-    return { status: true, procesados: resultados.length, resultados };
+    return {
+      status: true,
+      database: base,
+      procesados: resultados.length,
+      resultados,
+    };
   }
 
   async enqueueSisToRmsAfterEndoso(input: {
@@ -375,6 +405,52 @@ export class RmsSyncService {
     }
   }
 
+  private async nombreBase(): Promise<string> {
+    const res = await this.db.request().query('SELECT DB_NAME() AS name');
+    return String(res.recordset?.[0]?.['name'] ?? '');
+  }
+
+  private async listarEventosPendientes(
+    limit: number,
+  ): Promise<Array<Record<string, unknown>>> {
+    try {
+      const res = await this.db.request().query(`
+        SELECT TOP (50)
+          id, cnpoliza, cpoliza, fanopol, fmespol, origen, estado, payload_json, intentos
+        FROM dbo.sync_poliza_evento_rms_nexus
+        WHERE estado = 'PENDIENTE'
+        ORDER BY id ASC
+      `);
+      return ((res.recordset ?? []) as Array<Record<string, unknown>>).slice(0, limit);
+    } catch (err) {
+      if (this.isMissingObject(err)) return [];
+      throw err;
+    }
+  }
+
+  private async marcarEvento(
+    id: number,
+    estado: 'OK' | 'ERROR' | 'PENDIENTE',
+    xerror?: string,
+  ): Promise<void> {
+    try {
+      const req = this.db.request();
+      req.input('id', T.Int, id);
+      req.input('estado', T.NVarChar(20), estado);
+      req.input('xerror', T.NVarChar(T.MAX), xerror || null);
+      await req.query(`
+        UPDATE dbo.sync_poliza_evento_rms_nexus
+           SET estado = @estado,
+               xerror = @xerror,
+               intentos = intentos + CASE WHEN @estado IN ('ERROR', 'PENDIENTE') THEN 1 ELSE 0 END,
+               fupdated = GETDATE()
+         WHERE id = @id
+      `);
+    } catch (err) {
+      this.logger.warn(`marcarEvento ${id}: ${err instanceof Error ? err.message : String(err)}`);
+    }
+  }
+
   private async listarPendientes(limit: number): Promise<Array<Record<string, unknown>>> {
     try {
       const req = this.db.request();
@@ -388,11 +464,7 @@ export class RmsSyncService {
       `);
       return ((res.recordset ?? []) as Array<Record<string, unknown>>).slice(0, limit);
     } catch (err) {
-      if (this.isMissingObject(err)) {
-        throw new BadRequestException(
-          'Falta dbo.sync_persona_rms_nexus. Publique docs/sql/sp_sync_persona_rms_nexus.sql en Sis2000 QA.',
-        );
-      }
+      if (this.isMissingObject(err)) return [];
       throw err;
     }
   }
