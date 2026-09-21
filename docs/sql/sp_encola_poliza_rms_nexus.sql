@@ -3,10 +3,10 @@
 -- Sin trigger. Sin HTTP. Sin cron sobre adpolcob.
 --
 -- Objetos:
---   1) tabla sync_poliza_evento_rms_nexus  buzon PENDIENTE / OK / ERROR
+--   1) tabla sync_poliza_evento_rms_nexus  buzon PENDIENTE / MIGRADO / ERROR
 --   2) sp_encola_poliza_rms_nexus          SysIP / endoso EXEC: snapshot completo
 --   3) sp_sync_poliza_pendientes_rms_nexus nest lee PENDIENTE
---   4) sp_sync_poliza_marcar_rms_nexus     nest marca OK tras homologar RMS
+--   4) sp_sync_poliza_marcar_rms_nexus     nest marca MIGRADO tras homologar RMS
 --
 -- El SP arma el JSON del webhook RMS (personas + coberturas). No manda marca ni vehiculo.
 -- Si ya hay PENDIENTE de la misma poliza, actualiza el snapshot (no duplica).
@@ -325,10 +325,10 @@ AS
 BEGIN
     SET NOCOUNT ON;
 
-    IF @id IS NULL OR ISNULL(@estado, N'') NOT IN (N'OK', N'ERROR', N'PENDIENTE')
+    IF @id IS NULL OR ISNULL(@estado, N'') NOT IN (N'MIGRADO', N'OK', N'ERROR', N'PENDIENTE')
     BEGIN
         SET @pSuccess = 0;
-        SET @pErrorMessage = N'id y estado (OK|ERROR|PENDIENTE) son obligatorios.';
+        SET @pErrorMessage = N'id y estado (MIGRADO|OK|ERROR|PENDIENTE) son obligatorios.';
         RETURN;
     END;
 

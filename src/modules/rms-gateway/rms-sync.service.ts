@@ -224,7 +224,7 @@ export class RmsSyncService {
         } else {
           await this.rms.syncPoliza(cnpoliza);
         }
-        await this.marcarEvento(id, 'OK');
+        await this.marcarEvento(id, 'MIGRADO');
         resultados.push({ tabla: 'evento', id, cnpoliza, origen, ok: true });
       } catch (err) {
         const msg = err instanceof Error ? err.message : String(err);
@@ -454,7 +454,7 @@ export class RmsSyncService {
 
   private async marcarEvento(
     id: number,
-    estado: 'OK' | 'ERROR' | 'PENDIENTE',
+    estado: 'MIGRADO' | 'OK' | 'ERROR' | 'PENDIENTE',
     xerror?: string,
   ): Promise<void> {
     try {

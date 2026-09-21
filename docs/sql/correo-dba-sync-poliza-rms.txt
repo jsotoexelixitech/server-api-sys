@@ -1,0 +1,104 @@
+Asunto: QA Sis2000 — tabla y SP para sincronizar póliza completa hacia RMS (personas y coberturas)
+
+Buenos días,
+
+Necesitamos publicar en Sis2000 QA (la misma base de NAME_BD de nest-api, normalmente sis2000_qa) un buzón para sincronizar con RMS. Adjunto el script:
+
+  sp_encola_poliza_rms_nexus.sql
+
+No incluye trigger ni llamada HTTP. SQL Server 2019 no dispara HTTP desde el SP; el SP solo deja el cambio en tabla. Nuestro servidor lee las filas PENDIENTE, las envía a RMS y cambia el estado a MIGRADO.
+
+
+1) Qué crear (solo estos objetos)
+
+- Tabla dbo.sync_poliza_evento_rms_nexus
+- SP dbo.sp_encola_poliza_rms_nexus          (lo ejecutan ustedes al grabar)
+- SP dbo.sp_sync_poliza_pendientes_rms_nexus (lo usa nuestro servidor)
+- SP dbo.sp_sync_poliza_marcar_rms_nexus     (lo usa nuestro servidor)
+
+Publicar en SSMS. Si usan Azure Data Studio, no pegar la palabra GO (ejecutar lote por lote).
+
+
+2) Cómo funciona
+
+Cada vez que se edite una póliza en Sis2000 (personas, coberturas, vigencia, estatus, tomador/asegurado/beneficiario, etc.) hay que ejecutar:
+
+  EXEC dbo.sp_encola_poliza_rms_nexus
+      @cnpoliza = N'<cnpoliza>',
+      @fanopol  = <año>,
+      @fmespol  = <mes>,
+      @origen   = N'SP';
+
+El SP arma un JSON con la póliza completa (cabecera + personas + coberturas de adpolcob del último recibo vigente) y deja una fila:
+
+  estado = PENDIENTE
+
+Si ya existe PENDIENTE de esa misma póliza, actualiza el JSON (no duplica).
+
+Nuestro servidor (nest-api, POST /api/rms-sync/drenar) lee PENDIENTE, homologa con RMS y marca:
+
+  PENDIENTE  →  MIGRADO     (RMS recibió el snapshot)
+  PENDIENTE  →  PENDIENTE   (si RMS falla; se reintenta; sube intentos)
+  ERROR                     (solo si hay que dejarlo fuera de la cola)
+
+No hace falta un cron agresivo sobre adpoliza/adpolcob. Solo se leen las filas PENDIENTE de esta tabla.
+
+
+3) Dónde enganchar el EXEC
+
+Al final de los flujos que ya graban en Sis2000, cuando el cambio quede confirmado:
+
+- Endoso de datos de personas (tomador, titular/asegurado, beneficiario)
+- Cambio de coberturas (adpolcob)
+- Cambio de vigencia o estatus de la póliza (adpoliza)
+- Emisión / renovación que deje póliza nueva o modificada
+
+Mismo SP en todos los casos. El snapshot siempre sale completo (personas + coberturas), no un campo suelto.
+
+No enviar marca ni vehículo. No activar triggers sobre adpoliza/maclient.
+
+
+4) Prueba en QA
+
+DECLARE @pSuccess BIT, @pErrorMessage NVARCHAR(MAX);
+
+EXEC dbo.sp_encola_poliza_rms_nexus
+    @cnpoliza      = N'7-1-1000002371',
+    @fanopol       = 2026,
+    @fmespol       = 9,
+    @origen        = N'SP',
+    @pSuccess      = @pSuccess OUTPUT,
+    @pErrorMessage = @pErrorMessage OUTPUT;
+
+SELECT @pSuccess AS pSuccess, @pErrorMessage AS pErrorMessage;
+
+SELECT TOP 5
+    id, cnpoliza, fanopol, fmespol, origen, estado, intentos, fcreated
+FROM dbo.sync_poliza_evento_rms_nexus
+ORDER BY id DESC;
+
+Debe salir una fila PENDIENTE. El payload_json debe traer poliza_detalle.poliza, poliza_detalle.riesgo y poliza_detalle.Coberturas.
+
+Ajustar cnpoliza / fanopol / fmespol a una póliza real de esa base.
+
+
+5) Estados de la tabla
+
+  PENDIENTE  listo para que nuestro servidor lo lea
+  MIGRADO    ya se envió a RMS
+  ERROR      no reintentar en automático (queda el motivo en xerror)
+
+Quien escribe PENDIENTE: el SP de ustedes.
+Quien pasa a MIGRADO: nuestro servidor, cuando RMS homologa.
+
+
+6) Qué no hacer
+
+- No crear trigger sobre adpoliza, maclient ni adpolcob
+- No llamar HTTP / RMS / nest desde el SP
+- No barrer adpolcob con un job cada minuto
+- No publicar esto en Sis2000_DES si nest-api apunta a otra base (NAME_BD)
+
+Cualquier duda sobre el script, lo vemos juntos antes de engancharlo en SysIP.
+
+Saludos
