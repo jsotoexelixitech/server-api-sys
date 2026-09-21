@@ -1,6 +1,6 @@
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
 import { Transform } from 'class-transformer';
-import { IsBoolean, IsInt, IsOptional, IsString, Min } from 'class-validator';
+import { IsBoolean, IsInt, IsNumber, IsOptional, IsString, Min } from 'class-validator';
 
 export class RmsSyncConsultaDto {
   @ApiProperty({ example: '7-1-1000002371' })
@@ -90,6 +90,88 @@ export class RmsSyncDesdeRmsDto {
   @IsOptional()
   @IsInt()
   cusuario?: number;
+}
+
+export class RmsSyncSiniestroDto {
+  @ApiProperty({ example: '7-1-1000002371' })
+  @IsString()
+  cnpoliza: string;
+
+  @ApiPropertyOptional({ example: 'siniestro.actualizado' })
+  @IsOptional()
+  @IsString()
+  evento?: string;
+
+  @ApiPropertyOptional({ example: 292910 })
+  @IsOptional()
+  @IsInt()
+  n_siniestro?: number;
+
+  @ApiPropertyOptional({ example: 225727 })
+  @IsOptional()
+  @IsInt()
+  n_clave?: number;
+
+  @ApiPropertyOptional({ example: 'SIN-9000123' })
+  @IsOptional()
+  @IsString()
+  csiniestro?: string;
+
+  @ApiPropertyOptional({ example: 'V-28511812' })
+  @IsOptional()
+  @IsString()
+  asegurado?: string;
+
+  @ApiPropertyOptional({ example: 'PRE' })
+  @IsOptional()
+  @IsString()
+  cd_estatus?: string;
+
+  @ApiPropertyOptional({ example: '2026-07-20' })
+  @IsOptional()
+  @IsString()
+  focurrencia?: string;
+
+  @ApiPropertyOptional({ example: '2026-07-21' })
+  @IsOptional()
+  @IsString()
+  fnotificacion?: string;
+
+  @ApiPropertyOptional({ example: 'BS' })
+  @IsOptional()
+  @IsString()
+  cmoneda?: string;
+
+  @ApiPropertyOptional({ example: 150.5 })
+  @IsOptional()
+  @IsNumber()
+  mmontosiniestro?: number;
+
+  @ApiPropertyOptional()
+  @IsOptional()
+  @IsString()
+  xobserva?: string;
+
+  @ApiPropertyOptional({ example: 7 })
+  @IsOptional()
+  @IsInt()
+  ccausa?: number;
+}
+
+export class RmsSiniestroValidarDto {
+  @ApiProperty({ example: '7-1-1000002371' })
+  @IsString()
+  cnpoliza: string;
+
+  @ApiPropertyOptional({ example: '2026-07-20' })
+  @IsOptional()
+  @IsString()
+  focurrencia?: string;
+
+  @ApiPropertyOptional({ example: '2026-07-21' })
+  @IsOptional()
+  @IsString()
+  fnotificacion?: string;
 }
 
 export class RmsSyncDrenarDto {

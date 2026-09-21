@@ -1,4 +1,6 @@
 import { Body, Controller, Get, HttpCode, HttpStatus, Post, Query } from '@nestjs/common';
+import { NestProtected } from '../auth/decorators/nest-protected.decorator';
+import { NEST_AUTH_SCOPES } from '../auth/scopes/nest-auth-scopes.constants';
 import { ApiBody, ApiOperation, ApiQuery, ApiTags } from '@nestjs/swagger';
 import { ApiCrudErrors } from '../../common/swagger/api-error-responses';
 import { SWAGGER_TAGS } from '../../common/swagger/swagger-tags.constants';
@@ -6,13 +8,19 @@ import {
   RmsSyncAplicarDto,
   RmsSyncDrenarDto,
   RmsSyncDesdeRmsDto,
+  RmsSyncSiniestroDto,
 } from './dto/rms-sync.dto';
 import { RmsSyncService } from './rms-sync.service';
+import { RmsGatewayService } from './rms-gateway.service';
 
 @ApiTags(SWAGGER_TAGS.ENDOSOS)
 @Controller('rms-sync')
+@NestProtected(NEST_AUTH_SCOPES.ENDOSOS_WRITE)
 export class RmsSyncController {
-  constructor(private readonly sync: RmsSyncService) {}
+  constructor(
+    private readonly sync: RmsSyncService,
+    private readonly rms: RmsGatewayService,
+  ) {}
 
   @Get('personas')
   @ApiOperation({
@@ -78,6 +86,21 @@ export class RmsSyncController {
   async eventos() {
     const data = await this.sync.listarEventos();
     return { status: true, data };
+  }
+
+  @Post('siniestros')
+  @HttpCode(HttpStatus.OK)
+  @ApiOperation({
+    summary: 'Avisar a RMS un siniestro ya emitido',
+    description:
+      'POST al webhook de siniestros. Actualiza estatus/datos si el siniestro existe en RMS. ' +
+      'No crea siniestros nuevos. No usa el cron de Jorge.',
+  })
+  @ApiBody({ type: RmsSyncSiniestroDto })
+  @ApiCrudErrors()
+  async siniestro(@Body() dto: RmsSyncSiniestroDto) {
+    const rms = await this.rms.syncSiniestro({ ...dto });
+    return { status: true, cnpoliza: dto.cnpoliza, rms };
   }
 
   @Post('drenar')

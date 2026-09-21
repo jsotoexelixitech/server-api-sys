@@ -77,4 +77,27 @@ describe('RmsGatewayClient', () => {
       }),
     );
   });
+
+  it('POST /webhooks/siniestros con X-Webhook-Secret', async () => {
+    const fetchMock = jest.fn().mockResolvedValue({
+      ok: true,
+      text: async () => '{"ok":true,"resultado":{"sincronizado":true}}',
+    });
+    global.fetch = fetchMock as unknown as typeof fetch;
+    const client = new RmsGatewayClient(config as never);
+    await client.postSiniestros({
+      evento: 'siniestro.actualizado',
+      cnpoliza: '7-1-1000002371',
+      cd_estatus: 'PRE',
+    });
+    expect(fetchMock).toHaveBeenCalledWith(
+      'http://127.0.0.1:3033/rms-gateway-services/api/v1/webhooks/siniestros',
+      expect.objectContaining({
+        method: 'POST',
+        headers: expect.objectContaining({
+          'X-Webhook-Secret': 'test-secret',
+        }),
+      }),
+    );
+  });
 });

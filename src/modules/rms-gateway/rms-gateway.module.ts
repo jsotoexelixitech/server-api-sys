@@ -4,10 +4,11 @@ import { RmsGatewayClient } from './rms-gateway.client';
 import { RmsGatewayService } from './rms-gateway.service';
 import { RmsSyncController } from './rms-sync.controller';
 import { RmsSyncService } from './rms-sync.service';
+import { SiniestroValidarController } from './siniestro-validar.controller';
 
 @Module({
   imports: [DatabaseModule],
-  controllers: [RmsSyncController],
+  controllers: [RmsSyncController, SiniestroValidarController],
   providers: [RmsGatewayClient, RmsGatewayService, RmsSyncService],
   exports: [RmsGatewayService, RmsGatewayClient, RmsSyncService],
 })

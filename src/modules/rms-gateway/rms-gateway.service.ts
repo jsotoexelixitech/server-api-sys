@@ -68,6 +68,40 @@ export class RmsGatewayService {
     this.logger.log(`RMS notify OK cnpoliza=${poliza} resultado=${JSON.stringify(result)}`);
   }
 
+  /**
+   * Avisa un cambio de siniestro ya emitido en RMS. Nunca lanza.
+   * No crea siniestros nuevos (eso es POST /siniestros/emitir del gateway).
+   */
+  notifySiniestroActualizado(body: Record<string, unknown>): void {
+    void this.syncSiniestro(body).catch((err) => {
+      const msg = err instanceof Error ? err.message : String(err);
+      const cn = String(body['cnpoliza'] ?? '');
+      this.logger.warn(`RMS notify siniestro ${cn} falló: ${msg}`);
+    });
+  }
+
+  async syncSiniestro(body: Record<string, unknown>): Promise<unknown> {
+    if (!this.client.isEnabled()) return null;
+    const cnpoliza = String(body['cnpoliza'] ?? '').trim();
+    if (!cnpoliza) {
+      this.logger.warn('RMS notify siniestro: cnpoliza vacío');
+      return null;
+    }
+    const payload = {
+      evento: String(body['evento'] ?? 'siniestro.actualizado'),
+      ...body,
+      cnpoliza,
+    };
+    const result = await this.client.postSiniestros(
+      payload,
+      `nest-siniestro-${cnpoliza}-${Date.now()}`,
+    );
+    this.logger.log(
+      `RMS notify siniestro OK cnpoliza=${cnpoliza} resultado=${JSON.stringify(result)}`,
+    );
+    return result;
+  }
+
   /** POST al webhook el snapshot que armó el SP (personas + coberturas). */
   async syncPayload(body: RmsPolizaWebhookBody, cnpoliza: string): Promise<void> {
     if (!this.client.isEnabled()) {
