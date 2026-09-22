@@ -1,7 +1,21 @@
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
-import { Type } from 'class-transformer';
-import { IsIn, IsInt, IsNumber, IsOptional, IsString, Min } from 'class-validator';
+import { Transform, Type } from 'class-transformer';
+import {
+  IsBoolean,
+  IsIn,
+  IsInt,
+  IsNumber,
+  IsOptional,
+  IsString,
+  Min,
+} from 'class-validator';
 import { AUTO_IFRECUENCIA_VALUES } from '../../valrep/constants/auto-ifrecuencia.constants';
+
+function toOptionalBoolean(value: unknown): boolean | undefined {
+  if (value === true || value === 'true' || value === 1 || value === '1') return true;
+  if (value === false || value === 'false' || value === 0 || value === '0') return false;
+  return undefined;
+}
 
 export class CrearReciboEndosoDto {
   @ApiProperty({ example: '18-1-0000079163', description: 'Número de póliza exacto (cnpoliza)' })
@@ -26,6 +40,16 @@ export class CrearReciboEndosoDto {
   @IsOptional()
   @IsString()
   cplan?: string;
+
+  @ApiPropertyOptional({ description: 'Alias de cplan' })
+  @IsOptional()
+  @IsString()
+  cplan_nuevo?: string;
+
+  @ApiPropertyOptional({ description: 'Alias de cplan' })
+  @IsOptional()
+  @IsString()
+  idPlan?: string;
 
   @ApiPropertyOptional({ example: 1422, description: 'ID del usuario operador' })
   @IsOptional()
@@ -91,54 +115,65 @@ export class CrearReciboEndosoDto {
   fmespoliza?: number;
 
   @ApiPropertyOptional({
-    example: 'CA',
-    description: 'Modalidad casco para el tarifador: RC solo RCV, CA/PT/PP conservan casco existente.',
-    enum: ['RC', 'CA', 'PT', 'PP'],
+    example: 'RC',
+    description: 'Cobertura adicional tarifador: RC solo RCV, CA/PT/PP casco.',
   })
   @IsOptional()
   @IsString()
-  @IsIn(['RC', 'CA', 'PT', 'PP'])
   coberAdicional?: string;
 
-  @ApiPropertyOptional({ example: 30816, description: 'Suma asegurada del vehículo / casco' })
+  @ApiPropertyOptional({ example: 50000, description: 'Suma asegurada vehículo para tarifador casco' })
   @IsOptional()
   @Type(() => Number)
   @IsNumber()
   @Min(0)
   msumaaseg?: number;
 
-  @ApiPropertyOptional({ example: 2.4, description: 'Tasa cobertura amplia (%)' })
+  @ApiPropertyOptional({ description: 'Alias msumaaseg' })
   @IsOptional()
   @Type(() => Number)
   @IsNumber()
   @Min(0)
+  mvalor?: number;
+
+  @ApiPropertyOptional({ description: 'Alias msumaaseg' })
+  @IsOptional()
+  @Type(() => Number)
+  @IsNumber()
+  @Min(0)
+  suma?: number;
+
+  @ApiPropertyOptional({ example: 1.65, description: 'Tasa casco amplia (%)' })
+  @IsOptional()
+  @Type(() => Number)
+  @IsNumber()
   tasaCa?: number;
 
   @ApiPropertyOptional({ example: 0, description: 'Tasa pérdida total (%)' })
   @IsOptional()
   @Type(() => Number)
   @IsNumber()
-  @Min(0)
   tasaPt?: number;
 
   @ApiPropertyOptional({ example: 0, description: 'Tasa pérdida parcial (%)' })
   @IsOptional()
   @Type(() => Number)
   @IsNumber()
-  @Min(0)
   tasaPp?: number;
 
-  @ApiPropertyOptional({ example: 0, description: 'Recargo RCV (%)' })
+  @ApiPropertyOptional({
+    example: true,
+    description:
+      'Upgrade RCV con casco ya cobrado: actualiza cplan/ifrecuencia; recibos nuevos solo diferencial RCV (sin CA por cuota).',
+  })
   @IsOptional()
-  @Type(() => Number)
-  @IsNumber()
-  @Min(0)
-  precargorcv?: number;
+  @Transform(({ value }) => toOptionalBoolean(value))
+  @IsBoolean()
+  preserveExistingCasco?: boolean;
 
-  @ApiPropertyOptional({ example: 0, description: 'Toneladas del vehículo' })
+  @ApiPropertyOptional({ description: 'Alias preserveExistingCasco' })
   @IsOptional()
-  @Type(() => Number)
-  @IsInt()
-  @Min(0)
-  ntoneladas?: number;
+  @Transform(({ value }) => toOptionalBoolean(value))
+  @IsBoolean()
+  conservarCasco?: boolean;
 }
