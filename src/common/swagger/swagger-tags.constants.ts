@@ -35,7 +35,7 @@ export const SWAGGER_TAG_DESCRIPTIONS: Record<string, string> = {
   [SWAGGER_TAGS.EMISSION]: 'Validación de placa/serial y emisión de póliza automóvil.',
   [SWAGGER_TAGS.COLLECTION]:
     'Activación de cobro e ingreso de caja del recibo emitido. ' +
-    'Body `activate`: opcionales `telefono`, `cedula` y `cbanco_ref`.',
+    'Body `activate`: opcionales `xtelefono`, `cci_rif` y `cbanco_ref`.',
   [SWAGGER_TAGS.DOCUMENTS]: 'Generación de documentos PDF post-emisión.',
   [SWAGGER_TAGS.PERSONAS]: 'Productos, planes, cotización, validación y emisión de personas.',
   [SWAGGER_TAGS.CLIENT]: 'Consulta de cliente, pólizas del asegurado y coberturas.',

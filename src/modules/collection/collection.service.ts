@@ -117,13 +117,65 @@ export class CollectionService {
     return Number(result.recordset?.[0]?.['found'] ?? 0) === 1;
   }
 
+  private sumRowsAffected(result: { rowsAffected?: number[] }): number {
+    if (!result.rowsAffected?.length) return 0;
+    return result.rowsAffected.reduce((total, count) => total + count, 0);
+  }
+
+  /** Fila en pago_movil con la referencia exacta enviada en el body (sin LIKE). */
+  private async hasExactPagoMovilReference(referencia: string): Promise<boolean> {
+    const T = this.db.types;
+    const req = this.db.request();
+    req.input('referencia', T.VarChar(50), referencia);
+    const result = await req.query(`
+      SELECT TOP 1 1 AS found
+      FROM pago_movil
+      WHERE LTRIM(RTRIM(referencia_banco)) = @referencia
+    `);
+    return (result.recordset?.length ?? 0) > 0;
+  }
+
+  /** Actualiza pagador/bancos en fila existente cuando el integrador reenvía teléfono o cédula. */
+  private async syncPagoMovilPagadorFromBody(
+    referencia: string,
+    body: CollectionPaymentDto,
+  ): Promise<void> {
+    const dni = collectionPaymentCedula(body);
+    const telOrig = collectionPaymentTelefono(body);
+    const telDest = body.telefono_dest?.trim();
+    const bancoOrig = body.cbanco_ref?.trim();
+    const bancoDest = body.cbanco_dest_ref?.trim();
+    if (!dni && !telOrig && !telDest && !bancoOrig && !bancoDest) return;
+
+    const T = this.db.types;
+    const upd = this.db.request();
+    upd.input('referencia', T.VarChar(50), referencia);
+    upd.input('dni', T.VarChar(20), dni);
+    upd.input('tel_orig', T.VarChar(20), telOrig);
+    upd.input('tel_dest', T.VarChar(20), telDest ?? null);
+    upd.input('banco_orig', T.VarChar(10), bancoOrig ?? null);
+    upd.input('banco_dest', T.VarChar(10), bancoDest ?? null);
+    await upd.query(`
+      UPDATE pago_movil SET
+        dni = COALESCE(@dni, dni),
+        telefono_origen = COALESCE(@tel_orig, telefono_origen),
+        telefono_destino = COALESCE(@tel_dest, telefono_destino),
+        banco_origen = COALESCE(@banco_orig, banco_origen),
+        banco_destino = COALESCE(@banco_dest, banco_destino)
+      WHERE LTRIM(RTRIM(referencia_banco)) = @referencia
+    `);
+  }
+
   /**
    * Tras verificar pago móvil vía SysIP, la fila puede no existir en la BD que usa nest-api
    * (instancia distinta o registro solo en el gateway). Inserta en pago_movil si falta.
    */
   private async ensureMobilePaymentRegistered(body: CollectionPaymentDto): Promise<void> {
     const ref = body.xreferencia.trim();
-    if (await this.isPaymentRegistered(ref)) return;
+    if (await this.hasExactPagoMovilReference(ref)) {
+      await this.syncPagoMovilPagadorFromBody(ref, body);
+      return;
+    }
 
     const bankRef = body.cbanco_ref?.trim();
     if (!bankRef) {
@@ -150,7 +202,7 @@ export class CollectionService {
     ins.input('monto', T.Numeric(18, 2), body.mpago);
     ins.input('fecha', T.DateTime, fechaMov);
 
-    await ins.query(`
+    const insertResult = await ins.query(`
       INSERT INTO pago_movil
         (dni, telefono_origen, telefono_destino, banco_origen, banco_destino,
          referencia_banco, monto, fecha_movimiento, descripcion, refpk, ifuente, fcreacion)
@@ -158,11 +210,15 @@ export class CollectionService {
         @dni, @tel_orig, @tel_dest, @banco_orig, @banco_dest,
         @referencia, @monto, @fecha, 'Pago verificado Exelixi', @referencia, 'EXELIXI', GETDATE()
       WHERE NOT EXISTS (
-        SELECT 1 FROM pago_movil WHERE referencia_banco = @referencia
+        SELECT 1 FROM pago_movil WHERE LTRIM(RTRIM(referencia_banco)) = @referencia
       )
     `);
 
-    this.logger.log(`ensureMobilePayment: ref=${ref} registrado en pago_movil (Exelixi)`);
+    if (this.sumRowsAffected(insertResult) > 0) {
+      this.logger.log(`ensureMobilePayment: ref=${ref} registrado en pago_movil (Exelixi)`);
+    } else {
+      this.logger.warn(`ensureMobilePayment: ref=${ref} sin INSERT (referencia ya existía)`);
+    }
   }
 
   /**
@@ -171,7 +227,10 @@ export class CollectionService {
    */
   private async ensureFarmaciaFacturaRegistered(body: CollectionPaymentDto): Promise<void> {
     const ref = body.xreferencia.trim();
-    if (await this.isPaymentRegistered(ref)) return;
+    if (await this.hasExactPagoMovilReference(ref)) {
+      await this.syncPagoMovilPagadorFromBody(ref, body);
+      return;
+    }
 
     const T = this.db.types;
     const fechaMov = new Date(`${body.fpago}T12:00:00`);
@@ -192,7 +251,7 @@ export class CollectionService {
     ins.input('monto', T.Numeric(18, 2), body.mpago);
     ins.input('fecha', T.DateTime, fechaMov);
 
-    await ins.query(`
+    const insertResult = await ins.query(`
       INSERT INTO pago_movil
         (dni, telefono_origen, telefono_destino, banco_origen, banco_destino,
          referencia_banco, monto, fecha_movimiento, descripcion, refpk, ifuente, fcreacion)
@@ -200,11 +259,15 @@ export class CollectionService {
         @dni, @tel_orig, @tel_dest, @banco_orig, @banco_dest,
         @referencia, @monto, @fecha, 'Factura farmacia RCV tarjeta', @referencia, 'FARMACIA-RVC', GETDATE()
       WHERE NOT EXISTS (
-        SELECT 1 FROM pago_movil WHERE referencia_banco = @referencia
+        SELECT 1 FROM pago_movil WHERE LTRIM(RTRIM(referencia_banco)) = @referencia
       )
     `);
 
-    this.logger.log(`ensureFarmaciaFactura: ref=${ref} registrado en pago_movil (farmacia)`);
+    if (this.sumRowsAffected(insertResult) > 0) {
+      this.logger.log(`ensureFarmaciaFactura: ref=${ref} registrado en pago_movil (farmacia)`);
+    } else {
+      this.logger.warn(`ensureFarmaciaFactura: ref=${ref} sin INSERT (referencia ya existía)`);
+    }
   }
 
   /** La referencia debe existir en pago_movil o trsypago (mismo criterio que SysIP). */

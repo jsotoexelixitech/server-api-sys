@@ -77,8 +77,8 @@ Error de validación o negocio (HTTP 4xx):
 | \`serial_carroceria\` | Serial de carrocería (carnet) |
 | \`plan\` | Código del plan contratado (ej. \`RCVBAS\`) |
 | \`frecuencia\` | Periodicidad de pago (\`A\` anual, \`E\` única, etc.) |
-| \`telefono\` | Teléfono origen del pago móvil verificado (opcional en \`collection/activate\`) |
-| \`cedula\` | Cédula o RIF del pagador (opcional en \`collection/activate\`) |
+| \`xtelefono\` | Teléfono origen del pago móvil verificado (opcional en \`collection/activate\`) |
+| \`cci_rif\` | Cédula o RIF del pagador (opcional en \`collection/activate\`) |
 `.trim();
 
 /** Campos del body de activación de cobro (Swagger / integradores). */
@@ -90,10 +90,8 @@ export const COLLECTION_ACTIVATE_BODY_DESCRIPTION = `
 | \`xreferencia\` | Sí | Referencia bancaria del pago verificado |
 | \`fpago\` | Sí | Fecha del pago (\`YYYY-MM-DD\`) |
 | \`cbanco_ref\` | No | Código ref. banco origen (ej. \`0134\`) |
-| \`telefono\` | No | Teléfono origen del pago móvil |
-| \`cedula\` | No | Cédula o RIF del pagador |
-
-Alias legacy: \`xtelefono\` (teléfono), \`cci_rif\` (cédula/RIF).
+| \`xtelefono\` | No | Teléfono origen del pago móvil |
+| \`cci_rif\` | No | Cédula o RIF del pagador |
 `.trim();
 
 export const APIKEY_HEADER = {
@@ -120,8 +118,8 @@ export const RCV_COLLECTION_ACTIVATE_BODY = {
   xreferencia: '219551279300',
   fpago: '2026-07-14',
   cbanco_ref: '0134',
-  telefono: '584243678907',
-  cedula: 'V-24174934',
+  xtelefono: '584243678907',
+  cci_rif: 'V-24174934',
 };
 
 export const RCV_COLLECTION_ACTIVATE_RESPONSE = {
