@@ -11,15 +11,13 @@ const CollectionActivateRequiredDto = PickType(CollectionPaymentDto, [
 const CollectionActivateOptionalDto = PartialType(
   PickType(CollectionPaymentDto, [
     'cbanco_ref',
-    'telefono',
-    'cedula',
+    'xtelefono',
+    'cci_rif',
+    'telefono_dest',
+    'cbanco_dest_ref',
     'cusuario',
     'cbanco',
     'cbanco_destino',
-    'xtelefono',
-    'telefono_dest',
-    'cci_rif',
-    'cbanco_dest_ref',
     'origen_pago',
   ] as const),
 );

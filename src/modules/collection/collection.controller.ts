@@ -149,11 +149,11 @@ export class CollectionController {
   @ApiBody({
     type: CollectionActivateDto,
     description:
-      'Campos opcionales recomendados: `cbanco_ref`, `telefono` y `cedula` del pago verificado.',
+      'Campos opcionales recomendados: `cbanco_ref`, `xtelefono` y `cci_rif` del pago verificado.',
     examples: {
       pagoMovil: {
         summary: 'Pago móvil verificado (ejemplo QA)',
-        description: 'Incluye teléfono y cédula opcionales del pagador.',
+        description: 'Incluye `xtelefono` y `cci_rif` opcionales del pagador.',
         value: RCV_COLLECTION_ACTIVATE_BODY,
       },
     },
