@@ -103,6 +103,8 @@ export const RCV_COLLECTION_ACTIVATE_BODY = {
   xreferencia: '219551279300',
   fpago: '2026-07-14',
   cbanco_ref: '0134',
+  telefono: '584243678907',
+  cedula: 'V-24174934',
 };
 
 export const RCV_COLLECTION_ACTIVATE_RESPONSE = {
