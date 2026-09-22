@@ -11,6 +11,10 @@ import {
   collectionPaymentTelefono,
 } from './collection-payment-fields.util';
 import { CollectionPaymentDto } from './dto/collection-payment.dto';
+import {
+  hasPagoMovilDuplicateLookupFields,
+  PAGO_MOVIL_ALREADY_VALIDATED_MESSAGE,
+} from './pago-movil-validation.util';
 import { parseSPError } from '../../common/helpers/sp-error.helper';
 import { buildIngresoCajaUrl } from '../../common/helpers/policy-url.helper';
 
@@ -99,6 +103,55 @@ export class CollectionService {
     }
     if (ref.length > 30) {
       throw new BadRequestException('xreferencia excede 30 caracteres.');
+    }
+  }
+
+  /**
+   * Pago móvil ya registrado con la misma huella (teléfono, monto, banco, cédula, referencia).
+   */
+  private async findExistingValidatedPagoMovil(
+    body: CollectionPaymentDto,
+  ): Promise<boolean> {
+    if (!hasPagoMovilDuplicateLookupFields(body)) {
+      return false;
+    }
+
+    const referencia = body.xreferencia.trim();
+    const tel = collectionPaymentTelefono(body)!;
+    const dni = collectionPaymentCedula(body)!;
+    const monto = Number(body.mpago);
+    const bankVariants = this.bankRefVariants(body.cbanco_ref!.trim());
+    if (!bankVariants.length) return false;
+
+    const T = this.db.types;
+    const req = this.db.request();
+    req.input('referencia', T.VarChar(50), referencia);
+    req.input('tel', T.VarChar(20), tel);
+    req.input('dni', T.VarChar(20), dni);
+    req.input('monto', T.Numeric(18, 2), monto);
+
+    const bankClauses = bankVariants.map((variant, index) => {
+      const param = `bankRef${index}`;
+      req.input(param, T.VarChar(10), variant);
+      return `LTRIM(RTRIM(banco_origen)) = @${param}`;
+    });
+
+    const result = await req.query(`
+      SELECT TOP 1 1 AS found
+      FROM pago_movil
+      WHERE LTRIM(RTRIM(referencia_banco)) = @referencia
+        AND LTRIM(RTRIM(telefono_origen)) = @tel
+        AND LTRIM(RTRIM(dni)) = @dni
+        AND ABS(CAST(monto AS DECIMAL(18, 2)) - @monto) < 0.01
+        AND (${bankClauses.join(' OR ')})
+    `);
+
+    return (result.recordset?.length ?? 0) > 0;
+  }
+
+  private async assertPagoMovilNotAlreadyValidated(body: CollectionPaymentDto): Promise<void> {
+    if (await this.findExistingValidatedPagoMovil(body)) {
+      throw new BadRequestException(PAGO_MOVIL_ALREADY_VALIDATED_MESSAGE);
     }
   }
 
@@ -532,6 +585,7 @@ export class CollectionService {
         'mpago debe ser el monto pagado en bolívares (Bs) según la verificación bancaria.',
       );
     }
+    await this.assertPagoMovilNotAlreadyValidated(body);
     if (body.origen_pago === 'farmacia') {
       await this.ensureFarmaciaFacturaRegistered(body);
     } else {
