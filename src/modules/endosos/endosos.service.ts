@@ -183,13 +183,27 @@ export class EndososService {
    */
   async crearRecibo(dto: CrearReciboEndosoDto) {
     try {
-      const ifrecuencia = this.resolveIfrecuencia(dto, this.resolveNcuotas(dto));
-      // El SP genera un recibo por cuota según la frecuencia; reportamos ese mismo número.
-      const ncuotas = AUTO_IFRECUENCIA_CUOTAS[ifrecuencia];
+      const explicitNcuotas = this.resolveNcuotas(dto);
+      const ifrecuencia = this.resolveIfrecuencia(dto, explicitNcuotas);
+      // ncuotas explícito manda (ej. 4 cuotas del diferencial RCV con póliza antes anual).
+      const ncuotas = explicitNcuotas ?? AUTO_IFRECUENCIA_CUOTAS[ifrecuencia];
       const { fanopol, fmespol } = this.resolvePeriodo(dto);
+      const cplan =
+        dto.cplan?.trim() ||
+        dto.cplan_nuevo?.trim() ||
+        dto.idPlan?.trim() ||
+        null;
+      const coberAdicional = dto.coberAdicional?.trim() || null;
+      const msumaaseg =
+        dto.msumaaseg ?? dto.mvalor ?? dto.suma ?? null;
+      const preserveExistingCasco = Boolean(
+        dto.preserveExistingCasco ?? dto.conservarCasco,
+      );
 
       this.logger.log(
-        `crearRecibo cnpoliza=${dto.cnpoliza} ifrecuencia=${ifrecuencia} ncuotas=${ncuotas} mprima=${dto.mprima}`,
+        `crearRecibo cnpoliza=${dto.cnpoliza} ifrecuencia=${ifrecuencia} ncuotas=${ncuotas} ` +
+          `mprima=${dto.mprima} cplan=${cplan ?? '-'} coberAdicional=${coberAdicional ?? '-'} ` +
+          `preserveExistingCasco=${preserveExistingCasco}`,
       );
 
       const req = this.db.request();
@@ -199,17 +213,18 @@ export class EndososService {
       req.input('mprima', T.Numeric(18, 2), dto.mprima);
       req.input('fdesde', T.Date, new Date(dto.fdesde));
       req.input('fhasta', T.Date, new Date(dto.fhasta));
-      req.input('cplan', T.NVarChar(10), dto.cplan || null);
+      req.input('cplan', T.NVarChar(10), cplan);
       req.input('ifrecuencia', T.Char(1), ifrecuencia);
       req.input('ncuotas', T.Int, ncuotas);
       req.input('cusuario', T.Int, dto.cusuario || 1);
-      req.input('coberAdicional', T.VarChar(2), dto.coberAdicional || null);
-      req.input('msumaaseg', T.Numeric(18, 2), dto.msumaaseg ?? null);
+      req.input('coberAdicional', T.VarChar(2), coberAdicional);
+      req.input('msumaaseg', T.Numeric(18, 2), msumaaseg);
       req.input('tasaCa', T.Numeric(18, 2), dto.tasaCa ?? 0);
       req.input('tasaPt', T.Numeric(18, 2), dto.tasaPt ?? 0);
       req.input('tasaPp', T.Numeric(18, 2), dto.tasaPp ?? 0);
-      req.input('precargorcv', T.Numeric(18, 2), dto.precargorcv ?? 0);
-      req.input('ntoneladas', T.Int, dto.ntoneladas ?? 0);
+      req.input('precargorcv', T.Numeric(18, 2), 0);
+      req.input('ntoneladas', T.Int, 0);
+      req.input('preserveExistingCasco', T.Bit, preserveExistingCasco ? 1 : 0);
       req.output('pCnrecibo', T.NVarChar(30));
       req.output('pCrecibo', T.Numeric(19, 0));
       req.output('pSuccess', T.Bit);

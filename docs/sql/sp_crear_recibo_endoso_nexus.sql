@@ -36,6 +36,8 @@ CREATE PROCEDURE [dbo].[sp_crear_recibo_endoso_nexus]
     @tasaPp           NUMERIC(18, 2) = 0,
     @precargorcv      NUMERIC(18, 2) = 0,
     @ntoneladas       INT = 0,
+    -- Plan upgrade con casco ya cobrado: cuadro del endoso solo RCV (diferencial); casco queda en recibo anterior.
+    @preserveExistingCasco BIT = 0,
     @pCnrecibo        NVARCHAR(30) = NULL OUTPUT,
     @pCrecibo         NUMERIC(19, 0) = NULL OUTPUT,
     @pSuccess         BIT = 0 OUTPUT,
@@ -131,7 +133,10 @@ BEGIN
             @idxMayorPesoRcv INT,
             @poolRcv        NUMERIC(18, 2),
             @sumaCascoCuota NUMERIC(18, 2),
-            @factorCuota    NUMERIC(18, 6);
+            @factorCuota    NUMERIC(18, 6),
+            @coberTarifa    VARCHAR(2),
+            @reciboRefCobrado BIT,
+            @soloCuadroRcv  BIT;
 
         -- Temp tables al inicio: evita DECLARE de table-variable a mitad del SP (SSMS/parseo).
         CREATE TABLE #cobs (
@@ -288,6 +293,14 @@ BEGIN
 
         SET @monthsPerCuota = 12 / @totalCuotas;
 
+        -- Diferencial RCV fraccionado: ncuotas explícito (ej. 4) aunque la póliza fuera anual.
+        IF @preserveExistingCasco = 1 AND ISNULL(@ncuotas, 0) > 1
+        BEGIN
+            SET @totalCuotas = @ncuotas;
+            IF @totalCuotas > 12 SET @totalCuotas = 12;
+            SET @monthsPerCuota = CASE WHEN @totalCuotas >= 12 THEN 1 ELSE 12 / @totalCuotas END;
+        END
+
         -- 4. Prima total del endoso en ambas monedas (misma conversión que la emisión nativa).
         IF LTRIM(RTRIM(ISNULL(@cmoneda, ''))) = 'Bs'
             SET @mprimaTotalExt = ROUND(@mprima / NULLIF(@ptasamon, 0), 2);
@@ -342,6 +355,24 @@ BEGIN
         END
 
         SET @coberAdicional = ISNULL(@coberAdicional, 'RC');
+
+        SET @reciboRefCobrado = 0;
+        SET @soloCuadroRcv = 0;
+        SET @coberTarifa = @coberAdicional;
+
+        IF @creciboRef IS NOT NULL
+           AND EXISTS (
+               SELECT 1 FROM adrecibos r
+               WHERE r.crecibo = @creciboRef AND r.iestadorec = 'C'
+           )
+            SET @reciboRefCobrado = 1;
+
+        -- Casco cobrado + upgrade de plan: tarifador solo RCV del plan destino; no reinsertar CA/satélites.
+        IF @preserveExistingCasco = 1 AND @reciboRefCobrado = 1
+        BEGIN
+            SET @coberTarifa = 'RC';
+            SET @soloCuadroRcv = 1;
+        END
 
         -- La suma asegurada del casco se conserva: el endoso cambia el plan, no el valor del vehículo.
         IF ISNULL(@msumaaseg, 0) = 0 AND @creciboRef IS NOT NULL AND @coberAdicional <> 'RC'
@@ -423,7 +454,7 @@ BEGIN
                 @recargoRcv     = @precargorcv,
                 @cramo          = @cramo,
                 @cusuario       = @cusuarioTar,
-                @coberAdicional = @coberAdicional,
+                @coberAdicional = @coberTarifa,
                 @incluirTotales = 0,
                 @ifrecuencia    = @ifrecuencia;
         END
@@ -524,7 +555,7 @@ BEGIN
           AND RTRIM(A.cplan) = RTRIM(@cplanRecibo)
           -- Solo RCV: sin tarifador no arrastrar casco del catálogo del plan.
           AND (
-              @coberAdicional <> 'RC'
+              @coberTarifa <> 'RC'
               OR A.ccober NOT IN (1, 2, 3, 4, 5, 16, 28)
           );
         END
@@ -547,7 +578,7 @@ BEGIN
         IF @coberAdicional <> 'RC' AND @creciboRef IS NOT NULL
             SET @preservarCasco = 1;
 
-        IF @preservarCasco = 1
+        IF @preservarCasco = 1 AND @soloCuadroRcv = 0
         BEGIN
             UPDATE c
             SET
@@ -570,6 +601,23 @@ BEGIN
             WHERE ref.crecibo = @creciboRef
               AND ref.iestado <> 'A'
               AND ref.ccober IN (1, 2, 3, 4, 5, 16, 28);
+        END
+
+        IF @soloCuadroRcv = 1
+        BEGIN
+            DELETE FROM #cobs
+            WHERE ccober IN (1, 2, 3, 4, 5, 16, 28);
+
+            SET @preservarCasco = 0;
+            SET @primaCascoRefPol = 0;
+            SELECT @cntCobs = COUNT(*) FROM #cobs;
+            SELECT @sumaPesos = ISNULL(SUM(peso), 0) FROM #cobs;
+
+            IF @cntCobs > 0 AND ISNULL(@sumaPesos, 0) <= 0
+            BEGIN
+                UPDATE #cobs SET peso = 1;
+                SET @sumaPesos = @cntCobs;
+            END
         END
 
         -- El residuo del redondeo se carga a la cobertura de mayor peso.
