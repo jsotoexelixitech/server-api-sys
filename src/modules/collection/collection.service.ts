@@ -6,6 +6,10 @@ import {
 } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { MssqlService } from '../../database/mssql.service';
+import {
+  collectionPaymentCedula,
+  collectionPaymentTelefono,
+} from './collection-payment-fields.util';
 import { CollectionPaymentDto } from './dto/collection-payment.dto';
 import { parseSPError } from '../../common/helpers/sp-error.helper';
 import { buildIngresoCajaUrl } from '../../common/helpers/policy-url.helper';
@@ -137,8 +141,8 @@ export class CollectionService {
     const fechaMov = new Date(`${body.fpago}T12:00:00`);
 
     const ins = this.db.request();
-    ins.input('dni', T.VarChar(20), body.cci_rif?.trim() ?? null);
-    ins.input('tel_orig', T.VarChar(20), body.xtelefono?.trim() ?? null);
+    ins.input('dni', T.VarChar(20), collectionPaymentCedula(body));
+    ins.input('tel_orig', T.VarChar(20), collectionPaymentTelefono(body));
     ins.input('tel_dest', T.VarChar(20), body.telefono_dest?.trim() ?? '04143966962');
     ins.input('banco_orig', T.VarChar(10), bankRef);
     ins.input('banco_dest', T.VarChar(10), destBank);
@@ -179,8 +183,8 @@ export class CollectionService {
       '0171';
 
     const ins = this.db.request();
-    ins.input('dni', T.VarChar(20), body.cci_rif?.trim() ?? null);
-    ins.input('tel_orig', T.VarChar(20), body.xtelefono?.trim() ?? null);
+    ins.input('dni', T.VarChar(20), collectionPaymentCedula(body));
+    ins.input('tel_orig', T.VarChar(20), collectionPaymentTelefono(body));
     ins.input('tel_dest', T.VarChar(20), body.telefono_dest?.trim() ?? '04143966962');
     ins.input('banco_orig', T.VarChar(10), farmaciaBankRef);
     ins.input('banco_dest', T.VarChar(10), destBank);

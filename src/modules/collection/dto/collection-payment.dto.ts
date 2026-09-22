@@ -66,6 +66,23 @@ export class CollectionPaymentDto {
   cbanco_ref?: string;
 
   @ApiPropertyOptional({
+    example: '584243678907',
+    description:
+      'Teléfono origen del pago móvil verificado. Alias de `xtelefono` para integradores.',
+  })
+  @IsOptional()
+  @IsString()
+  telefono?: string;
+
+  @ApiPropertyOptional({
+    example: 'V-24174934',
+    description: 'Cédula o RIF del pagador. Alias de `cci_rif` para integradores.',
+  })
+  @IsOptional()
+  @IsString()
+  cedula?: string;
+
+  @ApiPropertyOptional({
     example: 35,
     description:
       'Código del banco destino. Pago móvil = 35, SyPago = 31. Si se omite, se infiere de la referencia.',
