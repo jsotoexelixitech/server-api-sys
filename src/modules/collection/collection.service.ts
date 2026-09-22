@@ -107,7 +107,7 @@ export class CollectionService {
   }
 
   /**
-   * Pago móvil ya registrado con la misma huella (teléfono, monto, banco, cédula, referencia).
+   * Pago móvil ya registrado (referencia, teléfono origen, banco origen, cédula).
    */
   private async findExistingValidatedPagoMovil(
     body: CollectionPaymentDto,
@@ -119,7 +119,6 @@ export class CollectionService {
     const referencia = body.xreferencia.trim();
     const tel = collectionPaymentTelefono(body)!;
     const dni = collectionPaymentCedula(body)!;
-    const monto = Number(body.mpago);
     const bankVariants = this.bankRefVariants(body.cbanco_ref!.trim());
     if (!bankVariants.length) return false;
 
@@ -128,7 +127,6 @@ export class CollectionService {
     req.input('referencia', T.VarChar(50), referencia);
     req.input('tel', T.VarChar(20), tel);
     req.input('dni', T.VarChar(20), dni);
-    req.input('monto', T.Numeric(18, 2), monto);
 
     const bankClauses = bankVariants.map((variant, index) => {
       const param = `bankRef${index}`;
@@ -142,7 +140,6 @@ export class CollectionService {
       WHERE LTRIM(RTRIM(referencia_banco)) = @referencia
         AND LTRIM(RTRIM(telefono_origen)) = @tel
         AND LTRIM(RTRIM(dni)) = @dni
-        AND ABS(CAST(monto AS DECIMAL(18, 2)) - @monto) < 0.01
         AND (${bankClauses.join(' OR ')})
     `);
 

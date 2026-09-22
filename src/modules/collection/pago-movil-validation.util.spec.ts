@@ -6,13 +6,12 @@ import {
 describe('hasPagoMovilDuplicateLookupFields', () => {
   const complete = {
     xtelefono: '584241930116',
-    mpago: 32025.3,
     cbanco_ref: '0191',
     cci_rif: 'V-28002498',
     xreferencia: '123212',
   };
 
-  it('devuelve true cuando vienen los cinco campos', () => {
+  it('devuelve true cuando vienen referencia, teléfono, banco y cédula', () => {
     expect(hasPagoMovilDuplicateLookupFields(complete)).toBe(true);
   });
 
@@ -20,8 +19,13 @@ describe('hasPagoMovilDuplicateLookupFields', () => {
     expect(hasPagoMovilDuplicateLookupFields({ ...complete, xtelefono: '  ' })).toBe(false);
   });
 
-  it('devuelve false si mpago es inválido', () => {
-    expect(hasPagoMovilDuplicateLookupFields({ ...complete, mpago: 0 })).toBe(false);
+  it('no exige mpago', () => {
+    expect(
+      hasPagoMovilDuplicateLookupFields({
+        ...complete,
+        xreferencia: '219551279300',
+      }),
+    ).toBe(true);
   });
 });
 
