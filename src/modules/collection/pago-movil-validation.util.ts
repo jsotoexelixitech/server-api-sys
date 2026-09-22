@@ -7,13 +7,12 @@ export const PAGO_MOVIL_ALREADY_VALIDATED_MESSAGE =
 export function hasPagoMovilDuplicateLookupFields(
   body: Pick<
     CollectionPaymentDto,
-    'xtelefono' | 'mpago' | 'cbanco_ref' | 'cci_rif' | 'xreferencia'
+    'xtelefono' | 'cbanco_ref' | 'cci_rif' | 'xreferencia'
   >,
 ): boolean {
   const tel = body.xtelefono?.trim();
   const bankRef = body.cbanco_ref?.trim();
   const dni = body.cci_rif?.trim();
   const referencia = body.xreferencia?.trim();
-  const monto = Number(body.mpago);
-  return Boolean(tel && bankRef && dni && referencia && Number.isFinite(monto) && monto > 0);
+  return Boolean(tel && bankRef && dni && referencia);
 }
