@@ -16,10 +16,12 @@ import {
 } from '@nestjs/swagger';
 import { CollectionService } from './collection.service';
 import { CollectionSearchDto } from './dto/collection-search.dto';
+import { CollectionActivateDto } from './dto/collection-activate.dto';
 import { CollectionPaymentDto } from './dto/collection-payment.dto';
 import { Api401, ApiCommonErrors } from '../../common/swagger/api-error-responses';
 import {
   APIKEY_HEADER,
+  COLLECTION_ACTIVATE_BODY_DESCRIPTION,
   RCV_COLLECTION_ACTIVATE_BODY,
   RCV_COLLECTION_ACTIVATE_RESPONSE,
 } from '../../common/swagger/api-docs.constants';
@@ -139,15 +141,19 @@ export class CollectionController {
     description:
       'Registra el pago del recibo emitido y genera el ingreso de caja. ' +
       'Use el `cnrecibo` devuelto por la emisión junto con los datos del pago móvil.\n\n' +
-      'Devuelve número de transacción, póliza asociada y confirmación del cobro.',
+      'Devuelve número de transacción, póliza asociada y confirmación del cobro.\n\n' +
+      COLLECTION_ACTIVATE_BODY_DESCRIPTION,
     operationId: 'rcvActivateReceipt',
   })
   @ApiHeader(APIKEY_HEADER)
   @ApiBody({
-    type: CollectionPaymentDto,
+    type: CollectionActivateDto,
+    description:
+      'Campos opcionales recomendados: `cbanco_ref`, `telefono` y `cedula` del pago verificado.',
     examples: {
       pagoMovil: {
         summary: 'Pago móvil verificado (ejemplo QA)',
+        description: 'Incluye teléfono y cédula opcionales del pagador.',
         value: RCV_COLLECTION_ACTIVATE_BODY,
       },
     },
@@ -161,7 +167,7 @@ export class CollectionController {
   @ApiCommonErrors()
   async activate(
     @NestApiKey() apikey: string,
-    @Body() dto: CollectionPaymentDto,
+    @Body() dto: CollectionActivateDto,
   ) {
     const result = await this.collectionService.activateReceipt(apikey ?? '', dto);
     return { status: true, result };
