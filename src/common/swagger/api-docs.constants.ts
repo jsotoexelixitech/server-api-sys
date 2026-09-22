@@ -77,6 +77,23 @@ Error de validación o negocio (HTTP 4xx):
 | \`serial_carroceria\` | Serial de carrocería (carnet) |
 | \`plan\` | Código del plan contratado (ej. \`RCVBAS\`) |
 | \`frecuencia\` | Periodicidad de pago (\`A\` anual, \`E\` única, etc.) |
+| \`telefono\` | Teléfono origen del pago móvil verificado (opcional en \`collection/activate\`) |
+| \`cedula\` | Cédula o RIF del pagador (opcional en \`collection/activate\`) |
+`.trim();
+
+/** Campos del body de activación de cobro (Swagger / integradores). */
+export const COLLECTION_ACTIVATE_BODY_DESCRIPTION = `
+| Campo | Req. | Descripción |
+|-------|:----:|-------------|
+| \`cnrecibo\` | Sí | Recibo devuelto por la emisión |
+| \`mpago\` | Sí | Monto pagado en Bs (verificación bancaria) |
+| \`xreferencia\` | Sí | Referencia bancaria del pago verificado |
+| \`fpago\` | Sí | Fecha del pago (\`YYYY-MM-DD\`) |
+| \`cbanco_ref\` | No | Código ref. banco origen (ej. \`0134\`) |
+| \`telefono\` | No | Teléfono origen del pago móvil |
+| \`cedula\` | No | Cédula o RIF del pagador |
+
+Alias legacy: \`xtelefono\` (teléfono), \`cci_rif\` (cédula/RIF).
 `.trim();
 
 export const APIKEY_HEADER = {

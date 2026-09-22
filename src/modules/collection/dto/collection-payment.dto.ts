@@ -39,24 +39,6 @@ export class CollectionPaymentDto {
   fpago: string;
 
   @ApiPropertyOptional({
-    example: 7,
-    description: 'Usuario cajero que aparece en el comprobante PDF. Si se omite, se usa el valor por defecto del entorno.',
-  })
-  @IsOptional()
-  @Type(() => Number)
-  @IsNumber()
-  cusuario?: number;
-
-  @ApiPropertyOptional({
-    example: 30,
-    description: 'Código del banco origen. Opcional si se envía `cbanco_ref`.',
-  })
-  @IsOptional()
-  @Type(() => Number)
-  @IsNumber()
-  cbanco?: number;
-
-  @ApiPropertyOptional({
     example: '0134',
     description:
       'Código de referencia del banco origen (ej. 0134 = Banco Mercantil).',
@@ -81,6 +63,24 @@ export class CollectionPaymentDto {
   @IsOptional()
   @IsString()
   cedula?: string;
+
+  @ApiPropertyOptional({
+    example: 7,
+    description: 'Usuario cajero que aparece en el comprobante PDF. Si se omite, se usa el valor por defecto del entorno.',
+  })
+  @IsOptional()
+  @Type(() => Number)
+  @IsNumber()
+  cusuario?: number;
+
+  @ApiPropertyOptional({
+    example: 30,
+    description: 'Código del banco origen. Opcional si se envía `cbanco_ref`.',
+  })
+  @IsOptional()
+  @Type(() => Number)
+  @IsNumber()
+  cbanco?: number;
 
   @ApiPropertyOptional({
     example: 35,
