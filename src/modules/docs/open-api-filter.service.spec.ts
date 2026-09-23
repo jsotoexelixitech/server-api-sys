@@ -58,6 +58,15 @@ describe('OpenApiFilterService', () => {
     expect(filtered.paths?.['/api/v1/personas/emision']).toBeUndefined();
   });
 
+  it('grant granular en la key sin catálogo partner cargado aparece en Swagger filtrado', () => {
+    const filtered = service.filterByScopes([
+      'POST /api/v1/partner/providers/consultar-polizas',
+    ]);
+    expect(
+      filtered.paths?.['/api/v1/partner/providers/consultar-polizas']?.post,
+    ).toBeDefined();
+  });
+
   it('grant granular partner en catálogo sin path OpenAPI aparece en Swagger filtrado', () => {
     registerPartnerScopeCatalog(
       [
