@@ -218,8 +218,20 @@ export class OpenApiFilterService {
                 catalogEntry?.description ?? describeRouteLine(routeLine),
               description:
                 catalogEntry?.scopeDescription ??
-                'Endpoint autorizado para esta API key.',
+                'Endpoint autorizado para esta API key (schema no disponible).',
               responses: { '200': { description: 'Respuesta exitosa' } },
+              ...(method === 'post' || method === 'put' || method === 'patch'
+                ? {
+                    requestBody: {
+                      description: 'Payload dinámico (el partner no expuso el schema explícitamente)',
+                      content: {
+                        'application/json': {
+                          schema: { type: 'object' },
+                        },
+                      },
+                    },
+                  }
+                : {}),
             };
 
       const nextItem = {
