@@ -12,6 +12,7 @@ import {
   parseRamosPermitidos,
   type RmsPolizaWebhookBody,
 } from './rms-gateway.mapper';
+import { resolverCcausa } from './siniestro-causa.mapper';
 
 /**
  * Emisor Mundial → RMS: lee la póliza ya grabada en Sis2000 (SELECT/SP)
@@ -221,22 +222,37 @@ export class RmsGatewayService {
       };
     }
 
+    const poliza = await this.loadPolizaRow(chequeo.cnpoliza);
+    const ccausa = resolverCcausa({
+      ccausa: dto.ccausa,
+      cdEnfermedad: dto.cd_enfermedad,
+      cdMotivo: dto.cd_motivo,
+      cramoPoliza: Number(poliza?.['cramo'] ?? 0) || undefined,
+    });
+    const nSiniestroRms = Number(dto.n_siniestro ?? 0);
+    const observaBase = String(dto.xobserva || '').trim();
+    const xobserva = (
+      nSiniestroRms > 0
+        ? `RMS-REF:${nSiniestroRms}${observaBase ? ` ${observaBase}` : ''}`
+        : observaBase
+    ).slice(0, 250);
+
     const fnoti = this.parseFecha(dto.fnotificacion) ?? new Date();
     const focc = this.parseFecha(focur) ?? fnoti;
     const req = this.db.request();
     req.input('cnpoliza', T.NVarChar(30), chequeo.cnpoliza);
     req.input('fnotificacion', T.DateTime, fnoti);
     req.input('focurencia', T.DateTime, focc);
-    req.input('ccausa', T.Int, Number(dto.ccausa ?? 0));
+    req.input('ccausa', T.Int, ccausa);
     req.input('asegurado', T.NVarChar(40), String(dto.asegurado || '').trim());
     req.input('cmoneda', T.NVarChar(4), this.normalizarMoneda(dto.cmoneda));
     req.input('cpais', T.Int, Number(dto.cpais ?? 58));
     req.input('cestado', T.Int, Number(dto.cestado ?? 1));
     req.input('cciudad', T.Int, Number(dto.cciudad ?? 1));
-    req.input('xobserva', T.NVarChar(250), String(dto.xobserva || '').slice(0, 250));
+    req.input('xobserva', T.NVarChar(250), xobserva);
     req.input('mmontosiniestro', T.Numeric(18, 2), Number(dto.mmontosiniestro ?? 0));
     req.input('itiposiniestro', T.Char(1), String(dto.itiposiniestro || 'S').slice(0, 1));
-    req.input('cusuario', T.Int, Number(dto.cusuario ?? 999));
+    req.input('cusuario', T.Int, Number(dto.cusuario ?? 999) || 999);
     req.output('csinies', T.Numeric(19, 0));
     req.output('cnsinies', T.Char(30));
     req.output('cerror', T.Int);
@@ -255,7 +271,8 @@ export class RmsGatewayService {
       throw new BadRequestException('spGeneraSiniestro no devolvió cnsinies');
     }
     this.logger.log(
-      `spGeneraSiniestro OK cnpoliza=${chequeo.cnpoliza} cnsinies=${cnsinies}`,
+      `spGeneraSiniestro OK cnpoliza=${chequeo.cnpoliza} cnsinies=${cnsinies} ccausa=${ccausa}` +
+        (nSiniestroRms > 0 ? ` n_siniestro_rms=${nSiniestroRms}` : ''),
     );
     return {
       status: 'ok',
@@ -264,6 +281,8 @@ export class RmsGatewayService {
       csinies,
       cnsinies,
       csiniestro: cnsinies,
+      ccausa,
+      n_siniestro_rms: nSiniestroRms > 0 ? nSiniestroRms : undefined,
       mensaje: msj || 'aceptado',
     };
   }

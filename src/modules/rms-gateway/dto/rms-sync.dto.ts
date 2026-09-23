@@ -243,6 +243,24 @@ export class RmsSiniestroEmitirDto {
   @IsOptional()
   @IsInt()
   cusuario?: number;
+
+  @ApiPropertyOptional({ example: 'Z25', description: 'CIE / enfermedad RMS' })
+  @IsOptional()
+  @IsString()
+  cd_enfermedad?: string;
+
+  @ApiPropertyOptional({ example: 'APS' })
+  @IsOptional()
+  @IsString()
+  cd_motivo?: string;
+
+  @ApiPropertyOptional({
+    example: 292967,
+    description: 'Número de siniestro RMS (correlación en xobserva)',
+  })
+  @IsOptional()
+  @IsInt()
+  n_siniestro?: number;
 }
 
 export class RmsSyncDrenarDto {
