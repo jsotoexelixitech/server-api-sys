@@ -166,7 +166,7 @@ export class CollectionController {
   @ApiResponse({
     status: 400,
     description:
-      'Pago móvil ya registrado con la misma referencia, teléfono origen, banco origen y cédula.',
+      'Pago móvil ya registrado con la misma referencia, teléfono origen y banco origen.',
     schema: {
       example: { status: false, message: 'El pago ya fue validado previamente.' },
     },
