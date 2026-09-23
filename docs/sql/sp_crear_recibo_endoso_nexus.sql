@@ -311,6 +311,12 @@ BEGIN
         SET @basePrimaExt  = FLOOR((@mprimaTotalExt / @totalCuotas) * 100) / 100;
         SET @firstPrimaExt = @mprimaTotalExt - (@basePrimaExt * (@totalCuotas - 1));
 
+        -- Moneda de póliza para reparto casco/RCV (evita @factorCuota = 1 por variable sin asignar).
+        SET @mprimaTotalPol = CASE
+            WHEN @esBs = 1 THEN ROUND(@mprima, 2)
+            ELSE @mprimaTotalExt
+        END;
+
         -- 4b. Cuadro de coberturas del endoso. El tarifador manda: decide qué coberturas del plan
         -- aplican y con qué suma asegurada, igual que la emisión nativa. Sin él el cuadro sale con
         -- todas las coberturas de maplantar (casco incluido) y con la suma del plan anterior.
@@ -367,8 +373,18 @@ BEGIN
            )
             SET @reciboRefCobrado = 1;
 
-        -- Casco cobrado + upgrade de plan: tarifador solo RCV del plan destino; no reinsertar CA/satélites.
-        IF @preserveExistingCasco = 1 AND @reciboRefCobrado = 1
+        -- Casco cobrado + upgrade: cuadro nuevo solo RCV (diferencial). Flag explícito, cober RC
+        -- del caller, o cambio de cplan con recibo ref ya cobrado.
+        IF @reciboRefCobrado = 1
+           AND (
+               @preserveExistingCasco = 1
+               OR @coberAdicional = 'RC'
+               OR (
+                   NULLIF(LTRIM(RTRIM(@cplanRecibo)), '') IS NOT NULL
+                   AND NULLIF(LTRIM(RTRIM(@polCplan)), '') IS NOT NULL
+                   AND RTRIM(@cplanRecibo) <> RTRIM(@polCplan)
+               )
+           )
         BEGIN
             SET @coberTarifa = 'RC';
             SET @soloCuadroRcv = 1;
@@ -748,11 +764,11 @@ BEGIN
             BEGIN
                 SET @cuotaPrimaPol = CASE WHEN @esBs = 1 THEN @cuotaPrimaBs ELSE @cuotaPrimaExt END;
 
-                IF @preservarCasco = 1 AND @primaCascoRefPol > 0 AND @creciboRef IS NOT NULL
+                IF @preservarCasco = 1 AND @soloCuadroRcv = 0 AND @primaCascoRefPol > 0 AND @creciboRef IS NOT NULL
                 BEGIN
                     SET @factorCuota = @cuotaPrimaPol / NULLIF(@mprimaTotalPol, 0);
                     IF @factorCuota IS NULL OR @factorCuota <= 0
-                        SET @factorCuota = 1;
+                        SET @factorCuota = 0;
 
                     UPDATE c
                     SET c.prima_cuota = ROUND(
