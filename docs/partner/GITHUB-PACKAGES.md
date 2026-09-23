@@ -60,6 +60,8 @@ El monorepo usa `file:packages/nest-api-sdk` en desarrollo; integradores usan la
 
 ### Instalar / actualizar paquete partner externo
 
+**Guía operativa por servidor (120 / 121 / GCIA):** [`INSTALAR-PARTNERS-SERVIDOR.md`](./INSTALAR-PARTNERS-SERVIDOR.md).
+
 **Regla fija:** nunca borrar partners que ya estén en producción. Solo se **suman** o se actualiza la versión de uno.
 
 #### Opción recomendada (sin cambiar token a mano)
