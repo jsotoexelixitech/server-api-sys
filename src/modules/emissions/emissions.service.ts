@@ -866,6 +866,8 @@ export class EmissionsService {
         if (dateKey in b) b[dateKey] = this.dateField(b[dateKey]);
       }
 
+      await this.resolveMarketplaceEntity(b);
+
       if (
         (canal['ctipocanal'] === 'T' ||
           canal['ctipocanal'] === 'A' ||
@@ -1198,6 +1200,96 @@ export class EmissionsService {
   }
 
   /**
+   * Resuelve los datos de entidad provenientes del marketplace/iframe:
+   * - cramo dinámico recibido.
+   * - centidad = 'P' -> cproductor = citem; si viene cgestor, se asigna cgestor y se busca en magestor ccanalalt y cscanalalt.
+   * - centidad = 'C' -> ccanalalt = citem; busca en magestor filtrando por ccanalalt para obtener cgestor y cscanalalt.
+   */
+  private async resolveMarketplaceEntity(b: Record<string, unknown>): Promise<void> {
+    const centidad = String(this.pick(b, 'centidad', 'entidad') ?? '').trim().toUpperCase();
+    const citemRaw = this.pick(b, 'citem', 'item');
+    const citemStr = citemRaw != null ? String(citemRaw).trim() : '';
+    const citemNum = this.intField(citemRaw);
+    const cgestorParam = String(this.pick(b, 'cgestor', 'gestor') ?? '').trim();
+    const cramoParam = this.intField(this.pick(b, 'cramo', 'ramo'));
+
+    if (cramoParam != null && cramoParam > 0) {
+      b['cramo'] = cramoParam;
+      this.logger.log(`resolveMarketplaceEntity: cramo=${cramoParam}`);
+    }
+
+    if (!centidad && !cgestorParam && !citemRaw) {
+      return;
+    }
+
+    const T = this.db.types;
+
+    if (centidad === 'P') {
+      if (citemNum != null) {
+        b['cproductor'] = citemNum;
+      }
+      b['ctipocanal'] = b['ctipocanal'] ?? (b['cproductor'] === 80080 ? 'D' : 'T');
+
+      if (cgestorParam !== '') {
+        b['cgestor'] = cgestorParam;
+
+        const req = this.db.request();
+        req.input('cgestor', T.VarChar(50), cgestorParam);
+        req.input('citem', T.VarChar(50), citemStr);
+        const result = await req.query(`
+          SELECT TOP 1 ccanalalt, cscanalalt, cgestor
+          FROM magestor
+          WHERE cgestor = @cgestor OR cgestor = @citem
+          ORDER BY CASE WHEN cgestor = @cgestor THEN 0 ELSE 1 END, fingreso DESC
+        `);
+        const row = result.recordset?.[0];
+        if (row) {
+          if (row.ccanalalt != null) {
+            b['ccanalalt'] = Number(row.ccanalalt);
+          }
+          if (row.cscanalalt != null) {
+            b['cscanalalt'] = Number(row.cscanalalt);
+          }
+          if (row.cgestor) {
+            b['cgestor'] = String(row.cgestor).trim();
+          }
+        }
+      }
+      this.logger.log(
+        `resolveMarketplaceEntity: centidad=P cproductor=${b['cproductor']} cgestor=${b['cgestor']} ccanalalt=${b['ccanalalt']} cscanalalt=${b['cscanalalt']}`,
+      );
+    } else if (centidad === 'C') {
+      if (citemNum != null) {
+        b['ccanalalt'] = citemNum;
+      }
+      b['ctipocanal'] = 'A';
+
+      if (citemNum != null) {
+        const req = this.db.request();
+        req.input('ccanalalt', T.Int, citemNum);
+        const result = await req.query(`
+          SELECT TOP 1 cgestor, cscanalalt
+          FROM magestor
+          WHERE ccanalalt = @ccanalalt
+          ORDER BY fingreso DESC
+        `);
+        const row = result.recordset?.[0];
+        if (row) {
+          if (row.cgestor != null && String(row.cgestor).trim() !== '') {
+            b['cgestor'] = String(row.cgestor).trim();
+          }
+          if (row.cscanalalt != null) {
+            b['cscanalalt'] = Number(row.cscanalalt);
+          }
+        }
+      }
+      this.logger.log(
+        `resolveMarketplaceEntity: centidad=C ccanalalt=${b['ccanalalt']} cgestor=${b['cgestor']} cscanalalt=${b['cscanalalt']}`,
+      );
+    }
+  }
+
+  /**
    * Gestor del canal (magestor): un guion en cgestor identifica el código UUID del gestor.
    * Marketplace canal: se persiste en adpoliza tras emitir.
    */
@@ -1227,26 +1319,42 @@ export class EmissionsService {
     return this.lookupChannelGestor(ccanalalt);
   }
 
-  private async applyPolicyGestor(cnpoliza: string, cgestor: string): Promise<void> {
+  private async applyPolicyGestorAndCanal(
+    cnpoliza: string,
+    cgestor?: string | null,
+    ccanalalt?: number | null,
+    cscanalalt?: number | null,
+    cproductor?: number | null,
+  ): Promise<void> {
     const poliza = String(cnpoliza ?? '').trim();
-    const gestor = String(cgestor ?? '').trim();
-    if (!poliza || !gestor) return;
+    if (!poliza) return;
 
     const T = this.db.types;
     const req = this.db.request();
     req.input('cnpoliza', T.NVarChar(30), poliza);
-    req.input('cgestor', T.VarChar(50), gestor);
-    const result = await req.query(`
+    req.input('cgestor', T.VarChar(50), cgestor ? String(cgestor).trim() : null);
+    req.input('ccanalalt', T.Int, ccanalalt ?? null);
+    req.input('cscanalalt', T.Int, cscanalalt ?? null);
+    req.input('cproductor', T.Numeric(11, 0), cproductor ?? null);
+
+    await req.query(`
       UPDATE adpoliza
-      SET cgestor = @cgestor
-      WHERE RTRIM(cnpoliza) = RTRIM(@cnpoliza)
+      SET cgestor = COALESCE(@cgestor, cgestor),
+          ccanalalt = COALESCE(@ccanalalt, ccanalalt),
+          cscanalalt = COALESCE(@cscanalalt, cscanalalt),
+          cproductor = COALESCE(@cproductor, cproductor)
+      WHERE RTRIM(cnpoliza) = RTRIM(@cnpoliza);
+
+      UPDATE adrecibos
+      SET cgestor = COALESCE(@cgestor, cgestor),
+          ccanalalt = COALESCE(@ccanalalt, ccanalalt),
+          cscanalalt = COALESCE(@cscanalalt, cscanalalt),
+          cproductor = COALESCE(@cproductor, cproductor)
+      WHERE RTRIM(cnpoliza) = RTRIM(@cnpoliza);
     `);
-    const rows = Number(result.rowsAffected?.[0] ?? 0);
-    if (rows === 0) {
-      this.logger.warn(`applyPolicyGestor: sin filas cnpoliza=${poliza} cgestor=${gestor}`);
-      return;
-    }
-    this.logger.log(`applyPolicyGestor OK cnpoliza=${poliza} cgestor=${gestor}`);
+    this.logger.log(
+      `applyPolicyGestorAndCanal OK cnpoliza=${poliza} gestor=${cgestor} canal=${ccanalalt} scanal=${cscanalalt} prod=${cproductor}`,
+    );
   }
 
   private async emitLocalAutomobile(
@@ -1655,19 +1763,28 @@ export class EmissionsService {
     }
 
     const ccanalalt = this.intField(this.pick(b, 'ccanalalt', 'ccanalalt_in'));
-    if (ccanalalt != null) {
+    const explicitGestor = this.pick<string>(b, 'cgestor');
+    const cgestor =
+      explicitGestor != null && String(explicitGestor).trim() !== ''
+        ? String(explicitGestor).trim()
+        : ccanalalt != null
+          ? await this.resolveEmissionGestor(b, ccanalalt)
+          : null;
+    const cproductor = this.intField(this.pick(b, 'cproductor'));
+    const cscanalalt = this.intField(this.pick(b, 'cscanalalt', 'cscanalalt_in'));
+
+    if (cgestor || ccanalalt != null || cproductor != null || cscanalalt != null) {
       try {
-        const cgestor = await this.resolveEmissionGestor(b, ccanalalt);
-        if (cgestor) {
-          await this.applyPolicyGestor(cnpoliza, cgestor);
-        } else {
-          this.logger.warn(
-            `emitLocal: canal ${ccanalalt} sin gestor en magestor (filtro UUID) cnpoliza=${cnpoliza}`,
-          );
-        }
+        await this.applyPolicyGestorAndCanal(
+          cnpoliza,
+          cgestor,
+          ccanalalt,
+          cscanalalt,
+          cproductor,
+        );
       } catch (err) {
         const msg = err instanceof Error ? err.message : String(err);
-        this.logger.warn(`applyPolicyGestor falló cnpoliza=${cnpoliza}: ${msg}`);
+        this.logger.warn(`applyPolicyGestorAndCanal falló cnpoliza=${cnpoliza}: ${msg}`);
       }
     }
 

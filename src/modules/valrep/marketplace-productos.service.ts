@@ -167,6 +167,7 @@ export class MarketplaceProductosService {
   private async tryGenerateQr(url: string): Promise<string | undefined> {
     if (!url) return undefined;
     try {
+      // @ts-ignore
       const QRCode = await import('qrcode');
       return await QRCode.toDataURL(url, { margin: 1, width: 256 });
     } catch {
