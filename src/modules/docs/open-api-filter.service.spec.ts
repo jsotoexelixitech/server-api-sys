@@ -1,4 +1,5 @@
 import { OpenAPIObject } from '@nestjs/swagger/dist/interfaces';
+import { registerPartnerScopeCatalog } from '../auth/scopes/scope-catalog.registry';
 import { OpenApiDocumentStore } from './open-api-document.store';
 import { OpenApiFilterService } from './open-api-filter.service';
 
@@ -53,6 +54,28 @@ describe('OpenApiFilterService', () => {
     const filtered = service.filterByScopes(['endosos:write']);
     expect(
       filtered.paths?.['/api/endoso-recibos/crearRecibo']?.post,
+    ).toBeDefined();
+    expect(filtered.paths?.['/api/v1/personas/emision']).toBeUndefined();
+  });
+
+  it('grant granular partner en catálogo sin path OpenAPI aparece en Swagger filtrado', () => {
+    registerPartnerScopeCatalog(
+      [
+        {
+          id: 'partner:providers',
+          label: 'Providers',
+          description: 'Venemergencia',
+          routes: ['POST /api/v1/partner/providers/consultar-polizas'],
+        },
+      ],
+      '@test/partner-providers',
+    );
+
+    const filtered = service.filterByScopes([
+      'POST /api/v1/partner/providers/consultar-polizas',
+    ]);
+    expect(
+      filtered.paths?.['/api/v1/partner/providers/consultar-polizas']?.post,
     ).toBeDefined();
     expect(filtered.paths?.['/api/v1/personas/emision']).toBeUndefined();
   });

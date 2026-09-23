@@ -186,16 +186,13 @@ export function toRouteGrantLine(method: string, path: string): string {
   return `${String(method).toUpperCase()} ${normalizeHttpPath(path)}`;
 }
 
-/** Scope completo (legacy) o grant por ruta individual en `granted`. */
-export function grantMatchesRoute(
+/** Solo grants granulares `METHOD /path` (sin comprobar scope legacy). */
+export function explicitRouteGrantMatches(
   granted: string[],
   method: string,
   path: string,
-  requiredScope?: string,
 ): boolean {
-  if (!requiredScope) return true;
   if (!granted?.length) return false;
-  if (scopeMatches(granted, requiredScope)) return true;
 
   const methodUpper = String(method).toUpperCase();
   const requestPath = normalizeHttpPath(path);
@@ -209,7 +206,6 @@ export function grantMatchesRoute(
     if (pathMatchesRouteTemplate(grantPath, path)) return true;
   }
 
-  // Plantillas funerario hermanas: si la key ya envía review-alert o payment-link, también rechazo.
   if (
     methodUpper === 'POST' &&
     /\/api\/v1\/mail\/funeral-[a-z0-9-]+$/i.test(requestPath)
@@ -223,4 +219,17 @@ export function grantMatchesRoute(
   }
 
   return false;
+}
+
+/** Scope completo (legacy) o grant por ruta individual en `granted`. */
+export function grantMatchesRoute(
+  granted: string[],
+  method: string,
+  path: string,
+  requiredScope?: string,
+): boolean {
+  if (!requiredScope) return true;
+  if (!granted?.length) return false;
+  if (scopeMatches(granted, requiredScope)) return true;
+  return explicitRouteGrantMatches(granted, method, path);
 }

@@ -76,3 +76,4 @@ El monorepo usa `file:packages/nest-api-sdk` en desarrollo; integradores usan la
    **No** en `ecosystem.config.js` (PM2 pisa dotenv).
 5. Si un partner previo desapareció de `node_modules`, reinstalarlo antes del restart.
 6. `npm run build && pm2 restart sysip-nest-api` → log debe listar **todos** en `Partner modules loaded`.
+7. Revisar log: `Swagger: catálogo admin sin OpenAPI (...)` indica rutas sin `@ApiOperation` — el integrador debe añadir decoradores Swagger (ver `docs/NEST-AUTH-SWAGGER-FILTRADO.md`). El host igual muestra la ruta en docs filtrados (stub) si la key tiene el grant.
