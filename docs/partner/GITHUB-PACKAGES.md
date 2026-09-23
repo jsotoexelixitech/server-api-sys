@@ -62,6 +62,35 @@ El monorepo usa `file:packages/nest-api-sdk` en desarrollo; integradores usan la
 
 **Regla fija:** nunca borrar partners que ya estén en producción. Solo se **suman** o se actualiza la versión de uno.
 
+#### Opción recomendada (sin cambiar token a mano)
+
+GitHub Packages solo admite **un** `_authToken` por `npm.pkg.github.com`. Por eso:
+
+| Enfoque | Cuándo |
+|---------|--------|
+| **Ideal:** un PAT / usuario máquina con `read:packages` en **todas** las orgs partner | Producción y QA a largo plazo → `TOKEN_DEFAULT` |
+| **Práctico hoy:** tokens por proveedor en un archivo **fuera del repo** + script | Mientras cada partner da su propio PAT |
+
+```bash
+# Una vez por servidor (120 / 121 / GCIA)
+mkdir -p ~/.config/exelixi-nest-partners
+cp scripts/partner-tokens.env.example ~/.config/exelixi-nest-partners/tokens.env
+chmod 600 ~/.config/exelixi-nest-partners/tokens.env
+nano ~/.config/exelixi-nest-partners/tokens.env   # rellenar TOKEN_* o TOKEN_DEFAULT
+
+# Instalar / actualizar todos + build + reload
+bash scripts/install-partner-packages.sh --build --reload
+
+# Solo un paquete
+bash scripts/install-partner-packages.sh @gestacio/sysip-nest-api --build --reload
+```
+
+El script usa `--userconfig` temporal por paquete (no pisa tu `~/.npmrc` a ciegas). **Nunca** commits de `tokens.env`.
+
+**No** uses un `.sh` por partner con el token hardcodeado en el repo: se filtra en git, backups y chats.
+
+#### Pasos manuales (legacy)
+
 1. Anotar partners actuales:
    ```bash
    grep '^PARTNER_PACKAGES=' .env
@@ -71,9 +100,9 @@ El monorepo usa `file:packages/nest-api-sdk` en desarrollo; integradores usan la
 3. `npm install @ORG/partner-api-xxx@VERSION` en `server-api-sys`.
 4. `.env`: **añadir** el paquete a `PARTNER_PACKAGES` (coma-separado). Ejemplo:
    ```env
-   PARTNER_PACKAGES=@esanchez-exelixitech/partner-api-test,@exelixi/partner-api-starter,@quand-mind/api_planes_v2
+   PARTNER_PACKAGES=@esanchez-exelixitech/partner-api-test,@exelixi/partner-api-starter,@quand-mind/api_planes_v2,@gestacio/sysip-nest-api
    ```
    **No** en `ecosystem.config.js` (PM2 pisa dotenv).
 5. Si un partner previo desapareció de `node_modules`, reinstalarlo antes del restart.
-6. `npm run build && pm2 restart sysip-nest-api` → log debe listar **todos** en `Partner modules loaded`.
+6. `npm run build && pm2 reload sysip-nest-api` → log debe listar **todos** en `Partner modules loaded`.
 7. Revisar log: `Swagger: catálogo admin sin OpenAPI (...)` indica rutas sin `@ApiOperation` — el integrador debe añadir decoradores Swagger (ver `docs/NEST-AUTH-SWAGGER-FILTRADO.md`). El host igual muestra la ruta en docs filtrados (stub) si la key tiene el grant.
