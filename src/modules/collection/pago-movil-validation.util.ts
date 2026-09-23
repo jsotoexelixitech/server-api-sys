@@ -5,14 +5,10 @@ export const PAGO_MOVIL_ALREADY_VALIDATED_MESSAGE =
 
 /** Datos mínimos para detectar un pago móvil ya registrado en pago_movil. */
 export function hasPagoMovilDuplicateLookupFields(
-  body: Pick<
-    CollectionPaymentDto,
-    'xtelefono' | 'cbanco_ref' | 'cci_rif' | 'xreferencia'
-  >,
+  body: Pick<CollectionPaymentDto, 'xtelefono' | 'cbanco_ref' | 'xreferencia'>,
 ): boolean {
   const tel = body.xtelefono?.trim();
   const bankRef = body.cbanco_ref?.trim();
-  const dni = body.cci_rif?.trim();
   const referencia = body.xreferencia?.trim();
-  return Boolean(tel && bankRef && dni && referencia);
+  return Boolean(tel && bankRef && referencia);
 }
