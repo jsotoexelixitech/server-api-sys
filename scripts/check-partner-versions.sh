@@ -75,8 +75,10 @@ for pkg in "${PACKAGES[@]}"; do
   fi
   write_npmrc "$token"
 
-  installed="$(npm ls "$pkg" --depth=0 --json 2>/dev/null \
-    | node -e "let d='';process.stdin.on('data',c=>d+=c);process.stdin.on('end',()=>{try{const j=JSON.parse(d);const dps=j.dependencies||{};const n=Object.keys(dps)[0];console.log(n&&dps[n]?dps[n].version:'MISSING')}catch{console.log('MISSING')}}")"
+  installed="MISSING"
+  if [[ -f "node_modules/${pkg}/package.json" ]]; then
+    installed="$(node -p "require('./node_modules/${pkg}/package.json').version" 2>/dev/null || echo "MISSING")"
+  fi
 
   latest="$(npm view "$pkg" version --userconfig "$TMP_NPMRC" 2>/dev/null || echo "ERROR")"
 
