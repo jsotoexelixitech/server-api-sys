@@ -2,12 +2,16 @@ import { Injectable, NotFoundException } from '@nestjs/common';
 import { OpenAPIObject } from '@nestjs/swagger/dist/interfaces';
 import {
   canonicalizePathTemplate,
+  explicitRouteGrantMatches,
   grantMatchesRoute,
+  pathMatchesRouteTemplate,
 } from '../auth/scopes/nest-auth-scopes.constants';
 import {
+  buildRouteCatalog,
   buildScopeCatalog,
   inferScopeFromPath,
 } from '../auth/scopes/scope-catalog.registry';
+import { SWAGGER_TAGS } from '../../common/swagger/swagger-tags.constants';
 import { OpenApiDocumentStore } from './open-api-document.store';
 import { pruneOpenApiComponents } from './prune-openapi-components';
 
@@ -69,6 +73,13 @@ export class OpenApiFilterService {
       }
     }
 
+    this.appendGrantedCatalogRoutes(
+      grantedScopes,
+      source,
+      filteredPaths,
+      visibleTags,
+    );
+
     const titleSuffix = keyName ? ` — ${keyName}` : '';
     const components = pruneOpenApiComponents(source.components, [
       filteredPaths,
@@ -113,14 +124,106 @@ export class OpenApiFilterService {
     const requiredScope =
       scopeIndex.get(lookupKey) ?? inferScopeFromPath(normalizedPath);
 
-    // Sin scope clasificado no se publica en Swagger por token (evita fugas tipo endoso-recibos).
-    if (!requiredScope) return false;
+    if (!requiredScope) {
+      return explicitRouteGrantMatches(
+        grantedScopes,
+        method,
+        normalizedPath,
+      );
+    }
     return grantMatchesRoute(
       grantedScopes,
       method,
       normalizedPath,
       requiredScope,
     );
+  }
+
+  /**
+   * Rutas en catálogo admin (p. ej. partnerScopes) que no generaron path en OpenAPI al arrancar.
+   */
+  private appendGrantedCatalogRoutes(
+    grantedScopes: string[],
+    source: OpenAPIObject,
+    filteredPaths: NonNullable<OpenAPIObject['paths']>,
+    visibleTags: Set<string>,
+  ): void {
+    if (!grantedScopes?.length) return;
+
+    const catalog = buildRouteCatalog();
+    const seen = new Set<string>();
+
+    for (const entry of catalog) {
+      const routeLine = entry.routeId;
+      const space = routeLine.indexOf(' ');
+      if (space <= 0) continue;
+
+      const method = routeLine.slice(0, space).toLowerCase();
+      const pathKey = this.normalizePath(routeLine.slice(space + 1));
+      const dedupeKey = `${method.toUpperCase()} ${pathKey}`;
+      if (seen.has(dedupeKey)) continue;
+
+      if (
+        !grantMatchesRoute(
+          grantedScopes,
+          method,
+          pathKey,
+          entry.scopeId,
+        )
+      ) {
+        continue;
+      }
+      seen.add(dedupeKey);
+
+      const existingItem = filteredPaths[pathKey];
+      if (
+        existingItem &&
+        typeof existingItem === 'object' &&
+        (existingItem as Record<string, unknown>)[method]
+      ) {
+        continue;
+      }
+
+      const sourcePathKey = this.resolveSourcePathKey(source.paths, pathKey);
+      const sourceItem = sourcePathKey ? source.paths?.[sourcePathKey] : undefined;
+      const fromDoc =
+        sourceItem && typeof sourceItem === 'object'
+          ? (sourceItem as Record<string, unknown>)[method]
+          : undefined;
+
+      const operation =
+        fromDoc && typeof fromDoc === 'object'
+          ? fromDoc
+          : {
+              tags: [SWAGGER_TAGS.PARTNER],
+              summary: entry.description,
+              description: entry.scopeDescription,
+              responses: { '200': { description: 'Respuesta exitosa' } },
+            };
+
+      const nextItem = {
+        ...(existingItem && typeof existingItem === 'object' ? existingItem : {}),
+        [method]: operation,
+      };
+      filteredPaths[pathKey] = nextItem as NonNullable<
+        OpenAPIObject['paths']
+      >[string];
+
+      const tags = (operation as { tags?: string[] }).tags;
+      tags?.forEach((tag) => visibleTags.add(tag));
+    }
+  }
+
+  private resolveSourcePathKey(
+    paths: OpenAPIObject['paths'] | undefined,
+    normalizedPath: string,
+  ): string | undefined {
+    if (!paths) return undefined;
+    if (paths[normalizedPath]) return normalizedPath;
+    for (const key of Object.keys(paths)) {
+      if (pathMatchesRouteTemplate(key, normalizedPath)) return key;
+    }
+    return undefined;
   }
 
   private isAlwaysVisible(path: string): boolean {

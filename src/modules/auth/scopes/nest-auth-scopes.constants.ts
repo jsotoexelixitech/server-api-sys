@@ -186,6 +186,41 @@ export function toRouteGrantLine(method: string, path: string): string {
   return `${String(method).toUpperCase()} ${normalizeHttpPath(path)}`;
 }
 
+/** Solo grants granulares `METHOD /path` (sin comprobar scope legacy). */
+export function explicitRouteGrantMatches(
+  granted: string[],
+  method: string,
+  path: string,
+): boolean {
+  if (!granted?.length) return false;
+
+  const methodUpper = String(method).toUpperCase();
+  const requestPath = normalizeHttpPath(path);
+  for (const grant of granted) {
+    const normalized = String(grant ?? '').trim();
+    if (!normalized.includes(' ')) continue;
+    const space = normalized.indexOf(' ');
+    const grantMethod = normalized.slice(0, space).toUpperCase();
+    if (grantMethod !== methodUpper) continue;
+    const grantPath = normalized.slice(space + 1);
+    if (pathMatchesRouteTemplate(grantPath, path)) return true;
+  }
+
+  if (
+    methodUpper === 'POST' &&
+    /\/api\/v1\/mail\/funeral-[a-z0-9-]+$/i.test(requestPath)
+  ) {
+    for (const grant of granted) {
+      const normalized = String(grant ?? '').trim();
+      if (!normalized.toUpperCase().startsWith('POST ')) continue;
+      const grantPath = normalizeHttpPath(normalized.slice(5));
+      if (/\/api\/v1\/mail\/funeral-[a-z0-9-]+$/i.test(grantPath)) return true;
+    }
+  }
+
+  return false;
+}
+
 /** Scope completo (legacy) o grant por ruta individual en `granted`. */
 export function grantMatchesRoute(
   granted: string[],
@@ -196,16 +231,5 @@ export function grantMatchesRoute(
   if (!requiredScope) return true;
   if (!granted?.length) return false;
   if (scopeMatches(granted, requiredScope)) return true;
-
-  const methodUpper = String(method).toUpperCase();
-  for (const grant of granted) {
-    const normalized = String(grant ?? '').trim();
-    if (!normalized.includes(' ')) continue;
-    const space = normalized.indexOf(' ');
-    const grantMethod = normalized.slice(0, space).toUpperCase();
-    if (grantMethod !== methodUpper) continue;
-    const grantPath = normalized.slice(space + 1);
-    if (pathMatchesRouteTemplate(grantPath, path)) return true;
-  }
-  return false;
+  return explicitRouteGrantMatches(granted, method, path);
 }

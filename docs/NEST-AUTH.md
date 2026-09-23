@@ -84,3 +84,9 @@ NEST_AUTH_USE_TOKEN=true         # Bearer en todas las llamadas HTTP
 | `documents:write` | `POST /documents/conductor-habitual` |
 
 Catálogos (`valrep/*`, `inma/*`, `personas/planes`, etc.) requieren token pero **sin scope** específico.
+
+## Swagger filtrado por key (`doc_<slug>`)
+
+Contrato operativo (admin ↔ docs cliente, partner, tests): **`docs/NEST-AUTH-SWAGGER-FILTRADO.md`**.
+
+Resumen: todo grant visible en el panel admin debe aparecer en el Swagger del enlace de la key; keys sin grants solo ven autenticación.
