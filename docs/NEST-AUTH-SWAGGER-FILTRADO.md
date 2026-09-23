@@ -18,7 +18,7 @@ Cada key tiene un enlace `doc_<slug>` que muestra **solo** los endpoints autoriz
 
 Los paquetes **partner** a menudo registran rutas en `partnerScopes` o por descubrimiento de controllers, pero **no** generan path en OpenAPI si el controlador no lleva decoradores Swagger.
 
-**Comportamiento del host (desde fix 2026-09):** `OpenApiFilterService.appendGrantedCatalogRoutes` inyecta en el doc filtrado las rutas del catálogo a las que la key tiene acceso, aunque falten en OpenAPI (stub mínimo bajo tag **8. Integraciones partner**). Si el path sí existe en OpenAPI, se reutiliza la operación completa.
+**Comportamiento del host (desde fix 2026-09):** `OpenApiFilterService.appendGrantedCatalogRoutes` inyecta en el doc filtrado **cada grant de la key** (`METHOD /path` y scopes expandidos con `expandGrantsToRoutes`), aunque la ruta no esté en el catálogo runtime (p. ej. `PARTNER_PACKAGES` distinto al crear la key) o falte en OpenAPI. Stub bajo tag **8. Integraciones partner**; si el path existe en OpenAPI, se reutiliza la operación completa.
 
 ## Integradores partner (recomendado)
 
@@ -57,3 +57,4 @@ Antes de cerrar cambios en auth/docs: `npm test -- --testPathPattern="open-api-f
 |-------|---------|-------|-----|
 | 2026-09 | Todos los doc_* veían `endoso-recibos` | Rutas sin scope → `return true` en filtro | `6f0f018` — denegar sin scope |
 | 2026-09 | Key Venemergencia solo auth | Catálogo partner ≠ paths OpenAPI | `appendGrantedCatalogRoutes` + tests |
+| 2026-09 | Venemergencia sigue solo auth tras deploy | Filtro solo iteraba `buildRouteCatalog()` | Inyectar grants `METHOD /path` guardados en la key |
