@@ -149,6 +149,127 @@ export class CollectionService {
     }
   }
 
+  private isEnsurePagoMovilSpMissing(err: unknown): boolean {
+    const msg = err instanceof Error ? err.message : String(err);
+    return /could not find stored procedure/i.test(msg)
+      || /\b2812\b/.test(msg)
+      || /spEnsurePagoMovilRcv_Nexus/i.test(msg);
+  }
+
+  /** Fallback si el SP aún no está en Sis2000 (pago_movil.ifuente CHAR(10)). */
+  private async insertPagoMovilDirect(params: {
+    xreferencia: string;
+    dni: string | null;
+    telOrig: string | null;
+    telDest: string;
+    bancoOrig: string;
+    bancoDest: string;
+    monto: number;
+    fecha: Date;
+    descripcion: string;
+    ifuente: string;
+    logContext: string;
+  }): Promise<void> {
+    const ifuente = String(params.ifuente).trim().slice(0, 10);
+    if (!ifuente) {
+      throw new BadRequestException('ifuente inválido para pago_movil.');
+    }
+
+    const T = this.db.types;
+    const ins = this.db.request();
+    ins.input('dni', T.VarChar(20), params.dni);
+    ins.input('tel_orig', T.VarChar(20), params.telOrig);
+    ins.input('tel_dest', T.VarChar(20), params.telDest);
+    ins.input('banco_orig', T.VarChar(10), params.bancoOrig);
+    ins.input('banco_dest', T.VarChar(10), params.bancoDest);
+    ins.input('referencia', T.VarChar(50), params.xreferencia);
+    ins.input('monto', T.Numeric(18, 2), params.monto);
+    ins.input('fecha', T.DateTime, params.fecha);
+    ins.input('descripcion', T.VarChar(200), params.descripcion);
+    ins.input('ifuente', T.Char(10), ifuente);
+
+    await ins.query(`
+      INSERT INTO pago_movil
+        (dni, telefono_origen, telefono_destino, banco_origen, banco_destino,
+         referencia_banco, monto, fecha_movimiento, descripcion, refpk, ifuente, fcreacion)
+      SELECT
+        @dni, @tel_orig, @tel_dest, @banco_orig, @banco_dest,
+        @referencia, @monto, @fecha, @descripcion, @referencia, @ifuente, GETDATE()
+      WHERE NOT EXISTS (
+        SELECT 1 FROM pago_movil WHERE referencia_banco = @referencia
+      )
+    `);
+
+    this.logger.log(
+      `${params.logContext}: ref=${params.xreferencia} registrado en pago_movil (SQL directo)`,
+    );
+  }
+
+  /**
+   * Registra referencia en pago_movil (SP preferido; INSERT directo si el SP no está desplegado).
+   * Script: docs/sql/spEnsurePagoMovilRcv_Nexus.sql
+   */
+  private async ensurePagoMovilRegisteredViaSp(params: {
+    xreferencia: string;
+    dni: string | null;
+    telOrig: string | null;
+    telDest: string;
+    bancoOrig: string;
+    bancoDest: string;
+    monto: number;
+    fecha: Date;
+    descripcion: string;
+    ifuente: string;
+    logContext: string;
+  }): Promise<void> {
+    const T = this.db.types;
+    const req = this.db.request();
+    req.input('xreferencia', T.VarChar(50), params.xreferencia);
+    req.input('dni', T.VarChar(20), params.dni);
+    req.input('tel_orig', T.VarChar(20), params.telOrig);
+    req.input('tel_dest', T.VarChar(20), params.telDest);
+    req.input('banco_orig', T.VarChar(10), params.bancoOrig);
+    req.input('banco_dest', T.VarChar(10), params.bancoDest);
+    req.input('monto', T.Numeric(18, 2), params.monto);
+    req.input('fecha', T.DateTime, params.fecha);
+    req.input('descripcion', T.VarChar(200), params.descripcion);
+    req.input('ifuente', T.VarChar(20), params.ifuente);
+    req.output('accion', T.Char(1));
+    req.output('mensaje', T.VarChar(500));
+
+    try {
+      const result = await req.execute('spEnsurePagoMovilRcv_Nexus');
+      const accion = String(result.output['accion'] ?? '').trim();
+      const mensaje = String(result.output['mensaje'] ?? '').trim();
+
+      if (accion === 'E') {
+        throw new InternalServerErrorException(
+          mensaje || 'spEnsurePagoMovilRcv_Nexus falló',
+        );
+      }
+
+      if (accion === 'I') {
+        this.logger.log(
+          `${params.logContext}: ref=${params.xreferencia} registrado en pago_movil (SP)`,
+        );
+      }
+    } catch (err) {
+      if (this.isEnsurePagoMovilSpMissing(err)) {
+        this.logger.warn(
+          `${params.logContext}: spEnsurePagoMovilRcv_Nexus no desplegado — INSERT directo`,
+        );
+        await this.insertPagoMovilDirect(params);
+        return;
+      }
+      if (err instanceof BadRequestException || err instanceof InternalServerErrorException) {
+        throw err;
+      }
+      const msg = parseSPError(err);
+      this.logger.error(`${params.logContext}: ${msg}`);
+      throw new InternalServerErrorException(msg);
+    }
+  }
+
   /** ¿Existe la referencia en pago_movil o trsypago? */
   private async isPaymentRegistered(xreferencia: string): Promise<boolean> {
     const T = this.db.types;
@@ -232,40 +353,25 @@ export class CollectionService {
       return;
     }
 
-    const T = this.db.types;
     const destBank =
       body.cbanco_dest_ref?.trim() ||
       process.env.LAMUNDIAL_PAYMENTS_DEST_BANCO ||
       '0171';
     const fechaMov = new Date(`${body.fpago}T12:00:00`);
 
-    const ins = this.db.request();
-    ins.input('dni', T.VarChar(20), collectionPaymentCedula(body));
-    ins.input('tel_orig', T.VarChar(20), collectionPaymentTelefono(body));
-    ins.input('tel_dest', T.VarChar(20), body.telefono_dest?.trim() ?? '04143966962');
-    ins.input('banco_orig', T.VarChar(10), bankRef);
-    ins.input('banco_dest', T.VarChar(10), destBank);
-    ins.input('referencia', T.VarChar(50), ref);
-    ins.input('monto', T.Numeric(18, 2), body.mpago);
-    ins.input('fecha', T.DateTime, fechaMov);
-
-    const insertResult = await ins.query(`
-      INSERT INTO pago_movil
-        (dni, telefono_origen, telefono_destino, banco_origen, banco_destino,
-         referencia_banco, monto, fecha_movimiento, descripcion, refpk, ifuente, fcreacion)
-      SELECT
-        @dni, @tel_orig, @tel_dest, @banco_orig, @banco_dest,
-        @referencia, @monto, @fecha, 'Pago verificado Exelixi', @referencia, 'EXELIXI', GETDATE()
-      WHERE NOT EXISTS (
-        SELECT 1 FROM pago_movil WHERE LTRIM(RTRIM(referencia_banco)) = @referencia
-      )
-    `);
-
-    if (this.sumRowsAffected(insertResult) > 0) {
-      this.logger.log(`ensureMobilePayment: ref=${ref} registrado en pago_movil (Exelixi)`);
-    } else {
-      this.logger.warn(`ensureMobilePayment: ref=${ref} sin INSERT (referencia ya existía)`);
-    }
+    await this.ensurePagoMovilRegisteredViaSp({
+      xreferencia: ref,
+      dni: collectionPaymentCedula(body),
+      telOrig: collectionPaymentTelefono(body),
+      telDest: body.telefono_dest?.trim() ?? '04143966962',
+      bancoOrig: bankRef,
+      bancoDest: destBank,
+      monto: body.mpago,
+      fecha: fechaMov,
+      descripcion: 'Pago verificado Exelixi',
+      ifuente: 'EXELIXI',
+      logContext: 'ensureMobilePayment',
+    });
   }
 
   /**
@@ -279,7 +385,6 @@ export class CollectionService {
       return;
     }
 
-    const T = this.db.types;
     const fechaMov = new Date(`${body.fpago}T12:00:00`);
     const farmaciaBankRef =
       process.env.LAMUNDIAL_FARMACIA_BANCO_REF?.trim() || '0000';
@@ -288,33 +393,19 @@ export class CollectionService {
       process.env.LAMUNDIAL_PAYMENTS_DEST_BANCO ||
       '0171';
 
-    const ins = this.db.request();
-    ins.input('dni', T.VarChar(20), collectionPaymentCedula(body));
-    ins.input('tel_orig', T.VarChar(20), collectionPaymentTelefono(body));
-    ins.input('tel_dest', T.VarChar(20), body.telefono_dest?.trim() ?? '04143966962');
-    ins.input('banco_orig', T.VarChar(10), farmaciaBankRef);
-    ins.input('banco_dest', T.VarChar(10), destBank);
-    ins.input('referencia', T.VarChar(50), ref);
-    ins.input('monto', T.Numeric(18, 2), body.mpago);
-    ins.input('fecha', T.DateTime, fechaMov);
-
-    const insertResult = await ins.query(`
-      INSERT INTO pago_movil
-        (dni, telefono_origen, telefono_destino, banco_origen, banco_destino,
-         referencia_banco, monto, fecha_movimiento, descripcion, refpk, ifuente, fcreacion)
-      SELECT
-        @dni, @tel_orig, @tel_dest, @banco_orig, @banco_dest,
-        @referencia, @monto, @fecha, 'Factura farmacia RCV tarjeta', @referencia, 'FARMACIA-RVC', GETDATE()
-      WHERE NOT EXISTS (
-        SELECT 1 FROM pago_movil WHERE LTRIM(RTRIM(referencia_banco)) = @referencia
-      )
-    `);
-
-    if (this.sumRowsAffected(insertResult) > 0) {
-      this.logger.log(`ensureFarmaciaFactura: ref=${ref} registrado en pago_movil (farmacia)`);
-    } else {
-      this.logger.warn(`ensureFarmaciaFactura: ref=${ref} sin INSERT (referencia ya existía)`);
-    }
+    await this.ensurePagoMovilRegisteredViaSp({
+      xreferencia: ref,
+      dni: collectionPaymentCedula(body),
+      telOrig: collectionPaymentTelefono(body),
+      telDest: body.telefono_dest?.trim() ?? '04143966962',
+      bancoOrig: farmaciaBankRef,
+      bancoDest: destBank,
+      monto: body.mpago,
+      fecha: fechaMov,
+      descripcion: 'Factura farmacia RCV tarjeta',
+      ifuente: 'FARMRCV',
+      logContext: 'ensureFarmaciaFactura',
+    });
   }
 
   /** La referencia debe existir en pago_movil o trsypago (mismo criterio que SysIP). */

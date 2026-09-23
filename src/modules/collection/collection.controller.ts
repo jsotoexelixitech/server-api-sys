@@ -156,6 +156,16 @@ export class CollectionController {
         description: 'Incluye `xtelefono` y `cci_rif` opcionales del pagador.',
         value: RCV_COLLECTION_ACTIVATE_BODY,
       },
+      tarjetaFarmacia: {
+        summary: 'Tarjeta RCV factura farmacia (bfactura=1)',
+        value: {
+          cnrecibo: '18-100272044',
+          mpago: 7.24,
+          xreferencia: '1234567890123456',
+          fpago: '2026-09-23',
+          origen_pago: 'farmacia',
+        },
+      },
     },
   })
   @ApiResponse({
