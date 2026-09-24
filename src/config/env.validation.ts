@@ -8,8 +8,7 @@ export const envValidationSchema = Joi.object({
   SWAGGER_PATH: Joi.string().default('docs'),
   /** Prefijo HTTPS cierrelmds (ej. /nest-api-docs). Vacío = rutas en raíz (/docs, /api). */
   PUBLIC_API_PREFIX: Joi.string().allow('').default(''),
-  /** Origen público para Swagger servers (sin barra final). */
-  /** Origen público HTTPS. QA srv001: nexusqa. Prod: cierrelmds. */
+  /** Origen público HTTPS. Prod: nest-api.exelixitech.com · QA: nexusqa · Dev: cierrelmds. */
   PUBLIC_API_ORIGIN: Joi.string().uri().default('https://nexusqa.exelixitech.com'),
   CORS_ORIGIN: Joi.string().default('*'),
 
@@ -36,6 +35,14 @@ export const envValidationSchema = Joi.object({
   MSSQL_SP_BUSCA_PLAN_PRODUCTO_NEXUS: Joi.string().default(
     'sp_busca_plan_producto_nexus',
   ),
+  /** Personas: defaults = SysIP legacy; en QA setear *_nexus / sp_get_maclient_api. */
+  MSSQL_SP_BUSCA_DETALLE_PLAN: Joi.string().default('spBuscaDetallePlan'),
+  MSSQL_SP_CALCULO_PER: Joi.string().default('spCalculoPer'),
+  MSSQL_SP_VALIDATE_PERSON: Joi.string().default('speeValidatePersonGeneral'),
+  MSSQL_SP_GET_POLIZA_RECIENTE_TITULAR: Joi.string().default(
+    'spGetPolizaRecienteTitular',
+  ),
+  MSSQL_SP_GET_MACLIENT_API: Joi.string().default('spGetMaclientApi'),
 
   /** local = INSERT directo Sis2000 (default). external = HTTP La Mundial QA. */
   EMISSION_SOURCE: Joi.string().valid('local', 'external').default('local'),
@@ -145,4 +152,12 @@ export const envValidationSchema = Joi.object({
   REPORTES_SYNC_BATCH_SIZE: Joi.number().default(1000),
   GEMINI_API_KEY: Joi.string().allow('').optional(),
   GEMINI_MODEL: Joi.string().default('gemini-2.5-flash-lite'),
+
+  /** Aviso HTTP a RMS Gateway tras cambio de póliza en endosos (no toca Sis2000). */
+  RMS_GATEWAY_ENABLED: Joi.boolean().default(true),
+  RMS_GATEWAY_BASE_URL: Joi.string().allow('').optional(),
+  RMS_GATEWAY_WEBHOOK_SECRET: Joi.string().allow('').optional(),
+  RMS_GATEWAY_API_KEY: Joi.string().allow('').optional(),
+  RMS_GATEWAY_RAMOS: Joi.string().allow('').default('5,7,8,9,45'),
+  RMS_GATEWAY_TIMEOUT_MS: Joi.number().integer().min(1000).default(8000),
 });
