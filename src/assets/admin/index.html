@@ -1105,10 +1105,18 @@
     }
 
     function buildRouteSearchText(route) {
-      return [route.routeId, route.scopeId, route.scopeLabel, route.description, route.scopeDescription]
+      const base = [route.routeId, route.scopeId, route.scopeLabel, route.description, route.scopeDescription]
         .filter(Boolean)
         .join(' ')
         .toLowerCase();
+      // Alias ES → términos técnicos del path (buscador admin)
+      const aliases = [];
+      if (/\bmail\b/.test(base) || /\/mail\//.test(base)) {
+        aliases.push('correo', 'email', 'e-mail');
+      }
+      if (/siniestro/.test(base)) aliases.push('claims', 'siniestros');
+      if (/partner\/providers/.test(base)) aliases.push('venemergencia', 'proveedores');
+      return `${base} ${aliases.join(' ')}`.trim();
     }
 
     function filterRouteList(containerId, query, metaId, moduleFilterId) {

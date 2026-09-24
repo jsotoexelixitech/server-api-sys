@@ -46,6 +46,16 @@ const ROUTE_LABELS: Record<string, string> = {
   'POST /api/v1/external/createEmissionAuto': 'Emitir póliza RCV',
   'GET /api/v1/arys/coberturas/:param/:param': 'Primas Arys (Coberturas) para membresía RCV',
   'POST /api/v1/arys/membership/register': 'Registrar membresía Arys post-emisión RCV',
+  'POST /api/v1/mail/funeral-review-alert':
+    'Correo: alerta a mesa técnica funerario',
+  'POST /api/v1/mail/funeral-payment-link':
+    'Correo: link de pago funerario al tomador',
+  'POST /api/v1/mail/funeral-rejected':
+    'Correo: aviso al tomador de solicitud funeraria rechazada',
+  'POST /api/v1/mail/policy-emission':
+    'Correo: envío de póliza emitida al tomador',
+  'POST /api/v1/mail/send':
+    'Correo: envío genérico con plantilla',
   // emissions:condominio
   'GET /api/v1/condominio/productos': 'Productos de condominio',
   'GET /api/v1/condominio/frecuencias': 'Frecuencias de pago condominio',
@@ -93,6 +103,9 @@ const ROUTE_LABELS: Record<string, string> = {
   'GET /api/endosos/planes': 'Listar planes endosables',
   'GET /api/endosos/planes/:param/coberturas': 'Coberturas del plan',
   'POST /api/endosos/planes/calcular': 'Calcular prima del endoso',
+  'POST /api/rms-sync/siniestros': 'Avisar a RMS un siniestro ya emitido',
+  'POST /api/v1/siniestros/validar': 'Prevalidar siniestro Sis2000 (póliza, vigencia, recibo)',
+  'POST /api/v1/siniestros/emitir': 'Alta de siniestro en Sis2000 (spGeneraSiniestro)',
   // partner
   'GET /api/v1/partner/starter/health': 'Health check módulo partner',
   'GET /api/v1/partner/starter/ping': 'Ping módulo partner',
