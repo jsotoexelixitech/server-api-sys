@@ -29,13 +29,13 @@ module.exports = {
         PUBLIC_API_ORIGIN:  'https://cierrelmds.exelixitech.com',
         SWAGGER_SHOW_INTERNAL_SERVERS: 'true',
       },
-      /** Alias legacy — usar env_development en srv001 (120) */
+      /** Producción La Mundial — https://nest-api.exelixitech.com */
       env_production: {
         NODE_ENV:           'production',
         SWAGGER_PATH:       'docs',
-        PUBLIC_API_PREFIX:  '/nest-api-docs',
-        PUBLIC_API_ORIGIN:  'https://cierrelmds.exelixitech.com',
-        SWAGGER_SHOW_INTERNAL_SERVERS: 'true',
+        PUBLIC_API_PREFIX:  '',
+        PUBLIC_API_ORIGIN:  'https://nest-api.exelixitech.com',
+        SWAGGER_SHOW_INTERNAL_SERVERS: 'false',
       },
       /** QA La Mundial — mismo prefijo /nest-api-docs, origen https://nexusqa.exelixitech.com */
       env_qa: {
