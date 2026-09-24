@@ -685,7 +685,7 @@
             <button type="button" class="preset-chip" data-preset="visible">Todo visible</button>
           </div>
           <div class="filter-row">
-            <input type="search" id="scopeRouteSearch" class="route-search" placeholder="Buscar endpoint, scope o método…" autocomplete="off" style="flex:1;min-width:200px;max-width:none" />
+            <input type="search" id="scopeRouteSearch" class="route-search" placeholder="Buscar: mail, correo, siniestros, partner…" autocomplete="off" style="flex:1;min-width:200px;max-width:none" />
             <select id="scopeModuleFilter" aria-label="Filtrar por módulo">
               <option value="">Todos los módulos</option>
             </select>
@@ -1138,6 +1138,10 @@
       container.querySelectorAll('.scope-group').forEach((group) => {
         const groupRows = group.querySelectorAll('.route-row:not(.hidden-by-search)');
         group.classList.toggle('hidden-by-filter', groupRows.length === 0);
+        // Con búsqueda activa, expandir grupos que tienen coincidencias (si no, solo se ve el título).
+        if (q && groupRows.length > 0) {
+          group.classList.remove('collapsed');
+        }
       });
       const emptyEl = container.querySelector('.route-list-empty');
       if (rows.length && visible === 0) {
@@ -1391,7 +1395,7 @@
             <button type="button" class="preset-chip" data-preset-edit="visible">Todo visible</button>
           </div>
           <div class="filter-row">
-            <input type="search" id="editScopeSearch" class="route-search" placeholder="Buscar endpoint…" autocomplete="off" style="flex:1;min-width:200px;max-width:none" />
+            <input type="search" id="editScopeSearch" class="route-search" placeholder="Buscar: mail, correo, siniestros…" autocomplete="off" style="flex:1;min-width:200px;max-width:none" />
             <select id="editModuleFilter" aria-label="Filtrar módulo"><option value="">Todos los módulos</option></select>
             <div class="route-toolbar" style="margin:0">
               <button type="button" class="btn btn-ghost btn-sm" data-select-all="editScope">Marcar visibles</button>
