@@ -174,6 +174,39 @@ async function bootstrap(): Promise<void> {
       )
       .addBearerAuth();
 
+    // Servidores HTTPS públicos (Producción, Desarrollo, QA)
+    swaggerConfigBuilder
+      .addServer(
+        'https://nest-api.exelixitech.com',
+        'La Mundial — Producción HTTPS (nest-api.exelixitech.com)',
+      )
+      .addServer(
+        'https://cierrelmds.exelixitech.com/nest-api-docs',
+        'La Mundial — Desarrollo HTTPS (cierrelmds.exelixitech.com)',
+      )
+      .addServer(
+        'https://nexusqa.exelixitech.com/nest-api-docs',
+        'La Mundial — QA HTTPS (nexusqa.exelixitech.com)',
+      );
+
+    // Servidor público dinámico si está configurado y no coincide con los anteriores
+    const standardPublicUrls = [
+      'https://nest-api.exelixitech.com',
+      'https://cierrelmds.exelixitech.com/nest-api-docs',
+      'https://nexusqa.exelixitech.com/nest-api-docs',
+    ];
+    if (
+      publicPaths.publicBaseUrl &&
+      !standardPublicUrls.includes(publicPaths.publicBaseUrl.replace(/\/+$/, ''))
+    ) {
+      const customLabel = publicPaths.origin.includes('nest-api')
+        ? 'La Mundial — Producción HTTPS (nest-api.exelixitech.com)'
+        : publicPaths.origin.includes('nexusqa')
+        ? 'La Mundial — QA HTTPS (nexusqa.exelixitech.com)'
+        : 'La Mundial — Desarrollo HTTPS';
+      swaggerConfigBuilder.addServer(publicPaths.publicBaseUrl, customLabel);
+    }
+
     if (showInternalSwaggerServers) {
       const isQaOrigin = publicPaths.origin.includes('nexusqa');
       const internalHost = isQaOrigin ? '192.168.8.121' : '192.168.8.120';
@@ -184,15 +217,15 @@ async function bootstrap(): Promise<void> {
         .addServer(`http://${internalHost}:${port}`, internalLabel)
         .addServer(`http://localhost:${port}`, 'Desarrollo local (tu PC)');
     }
-    if (publicPaths.prefix) {
-      const serverLabel = publicPaths.origin.includes('nexusqa')
-        ? 'La Mundial — QA HTTPS (nexusqa.exelixitech.com)'
-        : 'La Mundial — Desarrollo HTTPS (cierrelmds.exelixitech.com)';
-      swaggerConfigBuilder.addServer(publicPaths.publicBaseUrl, serverLabel);
-      bootstrapLog.log(
-        `Swagger server HTTPS: ${publicPaths.publicBaseUrl} (${serverLabel})`,
-      );
-    }
+
+    const bootstrapServerLabel = publicPaths.origin.includes('nest-api')
+      ? 'La Mundial — Producción HTTPS (nest-api.exelixitech.com)'
+      : publicPaths.origin.includes('nexusqa')
+      ? 'La Mundial — QA HTTPS (nexusqa.exelixitech.com)'
+      : 'La Mundial — Desarrollo HTTPS (cierrelmds.exelixitech.com)';
+    bootstrapLog.log(
+      `Swagger server HTTPS: ${publicPaths.publicBaseUrl} (${bootstrapServerLabel})`,
+    );
 
     const swaggerConfig = swaggerConfigBuilder
       .addTag(SWAGGER_TAGS.AUTH, SWAGGER_TAG_DESCRIPTIONS[SWAGGER_TAGS.AUTH])
@@ -354,8 +387,9 @@ async function bootstrap(): Promise<void> {
       + '<span class="sb-ver-val">${SWAGGER_BRAND_META.sidebarApiVersion}</span>'
       + '</div>'
       + '<div class="sb-env-row">'
-      + '<a class="sb-env-badge active" data-env="QA" href="#">QA</a>'
-      + '<span class="sb-env-badge disabled" title="Disponible próximamente">PROD</span>'
+      + '<a class="sb-env-badge" data-env="PROD" href="#">PROD</a>'
+      + '<a class="sb-env-badge" data-env="QA" href="#">QA</a>'
+      + '<a class="sb-env-badge" data-env="DEV" href="#">DEV</a>'
       + '</div></div>';
 
     document.body.insertBefore(nav, document.body.firstChild);
@@ -420,6 +454,19 @@ async function bootstrap(): Promise<void> {
   }
 
   /* ── QA / servidor Swagger ─────────────────────────────── */
+  function syncEnvBadges(selectedText) {
+    var nav = document.getElementById('lm-sidebar');
+    if (!nav) return;
+    var txt = (selectedText || '').toUpperCase();
+    var isProd = txt.indexOf('PROD') >= 0 || window.location.origin.indexOf('nest-api') >= 0;
+    var isQa = !isProd && (txt.indexOf('QA') >= 0 || window.location.origin.indexOf('nexusqa') >= 0);
+    var isDev = !isProd && !isQa;
+    nav.querySelectorAll('.sb-env-badge[data-env]').forEach(function(b) {
+      var env = b.getAttribute('data-env');
+      b.classList.toggle('active', (env === 'PROD' && isProd) || (env === 'QA' && isQa) || (env === 'DEV' && isDev));
+    });
+  }
+
   function autoSelectSwaggerServer() {
     var select = document.querySelector('.swagger-ui .servers select');
     if (!select || select.dataset.lmAuto) return;
@@ -431,8 +478,13 @@ async function bootstrap(): Promise<void> {
         select.selectedIndex = idx;
         select.dataset.lmAuto = '1';
         select.dispatchEvent(new Event('change', { bubbles: true }));
+        syncEnvBadges(opt.text);
       }
     });
+    if (!select.dataset.lmAuto && select.options.length > 0) {
+      var currentOpt = select.options[select.selectedIndex];
+      if (currentOpt) syncEnvBadges(currentOpt.text);
+    }
   }
 
   function wireEnvBadges(nav) {
@@ -448,12 +500,19 @@ async function bootstrap(): Promise<void> {
           if (opt.text.toUpperCase().indexOf(env) >= 0) {
             select.selectedIndex = idx;
             select.dispatchEvent(new Event('change', { bubbles: true }));
+            syncEnvBadges(opt.text);
           }
         });
-        nav.querySelectorAll('.sb-env-badge').forEach(function(b) { b.classList.remove('active'); });
-        badge.classList.add('active');
       });
     });
+    var select = document.querySelector('.swagger-ui .servers select');
+    if (select && !select.dataset.envListener) {
+      select.dataset.envListener = '1';
+      select.addEventListener('change', function() {
+        var opt = select.options[select.selectedIndex];
+        if (opt) syncEnvBadges(opt.text);
+      });
+    }
   }
 
   /* ── Limpiar prefijos "N. " visibles en las secciones ──── */
