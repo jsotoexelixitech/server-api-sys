@@ -791,6 +791,8 @@ export class PersonasService {
       return parentRows.map((row) => ({
         cparen: Number(row['cparen']),
         xparentesco: String(row['xparentesco'] ?? '').trim(),
+        min_edad: Number(row['min_edad'] ?? 0),
+        max_edad: Number(row['max_edad'] ?? 0),
       }));
     } catch (err) {
       if (err instanceof BadRequestException) throw err;
