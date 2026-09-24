@@ -737,7 +737,6 @@ export class ValrepService {
 
   async getFrecuencia(cplan: string, cramo?: number, cproductor?: number) {
     const spName = this.spBuscaFrecuenciaPlanNexusName();
-    const ramoPersonas = 9;
     try {
       const T = this.db.types;
       const req = this.db.request();
@@ -759,17 +758,10 @@ export class ValrepService {
       }[];
 
       if ((Boolean(result.output['berror']) && !rows.length) || !rows.length) {
-        // Personas/funerario (ramo 9): maplanes_frec suele estar vacío. SysIP
-        // persons-alt deja ANUAL y cotiza con ifrecuencia=A. No devolver 400.
-        if (Number(cramo) === ramoPersonas) {
-          this.logger.warn(
-            `getFrecuencia: plan=${cplan} cramo=9 sin filas en ${spName} — fallback ANUAL`,
-          );
-          return [{ cvalor: 'A', xdescripcion: 'ANUAL' }];
-        }
-        throw new BadRequestException(
-          String(result.output['mensaje'] ?? 'No se encontraron frecuencias para el plan.'),
+        this.logger.warn(
+          `getFrecuencia: plan=${cplan} cramo=${cramo ?? 'null'} cproductor=${cproductor ?? 'null'} sin filas en ${spName} — fallback ANUAL`,
         );
+        return [{ cvalor: 'A', xdescripcion: 'ANUAL' }];
       }
       // El SP o la tabla maplanes_frec_produc pueden devolver varias filas con el mismo cvalor (A, B, D…).
       return rows.filter((row, index, all) => {
