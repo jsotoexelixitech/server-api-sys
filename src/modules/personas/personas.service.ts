@@ -71,6 +71,8 @@ export interface PlanPerItem {
   /** Tope de personas: titular + nmax_dep. */
   maxAsegurados?: number;
   parentescos?: Array<{ cparen: number; xparentesco: string; min_edad: number; max_edad: number }>;
+  /** Días de vigencia (maplanes_frec) — Viajero / Viajero Local. */
+  ndias?: number | null;
 }
 
 export interface CotizacionPerResult {
@@ -546,7 +548,118 @@ export class PersonasService {
       cmoneda: this.optionalText(row['cmoneda']) || undefined,
       nmax_dep: this.intField(row['nmax_dep']),
       parentescos,
+      ndias:
+        row['ndias'] != null && Number.isFinite(Number(row['ndias']))
+          ? Number(row['ndias'])
+          : null,
     };
+  }
+
+  /**
+   * Productos Viajero (25) y Viajero Local (26): en SysIP el plan se elige por ndias
+   * (maplanes_frec). El SP de canal a veces devuelve 1 sola fila; expandimos todas
+   * las variantes por días para el selector.
+   */
+  private isViajeroDayProduct(cproducto: string): boolean {
+    const code = String(cproducto || '').trim();
+    return code === '25' || code === '26';
+  }
+
+  private labelWithNdias(xplan: string, ndias: number): string {
+    const base = String(xplan || '').trim();
+    if (!base) return `Plan · ${ndias} días`;
+    if (/\d+\s*d[ií]as?/i.test(base)) return base;
+    return `${base} · ${ndias} días`;
+  }
+
+  private async expandViajeroPlanesByNdias(
+    planes: PlanPerItem[],
+    cproducto: string,
+  ): Promise<PlanPerItem[]> {
+    if (!this.isViajeroDayProduct(cproducto)) return planes;
+
+    const byCplan = new Map(planes.map((p) => [p.cplan, p]));
+    try {
+      const T = this.db.types;
+      const req = this.db.request();
+      req.input('cproducto', T.NVarChar(20), String(cproducto).trim());
+      const result = await req.query(`
+        SELECT
+          LTRIM(RTRIM(f.cplan)) AS cplan,
+          f.cramo AS cramo,
+          f.ndias AS ndias,
+          LTRIM(RTRIM(p.xplan)) AS xplan,
+          p.nmax_dep AS nmax_dep,
+          LTRIM(RTRIM(CAST(p.cmoneda AS nvarchar(20)))) AS cmoneda
+        FROM maplanes_frec f
+        INNER JOIN maplanes_per p
+          ON LTRIM(RTRIM(f.cplan)) = LTRIM(RTRIM(p.cplan))
+         AND f.cramo = p.cramo
+        WHERE LTRIM(RTRIM(CAST(p.cproducto AS nvarchar(20)))) = @cproducto
+          AND f.ndias IS NOT NULL
+          AND f.ndias > 0
+        ORDER BY f.ndias, f.cplan
+      `);
+      const rows = (result.recordset ?? []) as Record<string, unknown>[];
+      if (!rows.length) {
+        this.logger.warn(
+          `expandViajeroPlanesByNdias cproducto=${cproducto}: sin filas en maplanes_frec — se mantienen ${planes.length} del SP`,
+        );
+        return planes;
+      }
+
+      const expanded: PlanPerItem[] = [];
+      const seen = new Set<string>();
+      for (const row of rows) {
+        const cplan = this.optionalText(row['cplan']);
+        const ndias = Number(row['ndias']);
+        if (!cplan || !Number.isFinite(ndias) || ndias <= 0) continue;
+        const key = `${cplan}|${ndias}`;
+        if (seen.has(key)) continue;
+        seen.add(key);
+        const base = byCplan.get(cplan);
+        const xplanRaw = this.optionalText(row['xplan']) || base?.xplan || cplan;
+        expanded.push({
+          cplan,
+          xplan: this.labelWithNdias(xplanRaw, ndias),
+          cramo: Number(row['cramo'] ?? base?.cramo ?? this.defaultRamo),
+          cmoneda: this.optionalText(row['cmoneda']) || base?.cmoneda,
+          nmax_dep:
+            row['nmax_dep'] != null
+              ? this.intField(row['nmax_dep'])
+              : (base?.nmax_dep ?? null),
+          parentescos: base?.parentescos ?? [],
+          maxAsegurados: base?.maxAsegurados,
+          ndias,
+        });
+      }
+
+      if (!expanded.length) return planes;
+
+      // Parentescos / nmax si el SP no trajo el cplan (solo maplanes_frec).
+      const missingParen = expanded.filter((p) => !(p.parentescos?.length));
+      for (const plan of missingParen) {
+        const fromSp = planes.find((p) => p.cplan === plan.cplan);
+        if (fromSp?.parentescos?.length) {
+          plan.parentescos = fromSp.parentescos;
+          continue;
+        }
+        try {
+          plan.parentescos = await this.getParenPlanPer(plan.cramo, plan.cplan);
+        } catch {
+          plan.parentescos = [];
+        }
+      }
+
+      this.logger.log(
+        `expandViajeroPlanesByNdias cproducto=${cproducto}: SP=${planes.length} → frec=${expanded.length}`,
+      );
+      return this.withMaxAsegurados(expanded);
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : String(err);
+      this.logger.warn(`expandViajeroPlanesByNdias cproducto=${cproducto}: ${msg}`);
+      return planes;
+    }
   }
 
   /**
@@ -616,7 +729,8 @@ export class PersonasService {
     if (!planes.length) {
       throw new BadRequestException('No se encontraron planes para el canal / producto SSO.');
     }
-    return this.withMaxAsegurados(planes);
+    const withMax = await this.withMaxAsegurados(planes);
+    return this.expandViajeroPlanesByNdias(withMax, cproducto);
   }
 
   /** Lee nmax_dep de maplanes_per (sin ALTER SP) y calcula titular + dependientes. */
