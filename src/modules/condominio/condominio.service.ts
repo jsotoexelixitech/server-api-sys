@@ -87,6 +87,70 @@ export class CondominioService {
     return (acc || text).slice(0, XAVECALLE_MAX).trim() || fallback;
   }
 
+  /** Apartamento → número de certificado Core (004 → 4). Ignora hash legacy en ncertificado si hay apto. */
+  private resolveCertificadoApto(dto: CreateEmissionCondominioDto): number | null {
+    const fromText = String(dto.apartamento ?? '').replace(/\D/g, '');
+    if (fromText) {
+      const n = parseInt(fromText, 10);
+      if (Number.isFinite(n) && n > 0) return n;
+    }
+    if (dto.napartamento != null && Number(dto.napartamento) > 0) {
+      return Math.trunc(Number(dto.napartamento));
+    }
+    const legacy = dto.ncertificado ?? dto.certificado;
+    if (legacy != null && Number(legacy) > 0 && Number(legacy) <= 9999) {
+      return Math.trunc(Number(legacy));
+    }
+    return null;
+  }
+
+  /**
+   * Valida póliza vigente por clave compuesta cédula + plan + apartamento (certificado).
+   * Permite otra póliza RESIDE/Hogar del mismo titular en distinto apto.
+   */
+  private async assertPolizaVigenteCondominioPorApto(
+    rifAsegurado: number,
+    cramo: number,
+    cplan: string,
+    fdesde: string,
+    ccerti: number | null,
+  ): Promise<void> {
+    if (!ccerti || !rifAsegurado || (cramo !== 38 && cramo !== 28)) return;
+
+    const T = this.db.types;
+    const req = this.db.request();
+    req.input('rif', T.Numeric(12, 0), rifAsegurado);
+    req.input('cramo', T.Int, cramo);
+    req.input('cplan', T.Char(6), cplan);
+    req.input('fdesde', T.Date, fdesde);
+    req.input('ccerti', T.Int, ccerti);
+
+    const result = await req.query(`
+      SELECT TOP 1
+        LTRIM(RTRIM(p.cnpoliza)) AS cnpoliza,
+        c.ccerti AS ccerti
+      FROM adpoliza p
+      INNER JOIN adpolcob c
+        ON c.cpoliza = p.cpoliza
+        AND c.fanopol = p.fanopol
+        AND c.fmespol = p.fmespol
+      WHERE p.casegurado = @rif
+        AND p.cramo = @cramo
+        AND LTRIM(RTRIM(p.cplan)) = LTRIM(RTRIM(@cplan))
+        AND p.iestado = 'V'
+        AND p.fhasta > @fdesde
+        AND c.ccerti = @ccerti
+      ORDER BY p.fhasta DESC
+    `);
+
+    const row = result.recordset?.[0] as { cnpoliza?: string; ccerti?: number } | undefined;
+    if (row?.cnpoliza) {
+      throw new BadRequestException(
+        `Se ha detectado una póliza vigente (${row.cnpoliza}) con el mismo asegurado, plan y apartamento.`,
+      );
+    }
+  }
+
   /**
    * Equipos en el formato que espera OPENJSON del SP
    * (xdescrip, anofab, msumasetot, cantidad). Descarta shapes inválidos
@@ -253,6 +317,20 @@ export class CondominioService {
         );
       }
 
+      const ccertiApto = this.resolveCertificadoApto(dto);
+      if ((dto.cramo === 38 || dto.cramo === 28) && !ccertiApto) {
+        throw new BadRequestException(
+          'El número de apartamento es obligatorio para emitir Hogar/RC por unidad (clave cédula + plan + apartamento).',
+        );
+      }
+      await this.assertPolizaVigenteCondominioPorApto(
+        rifAsegurado,
+        dto.cramo,
+        dto.plan,
+        fdesde,
+        ccertiApto,
+      );
+
       // 4. Cotización interna si faltan campos calculados
       let prima = dto.prima;
       let msumaasegext = dto.msumaasegext;
@@ -332,6 +410,12 @@ export class CondominioService {
       req.input('xdescrip2', T.VarChar(250), String(dto.xdescrip2 ?? '').slice(0, 250));
       req.input('xdescrip3', T.VarChar(250), dto.xdescrip3 != null ? String(dto.xdescrip3).slice(0, 250) : null);
       req.input('xdescrip4', T.VarChar(250), dto.xdescrip4 != null ? String(dto.xdescrip4).slice(0, 250) : null);
+
+      if (ccertiApto != null) {
+        req.input('ncertificado', T.Int, ccertiApto);
+        req.input('napartamento', T.Int, ccertiApto);
+        req.input('ccerti', T.Int, ccertiApto);
+      }
 
       // Arrays JSON (IDs escalares — el SP hace OPENJSON … SMALLINT '$')
       req.input('dispositivos', T.NVarChar(T.MAX), JSON.stringify(dispositivos));

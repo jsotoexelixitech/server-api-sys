@@ -15,12 +15,18 @@ import {
   AUTO_IFRECUENCIA_VALUES,
   AutoIfrecuenciaCode,
 } from '../valrep/constants/auto-ifrecuencia.constants';
+import { RmsGatewayService } from '../rms-gateway/rms-gateway.service';
+import { RmsSyncService } from '../rms-gateway/rms-sync.service';
 
 @Injectable()
 export class EndososService {
   private readonly logger = new Logger(EndososService.name);
 
-  constructor(private readonly db: MssqlService) {}
+  constructor(
+    private readonly db: MssqlService,
+    private readonly rmsGateway: RmsGatewayService,
+    private readonly rmsSync: RmsSyncService,
+  ) {}
 
   /**
    * Búsqueda general de pólizas con filtros y paginado.
@@ -65,6 +71,7 @@ export class EndososService {
 
   /**
    * Consulta detallada de póliza por número de póliza (cnpoliza).
+   * El SP de autos hace join a mamarca; en salud caemos a adpoliza+maclient.
    */
   async getPolizaByCnpoliza(cnpoliza: string) {
     try {
@@ -83,7 +90,13 @@ export class EndososService {
       return { poliza, certificado, recibos };
     } catch (err: any) {
       if (err instanceof NotFoundException) throw err;
-      this.logger.error(`Error en getPolizaByCnpoliza: ${err.message}`, err.stack);
+      const msg = String(err?.message ?? '');
+      this.logger.warn(`getPolizaByCnpoliza SP falló (${msg}); fallback personas`);
+      const row = await this.rmsGateway.loadPolizaRow(cnpoliza);
+      if (row) {
+        return { poliza: row, certificado: null, recibos: [] };
+      }
+      this.logger.error(`Error en getPolizaByCnpoliza: ${msg}`, err.stack);
       throw new InternalServerErrorException(err.message || 'Error al obtener detalle de la póliza.');
     }
   }
@@ -170,13 +183,27 @@ export class EndososService {
    */
   async crearRecibo(dto: CrearReciboEndosoDto) {
     try {
-      const ifrecuencia = this.resolveIfrecuencia(dto, this.resolveNcuotas(dto));
-      // El SP genera un recibo por cuota según la frecuencia; reportamos ese mismo número.
-      const ncuotas = AUTO_IFRECUENCIA_CUOTAS[ifrecuencia];
+      const explicitNcuotas = this.resolveNcuotas(dto);
+      const ifrecuencia = this.resolveIfrecuencia(dto, explicitNcuotas);
+      // ncuotas explícito manda (ej. 4 cuotas del diferencial RCV con póliza antes anual).
+      const ncuotas = explicitNcuotas ?? AUTO_IFRECUENCIA_CUOTAS[ifrecuencia];
       const { fanopol, fmespol } = this.resolvePeriodo(dto);
+      const cplan =
+        dto.cplan?.trim() ||
+        dto.cplan_nuevo?.trim() ||
+        dto.idPlan?.trim() ||
+        null;
+      const coberAdicional = dto.coberAdicional?.trim() || null;
+      const msumaaseg =
+        dto.msumaaseg ?? dto.mvalor ?? dto.suma ?? null;
+      const preserveExistingCasco = Boolean(
+        dto.preserveExistingCasco ?? dto.conservarCasco,
+      );
 
       this.logger.log(
-        `crearRecibo cnpoliza=${dto.cnpoliza} ifrecuencia=${ifrecuencia} ncuotas=${ncuotas} mprima=${dto.mprima}`,
+        `crearRecibo cnpoliza=${dto.cnpoliza} ifrecuencia=${ifrecuencia} ncuotas=${ncuotas} ` +
+          `mprima=${dto.mprima} cplan=${cplan ?? '-'} coberAdicional=${coberAdicional ?? '-'} ` +
+          `preserveExistingCasco=${preserveExistingCasco}`,
       );
 
       const req = this.db.request();
@@ -186,10 +213,18 @@ export class EndososService {
       req.input('mprima', T.Numeric(18, 2), dto.mprima);
       req.input('fdesde', T.Date, new Date(dto.fdesde));
       req.input('fhasta', T.Date, new Date(dto.fhasta));
-      req.input('cplan', T.NVarChar(10), dto.cplan || null);
+      req.input('cplan', T.NVarChar(10), cplan);
       req.input('ifrecuencia', T.Char(1), ifrecuencia);
       req.input('ncuotas', T.Int, ncuotas);
       req.input('cusuario', T.Int, dto.cusuario || 1);
+      req.input('coberAdicional', T.VarChar(2), coberAdicional);
+      req.input('msumaaseg', T.Numeric(18, 2), msumaaseg);
+      req.input('tasaCa', T.Numeric(18, 2), dto.tasaCa ?? 0);
+      req.input('tasaPt', T.Numeric(18, 2), dto.tasaPt ?? 0);
+      req.input('tasaPp', T.Numeric(18, 2), dto.tasaPp ?? 0);
+      req.input('precargorcv', T.Numeric(18, 2), 0);
+      req.input('ntoneladas', T.Int, 0);
+      req.input('preserveExistingCasco', T.Bit, preserveExistingCasco ? 1 : 0);
       req.output('pCnrecibo', T.NVarChar(30));
       req.output('pCrecibo', T.Numeric(19, 0));
       req.output('pSuccess', T.Bit);
@@ -243,6 +278,7 @@ export class EndososService {
         throw new BadRequestException(message || 'Error al anular póliza');
       }
 
+      this.rmsGateway.notifyPolizaActualizada(dto.cnpoliza);
       return { status: true, message, cnpoliza: dto.cnpoliza };
     } catch (err: any) {
       if (err instanceof BadRequestException) throw err;
@@ -272,6 +308,7 @@ export class EndososService {
         throw new BadRequestException(message || 'Error al reactivar la póliza');
       }
 
+      this.rmsGateway.notifyPolizaActualizada(dto.cnpoliza);
       return { status: true, message, cnpoliza: dto.cnpoliza };
     } catch (err: any) {
       if (err instanceof BadRequestException) throw err;
@@ -311,6 +348,20 @@ export class EndososService {
         throw new BadRequestException(message || 'Error al cambiar datos de la póliza');
       }
 
+      await this.rmsSync.enqueueSisToRmsAfterEndoso({
+        cnpoliza: dto.cnpoliza,
+        fanopol: dto.fanopol,
+        fmespol: dto.fmespol,
+        tipoCambio: dto.tipoCambio,
+        cci_rif: dto.cci_rif,
+        icedula: dto.icedula,
+        xcliente: dto.xcliente,
+        xnombre: dto.xnombre,
+        xapellido: dto.xapellido,
+        xdireccion: dto.xdireccion,
+        xtelefono: dto.xtelefono,
+        xcorreo: dto.xcorreo,
+      });
       return { status: true, message, cnpoliza: dto.cnpoliza };
     } catch (err: any) {
       if (err instanceof BadRequestException) throw err;

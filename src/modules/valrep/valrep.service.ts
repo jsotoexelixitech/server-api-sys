@@ -354,6 +354,12 @@ export class ValrepService {
     );
   }
 
+  private spBuscaDetallePlanName(): string {
+    return (
+      process.env.MSSQL_SP_BUSCA_DETALLE_PLAN?.trim() || 'spBuscaDetallePlan'
+    );
+  }
+
   /** Coberturas casco/AP que spCalculoAuto excluye de totalPA (ramo RCV / binacional). */
   private static readonly COBER_EXCLUIDAS_TOTAL_PA = new Set([
     '1', '2', '3', '4', '5', '16', '28', '69',
@@ -882,7 +888,7 @@ export class ValrepService {
     req.output('berror', T.Bit, false);
     req.output('mensaje', T.NVarChar(60), '');
 
-    const result = await req.execute('spBuscaDetallePlan');
+    const result = await req.execute(this.spBuscaDetallePlanName());
     const berror = Boolean(result.output['berror']);
     const mensaje: string = result.output['mensaje'] ?? '';
 

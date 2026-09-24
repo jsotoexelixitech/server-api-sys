@@ -39,6 +39,41 @@ export class CollectionPaymentDto {
   fpago: string;
 
   @ApiPropertyOptional({
+    example: '0134',
+    description:
+      'Código de referencia del banco origen (ej. 0134 = Banco Mercantil).',
+  })
+  @IsOptional()
+  @IsString()
+  cbanco_ref?: string;
+
+  @ApiPropertyOptional({
+    example: '584243678907',
+    description: 'Teléfono origen del pago móvil verificado.',
+  })
+  @IsOptional()
+  @IsString()
+  xtelefono?: string;
+
+  @ApiPropertyOptional({
+    example: 'V-24174934',
+    description: 'Cédula o RIF del pagador (pago móvil).',
+  })
+  @IsOptional()
+  @IsString()
+  cci_rif?: string;
+
+  @ApiPropertyOptional({ example: '04143966962', description: 'Teléfono destino La Mundial del pago móvil' })
+  @IsOptional()
+  @IsString()
+  telefono_dest?: string;
+
+  @ApiPropertyOptional({ example: '0171', description: 'Código ref. banco destino (banco_destino en pago_movil)' })
+  @IsOptional()
+  @IsString()
+  cbanco_dest_ref?: string;
+
+  @ApiPropertyOptional({
     example: 7,
     description: 'Usuario cajero que aparece en el comprobante PDF. Si se omite, se usa el valor por defecto del entorno.',
   })
@@ -57,15 +92,6 @@ export class CollectionPaymentDto {
   cbanco?: number;
 
   @ApiPropertyOptional({
-    example: '0134',
-    description:
-      'Código de referencia del banco origen (ej. 0134 = Banco Mercantil).',
-  })
-  @IsOptional()
-  @IsString()
-  cbanco_ref?: string;
-
-  @ApiPropertyOptional({
     example: 35,
     description:
       'Código del banco destino. Pago móvil = 35, SyPago = 31. Si se omite, se infiere de la referencia.',
@@ -74,26 +100,6 @@ export class CollectionPaymentDto {
   @Type(() => Number)
   @IsNumber()
   cbanco_destino?: number;
-
-  @ApiPropertyOptional({ example: '584243678907', description: 'Teléfono origen del pago móvil verificado' })
-  @IsOptional()
-  @IsString()
-  xtelefono?: string;
-
-  @ApiPropertyOptional({ example: '04143966962', description: 'Teléfono destino La Mundial del pago móvil' })
-  @IsOptional()
-  @IsString()
-  telefono_dest?: string;
-
-  @ApiPropertyOptional({ example: 'V-24174934', description: 'Cédula/RIF del pagador (pago móvil)' })
-  @IsOptional()
-  @IsString()
-  cci_rif?: string;
-
-  @ApiPropertyOptional({ example: '0171', description: 'Código ref. banco destino (banco_destino en pago_movil)' })
-  @IsOptional()
-  @IsString()
-  cbanco_dest_ref?: string;
 
   @ApiPropertyOptional({
     example: 'farmacia',
