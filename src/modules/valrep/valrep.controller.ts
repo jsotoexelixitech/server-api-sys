@@ -394,14 +394,28 @@ export class ValrepController {
             { cvalor: 'M', xdescripcion: 'MENSUAL' },
           ],
         },
+        plan: [
+          { cplan: 'RCVBAS', ifrecuencia: 'A', xfrecuencia: 'ANUAL', ndias: null },
+          { cplan: 'RCVBAS', ifrecuencia: 'S', xfrecuencia: 'SEMESTRAL', ndias: null },
+        ],
       },
     },
   })
   @ApiResponse({ status: 400, description: 'cplan requerido o inválido' })
   @Api500()
   async getFrecuencia(@Body() body: GetFrecuenciaDto) {
-    const frecuencias = await this.valrepService.getFrecuencia(body.cplan, body.cramo);
-    return { status: true, data: { frecuencias } };
+    const frecuencias = await this.valrepService.getFrecuencia(
+      body.cplan,
+      body.cramo,
+      body.cproductor,
+    );
+    const plan = frecuencias.map((f) => ({
+      cplan: f.cplan ?? body.cplan,
+      ifrecuencia: f.cvalor,
+      xfrecuencia: f.xdescripcion,
+      ndias: f.ndias ?? null,
+    }));
+    return { status: true, data: { frecuencias }, plan };
   }
 
   // ── GET /api/v1/valrep/recargosRCV ─────────────────────────────────────

@@ -735,7 +735,7 @@ export class ValrepService {
     }
   }
 
-  async getFrecuencia(cplan: string, cramo?: number) {
+  async getFrecuencia(cplan: string, cramo?: number, cproductor?: number) {
     const spName = this.spBuscaFrecuenciaPlanNexusName();
     const ramoPersonas = 9;
     try {
@@ -743,17 +743,22 @@ export class ValrepService {
       const req = this.db.request();
       req.input('cplan', T.VarChar(10), cplan);
       req.input('cramo', T.Int, cramo ?? null);
+      req.input('cproductor', T.Numeric(17), cproductor ?? null);
       req.output('berror', T.Bit, false);
       req.output('mensaje', T.NVarChar(60), '');
 
-      this.logger.log(`getFrecuencia: EXEC ${spName} cplan=${cplan} cramo=${cramo ?? 'null'}`);
+      this.logger.log(
+        `getFrecuencia: EXEC ${spName} cplan=${cplan} cramo=${cramo ?? 'null'} cproductor=${cproductor ?? 'null'}`,
+      );
       const result = await req.execute(spName);
-      const rows = (result.recordset ?? []) as {
+      let rows = (result.recordset ?? []) as {
         cvalor: string;
         xdescripcion: string;
         ndias?: number | null;
+        cplan?: string;
       }[];
-      if (Boolean(result.output['berror']) || !rows.length) {
+
+      if ((Boolean(result.output['berror']) && !rows.length) || !rows.length) {
         // Personas/funerario (ramo 9): maplanes_frec suele estar vacío. SysIP
         // persons-alt deja ANUAL y cotiza con ifrecuencia=A. No devolver 400.
         if (Number(cramo) === ramoPersonas) {
@@ -766,7 +771,7 @@ export class ValrepService {
           String(result.output['mensaje'] ?? 'No se encontraron frecuencias para el plan.'),
         );
       }
-      // El SP puede devolver varias filas con el mismo cvalor (A, B, D…).
+      // El SP o la tabla maplanes_frec_produc pueden devolver varias filas con el mismo cvalor (A, B, D…).
       return rows.filter((row, index, all) => {
         const code = String(row.cvalor ?? '').trim();
         if (!code) return false;
