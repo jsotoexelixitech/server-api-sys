@@ -16,10 +16,14 @@ import { CreateEmissionPersonDto } from './dto/create-emission-person.dto';
 import { parseSPError } from '../../common/helpers/sp-error.helper';
 import { buildPolicyPdfUrl } from '../../common/helpers/policy-url.helper';
 import {
-  SP_BUSCA_PLAN_PRODUCTO_NEXUS,
+  SP_BUSCA_DETALLE_PLAN,
+  SP_CALCULO_PER,
   SP_CALCULO_VIAJERO_PRORRATA,
   SP_CONTADOR_NEXUS,
+  SP_GET_MACLIENT_API,
+  SP_GET_POLIZA_RECIENTE_TITULAR,
   SP_PRE_EMISION_PERSONAS,
+  SP_VALIDATE_PERSON,
 } from '../../config/sis2000-sp.constants';
 import {
   assertViajeLocalEmission,
@@ -91,6 +95,35 @@ export class PersonasService {
     @Inject(forwardRef(() => ValrepService))
     private readonly valrep: ValrepService,
   ) {}
+
+  /** Nombre SP configurable (QA puede apuntar a *_nexus sin tocar prod). */
+  private spName(envKey: string, fallback: string): string {
+    const fromEnv = this.config.get<string>(envKey)?.trim();
+    return fromEnv || fallback;
+  }
+
+  private spBuscaDetallePlanName(): string {
+    return this.spName('MSSQL_SP_BUSCA_DETALLE_PLAN', SP_BUSCA_DETALLE_PLAN);
+  }
+
+  private spCalculoPerName(): string {
+    return this.spName('MSSQL_SP_CALCULO_PER', SP_CALCULO_PER);
+  }
+
+  private spValidatePersonName(): string {
+    return this.spName('MSSQL_SP_VALIDATE_PERSON', SP_VALIDATE_PERSON);
+  }
+
+  private spGetPolizaRecienteTitularName(): string {
+    return this.spName(
+      'MSSQL_SP_GET_POLIZA_RECIENTE_TITULAR',
+      SP_GET_POLIZA_RECIENTE_TITULAR,
+    );
+  }
+
+  private spGetMaclientApiName(): string {
+    return this.spName('MSSQL_SP_GET_MACLIENT_API', SP_GET_MACLIENT_API);
+  }
 
   private intField(value: unknown): number | null {
     if (value == null || String(value).trim() === '') return null;
@@ -385,7 +418,7 @@ export class PersonasService {
     const T = this.db.types;
     const req = this.db.request();
     req.input('casegurado', T.Numeric(9, 0), rifTitular);
-    const result = await req.execute('spGetPolizaRecienteTitular');
+    const result = await req.execute(this.spGetPolizaRecienteTitularName());
     return (result.recordset?.[0] ?? {}) as Record<string, unknown>;
   }
 
@@ -633,7 +666,7 @@ export class PersonasService {
       req.output('berror', T.Bit, false);
       req.output('mensaje', T.NVarChar(60), '');
 
-      const result = await req.execute('spBuscaDetallePlan');
+      const result = await req.execute(this.spBuscaDetallePlanName());
       if (Boolean(result.output['berror'])) {
         throw new BadRequestException(
           String(result.output['mensaje'] ?? 'No se encontraron parentescos.'),
@@ -843,7 +876,7 @@ export class PersonasService {
         req.input('ifrecuencia', T.Char(1), body.ifrecuencia);
         req.input('msumaaseg', T.Numeric(18, 2), body.msumaaseg ?? null);
 
-        const result = await req.execute('spCalculoPer');
+        const result = await req.execute(this.spCalculoPerName());
         const totals = (result.recordsets?.[1] ?? []) as Record<string, unknown>[];
         if (totals.length > 0) {
           mprimatotal += Number(totals[0]['mprima']) || 0;
@@ -976,7 +1009,7 @@ export class PersonasService {
     req.input('xrif_titular', T.Numeric(9), body['rif_titular']);
     req.input('fnac_titular', T.DateTime, body['fnac_titular']);
     try {
-      await req.execute('speeValidatePersonGeneral');
+      await req.execute(this.spValidatePersonName());
       return { status: true, message: 'Persona válida para emisión.' };
     } catch (err) {
       const msg = parseSPError(err);
@@ -1023,10 +1056,10 @@ export class PersonasService {
     try {
       const T = this.db.types;
 
-      // 1. Canal emisor vía spGetMaclientApi. Si el token no existe, usa defaults.
+      // 1. Canal emisor vía maclient_api (override MSSQL_SP_GET_MACLIENT_API).
       const authReq = this.db.request();
       authReq.input('xtoken', T.VarChar(100), apikey);
-      const authResult = await authReq.execute('spGetMaclientApi');
+      const authResult = await authReq.execute(this.spGetMaclientApiName());
       const canal: Record<string, unknown> = authResult.recordset.length
         ? authResult.recordset[0]
         : {

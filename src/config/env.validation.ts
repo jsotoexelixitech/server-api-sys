@@ -36,6 +36,14 @@ export const envValidationSchema = Joi.object({
   MSSQL_SP_BUSCA_PLAN_PRODUCTO_NEXUS: Joi.string().default(
     'sp_busca_plan_producto_nexus',
   ),
+  /** Personas: defaults = SysIP legacy; en QA setear *_nexus / sp_get_maclient_api. */
+  MSSQL_SP_BUSCA_DETALLE_PLAN: Joi.string().default('spBuscaDetallePlan'),
+  MSSQL_SP_CALCULO_PER: Joi.string().default('spCalculoPer'),
+  MSSQL_SP_VALIDATE_PERSON: Joi.string().default('speeValidatePersonGeneral'),
+  MSSQL_SP_GET_POLIZA_RECIENTE_TITULAR: Joi.string().default(
+    'spGetPolizaRecienteTitular',
+  ),
+  MSSQL_SP_GET_MACLIENT_API: Joi.string().default('spGetMaclientApi'),
 
   /** local = INSERT directo Sis2000 (default). external = HTTP La Mundial QA. */
   EMISSION_SOURCE: Joi.string().valid('local', 'external').default('local'),
