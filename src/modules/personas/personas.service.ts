@@ -827,17 +827,20 @@ export class PersonasService {
     return /too many arguments specified|too few arguments specified/i.test(msg);
   }
 
-  /** fdesde/fhasta obligatorios en spCalculoViajeroProrrata (BDA). */
+  /** fdesde/fhasta para spCalculoViajeroProrrata. Si solo viene ndias → hoy + (ndias-1). */
   private resolveProrrataDates(body: CotizacionPerDto): { fdesde: string; fhasta: string } {
-    const fdesde = body.fdesde?.trim();
-    const fhasta = body.fhasta?.trim();
-    if (fdesde && fhasta) {
-      return { fdesde, fhasta };
+    const fdesdeIn = body.fdesde?.trim();
+    const fhastaIn = body.fhasta?.trim();
+    if (fdesdeIn && fhastaIn) {
+      return { fdesde: fdesdeIn, fhasta: fhastaIn };
     }
-    if (fdesde && typeof body.ndias === 'number' && body.ndias > 0) {
+    const ndias =
+      typeof body.ndias === 'number' && body.ndias > 0 ? body.ndias : null;
+    const fdesde = fdesdeIn || new Date().toISOString().slice(0, 10);
+    if (ndias != null) {
       const desde = new Date(`${fdesde}T00:00:00Z`);
       const hasta = new Date(desde);
-      hasta.setUTCDate(hasta.getUTCDate() + body.ndias - 1);
+      hasta.setUTCDate(hasta.getUTCDate() + ndias - 1);
       return { fdesde, fhasta: hasta.toISOString().slice(0, 10) };
     }
     throw new BadRequestException('Viajero prorrata: fdesde y fhasta son obligatorios.');
