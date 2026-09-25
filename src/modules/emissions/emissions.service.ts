@@ -237,7 +237,7 @@ export class EmissionsService {
     const plan = String(this.pick(body, 'cplan', 'plan') ?? '')
       .trim()
       .toUpperCase();
-    if (['RCVBAS', 'RUSPAT', 'FARMPA', 'FARMMO'].includes(plan)) return true;
+    if (['RCVBAS', 'RUSPAT'].includes(plan)) return true;
     const centidad = String(this.pick(body, 'centidad') ?? '').trim().toUpperCase();
     return centidad === 'P';
   }
@@ -343,89 +343,9 @@ export class EmissionsService {
     })();
   }
 
-  /** QA Sis2000: fn_validar_* exigen @xcober (nvarchar(4)); legacy solo 2 params. */
-  private resolveValidateXcober(dto: {
-    xcober?: string;
-    coberAdicional?: string;
-    cober_adicional?: string;
-  }): string {
-    const raw =
-      dto.xcober
-      ?? dto.coberAdicional
-      ?? dto.cober_adicional
-      ?? 'RC';
-    const s = String(raw).trim().slice(0, 4);
-    return s || 'RC';
-  }
-
-  private isSqlTooManyArguments(err: unknown): boolean {
-    const msg = err instanceof Error ? err.message : String(err);
-    return /too many arguments/i.test(msg);
-  }
-
-  private async fnValidarPlacaActive(
-    xplaca: string,
-    fdesde: Date,
-    xcober: string,
-  ): Promise<boolean> {
-    const T = this.db.types;
-    const query = async (withXcober: boolean) => {
-      const req = this.db.request();
-      req.input('xplaca', T.VarChar(15), xplaca);
-      req.input('fdesde', T.Date, fdesde);
-      if (withXcober) {
-        req.input('xcober', T.NVarChar(4), xcober);
-      }
-      const sql = withXcober
-        ? 'SELECT ISNULL(dbo.fn_validar_placa(@xplaca, @fdesde, @xcober), 0) AS is_active'
-        : 'SELECT ISNULL(dbo.fn_validar_placa(@xplaca, @fdesde), 0) AS is_active';
-      const result = await req.query(sql);
-      return Boolean(result.recordset?.[0]?.['is_active']);
-    };
-
-    try {
-      return await query(true);
-    } catch (err) {
-      if (this.isSqlTooManyArguments(err)) {
-        return query(false);
-      }
-      throw err;
-    }
-  }
-
-  private async fnValidarSerialActive(
-    xsercar: string,
-    fdesde: Date,
-    xcober: string,
-  ): Promise<boolean> {
-    const T = this.db.types;
-    const query = async (withXcober: boolean) => {
-      const req = this.db.request();
-      req.input('xsercar', T.VarChar(60), xsercar);
-      req.input('fdesde', T.Date, fdesde);
-      if (withXcober) {
-        req.input('xcober', T.NVarChar(4), xcober);
-      }
-      const sql = withXcober
-        ? 'SELECT ISNULL(dbo.fn_validar_serialCar(@xsercar, @fdesde, @xcober), 0) AS is_active'
-        : 'SELECT ISNULL(dbo.fn_validar_serialCar(@xsercar, @fdesde), 0) AS is_active';
-      const result = await req.query(sql);
-      return Boolean(result.recordset?.[0]?.['is_active']);
-    };
-
-    try {
-      return await query(true);
-    } catch (err) {
-      if (this.isSqlTooManyArguments(err)) {
-        return query(false);
-      }
-      throw err;
-    }
-  }
-
   /**
    * Migración de SysIP Express `POST /api/v1/emissions/automobile/vehicle`.
-   * Usa `dbo.fn_validar_placa(@xplaca, @fdesde[, @xcober])` — no la búsqueda por vhcerti.
+   * Usa `dbo.fn_validar_placa(@xplaca, @fdesde)` — no la búsqueda por vhcerti.
    *
    * Compat Express:
    * - Placa activa → `{ status: true, message }` (`type === 'warning'` cambia el texto)
@@ -441,12 +361,14 @@ export class EmissionsService {
     }
 
     try {
-      const xcober = this.resolveValidateXcober(dto);
-      const isActive = await this.fnValidarPlacaActive(
-        xplaca,
-        new Date(dto.fdesde),
-        xcober,
-      );
+      const req = this.db.request();
+      const T = this.db.types;
+      req.input('xplaca', T.VarChar(15), xplaca);
+      req.input('fdesde', T.Date, new Date(dto.fdesde));
+      const result = await req.query(`
+        SELECT ISNULL(dbo.fn_validar_placa(@xplaca, @fdesde), 0) AS is_active
+      `);
+      const isActive = Boolean(result.recordset?.[0]?.['is_active']);
 
       if (isActive) {
         const message =
@@ -467,7 +389,7 @@ export class EmissionsService {
 
   /**
    * Migración de SysIP Express `POST /api/v1/emissions/automobile/serial`.
-   * Usa `dbo.fn_validar_serialCar(@xsercar, @fdesde[, @xcober])`.
+   * Usa `dbo.fn_validar_serialCar(@xsercar, @fdesde)`.
    *
    * Compat Express:
    * - Serial activo → `{ status: true, message }` (`type === 'warning'` cambia el texto)
@@ -483,12 +405,14 @@ export class EmissionsService {
     }
 
     try {
-      const xcober = this.resolveValidateXcober(dto);
-      const isActive = await this.fnValidarSerialActive(
-        xsercar,
-        new Date(dto.fdesde),
-        xcober,
-      );
+      const req = this.db.request();
+      const T = this.db.types;
+      req.input('xsercar', T.VarChar(60), xsercar);
+      req.input('fdesde', T.Date, new Date(dto.fdesde));
+      const result = await req.query(`
+        SELECT ISNULL(dbo.fn_validar_serialCar(@xsercar, @fdesde), 0) AS is_active
+      `);
+      const isActive = Boolean(result.recordset?.[0]?.['is_active']);
 
       if (isActive) {
         const message =

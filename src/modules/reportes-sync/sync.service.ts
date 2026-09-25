@@ -155,26 +155,6 @@ export class SyncService {
     );
   }
 
-  private mergeAdapterWithColumnMap(
-    fromAdapter: Record<string, unknown>,
-    fromConfig: Record<string, unknown>,
-  ): Record<string, unknown> {
-    const merged = { ...fromAdapter };
-    for (const [key, value] of Object.entries(fromConfig)) {
-      if (value === undefined || value === null) continue;
-      if (
-        typeof value === 'string' &&
-        value.trim() === '' &&
-        merged[key] != null &&
-        String(merged[key]).trim() !== ''
-      ) {
-        continue;
-      }
-      merged[key] = value;
-    }
-    return merged;
-  }
-
   private mapRowForSync(
     entidad: string,
     row: Record<string, unknown>,
@@ -185,16 +165,14 @@ export class SyncService {
     const columnMap =
       (entityConfig.columnMap as Record<string, unknown>) ||
       (entityConfig.mapeo_columnas as Record<string, unknown>);
-    const fromAdapter = adapter.mapRow(entidad, row, connectionConfig);
     if (
       columnMap &&
       typeof columnMap === 'object' &&
       Object.keys(columnMap).length > 0
     ) {
-      const fromConfig = mapRowFromConfig(entidad, row, entityConfig);
-      return this.mergeAdapterWithColumnMap(fromAdapter, fromConfig);
+      return mapRowFromConfig(entidad, row, entityConfig);
     }
-    return fromAdapter;
+    return adapter.mapRow(entidad, row, connectionConfig);
   }
 
   private normalizeCatalogMapped(

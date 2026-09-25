@@ -54,27 +54,6 @@ export const SP_BUSCA_FRECUENCIA_PLAN_NEXUS = 'sp_busca_frecuencia_plan_nexus';
 /** Planes funerarios por producto + canal (POST /personas/planes y /valrep/planes/producto). */
 export const SP_BUSCA_PLAN_PRODUCTO_NEXUS = 'sp_busca_plan_producto_nexus';
 
-/** Detalle / parentescos plan personas (override: MSSQL_SP_BUSCA_DETALLE_PLAN). */
-export const SP_BUSCA_DETALLE_PLAN = 'spBuscaDetallePlan';
-export const SP_BUSCA_DETALLE_PLAN_NEXUS = 'sp_busca_detalle_plan_nexus';
-
-/** Cotización personas (override: MSSQL_SP_CALCULO_PER). */
-export const SP_CALCULO_PER = 'spCalculoPer';
-export const SP_CALCULO_PER_NEXUS = 'sp_calculo_per_nexus';
-
-/** Validación pre-emisión personas (override: MSSQL_SP_VALIDATE_PERSON). */
-export const SP_VALIDATE_PERSON = 'speeValidatePersonGeneral';
-export const SP_VALIDATE_PERSON_NEXUS = 'spee_validate_person_general_nexus';
-
-/** Póliza reciente por titular (override: MSSQL_SP_GET_POLIZA_RECIENTE_TITULAR). */
-export const SP_GET_POLIZA_RECIENTE_TITULAR = 'spGetPolizaRecienteTitular';
-export const SP_GET_POLIZA_RECIENTE_TITULAR_NEXUS =
-  'sp_get_poliza_reciente_titular_nexus';
-
-/** Canal API key → productor/entidad (override: MSSQL_SP_GET_MACLIENT_API). */
-export const SP_GET_MACLIENT_API_DEFAULT = SP_GET_MACLIENT_API;
-export const SP_GET_MACLIENT_API_SNAKE = 'sp_get_maclient_api';
-
 // ── Condominio ──────────────────────────────────────────────────────────────
 export const SP_BUSCA_PLANES_CONDOMINIO = 'sp_busca_planes_condominio_nexus';
 export const SP_CALCULO_COTIZACION_CONDOMINIO = 'sp_calculo_cotizacion_condominio_nexus';
