@@ -2,6 +2,11 @@
 
 Repo Git de este subproyecto. Commits/deploy desde aquí.
 
+## Git
+
+- Crear ramas de feature/fix **siempre desde `main`**: `git fetch origin && git checkout -b mi-rama origin/main`.
+- **No commitear ni pushear directo a `main`**: solo merge vía PR desde la rama.
+
 @CONTEXTO-SESION.md
 
 ## Deploy srv001
