@@ -50,7 +50,6 @@ const PLANTILLA_ORIGEN_CONFIG = {
       poliza: 'poliza',
       recibo: 'recibo',
       montoRecibo: { field: 'monto_recibo', type: 'decimal' },
-      coberturas: 'coberturas',
     },
   },
   siniestros: {

@@ -16,14 +16,10 @@ import { CreateEmissionPersonDto } from './dto/create-emission-person.dto';
 import { parseSPError } from '../../common/helpers/sp-error.helper';
 import { buildPolicyPdfUrl } from '../../common/helpers/policy-url.helper';
 import {
-  SP_BUSCA_DETALLE_PLAN,
-  SP_CALCULO_PER,
+  SP_BUSCA_PLAN_PRODUCTO_NEXUS,
   SP_CALCULO_VIAJERO_PRORRATA,
   SP_CONTADOR_NEXUS,
-  SP_GET_MACLIENT_API,
-  SP_GET_POLIZA_RECIENTE_TITULAR,
   SP_PRE_EMISION_PERSONAS,
-  SP_VALIDATE_PERSON,
 } from '../../config/sis2000-sp.constants';
 import {
   assertViajeLocalEmission,
@@ -71,8 +67,6 @@ export interface PlanPerItem {
   /** Tope de personas: titular + nmax_dep. */
   maxAsegurados?: number;
   parentescos?: Array<{ cparen: number; xparentesco: string; min_edad: number; max_edad: number }>;
-  /** Días de vigencia (maplanes_frec) — Viajero / Viajero Local. */
-  ndias?: number | null;
 }
 
 export interface CotizacionPerResult {
@@ -97,35 +91,6 @@ export class PersonasService {
     @Inject(forwardRef(() => ValrepService))
     private readonly valrep: ValrepService,
   ) {}
-
-  /** Nombre SP configurable (QA puede apuntar a *_nexus sin tocar prod). */
-  private spName(envKey: string, fallback: string): string {
-    const fromEnv = this.config.get<string>(envKey)?.trim();
-    return fromEnv || fallback;
-  }
-
-  private spBuscaDetallePlanName(): string {
-    return this.spName('MSSQL_SP_BUSCA_DETALLE_PLAN', SP_BUSCA_DETALLE_PLAN);
-  }
-
-  private spCalculoPerName(): string {
-    return this.spName('MSSQL_SP_CALCULO_PER', SP_CALCULO_PER);
-  }
-
-  private spValidatePersonName(): string {
-    return this.spName('MSSQL_SP_VALIDATE_PERSON', SP_VALIDATE_PERSON);
-  }
-
-  private spGetPolizaRecienteTitularName(): string {
-    return this.spName(
-      'MSSQL_SP_GET_POLIZA_RECIENTE_TITULAR',
-      SP_GET_POLIZA_RECIENTE_TITULAR,
-    );
-  }
-
-  private spGetMaclientApiName(): string {
-    return this.spName('MSSQL_SP_GET_MACLIENT_API', SP_GET_MACLIENT_API);
-  }
 
   private intField(value: unknown): number | null {
     if (value == null || String(value).trim() === '') return null;
@@ -420,7 +385,7 @@ export class PersonasService {
     const T = this.db.types;
     const req = this.db.request();
     req.input('casegurado', T.Numeric(9, 0), rifTitular);
-    const result = await req.execute(this.spGetPolizaRecienteTitularName());
+    const result = await req.execute('spGetPolizaRecienteTitular');
     return (result.recordset?.[0] ?? {}) as Record<string, unknown>;
   }
 
@@ -548,118 +513,7 @@ export class PersonasService {
       cmoneda: this.optionalText(row['cmoneda']) || undefined,
       nmax_dep: this.intField(row['nmax_dep']),
       parentescos,
-      ndias:
-        row['ndias'] != null && Number.isFinite(Number(row['ndias']))
-          ? Number(row['ndias'])
-          : null,
     };
-  }
-
-  /**
-   * Productos Viajero (25) y Viajero Local (26): en SysIP el plan se elige por ndias
-   * (maplanes_frec). El SP de canal a veces devuelve 1 sola fila; expandimos todas
-   * las variantes por días para el selector.
-   */
-  private isViajeroDayProduct(cproducto: string): boolean {
-    const code = String(cproducto || '').trim();
-    return code === '25' || code === '26';
-  }
-
-  private labelWithNdias(xplan: string, ndias: number): string {
-    const base = String(xplan || '').trim();
-    if (!base) return `Plan · ${ndias} días`;
-    if (/\d+\s*d[ií]as?/i.test(base)) return base;
-    return `${base} · ${ndias} días`;
-  }
-
-  private async expandViajeroPlanesByNdias(
-    planes: PlanPerItem[],
-    cproducto: string,
-  ): Promise<PlanPerItem[]> {
-    if (!this.isViajeroDayProduct(cproducto)) return planes;
-
-    const byCplan = new Map(planes.map((p) => [p.cplan, p]));
-    try {
-      const T = this.db.types;
-      const req = this.db.request();
-      req.input('cproducto', T.NVarChar(20), String(cproducto).trim());
-      const result = await req.query(`
-        SELECT
-          LTRIM(RTRIM(f.cplan)) AS cplan,
-          f.cramo AS cramo,
-          f.ndias AS ndias,
-          LTRIM(RTRIM(p.xplan)) AS xplan,
-          p.nmax_dep AS nmax_dep,
-          LTRIM(RTRIM(CAST(p.cmoneda AS nvarchar(20)))) AS cmoneda
-        FROM maplanes_frec f
-        INNER JOIN maplanes_per p
-          ON LTRIM(RTRIM(f.cplan)) = LTRIM(RTRIM(p.cplan))
-         AND f.cramo = p.cramo
-        WHERE LTRIM(RTRIM(CAST(p.cproducto AS nvarchar(20)))) = @cproducto
-          AND f.ndias IS NOT NULL
-          AND f.ndias > 0
-        ORDER BY f.ndias, f.cplan
-      `);
-      const rows = (result.recordset ?? []) as Record<string, unknown>[];
-      if (!rows.length) {
-        this.logger.warn(
-          `expandViajeroPlanesByNdias cproducto=${cproducto}: sin filas en maplanes_frec — se mantienen ${planes.length} del SP`,
-        );
-        return planes;
-      }
-
-      const expanded: PlanPerItem[] = [];
-      const seen = new Set<string>();
-      for (const row of rows) {
-        const cplan = this.optionalText(row['cplan']);
-        const ndias = Number(row['ndias']);
-        if (!cplan || !Number.isFinite(ndias) || ndias <= 0) continue;
-        const key = `${cplan}|${ndias}`;
-        if (seen.has(key)) continue;
-        seen.add(key);
-        const base = byCplan.get(cplan);
-        const xplanRaw = this.optionalText(row['xplan']) || base?.xplan || cplan;
-        expanded.push({
-          cplan,
-          xplan: this.labelWithNdias(xplanRaw, ndias),
-          cramo: Number(row['cramo'] ?? base?.cramo ?? this.defaultRamo),
-          cmoneda: this.optionalText(row['cmoneda']) || base?.cmoneda,
-          nmax_dep:
-            row['nmax_dep'] != null
-              ? this.intField(row['nmax_dep'])
-              : (base?.nmax_dep ?? null),
-          parentescos: base?.parentescos ?? [],
-          maxAsegurados: base?.maxAsegurados,
-          ndias,
-        });
-      }
-
-      if (!expanded.length) return planes;
-
-      // Parentescos / nmax si el SP no trajo el cplan (solo maplanes_frec).
-      const missingParen = expanded.filter((p) => !(p.parentescos?.length));
-      for (const plan of missingParen) {
-        const fromSp = planes.find((p) => p.cplan === plan.cplan);
-        if (fromSp?.parentescos?.length) {
-          plan.parentescos = fromSp.parentescos;
-          continue;
-        }
-        try {
-          plan.parentescos = await this.getParenPlanPer(plan.cramo, plan.cplan);
-        } catch {
-          plan.parentescos = [];
-        }
-      }
-
-      this.logger.log(
-        `expandViajeroPlanesByNdias cproducto=${cproducto}: SP=${planes.length} → frec=${expanded.length}`,
-      );
-      return this.withMaxAsegurados(expanded);
-    } catch (err) {
-      const msg = err instanceof Error ? err.message : String(err);
-      this.logger.warn(`expandViajeroPlanesByNdias cproducto=${cproducto}: ${msg}`);
-      return planes;
-    }
   }
 
   /**
@@ -729,8 +583,7 @@ export class PersonasService {
     if (!planes.length) {
       throw new BadRequestException('No se encontraron planes para el canal / producto SSO.');
     }
-    const withMax = await this.withMaxAsegurados(planes);
-    return this.expandViajeroPlanesByNdias(withMax, cproducto);
+    return this.withMaxAsegurados(planes);
   }
 
   /** Lee nmax_dep de maplanes_per (sin ALTER SP) y calcula titular + dependientes. */
@@ -780,7 +633,7 @@ export class PersonasService {
       req.output('berror', T.Bit, false);
       req.output('mensaje', T.NVarChar(60), '');
 
-      const result = await req.execute(this.spBuscaDetallePlanName());
+      const result = await req.execute('spBuscaDetallePlan');
       if (Boolean(result.output['berror'])) {
         throw new BadRequestException(
           String(result.output['mensaje'] ?? 'No se encontraron parentescos.'),
@@ -992,7 +845,7 @@ export class PersonasService {
         req.input('ifrecuencia', T.Char(1), body.ifrecuencia);
         req.input('msumaaseg', T.Numeric(18, 2), body.msumaaseg ?? null);
 
-        const result = await req.execute(this.spCalculoPerName());
+        const result = await req.execute('spCalculoPer');
         const totals = (result.recordsets?.[1] ?? []) as Record<string, unknown>[];
         if (totals.length > 0) {
           mprimatotal += Number(totals[0]['mprima']) || 0;
@@ -1125,7 +978,7 @@ export class PersonasService {
     req.input('xrif_titular', T.Numeric(9), body['rif_titular']);
     req.input('fnac_titular', T.DateTime, body['fnac_titular']);
     try {
-      await req.execute(this.spValidatePersonName());
+      await req.execute('speeValidatePersonGeneral');
       return { status: true, message: 'Persona válida para emisión.' };
     } catch (err) {
       const msg = parseSPError(err);
@@ -1172,10 +1025,10 @@ export class PersonasService {
     try {
       const T = this.db.types;
 
-      // 1. Canal emisor vía maclient_api (override MSSQL_SP_GET_MACLIENT_API).
+      // 1. Canal emisor vía spGetMaclientApi. Si el token no existe, usa defaults.
       const authReq = this.db.request();
       authReq.input('xtoken', T.VarChar(100), apikey);
-      const authResult = await authReq.execute(this.spGetMaclientApiName());
+      const authResult = await authReq.execute('spGetMaclientApi');
       const canal: Record<string, unknown> = authResult.recordset.length
         ? authResult.recordset[0]
         : {
