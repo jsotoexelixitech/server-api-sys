@@ -5,6 +5,7 @@
 #   bash scripts/install-partner-packages.sh
 #   bash scripts/install-partner-packages.sh --build --reload
 #   bash scripts/install-partner-packages.sh @gestacio/sysip-nest-api
+#   bash scripts/install-partner-packages.sh @gestacio/sysip-nest-api@1.7.0 --build --reload
 #
 # Tokens: ~/.config/exelixi-nest-partners/tokens.env  (chmod 600)
 #   ver scripts/partner-tokens.env.example
@@ -82,8 +83,19 @@ else
   packages=("${DEFAULT_PACKAGES[@]}")
 fi
 
+# @scope/name@version → @scope/name (el mapa de tokens no incluye versión)
+pkg_name_only() {
+  local spec="$1"
+  if [[ "$spec" =~ ^(@[^/]+/[^@]+)@.+$ ]]; then
+    echo "${BASH_REMATCH[1]}"
+    return
+  fi
+  echo "$spec"
+}
+
 resolve_token() {
-  local pkg="$1"
+  local pkg
+  pkg="$(pkg_name_only "$1")"
   local var="${PKG_TOKEN_VAR[$pkg]:-}"
   local specific=""
   if [[ -n "$var" ]]; then
