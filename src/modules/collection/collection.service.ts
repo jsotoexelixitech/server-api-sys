@@ -426,75 +426,7 @@ export class CollectionService {
     return metodo === 'sypago' || metodo === 'otp' || metodo === 'domiciliacion';
   }
 
-  /**
-   * Asegura que el pago SyPago (OTP / domiciliación) exista en trsypago.
-   * Si no existe previamente, lo registra.
-   */
-  private async ensureSypagoPaymentRegistered(body: CollectionPaymentDto): Promise<void> {
-    const ref = body.xreferencia.trim();
-    if (await this.isPaymentRegistered(ref)) return;
 
-    const T = this.db.types;
-    const cedulaRaw = collectionPaymentCedula(body) || '';
-    let typeDebitor = 'V';
-    let numberDebitor = cedulaRaw;
-    if (cedulaRaw) {
-      const match = cedulaRaw.match(/^([VEJPG])[-_]?(\d+)$/i);
-      if (match) {
-        typeDebitor = match[1].toUpperCase();
-        numberDebitor = match[2];
-      }
-    }
-
-    const tel = collectionPaymentTelefono(body) || body.xtelefono?.trim() || null;
-    const bankCode = body.cbanco_ref?.trim() || '0172';
-    const fechaMov = new Date(`${body.fpago}T12:00:00`);
-    const anyBody = body as unknown as Record<string, unknown>;
-    const nombrePagador = typeof anyBody['nombre_pagador'] === 'string' ? anyBody['nombre_pagador'] : 'CLIENTE EXELIXI';
-
-    const ins = this.db.request();
-    ins.input('u_version', T.Char(1), '!');
-    ins.input('transaction_id', T.VarChar(20), ref.slice(0, 20));
-    ins.input('ref_ibp', T.VarChar(50), ref);
-    ins.input('group_id', T.VarChar(200), 'lmds-core-payments/transactionOtp');
-    ins.input('operation_date', T.DateTime, fechaMov);
-    ins.input('type_amount', T.Char(4), 'NONE');
-    ins.input('amt', T.Numeric(18, 2), body.mpago);
-    ins.input('pay_amt', T.Numeric(18, 2), body.mpago);
-    ins.input('currency', T.Char(4), 'VES');
-    ins.input('rate', T.Numeric(13, 6), 1);
-    ins.input('name_debitor', T.VarChar(200), nombrePagador);
-    ins.input('type_debitor', T.Char(1), typeDebitor);
-    ins.input('number_debitor', T.VarChar(11), numberDebitor.slice(0, 11));
-    ins.input('bank_code', T.Char(4), bankCode.slice(0, 4));
-    ins.input('bank_type', T.Char(4), 'CELE');
-    ins.input('bank_number', T.VarChar(20), tel ? tel.slice(0, 20) : null);
-    ins.input('status', T.Char(4), 'ACCP');
-    ins.input('rejected_code', T.Char(4), '    ');
-    ins.input('cprog', T.Char(20), 'SypagoSaveTran');
-    ins.input('ifuente', T.Char(10), 'EXELIXI');
-    ins.input('cusuario', T.Numeric(18, 0), body.cusuario ? Number(body.cusuario) : null);
-
-    await ins.query(`
-      DECLARE @nextC NUMERIC(18) = (SELECT ISNULL(MAX(csypago), 0) + 1 FROM trsypago);
-      INSERT INTO trsypago (
-        csypago, u_version, transaction_id, ref_ibp, group_id, operation_date,
-        type_amount, amt, pay_amt, currency, rate, use_day_rate, name_debitor,
-        type_debitor, number_debitor, bank_code, bank_type, bank_number, status,
-        rejected_code, cprog, ifuente, fingreso, cusuario
-      )
-      SELECT
-        @nextC, @u_version, @transaction_id, @ref_ibp, @group_id, @operation_date,
-        @type_amount, @amt, @pay_amt, @currency, @rate, 0, @name_debitor,
-        @type_debitor, @number_debitor, @bank_code, @bank_type, @bank_number, @status,
-        @rejected_code, @cprog, @ifuente, GETDATE(), @cusuario
-      WHERE NOT EXISTS (
-        SELECT 1 FROM trsypago WHERE ref_ibp = @ref_ibp OR transaction_id = @transaction_id
-      )
-    `);
-
-    this.logger.log(`ensureSypagoPayment: ref=${ref} registrado en trsypago (Exelixi)`);
-  }
 
   /** La referencia debe existir en pago_movil o trsypago (mismo criterio que SysIP). */
   private async assertPaymentRegistered(xreferencia: string): Promise<void> {
@@ -787,9 +719,7 @@ export class CollectionService {
     const isSypago = this.isSypagoPayment(body);
     if (body.origen_pago === 'farmacia') {
       await this.ensureFarmaciaFacturaRegistered(body);
-    } else if (isSypago) {
-      await this.ensureSypagoPaymentRegistered(body);
-    } else {
+    } else if (!isSypago) {
       await this.assertPagoMovilNotAlreadyValidated(body);
       await this.ensureMobilePaymentRegistered(body);
     }
