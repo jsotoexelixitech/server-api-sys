@@ -207,11 +207,95 @@ export class CollectionService {
     this.logger.log(`ensureFarmaciaFactura: ref=${ref} registrado en pago_movil (farmacia)`);
   }
 
+  /**
+   * Determina si el pago corresponde a SyPago (OTP / domiciliación).
+   */
+  private isSypagoPayment(body: CollectionPaymentDto): boolean {
+    if (body.cbanco_destino != null && Number(body.cbanco_destino) === 31) {
+      return true;
+    }
+    const anyBody = body as unknown as Record<string, unknown>;
+    const metodo = String(
+      anyBody['metodo_pago'] ?? anyBody['method'] ?? body.origen_pago ?? '',
+    ).toLowerCase().trim();
+    return metodo === 'sypago' || metodo === 'otp' || metodo === 'domiciliacion';
+  }
+
+  /**
+   * Asegura que el pago SyPago (OTP / domiciliación) exista en trsypago.
+   * Si no existe previamente, lo registra.
+   */
+  private async ensureSypagoPaymentRegistered(body: CollectionPaymentDto): Promise<void> {
+    const ref = body.xreferencia.trim();
+    if (await this.isPaymentRegistered(ref)) return;
+
+    const T = this.db.types;
+    const cedulaRaw = body.cci_rif?.trim() || '';
+    let typeDebitor = 'V';
+    let numberDebitor = cedulaRaw;
+    if (cedulaRaw) {
+      const match = cedulaRaw.match(/^([VEJPG])[-_]?(\d+)$/i);
+      if (match) {
+        typeDebitor = match[1].toUpperCase();
+        numberDebitor = match[2];
+      }
+    }
+
+    const tel = body.xtelefono?.trim() || null;
+    const bankCode = body.cbanco_ref?.trim() || '0172';
+    const fechaMov = new Date(`${body.fpago}T12:00:00`);
+    const anyBody = body as unknown as Record<string, unknown>;
+    const nombrePagador = typeof anyBody['nombre_pagador'] === 'string' ? anyBody['nombre_pagador'] : 'CLIENTE EXELIXI';
+
+    const ins = this.db.request();
+    ins.input('u_version', T.Char(1), '!');
+    ins.input('transaction_id', T.VarChar(20), ref.slice(0, 20));
+    ins.input('ref_ibp', T.VarChar(50), ref);
+    ins.input('group_id', T.VarChar(200), 'lmds-core-payments/transactionOtp');
+    ins.input('operation_date', T.DateTime, fechaMov);
+    ins.input('type_amount', T.Char(4), 'NONE');
+    ins.input('amt', T.Numeric(18, 2), body.mpago);
+    ins.input('pay_amt', T.Numeric(18, 2), body.mpago);
+    ins.input('currency', T.Char(4), 'VES');
+    ins.input('rate', T.Numeric(13, 6), 1);
+    ins.input('name_debitor', T.VarChar(200), nombrePagador);
+    ins.input('type_debitor', T.Char(1), typeDebitor);
+    ins.input('number_debitor', T.VarChar(11), numberDebitor.slice(0, 11));
+    ins.input('bank_code', T.Char(4), bankCode.slice(0, 4));
+    ins.input('bank_type', T.Char(4), 'CELE');
+    ins.input('bank_number', T.VarChar(20), tel ? tel.slice(0, 20) : null);
+    ins.input('status', T.Char(4), 'ACCP');
+    ins.input('rejected_code', T.Char(4), '    ');
+    ins.input('cprog', T.Char(20), 'SypagoSaveTran');
+    ins.input('ifuente', T.Char(10), 'EXELIXI');
+    ins.input('cusuario', T.Numeric(18, 0), body.cusuario ? Number(body.cusuario) : null);
+
+    await ins.query(`
+      DECLARE @nextC NUMERIC(18) = (SELECT ISNULL(MAX(csypago), 0) + 1 FROM trsypago);
+      INSERT INTO trsypago (
+        csypago, u_version, transaction_id, ref_ibp, group_id, operation_date,
+        type_amount, amt, pay_amt, currency, rate, use_day_rate, name_debitor,
+        type_debitor, number_debitor, bank_code, bank_type, bank_number, status,
+        rejected_code, cprog, ifuente, fingreso, cusuario
+      )
+      SELECT
+        @nextC, @u_version, @transaction_id, @ref_ibp, @group_id, @operation_date,
+        @type_amount, @amt, @pay_amt, @currency, @rate, 0, @name_debitor,
+        @type_debitor, @number_debitor, @bank_code, @bank_type, @bank_number, @status,
+        @rejected_code, @cprog, @ifuente, GETDATE(), @cusuario
+      WHERE NOT EXISTS (
+        SELECT 1 FROM trsypago WHERE ref_ibp = @ref_ibp OR transaction_id = @transaction_id
+      )
+    `);
+
+    this.logger.log(`ensureSypagoPayment: ref=${ref} registrado en trsypago (Exelixi)`);
+  }
+
   /** La referencia debe existir en pago_movil o trsypago (mismo criterio que SysIP). */
   private async assertPaymentRegistered(xreferencia: string): Promise<void> {
     if (!(await this.isPaymentRegistered(xreferencia))) {
       throw new BadRequestException(
-        'Referencia de pago no registrada en Sis2000. Verifique el pago móvil antes de cobrar el recibo.',
+        'Referencia de pago no registrada en Sis2000 (pago_movil o trsypago). Verifique el pago antes de cobrar el recibo.',
       );
     }
   }
@@ -295,6 +379,32 @@ export class CollectionService {
     };
   }
 
+  /** Datos de operación desde pago_movil o trsypago (banco origen + fecha operación). */
+  private async getPaymentOperationData(
+    xreferencia: string,
+  ): Promise<PagoMovilOperacion | null> {
+    const pm = await this.getPagoMovilOperacion(xreferencia);
+    if (pm) return pm;
+
+    const T = this.db.types;
+    const req = this.db.request();
+    req.input('xreferencia', T.VarChar(50), xreferencia);
+    const result = await req.query(`
+      SELECT TOP 1 bank_code, operation_date, fingreso
+      FROM trsypago
+      WHERE ref_ibp LIKE '%' + @xreferencia + '%' OR transaction_id LIKE '%' + @xreferencia + '%'
+      ORDER BY csypago DESC
+    `);
+    if (!result.recordset.length) return null;
+    const row = result.recordset[0] as Record<string, unknown>;
+    const fecha = row['operation_date'] ?? row['fingreso'];
+    return {
+      banco_origen: row['bank_code'] != null ? String(row['bank_code']).trim() : null,
+      banco_destino: '0172',
+      fecha_movimiento: fecha instanceof Date ? fecha : fecha ? new Date(String(fecha)) : null,
+    };
+  }
+
   /**
    * Igual que SysIP buildcollectReceiptPayload: cbanco_destino del canal (35/31)
    * y ctipopago de maclient_api — sin reemplazar por lookup en MABANCO_DESTINO.
@@ -340,7 +450,7 @@ export class CollectionService {
         ? Number(destResult.recordset[0]['cbanco_destino'])
         : null;
 
-    const pmOperacion = await this.getPagoMovilOperacion(xreferencia);
+    const pmOperacion = await this.getPaymentOperationData(xreferencia);
     const bancoOrigenRef =
       body.cbanco_ref?.trim() || pmOperacion?.banco_origen || null;
 
@@ -469,8 +579,11 @@ export class CollectionService {
         'mpago debe ser el monto pagado en bolívares (Bs) según la verificación bancaria.',
       );
     }
+    const isSypago = this.isSypagoPayment(body);
     if (body.origen_pago === 'farmacia') {
       await this.ensureFarmaciaFacturaRegistered(body);
+    } else if (isSypago) {
+      await this.ensureSypagoPaymentRegistered(body);
     } else {
       await this.ensureMobilePaymentRegistered(body);
     }
@@ -487,7 +600,7 @@ export class CollectionService {
     const xreferencia = body.xreferencia.trim();
     const banks = await this.resolvePaymentBanks(xreferencia, body, client);
     const receipt = await this.getReceiptAmounts(body.cnrecibo);
-    const pmOperacion = await this.getPagoMovilOperacion(xreferencia);
+    const pmOperacion = await this.getPaymentOperationData(xreferencia);
 
     let ptasamon = receipt.ptasamon;
     if (!ptasamon) {
