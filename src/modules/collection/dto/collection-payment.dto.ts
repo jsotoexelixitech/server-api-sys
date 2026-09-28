@@ -102,11 +102,11 @@ export class CollectionPaymentDto {
   cbanco_destino?: number;
 
   @ApiPropertyOptional({
-    example: 'farmacia',
+    example: 'mobile',
     description:
-      'Origen del pago: farmacia (tarjeta RCV bfactura=1, xreferencia = nfactura fiscal).',
+      'Origen o método del pago: mobile (pago móvil), sypago u otp (SyPago OTP), farmacia (tarjeta RCV bfactura=1, xreferencia = nfactura fiscal).',
   })
   @IsOptional()
   @IsString()
-  origen_pago?: 'farmacia' | 'mobile';
+  origen_pago?: 'farmacia' | 'mobile' | 'sypago' | 'otp';
 }
