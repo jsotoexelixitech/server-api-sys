@@ -412,11 +412,27 @@ export class CollectionService {
     });
   }
 
+  /**
+   * Determina si el pago corresponde a SyPago (OTP / domiciliación).
+   */
+  private isSypagoPayment(body: CollectionPaymentDto): boolean {
+    if (body.cbanco_destino != null && Number(body.cbanco_destino) === 31) {
+      return true;
+    }
+    const anyBody = body as unknown as Record<string, unknown>;
+    const metodo = String(
+      anyBody['metodo_pago'] ?? anyBody['method'] ?? body.origen_pago ?? '',
+    ).toLowerCase().trim();
+    return metodo === 'sypago' || metodo === 'otp' || metodo === 'domiciliacion';
+  }
+
+
+
   /** La referencia debe existir en pago_movil o trsypago (mismo criterio que SysIP). */
   private async assertPaymentRegistered(xreferencia: string): Promise<void> {
     if (!(await this.isPaymentRegistered(xreferencia))) {
       throw new BadRequestException(
-        'Referencia de pago no registrada en Sis2000. Verifique el pago móvil antes de cobrar el recibo.',
+        'Referencia de pago no registrada en Sis2000 (pago_movil o trsypago). Verifique el pago antes de cobrar el recibo.',
       );
     }
   }
@@ -500,6 +516,32 @@ export class CollectionService {
     };
   }
 
+  /** Datos de operación desde pago_movil o trsypago (banco origen + fecha operación). */
+  private async getPaymentOperationData(
+    xreferencia: string,
+  ): Promise<PagoMovilOperacion | null> {
+    const pm = await this.getPagoMovilOperacion(xreferencia);
+    if (pm) return pm;
+
+    const T = this.db.types;
+    const req = this.db.request();
+    req.input('xreferencia', T.VarChar(50), xreferencia);
+    const result = await req.query(`
+      SELECT TOP 1 bank_code, operation_date, fingreso
+      FROM trsypago
+      WHERE ref_ibp LIKE '%' + @xreferencia + '%' OR transaction_id LIKE '%' + @xreferencia + '%'
+      ORDER BY csypago DESC
+    `);
+    if (!result.recordset.length) return null;
+    const row = result.recordset[0] as Record<string, unknown>;
+    const fecha = row['operation_date'] ?? row['fingreso'];
+    return {
+      banco_origen: row['bank_code'] != null ? String(row['bank_code']).trim() : null,
+      banco_destino: '0172',
+      fecha_movimiento: fecha instanceof Date ? fecha : fecha ? new Date(String(fecha)) : null,
+    };
+  }
+
   /**
    * Igual que SysIP buildcollectReceiptPayload: cbanco_destino del canal (35/31)
    * y ctipopago de maclient_api — sin reemplazar por lookup en MABANCO_DESTINO.
@@ -545,7 +587,7 @@ export class CollectionService {
         ? Number(destResult.recordset[0]['cbanco_destino'])
         : null;
 
-    const pmOperacion = await this.getPagoMovilOperacion(xreferencia);
+    const pmOperacion = await this.getPaymentOperationData(xreferencia);
     const bancoOrigenRef =
       body.cbanco_ref?.trim() || pmOperacion?.banco_origen || null;
 
@@ -674,10 +716,11 @@ export class CollectionService {
         'mpago debe ser el monto pagado en bolívares (Bs) según la verificación bancaria.',
       );
     }
-    await this.assertPagoMovilNotAlreadyValidated(body);
+    const isSypago = this.isSypagoPayment(body);
     if (body.origen_pago === 'farmacia') {
       await this.ensureFarmaciaFacturaRegistered(body);
-    } else {
+    } else if (!isSypago) {
+      await this.assertPagoMovilNotAlreadyValidated(body);
       await this.ensureMobilePaymentRegistered(body);
     }
     await this.assertPaymentRegistered(body.xreferencia.trim());
@@ -693,7 +736,7 @@ export class CollectionService {
     const xreferencia = body.xreferencia.trim();
     const banks = await this.resolvePaymentBanks(xreferencia, body, client);
     const receipt = await this.getReceiptAmounts(body.cnrecibo);
-    const pmOperacion = await this.getPagoMovilOperacion(xreferencia);
+    const pmOperacion = await this.getPaymentOperationData(xreferencia);
 
     let ptasamon = receipt.ptasamon;
     if (!ptasamon) {
