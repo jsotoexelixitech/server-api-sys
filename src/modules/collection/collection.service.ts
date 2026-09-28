@@ -130,10 +130,14 @@ export class CollectionService {
     }
 
     const T = this.db.types;
+    const defaultDestBank =
+      (body.cbanco_destino != null && Number(body.cbanco_destino) === 31)
+        ? '0172'
+        : '0171';
     const destBank =
       body.cbanco_dest_ref?.trim() ||
       process.env.LAMUNDIAL_PAYMENTS_DEST_BANCO ||
-      '0171';
+      defaultDestBank;
     const fechaMov = new Date(`${body.fpago}T12:00:00`);
 
     const ins = this.db.request();
@@ -301,8 +305,8 @@ export class CollectionService {
     body: CollectionPaymentDto,
   ): MabancoDestinoPair {
     const cbanco_destino =
-      channelHint ??
       (body.cbanco_destino != null ? Number(body.cbanco_destino) : null) ??
+      channelHint ??
       (client.cbanco_destino != null ? Number(client.cbanco_destino) : null) ??
       35;
 
