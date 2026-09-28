@@ -426,6 +426,75 @@ export class CollectionService {
     return metodo === 'sypago' || metodo === 'otp' || metodo === 'domiciliacion';
   }
 
+  /**
+   * Auto-registra la transacción de SyPago en trsypago si la pasarela/portal la verificó
+   * pero el webhook aún no la ha insertado en Sis2000.
+   */
+  private async ensureSypagoPaymentRegistered(body: CollectionPaymentDto): Promise<void> {
+    const ref = body.xreferencia.trim();
+    const T = this.db.types;
+
+    const checkReq = this.db.request();
+    checkReq.input('ref', T.VarChar(50), ref);
+    const checkResult = await checkReq.query(`
+      SELECT TOP 1 1 AS found
+      FROM trsypago
+      WHERE LTRIM(RTRIM(ref_ibp)) = @ref OR LTRIM(RTRIM(transaction_id)) = @ref
+    `);
+    if ((checkResult.recordset?.length ?? 0) > 0) {
+      return;
+    }
+
+    const bankRef = body.cbanco_ref?.trim() || '0172';
+    const fechaMov = new Date(`${body.fpago}T12:00:00`);
+    const cusuario = body.cusuario ?? 7;
+
+    const seqReq = this.db.request();
+    let csypago: number;
+    try {
+      const seqRes = await seqReq.query(`
+        DECLARE @qcontador INT;
+        SELECT @qcontador = qcontador + 1 FROM macontadores WHERE ccontador = 'CSYPAGO';
+        IF @qcontador IS NOT NULL
+        BEGIN
+          UPDATE macontadores SET qcontador = @qcontador WHERE ccontador = 'CSYPAGO';
+          SELECT @qcontador AS csypago;
+        END
+        ELSE
+        BEGIN
+          SELECT ISNULL(MAX(csypago), 0) + 1 AS csypago FROM trsypago;
+        END
+      `);
+      csypago = Number(seqRes.recordset?.[0]?.['csypago'] ?? Date.now() % 100000000);
+    } catch {
+      csypago = Date.now() % 100000000;
+    }
+
+    const insReq = this.db.request();
+    insReq.input('csypago', T.Numeric(10, 0), csypago);
+    insReq.input('transaction_id', T.VarChar(20), ref.slice(0, 20));
+    insReq.input('ref_ibp', T.VarChar(50), ref);
+    insReq.input('operation_date', T.DateTime, fechaMov);
+    insReq.input('amt', T.Numeric(18, 2), body.mpago);
+    insReq.input('pay_amt', T.Numeric(18, 2), body.mpago);
+    insReq.input('bank_code', T.Char(4), bankRef.slice(0, 4));
+    insReq.input('cusuario', T.Numeric(11, 0), cusuario);
+
+    await insReq.query(`
+      INSERT INTO trsypago (
+        csypago, u_version, transaction_id, ref_ibp,
+        operation_date, amt, pay_amt, currency,
+        bank_code, status, cprog, ifuente, fingreso, cusuario
+      ) VALUES (
+        @csypago, '!', @transaction_id, @ref_ibp,
+        @operation_date, @amt, @pay_amt, 'VES',
+        @bank_code, 'ACCP', 'SypagoSaveTran', 'API', GETDATE(), @cusuario
+      )
+    `);
+
+    this.logger.log(`ensureSypagoPaymentRegistered: ref=${ref}, csypago=${csypago}, monto=${body.mpago}`);
+  }
+
 
 
   /** La referencia debe existir en pago_movil o trsypago (mismo criterio que SysIP). */
@@ -722,6 +791,8 @@ export class CollectionService {
     } else if (!isSypago) {
       await this.assertPagoMovilNotAlreadyValidated(body);
       await this.ensureMobilePaymentRegistered(body);
+    } else {
+      await this.ensureSypagoPaymentRegistered(body);
     }
     await this.assertPaymentRegistered(body.xreferencia.trim());
     return this.buildCollectionPayloadInternal(apikey, body);
