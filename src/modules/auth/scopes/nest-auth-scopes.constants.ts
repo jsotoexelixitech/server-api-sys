@@ -16,6 +16,8 @@ export const NEST_AUTH_SCOPES = {
   ENDOSOS_WRITE: 'endosos:write',
   /** Reportes partner (/api/v1/report/) y reportes ET (dynamic-schemas, siniestros, etc.). */
   REPORT_WRITE: 'report:write',
+  /** Login de usuarios Sis2000 (seusuariosweb) para el portal La Mundial. */
+  PORTAL_LOGIN: 'portal:login',
 } as const;
 
 export type NestAuthScopeId =
@@ -113,6 +115,13 @@ export const NEST_AUTH_SCOPE_CATALOG: NestAuthScopeMeta[] = [
     label: 'Reportes',
     description:
       'Reportes partner (recibos, comisiones) y reportes dinámicos ET (esquemas, siniestros, recibos, pólizas, sync)',
+    routes: [],
+  },
+  {
+    id: NEST_AUTH_SCOPES.PORTAL_LOGIN,
+    label: 'Login portal La Mundial',
+    description:
+      'Validar usuario/clave Sis2000 (seusuariosweb) y resolver entidad del marketplace',
     routes: [],
   },
 ];

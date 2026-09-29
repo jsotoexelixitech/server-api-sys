@@ -24,6 +24,7 @@ import { PrismaModule } from './database/prisma/prisma.module';
 import { ProductEmissionModule } from './modules/product-emission/product-emission.module';
 import { MailModule } from './modules/mail/mail.module';
 import { CanalModule } from './modules/canal/canal.module';
+import { PortalAuthModule } from './modules/portal-auth/portal-auth.module';
 import { MonedaModule } from './modules/moneda/moneda.module';
 import { ArysModule } from './modules/arys/arys.module';
 import { ViajeroNacionalModule } from './modules/viajero-nacional/viajero-nacional.module';
@@ -69,6 +70,7 @@ import { ComponentsModule } from './modules/components/components.module';
     ProductEmissionModule,
     MailModule,
     CanalModule,
+    PortalAuthModule,
     MonedaModule,
     ArysModule,
     ViajeroNacionalModule,
