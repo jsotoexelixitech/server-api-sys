@@ -46,7 +46,7 @@ export class CondominioController {
             id: 'condominio',
             nombre: 'Combinado Empresarial (Condominio)',
             cramo: 16,
-            cplan_defecto: 'CONDOM',
+            cplan_defecto: '1',
             descripcion: 'Seguro combinado multirriesgo para la protección de áreas comunes de condominios, locales comerciales y oficinas.'
           }
         ]
@@ -75,7 +75,7 @@ export class CondominioController {
           id: 'condominio',
           nombre: 'Combinado Empresarial (Condominio)',
           cramo: 16,
-          cplan_defecto: 'CONDOM',
+          cplan_defecto: '1',
           descripcion: 'Seguro combinado multirriesgo para la protección de áreas comunes de condominios, locales comerciales y oficinas.'
         }
       ]
@@ -90,7 +90,7 @@ export class CondominioController {
     
 *   **Hogar**: cramo 38 (plan por defecto: RESIDE)
 *   **Vecinos**: cramo 28 (plan por defecto: IGEMA)
-*   **Condominio**: cramo 16 (plan por defecto: CONDOM)
+*   **Condominio**: cramo 16 (plan por defecto: 1)
     
 *Nota: Si se envía el campo 'cplan', se filtrará únicamente ese plan. Si se omite, se retornarán todos los planes del ramo con sus coberturas para poder compararlos.*`,
   })
