@@ -1,5 +1,5 @@
 import { ApiPropertyOptional } from '@nestjs/swagger';
-import { IsOptional, IsString } from 'class-validator';
+import { IsBoolean, IsOptional, IsString } from 'class-validator';
 import { GetProductosPersonasDto } from './get-productos-personas.dto';
 
 /**
@@ -19,4 +19,13 @@ export class GetProductosMarketplaceDto extends GetProductosPersonasDto {
   @IsOptional()
   @IsString()
   csub?: string;
+
+  @ApiPropertyOptional({
+    description:
+      'Con `cgestor`: limita a los productos habilitados del gestor (SysIP `products/obtener`, centidad G). ' +
+      'Usar con centidad/citem del canal o productor del gestor.',
+  })
+  @IsOptional()
+  @IsBoolean()
+  filtrar_gestor?: boolean;
 }
