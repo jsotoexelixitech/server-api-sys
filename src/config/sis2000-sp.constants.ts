@@ -79,3 +79,7 @@ export const SP_GET_MACLIENT_API_SNAKE = 'sp_get_maclient_api';
 export const SP_BUSCA_PLANES_CONDOMINIO = 'sp_busca_planes_condominio_nexus';
 export const SP_CALCULO_COTIZACION_CONDOMINIO = 'sp_calculo_cotizacion_condominio_nexus';
 export const SP_PRE_EMISION_CONDOMINIO = 'sp_pre_emision_condominio_nexus';
+
+// ── Productores / Brokers ───────────────────────────────────────────────────
+export const SP_OBTENER_PRODUCTORES_NEXUS = 'sp_ma_obtener_productores_nexus';
+
