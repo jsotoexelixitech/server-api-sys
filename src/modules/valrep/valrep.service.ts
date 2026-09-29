@@ -12,6 +12,7 @@ import {
   SP_BUSCA_PLAN_PRODUCTO_NEXUS,
   SP_CALCULO_AUTO_NEXUS,
   SP_GET_SUSTANCIAS_NEXUS,
+  SP_OBTENER_PRODUCTORES_NEXUS,
 } from '../../config/sis2000-sp.constants';
 import { GetPlanesV2Dto } from './dto/get-planes-v2.dto';
 import { GetPlanesProductoDto } from './dto/get-planes-producto.dto';
@@ -1320,4 +1321,34 @@ export class ValrepService {
       );
     }
   }
+
+  /**
+   * Catálogo de productores / brokers — invoca SP dbo.sp_ma_obtener_productores_nexus
+   * Paridad con SysIP-backend POST/GET /api/v1/valrep/brokers.
+   */
+  async getBrokers(): Promise<{ cproductor: number; xproductor: string }[]> {
+    try {
+      const req = this.db.request();
+      const result = await req.execute(SP_OBTENER_PRODUCTORES_NEXUS);
+      const rows = (result.recordset ?? []) as {
+        cproductor: number | string;
+        xproductor: string;
+      }[];
+
+      return rows
+        .map((r) => ({
+          cproductor: Number(r.cproductor),
+          xproductor: String(r.xproductor ?? '').trim(),
+        }))
+        .filter((r) => r.cproductor > 0 && r.xproductor !== '')
+        .sort((a, b) => a.xproductor.localeCompare(b.xproductor));
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : String(err);
+      this.logger.error(`getBrokers: ${msg}`);
+      throw new InternalServerErrorException(
+        'Error al obtener la lista de productores.',
+      );
+    }
+  }
 }
+

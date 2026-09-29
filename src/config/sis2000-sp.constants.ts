@@ -58,3 +58,7 @@ export const SP_BUSCA_PLAN_PRODUCTO_NEXUS = 'sp_busca_plan_producto_nexus';
 export const SP_BUSCA_PLANES_CONDOMINIO = 'sp_busca_planes_condominio_nexus';
 export const SP_CALCULO_COTIZACION_CONDOMINIO = 'sp_calculo_cotizacion_condominio_nexus';
 export const SP_PRE_EMISION_CONDOMINIO = 'sp_pre_emision_condominio_nexus';
+
+// ── Productores / Brokers ───────────────────────────────────────────────────
+export const SP_OBTENER_PRODUCTORES_NEXUS = 'sp_ma_obtener_productores_nexus';
+
