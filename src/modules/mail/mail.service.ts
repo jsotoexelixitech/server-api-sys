@@ -70,6 +70,7 @@ export class MailService {
       data: {
         name: dto.name,
         planName: dto.planName,
+        productLabel: dto.productLabel,
         paymentUrl: dto.paymentUrl,
         expiresAt: dto.expiresAt,
       },
@@ -85,6 +86,7 @@ export class MailService {
       data: {
         tomadorNombre: dto.tomadorNombre,
         planName: dto.planName,
+        productLabel: dto.productLabel,
         scoreTotal: dto.scoreTotal,
       },
     });
@@ -100,6 +102,7 @@ export class MailService {
       data: {
         tomadorNombre: dto.tomadorNombre,
         planName: dto.planName,
+        productLabel: dto.productLabel,
         reason: dto.reason,
       },
     });
@@ -160,6 +163,7 @@ export class MailService {
       return buildFuneralPaymentLinkEmail({
         nombre: str('name', 'Cliente'),
         planName: str('planName', 'Funerario'),
+        productLabel: str('productLabel', 'Funerario'),
         paymentUrl,
         expiresLabel,
         callCenterPhone: phone,
@@ -170,6 +174,7 @@ export class MailService {
       return buildFuneralReviewAlertEmail({
         tomadorNombre: str('tomadorNombre', 'Tomador'),
         planName: str('planName', 'Funerario'),
+        productLabel: str('productLabel', 'Funerario'),
         scoreTotal: str('scoreTotal', '—'),
         callCenterPhone: phone,
       });
@@ -179,6 +184,7 @@ export class MailService {
       return buildFuneralRejectedEmail({
         tomadorNombre: str('tomadorNombre', 'Cliente'),
         planName: str('planName', 'Funerario'),
+        productLabel: str('productLabel', 'Funerario'),
         reason: str('reason'),
         callCenterPhone: phone,
       });
