@@ -136,9 +136,28 @@ BEGIN
             @factorCuota    NUMERIC(18, 6),
             @coberTarifa    VARCHAR(2),
             @reciboRefCobrado BIT,
-            @soloCuadroRcv  BIT;
+            @soloCuadroRcv  BIT,
+            @hasPaidReceipt BIT,
+            @curPlanD       DATE,
+            @curPlanH       DATE,
+            @kPlan          INT,
+            @stdDias        INT,
+            @lastDias       INT,
+            @wLast          NUMERIC(18, 6),
+            @totalWeight    NUMERIC(18, 6),
+            @basePrimaCalc  NUMERIC(18, 2),
+            @lastPrimaCalc  NUMERIC(18, 2),
+            @firstPrimaCalc NUMERIC(18, 2);
 
         -- Temp tables al inicio: evita DECLARE de table-variable a mitad del SP (SSMS/parseo).
+        CREATE TABLE #cuotas_plan (
+            cuotaIdx INT PRIMARY KEY,
+            fdesde   DATE NOT NULL,
+            fhasta   DATE NOT NULL,
+            dias     INT NOT NULL,
+            primaExt NUMERIC(18, 2) NOT NULL DEFAULT 0
+        );
+
         CREATE TABLE #cobs (
             ccober          INT            NOT NULL,
             ctarifa         CHAR(4)        NULL,
@@ -307,9 +326,84 @@ BEGIN
         ELSE
             SET @mprimaTotalExt = @mprima;
 
-        -- Reparto por cuota: la 1ª absorbe los centavos, igual que el wizard de endosos.
-        SET @basePrimaExt  = FLOOR((@mprimaTotalExt / @totalCuotas) * 100) / 100;
-        SET @firstPrimaExt = @mprimaTotalExt - (@basePrimaExt * (@totalCuotas - 1));
+        -- 4a. Evaluar si la póliza tiene recibos cobrados (Punto 1 y Punto 2)
+        SET @hasPaidReceipt = 0;
+        IF EXISTS (
+            SELECT 1 FROM adrecibos
+            WHERE cpoliza = @cpoliza
+              AND fanopol = @polFanopol
+              AND fmespol = @polFmespol
+              AND iestadorec = 'C'
+        )
+            SET @hasPaidReceipt = 1;
+
+        -- Punto 1: Si la póliza está pendiente (sin recibos cobrados), se toma toda la
+        -- vigencia de la póliza (@polFdesde a @polFhasta) y no desde el día del endoso.
+        IF @hasPaidReceipt = 0
+        BEGIN
+            SET @fdesde = ISNULL(@polFdesde, @fdesde);
+            SET @fhasta = ISNULL(@polFhasta, @fhasta);
+        END
+
+        -- Precomputar cronograma de cuotas y fechas
+        SET @curPlanD = @fdesde;
+        SET @kPlan = 1;
+
+        WHILE @kPlan <= @totalCuotas
+        BEGIN
+            IF @kPlan = @totalCuotas
+                SET @curPlanH = @fhasta;
+            ELSE
+            BEGIN
+                SET @curPlanH = CONVERT(DATE, DATEADD(MM, @monthsPerCuota, @curPlanD));
+                IF @curPlanH > @fhasta SET @curPlanH = @fhasta;
+            END
+
+            INSERT INTO #cuotas_plan (cuotaIdx, fdesde, fhasta, dias, primaExt)
+            VALUES (@kPlan, @curPlanD, @curPlanH, DATEDIFF(DAY, @curPlanD, @curPlanH), 0);
+
+            IF @hasPaidReceipt = 1
+                SET @curPlanD = DATEADD(DAY, 1, @curPlanH);
+            ELSE
+                SET @curPlanD = @curPlanH;
+
+            SET @kPlan = @kPlan + 1;
+        END
+
+        -- Punto 2: Con recibos pagados, si la última cuota cubre menos días que un período estándar,
+        -- se prorratea proporcionalmente.
+        SET @stdDias = 365 / @totalCuotas;
+        SELECT @lastDias = dias FROM #cuotas_plan WHERE cuotaIdx = @totalCuotas;
+
+        IF @hasPaidReceipt = 1 AND @totalCuotas > 1 AND @lastDias < (@stdDias - 7)
+        BEGIN
+            SET @wLast = CAST(@lastDias AS NUMERIC(18, 6)) / CAST(@stdDias AS NUMERIC(18, 6));
+            SET @totalWeight = (@totalCuotas - 1) + @wLast;
+            SET @basePrimaCalc = ROUND(@mprimaTotalExt / @totalWeight, 2);
+            SET @lastPrimaCalc = ROUND(@mprimaTotalExt * (@wLast / @totalWeight), 2);
+            SET @firstPrimaCalc = @mprimaTotalExt - ((@basePrimaCalc * (@totalCuotas - 2)) + @lastPrimaCalc);
+
+            UPDATE #cuotas_plan
+            SET primaExt = CASE
+                WHEN cuotaIdx = 1 THEN @firstPrimaCalc
+                WHEN cuotaIdx = @totalCuotas THEN @lastPrimaCalc
+                ELSE @basePrimaCalc
+            END;
+
+            SET @basePrimaExt = @basePrimaCalc;
+            SET @firstPrimaExt = @firstPrimaCalc;
+        END
+        ELSE
+        BEGIN
+            SET @basePrimaExt  = FLOOR((@mprimaTotalExt / @totalCuotas) * 100) / 100;
+            SET @firstPrimaExt = @mprimaTotalExt - (@basePrimaExt * (@totalCuotas - 1));
+
+            UPDATE #cuotas_plan
+            SET primaExt = CASE
+                WHEN cuotaIdx = 1 THEN @firstPrimaExt
+                ELSE @basePrimaExt
+            END;
+        END
 
         -- Moneda de póliza para reparto casco/RCV (evita @factorCuota = 1 por variable sin asignar).
         SET @mprimaTotalPol = CASE
@@ -749,10 +843,12 @@ BEGIN
                 SET @firstCrecibo = @newCrecibo;
             END
 
-            IF @cuotaIdx = 1
-                SET @cuotaPrimaExt = @firstPrimaExt;
-            ELSE
-                SET @cuotaPrimaExt = @basePrimaExt;
+            SELECT
+                @cuotaFdesde = fdesde,
+                @cuotaFhasta = fhasta,
+                @cuotaPrimaExt = primaExt
+            FROM #cuotas_plan
+            WHERE cuotaIdx = @cuotaIdx;
 
             SET @cuotaPrimaBs  = ROUND(@cuotaPrimaExt * @ptasamon, 2);
             SET @cuotaComExt   = ROUND(@cuotaPrimaExt * @pcomision / 100, 2);
@@ -820,15 +916,6 @@ BEGIN
                     WHERE idx = @idxMayorPeso;
                 END
             END
-
-            -- La última cuota cierra en la vigencia del endoso; los tramos nunca la sobrepasan.
-            IF @cuotaIdx = @totalCuotas
-                SET @cuotaFhasta = @fhasta;
-            ELSE
-                SET @cuotaFhasta = CONVERT(DATE, DATEADD(MM, @monthsPerCuota, @cuotaFdesde));
-
-            IF @cuotaFhasta > @fhasta
-                SET @cuotaFhasta = @fhasta;
 
             INSERT INTO adrecibos (
                 crecibo, u_version, cnpoliza, cnrecibo, cpoliza, fanopol, fmespol, cramo, itipoprod, itiponegocio, itipopol,
@@ -987,11 +1074,11 @@ BEGIN
             EXEC dbo.sp_genera_adpolrea_nexus @crecibo = @newCrecibo;
 
             SET @cuotaIdx = @cuotaIdx + 1;
-            SET @cuotaFdesde = @cuotaFhasta;
         END
 
         DROP TABLE #cobs;
         DROP TABLE #montos;
+        DROP TABLE #cuotas_plan;
 
         -- 7. Actualizar el contrato con el plan y la frecuencia del endoso.
         UPDATE adpoliza
