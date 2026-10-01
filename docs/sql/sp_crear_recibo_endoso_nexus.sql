@@ -138,6 +138,7 @@ BEGIN
             @reciboRefCobrado BIT,
             @soloCuadroRcv  BIT,
             @hasPaidReceipt BIT,
+            @hasPendingReceipt BIT,
             @curPlanD       DATE,
             @curPlanH       DATE,
             @kPlan          INT,
@@ -306,18 +307,27 @@ BEGIN
         SET @totalCuotas = 1;
 
         IF @ifrecuencia = 'M' SET @totalCuotas = 12;
+        ELSE IF @ifrecuencia = 'B' SET @totalCuotas = 6;
         ELSE IF @ifrecuencia = 'T' SET @totalCuotas = 4;
         ELSE IF @ifrecuencia = 'C' SET @totalCuotas = 3;
         ELSE IF @ifrecuencia = 'S' SET @totalCuotas = 2;
 
-        SET @monthsPerCuota = 12 / @totalCuotas;
+        -- Meses por cuota según la frecuencia elegida (T = 3 meses, S = 6 meses, etc.)
+        SET @monthsPerCuota = CASE 
+            WHEN @ifrecuencia = 'M' THEN 1
+            WHEN @ifrecuencia = 'B' THEN 2
+            WHEN @ifrecuencia = 'T' THEN 3
+            WHEN @ifrecuencia = 'C' THEN 4
+            WHEN @ifrecuencia = 'S' THEN 6
+            WHEN @ifrecuencia = 'A' THEN 12
+            ELSE CASE WHEN @totalCuotas >= 12 THEN 1 ELSE 12 / NULLIF(@totalCuotas, 0) END
+        END;
 
-        -- Diferencial RCV fraccionado: ncuotas explícito (ej. 4) aunque la póliza fuera anual.
-        IF @preserveExistingCasco = 1 AND ISNULL(@ncuotas, 0) > 1
+        -- ncuotas explícito manda sobre totalCuotas (ej. 3 cuotas restantes en endoso trimestral)
+        IF ISNULL(@ncuotas, 0) > 0
         BEGIN
             SET @totalCuotas = @ncuotas;
             IF @totalCuotas > 12 SET @totalCuotas = 12;
-            SET @monthsPerCuota = CASE WHEN @totalCuotas >= 12 THEN 1 ELSE 12 / @totalCuotas END;
         END
 
         -- 4. Prima total del endoso en ambas monedas (misma conversión que la emisión nativa).
@@ -336,6 +346,16 @@ BEGIN
               AND iestadorec = 'C'
         )
             SET @hasPaidReceipt = 1;
+
+        SET @hasPendingReceipt = 0;
+        IF EXISTS (
+            SELECT 1 FROM adrecibos
+            WHERE cpoliza = @cpoliza
+              AND fanopol = @polFanopol
+              AND fmespol = @polFmespol
+              AND iestadorec = 'P'
+        )
+            SET @hasPendingReceipt = 1;
 
         -- Punto 1: Si la póliza está pendiente (sin recibos cobrados), se toma toda la
         -- vigencia de la póliza (@polFdesde a @polFhasta) y no desde el día del endoso.
@@ -372,7 +392,15 @@ BEGIN
 
         -- Punto 2: Con recibos pagados, si la última cuota cubre menos días que un período estándar,
         -- se prorratea proporcionalmente.
-        SET @stdDias = 365 / @totalCuotas;
+        SET @stdDias = CASE 
+            WHEN @ifrecuencia = 'M' THEN 30
+            WHEN @ifrecuencia = 'B' THEN 60
+            WHEN @ifrecuencia = 'T' THEN 90
+            WHEN @ifrecuencia = 'C' THEN 120
+            WHEN @ifrecuencia = 'S' THEN 180
+            WHEN @ifrecuencia = 'A' THEN 365
+            ELSE 365 / NULLIF(@totalCuotas, 0)
+        END;
         SELECT @lastDias = dias FROM #cuotas_plan WHERE cuotaIdx = @totalCuotas;
 
         IF @hasPaidReceipt = 1 AND @totalCuotas > 1 AND @lastDias < (@stdDias - 7)
@@ -469,7 +497,7 @@ BEGIN
 
         -- Casco cobrado + upgrade: cuadro nuevo solo RCV (diferencial). Flag explícito, cober RC
         -- del caller, o cambio de cplan con recibo ref ya cobrado.
-        IF @reciboRefCobrado = 1
+        IF @reciboRefCobrado = 1 AND @hasPendingReceipt = 0
            AND (
                @preserveExistingCasco = 1
                OR @coberAdicional = 'RC'
@@ -681,11 +709,47 @@ BEGIN
             SET @sumaPesos = @cntCobs;
         END
 
-        -- Plan upgrade RCV con casco ya contratado: suma y prima de casco del recibo de referencia.
+        CREATE TABLE #casco_pendiente (
+            ccober NUMERIC(3, 0),
+            mprima_pendiente NUMERIC(18, 2),
+            mprima_asignada NUMERIC(18, 2) DEFAULT 0
+        );
+
+        IF @hasPendingReceipt = 1
+        BEGIN
+            INSERT INTO #casco_pendiente (ccober, mprima_pendiente, mprima_asignada)
+            SELECT 
+                pc.ccober,
+                ISNULL(SUM(CASE WHEN @esBs = 1 THEN pc.mprimabruta ELSE pc.mprimabrutaext END), 0),
+                0
+            FROM adpolcob pc
+            INNER JOIN adrecibos r ON r.crecibo = pc.crecibo
+            WHERE r.cpoliza = @cpoliza
+              AND r.fanopol = @polFanopol
+              AND r.fmespol = @polFmespol
+              AND r.iestadorec = 'P'
+              AND pc.iestado <> 'A'
+              AND pc.ccober IN (1, 2, 3, 4, 5, 16, 28)
+            GROUP BY pc.ccober;
+        END
+        ELSE IF @hasPaidReceipt = 0 AND @creciboRef IS NOT NULL
+        BEGIN
+            INSERT INTO #casco_pendiente (ccober, mprima_pendiente, mprima_asignada)
+            SELECT 
+                pc.ccober,
+                ISNULL(SUM(CASE WHEN @esBs = 1 THEN pc.mprimabruta ELSE pc.mprimabrutaext END), 0),
+                0
+            FROM adpolcob pc
+            WHERE pc.crecibo = @creciboRef
+              AND pc.iestado <> 'A'
+              AND pc.ccober IN (1, 2, 3, 4, 5, 16, 28)
+            GROUP BY pc.ccober;
+        END
+
         SET @preservarCasco = 0;
         SET @primaCascoRefPol = 0;
 
-        IF @coberAdicional <> 'RC' AND @creciboRef IS NOT NULL
+        IF @coberAdicional <> 'RC' AND (@creciboRef IS NOT NULL OR EXISTS (SELECT 1 FROM #casco_pendiente))
             SET @preservarCasco = 1;
 
         IF @preservarCasco = 1 AND @soloCuadroRcv = 0
@@ -704,13 +768,17 @@ BEGIN
                AND ref.iestado <> 'A'
             WHERE c.ccober IN (1, 2, 3, 4, 5, 16, 28);
 
-            SELECT @primaCascoRefPol = ISNULL(SUM(
-                CASE WHEN @esBs = 1 THEN ref.mprimabruta ELSE ref.mprimabrutaext END
-            ), 0)
-            FROM adpolcob ref
-            WHERE ref.crecibo = @creciboRef
-              AND ref.iestado <> 'A'
-              AND ref.ccober IN (1, 2, 3, 4, 5, 16, 28);
+            SELECT @primaCascoRefPol = ISNULL(SUM(mprima_pendiente), 0) FROM #casco_pendiente;
+            IF @primaCascoRefPol = 0
+            BEGIN
+                SELECT @primaCascoRefPol = ISNULL(SUM(
+                    CASE WHEN @esBs = 1 THEN ref.mprimabruta ELSE ref.mprimabrutaext END
+                ), 0)
+                FROM adpolcob ref
+                WHERE ref.crecibo = @creciboRef
+                  AND ref.iestado <> 'A'
+                  AND ref.ccober IN (1, 2, 3, 4, 5, 16, 28);
+            END
         END
 
         IF @soloCuadroRcv = 1
@@ -860,22 +928,42 @@ BEGIN
             BEGIN
                 SET @cuotaPrimaPol = CASE WHEN @esBs = 1 THEN @cuotaPrimaBs ELSE @cuotaPrimaExt END;
 
-                IF @preservarCasco = 1 AND @soloCuadroRcv = 0 AND @primaCascoRefPol > 0 AND @creciboRef IS NOT NULL
+                IF @preservarCasco = 1 AND @soloCuadroRcv = 0 AND @primaCascoRefPol > 0
                 BEGIN
                     SET @factorCuota = @cuotaPrimaPol / NULLIF(@mprimaTotalPol, 0);
                     IF @factorCuota IS NULL OR @factorCuota <= 0
                         SET @factorCuota = 0;
 
-                    UPDATE c
-                    SET c.prima_cuota = ROUND(
-                        (CASE WHEN @esBs = 1 THEN ref.mprimabruta ELSE ref.mprimabrutaext END)
-                        * @factorCuota, 2)
-                    FROM #cobs c
-                    INNER JOIN adpolcob ref
-                        ON ref.ccober = c.ccober
-                       AND ref.crecibo = @creciboRef
-                       AND ref.iestado <> 'A'
-                    WHERE c.ccober IN (1, 2, 3, 4, 5, 16, 28);
+                    IF EXISTS (SELECT 1 FROM #casco_pendiente)
+                    BEGIN
+                        UPDATE c
+                        SET c.prima_cuota = CASE
+                            WHEN @cuotaIdx = @totalCuotas THEN 
+                                cp.mprima_pendiente - cp.mprima_asignada
+                            ELSE 
+                                ROUND(cp.mprima_pendiente * @factorCuota, 2)
+                        END
+                        FROM #cobs c
+                        INNER JOIN #casco_pendiente cp ON cp.ccober = c.ccober;
+
+                        UPDATE cp
+                        SET cp.mprima_asignada = cp.mprima_asignada + c.prima_cuota
+                        FROM #casco_pendiente cp
+                        INNER JOIN #cobs c ON c.ccober = cp.ccober;
+                    END
+                    ELSE IF @creciboRef IS NOT NULL
+                    BEGIN
+                        UPDATE c
+                        SET c.prima_cuota = ROUND(
+                            (CASE WHEN @esBs = 1 THEN ref.mprimabruta ELSE ref.mprimabrutaext END)
+                            * @factorCuota, 2)
+                        FROM #cobs c
+                        INNER JOIN adpolcob ref
+                            ON ref.ccober = c.ccober
+                           AND ref.crecibo = @creciboRef
+                           AND ref.iestado <> 'A'
+                        WHERE c.ccober IN (1, 2, 3, 4, 5, 16, 28);
+                    END
 
                     SELECT @sumaCascoCuota = ISNULL(SUM(prima_cuota), 0) FROM #cobs
                     WHERE ccober IN (1, 2, 3, 4, 5, 16, 28);
@@ -1079,6 +1167,7 @@ BEGIN
         DROP TABLE #cobs;
         DROP TABLE #montos;
         DROP TABLE #cuotas_plan;
+        IF OBJECT_ID(N'tempdb..#casco_pendiente') IS NOT NULL DROP TABLE #casco_pendiente;
 
         -- 7. Actualizar el contrato con el plan y la frecuencia del endoso.
         UPDATE adpoliza
