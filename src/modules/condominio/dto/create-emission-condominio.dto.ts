@@ -1,5 +1,7 @@
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
-import { IsArray, IsDateString, IsIn, IsInt, IsNotEmpty, IsNumber, IsOptional, IsString } from 'class-validator';
+import { Type } from 'class-transformer';
+import { IsArray, IsDateString, IsIn, IsInt, IsNotEmpty, IsNumber, IsOptional, IsString, ValidateNested } from 'class-validator';
+import { CotizacionPreestablecidaDto } from './cotizacion-preestablecida.dto';
 
 export class CreateEmissionCondominioDto {
   @ApiProperty({ example: 38, description: 'Código de ramo (38 = Condominio Residencial).' })
@@ -69,6 +71,16 @@ export class CreateEmissionCondominioDto {
   @IsOptional()
   @IsNumber()
   mcomisionext?: number;
+
+  @ApiPropertyOptional({
+    type: CotizacionPreestablecidaDto,
+    description:
+      'Cotización ya calculada por el producto (tarificador). Si se envía, el Core no recalcula: valida contra sus tarifas y emite estos valores. Aplica igual a la emisión interna y a los enlaces de autogestión.',
+  })
+  @IsOptional()
+  @ValidateNested()
+  @Type(() => CotizacionPreestablecidaDto)
+  cotizacion?: CotizacionPreestablecidaDto;
 
   // Staging / Datos del Certificado
   @ApiProperty({ example: 'Caseta de Vigilancia, Edif Bella Vista', description: 'Dirección de cobro.' })
