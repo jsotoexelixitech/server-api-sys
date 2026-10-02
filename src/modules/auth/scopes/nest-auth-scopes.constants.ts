@@ -3,6 +3,8 @@ export const NEST_AUTH_SCOPES = {
   EMISSIONS_AUTO: 'emissions:auto',
   EMISSIONS_PERSON: 'emissions:person',
   EMISSIONS_CONDOMINIO: 'emissions:condominio',
+  /** Replicar tasas del tarificador de Condominio/Hogar (matarifa_d, ramos 16 y 38). */
+  TARIFAS_CONDOMINIO: 'tarifas:condominio',
   COLLECTION_WRITE: 'collection:write',
   DOCUMENTS_WRITE: 'documents:write',
   ADMIN_KEYS: 'admin:keys',
@@ -57,6 +59,12 @@ export const NEST_AUTH_SCOPE_CATALOG: NestAuthScopeMeta[] = [
     label: 'Emisión condominio',
     description: 'Emitir pólizas de condominio',
     routes: ['POST /api/v1/condominio/emision'],
+  },
+  {
+    id: NEST_AUTH_SCOPES.TARIFAS_CONDOMINIO,
+    label: 'Tarifas condominio/hogar',
+    description: 'Actualizar la tasa por cobertura (ramos 16 y 38) desde el tarificador de Técnica',
+    routes: ['PUT /api/v1/condominio/tarificador/tasa'],
   },
   {
     id: NEST_AUTH_SCOPES.COLLECTION_WRITE,
