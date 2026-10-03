@@ -52,8 +52,26 @@ CREATE TABLE IF NOT EXISTS nest_auth.arys_membership_config (
   retry_base_minutes     INTEGER NOT NULL DEFAULT 15,     -- backoff: base * 2^(intentos-1)
   retry_max_minutes      INTEGER NOT NULL DEFAULT 360,    -- tope del backoff
   batch_size             INTEGER NOT NULL DEFAULT 10,     -- trabajos por ciclo
+  monitor_enabled        BOOLEAN NOT NULL DEFAULT FALSE,  -- reportar fallos a Exelixi Monitor
+  monitor_url            VARCHAR(300),                    -- ej. http://127.0.0.1:3099/monitor-api/events/business
+  monitor_app_id         VARCHAR(80) NOT NULL DEFAULT 'sysip-nest-api', -- id en inventory.json del monitor
+  monitor_token          VARCHAR(200),                    -- MONITOR_INGEST_TOKEN del monitor
   updated_at             TIMESTAMPTZ NOT NULL DEFAULT now(),
   updated_by             VARCHAR(80)
 );
 
 INSERT INTO nest_auth.arys_membership_config (id) VALUES (1) ON CONFLICT (id) DO NOTHING;
+
+-- Si la tabla ya existía sin las columnas del monitor:
+ALTER TABLE nest_auth.arys_membership_config
+  ADD COLUMN IF NOT EXISTS monitor_enabled BOOLEAN NOT NULL DEFAULT FALSE,
+  ADD COLUMN IF NOT EXISTS monitor_url     VARCHAR(300),
+  ADD COLUMN IF NOT EXISTS monitor_app_id  VARCHAR(80) NOT NULL DEFAULT 'sysip-nest-api',
+  ADD COLUMN IF NOT EXISTS monitor_token   VARCHAR(200);
+
+-- Activar el reporte al monitor (sin reiniciar PM2):
+--   UPDATE nest_auth.arys_membership_config
+--   SET monitor_enabled = TRUE,
+--       monitor_url = 'http://127.0.0.1:3099/monitor-api/events/business',
+--       monitor_token = '<MONITOR_INGEST_TOKEN>'
+--   WHERE id = 1;
