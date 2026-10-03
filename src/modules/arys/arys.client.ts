@@ -22,6 +22,18 @@ import {
   resolveEstadoArysName,
 } from './arys.utils';
 
+/** Error HTTP de Arys con lo enviado y recibido, para respaldo y reintento. */
+export class ArysHttpError extends BadGatewayException {
+  constructor(
+    message: string,
+    readonly httpStatus: number,
+    readonly requestBody: unknown,
+    readonly responseBody: string,
+  ) {
+    super(message);
+  }
+}
+
 @Injectable()
 export class ArysClient {
   private readonly logger = new Logger(ArysClient.name);
@@ -256,13 +268,28 @@ export class ArysClient {
       throw new ServiceUnavailableException(`No se pudo contactar Arys en ${this.baseUrl}.`);
     }
 
-    const payload = (await response.json().catch(() => ({}))) as ArysApiResponse<T>;
-
     if (!response.ok) {
-      throw new BadGatewayException(
+      const rawBody = await response.text().catch(() => '');
+      let payload: ArysApiResponse<T> = {};
+      try {
+        payload = JSON.parse(rawBody) as ArysApiResponse<T>;
+      } catch {
+        // cuerpo no JSON (p. ej. página de error HTML)
+      }
+      this.logger.warn(
+        `Arys ${method} ${path} HTTP ${response.status} ` +
+          `request=${body !== undefined ? JSON.stringify(body) : '-'} ` +
+          `response=${rawBody.slice(0, 1000) || '-'}`,
+      );
+      throw new ArysHttpError(
         payload.errorMessage || `Arys respondió HTTP ${response.status} en ${path}.`,
+        response.status,
+        body,
+        rawBody.slice(0, 2000),
       );
     }
+
+    const payload = (await response.json().catch(() => ({}))) as ArysApiResponse<T>;
 
     if (payload.isSuccess === false) {
       throw new BadGatewayException(payload.errorMessage || `Arys rechazó ${path}.`);
