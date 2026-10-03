@@ -2,6 +2,7 @@ import { Injectable, Logger } from '@nestjs/common';
 import { ArysMembershipJob, Prisma } from '@prisma/client';
 import { PrismaService } from '../../database/prisma/prisma.service';
 import { ArysHttpError } from './arys.client';
+import { ArysMonitorReporterService } from './arys-monitor-reporter.service';
 import {
   ArysMembershipConfigService,
   ArysMembershipConfigValues,
@@ -29,6 +30,7 @@ export class ArysMembershipJobService {
   constructor(
     private readonly prisma: PrismaService,
     private readonly config: ArysMembershipConfigService,
+    private readonly reporter: ArysMonitorReporterService,
   ) {}
 
   isEnabled(): boolean {
@@ -117,6 +119,23 @@ export class ArysMembershipJobService {
     } catch (err) {
       this.logWarn('markSuccess', job.cnpoliza, err);
     }
+    if (job.attempts > 1) {
+      void this.reporter.report({
+        type: 'arys.membership.recovered',
+        severity: 'info',
+        title: `Membresía Arys recuperada · ${job.cnpoliza}`,
+        message: `La membresía se registró en el intento ${job.attempts}.`,
+        entity: job.cnpoliza,
+        details: { attempts: job.attempts, personaId: job.personaId, vehiculoId: job.vehiculoId },
+        dedupeKey: `arys-membership:${job.cnpoliza}:recovered`,
+        notify: true,
+        // cierra los incidentes abiertos por los fallos de esta póliza
+        resolves: [
+          `arys-membership:${job.cnpoliza}:failed`,
+          `arys-membership:${job.cnpoliza}:dead`,
+        ],
+      });
+    }
   }
 
   async markFailure(
@@ -157,6 +176,28 @@ export class ArysMembershipJobService {
     } catch (err) {
       this.logWarn('markFailure', job.cnpoliza, err);
     }
+    void this.reporter.report({
+      type: dead ? 'arys.membership.dead' : 'arys.membership.failed',
+      severity: dead ? 'critical' : 'warning',
+      title: dead
+        ? `Membresía Arys sin recuperar · ${job.cnpoliza}`
+        : `Membresía Arys falló · ${job.cnpoliza}`,
+      message:
+        `Etapa ${stage}${http ? ` (HTTP ${http.httpStatus})` : ''}: ${msg.slice(0, 500)}` +
+        (dead ? ` — agotó ${job.maxAttempts} intentos, requiere revisión manual.` : ''),
+      entity: job.cnpoliza,
+      details: {
+        stage,
+        attempts: job.attempts,
+        maxAttempts: job.maxAttempts,
+        httpStatus: http?.httpStatus ?? null,
+        personaId: job.personaId,
+        vehiculoId: job.vehiculoId,
+        willRetry: !dead,
+      },
+      dedupeKey: `arys-membership:${job.cnpoliza}:${dead ? 'dead' : 'failed'}`,
+      notify: dead || job.attempts === 1,
+    });
   }
 
   /** Trabajos FAILED vencidos, o RETRYING abandonados, listos para reintentar. */
