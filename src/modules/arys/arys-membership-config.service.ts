@@ -8,7 +8,17 @@ export interface ArysMembershipConfigValues {
   retryBaseMinutes: number;
   retryMaxMinutes: number;
   batchSize: number;
+  /** Reporte de fallos a Exelixi Monitor. */
+  monitorEnabled: boolean;
+  monitorUrl: string | null;
+  monitorAppId: string;
+  monitorToken: string | null;
 }
+
+/** Config sin el token, apta para devolver por la API. */
+export type ArysMembershipConfigPublic = Omit<ArysMembershipConfigValues, 'monitorToken'> & {
+  monitorTokenSet: boolean;
+};
 
 export const ARYS_CONFIG_DEFAULTS: ArysMembershipConfigValues = {
   retryEnabled: false,
@@ -17,6 +27,10 @@ export const ARYS_CONFIG_DEFAULTS: ArysMembershipConfigValues = {
   retryBaseMinutes: 15,
   retryMaxMinutes: 360,
   batchSize: 10,
+  monitorEnabled: false,
+  monitorUrl: null,
+  monitorAppId: 'sysip-nest-api',
+  monitorToken: null,
 };
 
 const CACHE_MS = 30_000;
@@ -50,6 +64,10 @@ export class ArysMembershipConfigService {
             retryBaseMinutes: row.retryBaseMinutes,
             retryMaxMinutes: row.retryMaxMinutes,
             batchSize: row.batchSize,
+            monitorEnabled: row.monitorEnabled,
+            monitorUrl: row.monitorUrl,
+            monitorAppId: row.monitorAppId,
+            monitorToken: row.monitorToken,
           };
         }
       } catch {
@@ -60,12 +78,32 @@ export class ArysMembershipConfigService {
     return value;
   }
 
+  /** Igual que get(), pero sin exponer el token. */
+  async getPublic(): Promise<ArysMembershipConfigPublic> {
+    const { monitorToken, ...rest } = await this.get();
+    return { ...rest, monitorTokenSet: Boolean(monitorToken) };
+  }
+
   async update(
     patch: Partial<ArysMembershipConfigValues>,
     updatedBy?: string,
-  ): Promise<ArysMembershipConfigValues> {
+  ): Promise<ArysMembershipConfigPublic> {
     const data: Partial<ArysMembershipConfigValues> = {};
     if (patch.retryEnabled !== undefined) data.retryEnabled = Boolean(patch.retryEnabled);
+    if (patch.monitorEnabled !== undefined) data.monitorEnabled = Boolean(patch.monitorEnabled);
+    if (patch.monitorUrl !== undefined) {
+      const url = patch.monitorUrl?.trim() || null;
+      if (url && !/^https?:\/\//i.test(url)) {
+        throw new Error('monitorUrl debe empezar con http:// o https://');
+      }
+      data.monitorUrl = url;
+    }
+    if (patch.monitorAppId !== undefined) {
+      const id = patch.monitorAppId.trim();
+      if (!id) throw new Error('monitorAppId no puede estar vacío');
+      data.monitorAppId = id;
+    }
+    if (patch.monitorToken !== undefined) data.monitorToken = patch.monitorToken?.trim() || null;
     for (const key of NUMERIC_KEYS) {
       const n = patch[key];
       if (n === undefined) continue;
@@ -78,6 +116,6 @@ export class ArysMembershipConfigService {
       update: { ...data, updatedBy },
     });
     this.cache = null;
-    return this.get();
+    return this.getPublic();
   }
 }

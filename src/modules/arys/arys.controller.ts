@@ -106,7 +106,7 @@ export class ArysController {
   @Get('membership/config')
   @ApiOperation({ summary: 'Configuración del reintento de membresías Arys (guardada en BD)' })
   async getConfig() {
-    return { status: true, result: await this.membershipConfig.get() };
+    return { status: true, result: await this.membershipConfig.getPublic() };
   }
 
   @NestProtected(NEST_AUTH_SCOPES.EMISSIONS_AUTO)
@@ -114,7 +114,7 @@ export class ArysController {
   @ApiOperation({
     summary: 'Actualizar la configuración del reintento (sin reiniciar PM2)',
     description:
-      'Campos opcionales: retryEnabled, retryIntervalSeconds, maxAttempts, retryBaseMinutes, retryMaxMinutes, batchSize. Se aplica en ~30 s.',
+      'Campos opcionales: retryEnabled, retryIntervalSeconds, maxAttempts, retryBaseMinutes, retryMaxMinutes, batchSize, monitorEnabled, monitorUrl, monitorAppId, monitorToken. Se aplica en ~30 s. El token nunca se devuelve.',
   })
   async updateConfig(@Body() body: Partial<ArysMembershipConfigValues>) {
     return { status: true, result: await this.membershipConfig.update(body) };
