@@ -17,6 +17,8 @@ export interface ArysMembershipConfigValues {
   monitorReport5xx: boolean;
   /** Observar tráfico externo y enviarlo al monitor en modo dry-run (nunca bloquea). */
   monitorSecurityObserve: boolean;
+  /** Toda emisión de automóvil registra su membresía Arys (apagar solo ante un problema con Arys). */
+  arysEmissionEnabled: boolean;
 }
 
 /** Config sin el token, apta para devolver por la API. */
@@ -37,6 +39,7 @@ export const ARYS_CONFIG_DEFAULTS: ArysMembershipConfigValues = {
   monitorToken: null,
   monitorReport5xx: true,
   monitorSecurityObserve: false,
+  arysEmissionEnabled: true,
 };
 
 const CACHE_MS = 30_000;
@@ -80,6 +83,7 @@ export class ArysMembershipConfigService {
             monitorToken: row.monitorToken,
             monitorReport5xx: row.monitorReport5xx,
             monitorSecurityObserve: row.monitorSecurityObserve,
+            arysEmissionEnabled: row.arysEmissionEnabled,
           };
         }
         this.failing = false;
@@ -110,6 +114,7 @@ export class ArysMembershipConfigService {
     const data: Partial<ArysMembershipConfigValues> = {};
     if (patch.retryEnabled !== undefined) data.retryEnabled = Boolean(patch.retryEnabled);
     if (patch.monitorEnabled !== undefined) data.monitorEnabled = Boolean(patch.monitorEnabled);
+    if (patch.arysEmissionEnabled !== undefined) data.arysEmissionEnabled = Boolean(patch.arysEmissionEnabled);
     if (patch.monitorReport5xx !== undefined) data.monitorReport5xx = Boolean(patch.monitorReport5xx);
     if (patch.monitorSecurityObserve !== undefined) {
       data.monitorSecurityObserve = Boolean(patch.monitorSecurityObserve);

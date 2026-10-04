@@ -58,6 +58,7 @@ CREATE TABLE IF NOT EXISTS nest_auth.arys_membership_config (
   monitor_token          VARCHAR(200),                    -- MONITOR_INGEST_TOKEN del monitor
   monitor_report_5xx     BOOLEAN NOT NULL DEFAULT TRUE,   -- reportar todo 5xx de la API al monitor
   monitor_security_observe BOOLEAN NOT NULL DEFAULT FALSE, -- observar tráfico externo (solo dry-run, nunca bloquea)
+  arys_emission_enabled  BOOLEAN NOT NULL DEFAULT TRUE,   -- emitir membresía Arys en TODA emisión de automóvil
   updated_at             TIMESTAMPTZ NOT NULL DEFAULT now(),
   updated_by             VARCHAR(80)
 );
@@ -71,7 +72,8 @@ ALTER TABLE nest_auth.arys_membership_config
   ADD COLUMN IF NOT EXISTS monitor_app_id  VARCHAR(80) NOT NULL DEFAULT 'sysip-nest-api',
   ADD COLUMN IF NOT EXISTS monitor_token   VARCHAR(200),
   ADD COLUMN IF NOT EXISTS monitor_report_5xx BOOLEAN NOT NULL DEFAULT TRUE,
-  ADD COLUMN IF NOT EXISTS monitor_security_observe BOOLEAN NOT NULL DEFAULT FALSE;
+  ADD COLUMN IF NOT EXISTS monitor_security_observe BOOLEAN NOT NULL DEFAULT FALSE,
+  ADD COLUMN IF NOT EXISTS arys_emission_enabled BOOLEAN NOT NULL DEFAULT TRUE;
 
 -- Activar el reporte al monitor (sin reiniciar PM2):
 --   UPDATE nest_auth.arys_membership_config

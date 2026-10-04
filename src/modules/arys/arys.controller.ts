@@ -44,7 +44,7 @@ export class ArysController {
   @NestProtected(NEST_AUTH_SCOPES.EMISSIONS_AUTO)
   @Post('membership/register')
   @ApiOperation({
-    summary: 'Registrar membresía Arys post-emisión RCV',
+    summary: 'Registrar membresía Arys (la emisión de automóvil ya lo hace sola)',
     description:
       'Orquesta AddPropetario → AddVehiculo → Coberturas → RegistrarSubcripcion usando datos de Sis2000.',
   })
@@ -61,6 +61,22 @@ export class ArysController {
   })
   async registerMembership(@Body() body: ArysRegisterMembershipInput) {
     const result = await this.arysService.registerMembershipFromEmission(body);
+    if (!result && body.cnpoliza) {
+      // La emisión de automóvil ya registra la membresía sola; este endpoint es idempotente y no debe
+      // confundir a quien lo siga llamando: si ya estaba registrada, se informa como tal.
+      const job = await this.jobs.get(body.cnpoliza);
+      if (job?.status === 'SUCCESS') {
+        return {
+          status: true,
+          result: {
+            cnpoliza: job.cnpoliza,
+            alreadyRegistered: true,
+            personaId: job.personaId,
+            vehiculoId: job.vehiculoId,
+          },
+        };
+      }
+    }
     return {
       status: Boolean(result),
       result,
@@ -114,7 +130,7 @@ export class ArysController {
   @ApiOperation({
     summary: 'Actualizar la configuración del reintento (sin reiniciar PM2)',
     description:
-      'Campos opcionales: retryEnabled, retryIntervalSeconds, maxAttempts, retryBaseMinutes, retryMaxMinutes, batchSize, monitorEnabled, monitorUrl, monitorAppId, monitorToken, monitorReport5xx, monitorSecurityObserve. Se aplica en ~30 s. El token nunca se devuelve.',
+      'Campos opcionales: retryEnabled, retryIntervalSeconds, maxAttempts, retryBaseMinutes, retryMaxMinutes, batchSize, monitorEnabled, monitorUrl, monitorAppId, monitorToken, monitorReport5xx, monitorSecurityObserve, arysEmissionEnabled. Se aplica en ~30 s. El token nunca se devuelve.',
   })
   async updateConfig(@Body() body: Partial<ArysMembershipConfigValues>) {
     return { status: true, result: await this.membershipConfig.update(body) };

@@ -125,6 +125,7 @@ model ArysMembershipConfig {
   monitorToken         String?  @map("monitor_token") @db.VarChar(200)
   monitorReport5xx     Boolean  @default(true) @map("monitor_report_5xx")
   monitorSecurityObserve Boolean @default(false) @map("monitor_security_observe")
+  arysEmissionEnabled  Boolean  @default(true) @map("arys_emission_enabled")
   updatedAt            DateTime @default(now()) @updatedAt @map("updated_at") @db.Timestamptz(6)
   updatedBy            String?  @map("updated_by") @db.VarChar(80)
 

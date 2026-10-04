@@ -20,6 +20,9 @@ import { SearchProprietaryDto } from './dto/search-proprietary.dto';
 import { SearchVehicleByPlateDto, SearchVehicleBySerialDto } from './dto/search-vehicle.dto';
 import { ArysService } from '../arys/arys.service';
 
+/** Espera antes del primer intento de membresía Arys tras emitir (ver scheduleArysMembershipRegistration). */
+const ARYS_POST_EMISSION_DELAY_MS = 1500;
+
 @Injectable()
 export class EmissionsService {
   private readonly logger = new Logger(EmissionsService.name);
@@ -321,18 +324,22 @@ export class EmissionsService {
     }
   }
 
-  /** Registro de membresía Arys en segundo plano (solo pólizas con cobertura Club Arys). */
+  /**
+   * Registro de membresía Arys en segundo plano para TODA emisión de automóvil (ya no solo las que
+   * llevan la cobertura Club Arys): el cliente no tiene que llamar aparte al endpoint de membresía.
+   * No bloquea la respuesta de la emisión; el seguimiento y el reintento quedan en ArysMembershipJob.
+   */
   private scheduleArysMembershipRegistration(
     cnpoliza: string,
     body: Record<string, unknown>,
   ): void {
     void (async () => {
       try {
-        const hasArys = await this.hasClubArysCoverage(cnpoliza, body);
-        if (!hasArys) return;
+        // Margen para que Sis2000 deje visibles propietario, vehículo y cobertura de la póliza recién emitida.
+        await new Promise((resolve) => setTimeout(resolve, ARYS_POST_EMISSION_DELAY_MS));
 
         const xplaca = String(this.pick(body, 'xplaca') ?? this.pick(body, 'placa') ?? '').trim();
-        await this.arysService.registerMembershipFromEmission({
+        await this.arysService.registerMembershipForEmission({
           cnpoliza,
           xplaca: xplaca || undefined,
         });
