@@ -3,6 +3,7 @@ import { ConfigService } from '@nestjs/config';
 import { ArysMembershipJob } from '@prisma/client';
 import { ArysClient } from './arys.client';
 import { ArysJobStage, ArysMembershipJobService } from './arys-membership-job.service';
+import { ArysMonitorReporterService } from './arys-monitor-reporter.service';
 import { buildPropietarioRequest, buildVehiculoRequest } from './arys.mapper';
 import { ArysRepository } from './arys.repository';
 import {
@@ -21,6 +22,7 @@ export class ArysService {
     private readonly repository: ArysRepository,
     private readonly config: ConfigService,
     private readonly jobs: ArysMembershipJobService,
+    private readonly reporter: ArysMonitorReporterService,
   ) {
     this.defaultTipoMembresia = Number(
       this.config.get<string>('SARYS_TIPO_MEMBRESIA_RCV') ?? 6,
@@ -157,6 +159,21 @@ export class ArysService {
         `Arys membresía falló cnpoliza=${input.cnpoliza ?? input.xplaca ?? 'n/a'} etapa=${stage}: ${msg}`,
       );
       await this.jobs.markFailure(job, stage, error);
+      if (!job) {
+        // Falló antes de existir el respaldo (p. ej. la póliza no se encuentra en Sis2000) o el
+        // respaldo no pudo crearse: markFailure no reporta nada, así que se avisa al monitor aquí.
+        const entity = input.cnpoliza ?? input.cpoliza ?? input.xplaca ?? 'n/a';
+        void this.reporter.report({
+          type: 'arys.membership.failed',
+          severity: 'warning',
+          title: `Membresía Arys falló · ${entity}`,
+          message: `Etapa ${stage}: ${msg.slice(0, 500)} — sin respaldo: no habrá reintento automático.`,
+          entity,
+          details: { stage, sinRespaldo: true },
+          dedupeKey: `arys-membership:${entity}:failed`,
+          notify: true,
+        });
+      }
       return null;
     }
   }

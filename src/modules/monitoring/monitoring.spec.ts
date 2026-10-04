@@ -1,3 +1,4 @@
+import { EventEmitter } from 'events';
 import { HttpException, HttpStatus } from '@nestjs/common';
 import { AllExceptionsFilter } from '../../common/filters/all-exceptions.filter';
 import { MonitorIngestService } from './monitor-ingest.service';
@@ -53,6 +54,12 @@ describe('MonitorIngestService', () => {
     expect(global.fetch).toHaveBeenCalledTimes(2);
   });
 
+  it('reporta peticiones externas a security/events (registra y alerta), no a evaluate', async () => {
+    global.fetch = jest.fn().mockResolvedValue({ ok: true, status: 201 } as Response);
+    await ingestWith().observeRequest({ ip: '203.0.113.9', method: 'GET', path: '/x', statusCode: 200 });
+    expect((global.fetch as jest.Mock).mock.calls[0][0]).toBe('http://127.0.0.1:3098/monitor-api/security/events');
+  });
+
   it('nunca lanza si el monitor no responde', async () => {
     global.fetch = jest.fn().mockRejectedValue(new Error('ECONNREFUSED'));
     await expect(
@@ -72,20 +79,27 @@ describe('MonitorSecurityObserver', () => {
       ...over,
     }) as never;
 
+  const res = (statusCode = 200) => Object.assign(new EventEmitter(), { statusCode }) as never;
+  const finish = async (r: never) => {
+    (r as unknown as EventEmitter).emit('finish');
+    await new Promise((resolve) => setImmediate(resolve));
+  };
+
   it('llama a next() de inmediato y nunca bloquea', () => {
     const observer = new MonitorSecurityObserver({ securityObserveEnabled: () => new Promise(() => undefined) } as never);
     const next = jest.fn();
-    observer.middleware()(req(), {} as never, next);
+    observer.middleware()(req(), res(), next);
     expect(next).toHaveBeenCalledTimes(1);
   });
 
   it('envía al monitor solo tráfico externo y sin cuerpo', async () => {
     const observeRequest = jest.fn().mockResolvedValue(undefined);
     const observer = new MonitorSecurityObserver({ securityObserveEnabled: async () => true, observeRequest } as never);
-    observer.middleware()(req(), {} as never, jest.fn());
-    await new Promise((r) => setImmediate(r));
+    const r = res(401);
+    observer.middleware()(req(), r, jest.fn());
+    await finish(r);
     expect(observeRequest).toHaveBeenCalledWith(
-      expect.objectContaining({ ip: '203.0.113.9', path: '/api/polizas', userAgent: 'sqlmap/1.7' }),
+      expect.objectContaining({ ip: '203.0.113.9', path: '/api/polizas', userAgent: 'sqlmap/1.7', statusCode: 401 }),
     );
     expect(Object.keys(observeRequest.mock.calls[0][0])).not.toContain('bodySnippet');
   });
@@ -93,9 +107,10 @@ describe('MonitorSecurityObserver', () => {
   it('ignora IPs privadas, OPTIONS y health', async () => {
     const observeRequest = jest.fn().mockResolvedValue(undefined);
     const observer = new MonitorSecurityObserver({ securityObserveEnabled: async () => true, observeRequest } as never);
-    const run = async (r: never) => {
-      observer.middleware()(r, {} as never, jest.fn());
-      await new Promise((resolve) => setImmediate(resolve));
+    const run = async (q: never) => {
+      const r = res();
+      observer.middleware()(q, r, jest.fn());
+      await finish(r);
     };
     await run(req({ headers: { 'x-forwarded-for': '10.0.0.5' } }));
     await run(req({ headers: {}, socket: { remoteAddress: '::ffff:192.168.8.20' } }));

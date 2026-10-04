@@ -29,8 +29,9 @@ function build(existingJob: Record<string, unknown> | null) {
     markFailure: jest.fn().mockResolvedValue(undefined),
   };
   const config = { get: () => undefined } as unknown as ConfigService;
-  const service = new ArysService(client as never, repository as never, config, jobs as never);
-  return { service, client, jobs, job };
+  const reporter = { report: jest.fn().mockResolvedValue(undefined) };
+  const service = new ArysService(client as never, repository as never, config, jobs as never, reporter as never);
+  return { service, client, jobs, job, repository, reporter };
 }
 
 jest.mock('./arys.mapper', () => ({
@@ -70,5 +71,30 @@ describe('ArysService respaldo de membresía', () => {
     const result = await service.registerMembershipFromEmission({ cnpoliza: 'N1' });
     expect(result).toBeNull();
     expect(client.registrarSubcripcion).not.toHaveBeenCalled();
+  });
+
+  it('avisa al monitor si falla antes de existir el respaldo (póliza no encontrada)', async () => {
+    const { service, repository, reporter, jobs } = build(null);
+    repository.resolveEmissionTarget.mockRejectedValue(new Error('Póliza no encontrada en Sis2000'));
+
+    const result = await service.registerMembershipFromEmission({ cnpoliza: 'N-NOEXISTE' });
+
+    expect(result).toBeNull();
+    expect(jobs.begin).not.toHaveBeenCalled();
+    expect(reporter.report).toHaveBeenCalledWith(
+      expect.objectContaining({
+        type: 'arys.membership.failed',
+        entity: 'N-NOEXISTE',
+        dedupeKey: 'arys-membership:N-NOEXISTE:failed',
+        details: { stage: 'target', sinRespaldo: true },
+      }),
+    );
+  });
+
+  it('no duplica el aviso cuando el respaldo sí existe (lo reporta markFailure)', async () => {
+    const { service, client, reporter } = build(null);
+    client.registrarSubcripcion.mockRejectedValue(new Error('500'));
+    await service.registerMembershipFromEmission({ cnpoliza: 'N1' });
+    expect(reporter.report).not.toHaveBeenCalled();
   });
 });
