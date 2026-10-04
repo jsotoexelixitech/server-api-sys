@@ -18,6 +18,8 @@ export interface SecurityEvaluateReport {
   query?: string;
   userAgent?: string;
   isAuthEndpoint?: boolean;
+  /** Código HTTP de la respuesta: permite detectar fuerza bruta en endpoints de autenticación. */
+  statusCode?: number;
 }
 
 const TIMEOUT_MS = 3000;
@@ -63,12 +65,16 @@ export class MonitorIngestService {
     }
   }
 
-  /** Envía una petición externa al motor de seguridad del monitor (el resultado se ignora: dry-run). */
+  /**
+   * Reporta una petición externa al motor de seguridad del monitor (POST /security/events).
+   * Se usa 'events' y no 'evaluate': el primero registra el evento y alerta; el segundo solo decide.
+   * El resultado se ignora (dry-run): la API nunca actúa sobre él.
+   */
   async observeRequest(report: SecurityEvaluateReport): Promise<void> {
     try {
       const target = await this.target();
       if (!target || !target.cfg.monitorSecurityObserve) return;
-      await this.post(`${target.base}/security/evaluate`, target.token, {
+      await this.post(`${target.base}/security/events`, target.token, {
         appId: target.cfg.monitorAppId,
         ...report,
       });

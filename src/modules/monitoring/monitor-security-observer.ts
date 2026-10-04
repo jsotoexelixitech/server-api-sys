@@ -12,7 +12,7 @@ const SECRET_PARAM = /^(?:.*(?:key|token|secret|pass|auth|sig).*)$/i;
  *
  * Envía al monitor, sin esperar respuesta, las peticiones que llegan de IPs externas para que
  * detecte patrones (SQLi, XSS, fuerza bruta, scanners). NUNCA bloquea, no modifica la petición ni la
- * retrasa: llama a next() de inmediato. No envía el cuerpo (puede traer datos de asegurados) y
+ * retrasa: llama a next() de inmediato y reporta cuando la respuesta ya terminó. No envía el cuerpo (puede traer datos de asegurados) y
  * redacta parámetros sensibles del query. Se ignoran IPs privadas (tráfico servicio a servicio).
  * Apagado por defecto: monitor_security_observe en arys_membership_config.
  */
@@ -21,13 +21,14 @@ export class MonitorSecurityObserver {
   constructor(private readonly ingest: MonitorIngestService) {}
 
   middleware() {
-    return (req: Request, _res: Response, next: NextFunction): void => {
+    return (req: Request, res: Response, next: NextFunction): void => {
       next();
-      void this.observe(req);
+      // Se observa al terminar la respuesta para conocer su código (login fallido = 401/403).
+      res.once?.('finish', () => void this.observe(req, res.statusCode));
     };
   }
 
-  private async observe(req: Request): Promise<void> {
+  private async observe(req: Request, statusCode?: number): Promise<void> {
     try {
       if (req.method === 'OPTIONS') return;
       const path = (req.originalUrl || req.url || '/').split('?')[0];
@@ -45,6 +46,7 @@ export class MonitorSecurityObserver {
         query: MonitorSecurityObserver.redactQuery(rawQuery),
         userAgent: String(req.headers['user-agent'] ?? '').slice(0, 300) || undefined,
         isAuthEndpoint: AUTH_PATH.test(path),
+        statusCode,
       });
     } catch {
       // un observador jamás debe afectar a la API
