@@ -55,6 +55,18 @@ export class AllExceptionsFilter implements ExceptionFilter {
       // Usamos el status 400 (Bad Request) ya que es un error de regla de negocio
       statusCode = HttpStatus.BAD_REQUEST;
       message = sqlError.message || 'Error de validación de base de datos.';
+      // Un THROW de negocio (número >= 50000) es una validación esperada y no se reporta; un timeout,
+      // un deadlock o un objeto inexistente sí: antes se escondían tras este 400 y nadie se enteraba.
+      const sql = exception as { code?: string; number?: number };
+      if (MonitorIngestService.isSystemSqlError(sql)) {
+        void this.monitor?.reportSqlError({
+          method: req.method,
+          path: (req.originalUrl || req.url || '/').split('?')[0],
+          code: sql.code,
+          number: sql.number,
+          message: sqlError.message || '',
+        });
+      }
     } else {
       // Error NO-HTTP: bug, timeout de red, etc. — nunca filtrar info interna
       message = 'Ha ocurrido un error inesperado en el servidor.';
