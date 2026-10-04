@@ -13,6 +13,10 @@ export interface ArysMembershipConfigValues {
   monitorUrl: string | null;
   monitorAppId: string;
   monitorToken: string | null;
+  /** Reportar todo 5xx de la API (requiere monitorEnabled). */
+  monitorReport5xx: boolean;
+  /** Observar tráfico externo y enviarlo al monitor en modo dry-run (nunca bloquea). */
+  monitorSecurityObserve: boolean;
 }
 
 /** Config sin el token, apta para devolver por la API. */
@@ -31,6 +35,8 @@ export const ARYS_CONFIG_DEFAULTS: ArysMembershipConfigValues = {
   monitorUrl: null,
   monitorAppId: 'sysip-nest-api',
   monitorToken: null,
+  monitorReport5xx: true,
+  monitorSecurityObserve: false,
 };
 
 const CACHE_MS = 30_000;
@@ -68,6 +74,8 @@ export class ArysMembershipConfigService {
             monitorUrl: row.monitorUrl,
             monitorAppId: row.monitorAppId,
             monitorToken: row.monitorToken,
+            monitorReport5xx: row.monitorReport5xx,
+            monitorSecurityObserve: row.monitorSecurityObserve,
           };
         }
       } catch {
@@ -91,6 +99,10 @@ export class ArysMembershipConfigService {
     const data: Partial<ArysMembershipConfigValues> = {};
     if (patch.retryEnabled !== undefined) data.retryEnabled = Boolean(patch.retryEnabled);
     if (patch.monitorEnabled !== undefined) data.monitorEnabled = Boolean(patch.monitorEnabled);
+    if (patch.monitorReport5xx !== undefined) data.monitorReport5xx = Boolean(patch.monitorReport5xx);
+    if (patch.monitorSecurityObserve !== undefined) {
+      data.monitorSecurityObserve = Boolean(patch.monitorSecurityObserve);
+    }
     if (patch.monitorUrl !== undefined) {
       const url = patch.monitorUrl?.trim() || null;
       if (url && !/^https?:\/\//i.test(url)) {
