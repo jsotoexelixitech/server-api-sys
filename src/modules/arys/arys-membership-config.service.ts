@@ -1,4 +1,4 @@
-import { Injectable } from '@nestjs/common';
+import { Injectable, Logger } from '@nestjs/common';
 import { PrismaService } from '../../database/prisma/prisma.service';
 
 export interface ArysMembershipConfigValues {
@@ -52,13 +52,17 @@ const NUMERIC_KEYS = [
 /** Config del reintento de membresías Arys, guardada en BD (fila única) y cacheada ~30 s. */
 @Injectable()
 export class ArysMembershipConfigService {
+  private readonly logger = new Logger(ArysMembershipConfigService.name);
   private cache: { at: number; value: ArysMembershipConfigValues } | null = null;
+  private failing = false;
 
   constructor(private readonly prisma: PrismaService) {}
 
   async get(): Promise<ArysMembershipConfigValues> {
     if (this.cache && Date.now() - this.cache.at < CACHE_MS) return this.cache.value;
-    let value = ARYS_CONFIG_DEFAULTS;
+    // Si la BD falla se conserva la última configuración válida: caer a los valores por defecto apagaría
+    // en silencio el reporte al monitor justo cuando más falta hace.
+    let value = this.cache?.value ?? ARYS_CONFIG_DEFAULTS;
     if (this.prisma.isEnabled()) {
       try {
         const row = await this.prisma.arysMembershipConfig.findUnique({ where: { id: 1 } });
@@ -78,8 +82,15 @@ export class ArysMembershipConfigService {
             monitorSecurityObserve: row.monitorSecurityObserve,
           };
         }
-      } catch {
-        // BD sin la tabla aún: se usan los valores por defecto (reintento apagado)
+        this.failing = false;
+      } catch (err) {
+        // BD caída, sin permisos o sin la tabla aún: se mantiene el último valor (o los por defecto al arrancar)
+        if (!this.failing) {
+          this.logger.warn(
+            `No se pudo leer la config; se conserva la última válida: ${err instanceof Error ? err.message.split('\n').pop() : String(err)}`,
+          );
+        }
+        this.failing = true;
       }
     }
     this.cache = { at: Date.now(), value };
