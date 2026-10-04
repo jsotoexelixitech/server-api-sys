@@ -2,6 +2,7 @@ import { Injectable, Logger } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { ArysMembershipJob } from '@prisma/client';
 import { ArysClient } from './arys.client';
+import { ArysMembershipConfigService } from './arys-membership-config.service';
 import { ArysJobStage, ArysMembershipJobService } from './arys-membership-job.service';
 import { ArysMonitorReporterService } from './arys-monitor-reporter.service';
 import { buildPropietarioRequest, buildVehiculoRequest } from './arys.mapper';
@@ -16,6 +17,8 @@ import {
 export class ArysService {
   private readonly logger = new Logger(ArysService.name);
   private readonly defaultTipoMembresia: number;
+  /** Registros en curso por póliza: evita duplicar propietario/vehículo si coinciden dos llamadas. */
+  private readonly inFlight = new Map<string, Promise<ArysMembershipRegistrationResult | null>>();
 
   constructor(
     private readonly client: ArysClient,
@@ -23,6 +26,7 @@ export class ArysService {
     private readonly config: ConfigService,
     private readonly jobs: ArysMembershipJobService,
     private readonly reporter: ArysMonitorReporterService,
+    private readonly membershipConfig: ArysMembershipConfigService,
   ) {
     this.defaultTipoMembresia = Number(
       this.config.get<string>('SARYS_TIPO_MEMBRESIA_RCV') ?? 6,
@@ -43,11 +47,46 @@ export class ArysService {
   }
 
   /**
+   * Punto de entrada de la emisión de automóvil: TODA emisión registra su membresía Arys, sin que el
+   * cliente tenga que llamar aparte al endpoint de membresía. Respeta el interruptor
+   * arys_emission_enabled (BD) para poder apagarlo sin reiniciar si Arys tiene problemas.
+   */
+  async registerMembershipForEmission(
+    input: ArysRegisterMembershipInput,
+  ): Promise<ArysMembershipRegistrationResult | null> {
+    const { arysEmissionEnabled } = await this.membershipConfig.get();
+    if (!arysEmissionEnabled) {
+      this.logger.log(
+        `Arys post-emisión desactivado (arys_emission_enabled=false) cnpoliza=${input.cnpoliza ?? 'n/a'}`,
+      );
+      return null;
+    }
+    return this.registerMembershipFromEmission(input);
+  }
+
+  /**
    * Flujo completo: propietario → vehículo → primas → membresía.
    * Cada intento queda respaldado en Postgres (ArysMembershipJob); si falla, un reintento
    * retoma con el personaId/vehiculoId ya creados en Arys en lugar de duplicarlos.
+   * Si ya hay un registro en curso para la misma póliza, se espera a ese en vez de lanzar otro.
    */
   async registerMembershipFromEmission(
+    input: ArysRegisterMembershipInput,
+  ): Promise<ArysMembershipRegistrationResult | null> {
+    const key = input.cnpoliza?.trim() || input.cpoliza?.trim() || input.xplaca?.trim();
+    if (!key) return this.runRegistration(input);
+
+    const running = this.inFlight.get(key);
+    if (running) {
+      this.logger.log(`Arys registro ya en curso para ${key}, se reutiliza`);
+      return running;
+    }
+    const promise = this.runRegistration(input).finally(() => this.inFlight.delete(key));
+    this.inFlight.set(key, promise);
+    return promise;
+  }
+
+  private async runRegistration(
     input: ArysRegisterMembershipInput,
   ): Promise<ArysMembershipRegistrationResult | null> {
     if (!this.client.isEnabled()) {
@@ -60,28 +99,47 @@ export class ArysService {
     let primas: ArysCoberturas | undefined;
 
     try {
+      // Si ya conocemos la póliza se abre el respaldo ANTES de consultar Sis2000: así un fallo al
+      // resolverla (replicación aún pendiente, póliza no encontrada) también queda registrado y se reintenta.
+      const early = input.cnpoliza?.trim() || '';
+      let existing = early ? await this.jobs.get(early) : null;
+      if (existing?.status === 'SUCCESS') {
+        this.logger.log(`Arys membresía ya registrada cnpoliza=${early}, se omite`);
+        return null;
+      }
+      if (early) {
+        job = await this.jobs.begin({
+          cnpoliza: early,
+          cpoliza: input.cpoliza ?? null,
+          xplaca: input.xplaca ?? null,
+          tipoMembresia,
+        });
+      }
+
       const target = await this.repository.resolveEmissionTarget({
         cnpoliza: input.cnpoliza,
         cpoliza: input.cpoliza,
         xplaca: input.xplaca,
       });
 
-      const cnpoliza = target.cnpoliza ?? input.cnpoliza ?? '';
+      const cnpoliza = target.cnpoliza ?? early;
 
-      const existing = cnpoliza ? await this.jobs.get(cnpoliza) : null;
-      if (existing?.status === 'SUCCESS') {
-        this.logger.log(`Arys membresía ya registrada cnpoliza=${cnpoliza}, se omite`);
-        return null;
+      if (!job) {
+        // Solo se conocía la placa o cpoliza: el cnpoliza sale recién de Sis2000.
+        existing = cnpoliza ? await this.jobs.get(cnpoliza) : null;
+        if (existing?.status === 'SUCCESS') {
+          this.logger.log(`Arys membresía ya registrada cnpoliza=${cnpoliza}, se omite`);
+          return null;
+        }
+        job = cnpoliza
+          ? await this.jobs.begin({
+              cnpoliza,
+              cpoliza: target.cpoliza,
+              xplaca: target.xplaca,
+              tipoMembresia,
+            })
+          : null;
       }
-
-      job = cnpoliza
-        ? await this.jobs.begin({
-            cnpoliza,
-            cpoliza: target.cpoliza,
-            xplaca: target.xplaca,
-            tipoMembresia,
-          })
-        : null;
 
       let personaId = input.personaId ?? existing?.personaId ?? undefined;
       if (!personaId) {
