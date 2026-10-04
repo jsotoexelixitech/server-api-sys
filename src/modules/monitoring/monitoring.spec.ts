@@ -60,6 +60,25 @@ describe('MonitorIngestService', () => {
     expect((global.fetch as jest.Mock).mock.calls[0][0]).toBe('http://127.0.0.1:3098/monitor-api/security/events');
   });
 
+  it('reporta un error de SQL como evento de negocio (sql.error) a events/business', async () => {
+    global.fetch = jest.fn().mockResolvedValue({ ok: true, status: 201 } as Response);
+    await ingestWith().reportSqlError({ method: 'POST', path: '/v1/emision', code: 'ETIMEOUT', message: 'Timeout: request failed to complete' });
+    const [url, init] = (global.fetch as jest.Mock).mock.calls[0];
+    expect(url).toBe('http://127.0.0.1:3098/monitor-api/events/business');
+    expect(JSON.parse(init.body)).toMatchObject({
+      type: 'sql.error', severity: 'warning', entity: 'POST /v1/emision', autoResolveMinutes: 60,
+      dedupeKey: 'sql:POST:/v1/emision:ETIMEOUT:',
+    });
+  });
+
+  it('distingue errores de SQL de sistema de un THROW de negocio', () => {
+    expect(MonitorIngestService.isSystemSqlError({ code: 'ETIMEOUT' })).toBe(true); // timeout
+    expect(MonitorIngestService.isSystemSqlError({ code: 'EREQUEST', number: 1205 })).toBe(true); // deadlock
+    expect(MonitorIngestService.isSystemSqlError({ code: 'EREQUEST', number: 208 })).toBe(true); // objeto inexistente
+    expect(MonitorIngestService.isSystemSqlError({ code: 'EREQUEST' })).toBe(true); // sin número: se reporta
+    expect(MonitorIngestService.isSystemSqlError({ code: 'EREQUEST', number: 99001 })).toBe(false); // THROW de negocio
+  });
+
   it('nunca lanza si el monitor no responde', async () => {
     global.fetch = jest.fn().mockRejectedValue(new Error('ECONNREFUSED'));
     await expect(
@@ -160,6 +179,26 @@ describe('AllExceptionsFilter → monitor', () => {
     expect(h.status).toHaveBeenCalledWith(500);
     // el cliente nunca recibe el detalle interno
     expect(JSON.stringify(h.json.mock.calls[0][0])).not.toContain('tabla X');
+  });
+
+  const sqlError = (code: string, number?: number) =>
+    Object.assign(new Error('mensaje de SQL'), { name: 'RequestError', code, number });
+
+  it('reporta los errores de SQL de sistema aunque se respondan como 400', () => {
+    const monitor = { reportServerError: jest.fn(), reportSqlError: jest.fn() };
+    const h = host();
+    new AllExceptionsFilter(monitor as never).catch(sqlError('ETIMEOUT'), h.host);
+    expect(h.status).toHaveBeenCalledWith(400); // el comportamiento hacia el cliente no cambia
+    expect(monitor.reportSqlError).toHaveBeenCalledWith(
+      expect.objectContaining({ method: 'POST', path: '/v1/emision', code: 'ETIMEOUT' }),
+    );
+    expect(monitor.reportServerError).not.toHaveBeenCalled();
+  });
+
+  it('no reporta un THROW de negocio de un SP', () => {
+    const monitor = { reportServerError: jest.fn(), reportSqlError: jest.fn() };
+    new AllExceptionsFilter(monitor as never).catch(sqlError('EREQUEST', 99001), host().host);
+    expect(monitor.reportSqlError).not.toHaveBeenCalled();
   });
 
   it('no reporta los 4xx', () => {

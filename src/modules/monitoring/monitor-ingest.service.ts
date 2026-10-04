@@ -22,6 +22,25 @@ export interface SecurityEvaluateReport {
   statusCode?: number;
 }
 
+export interface SqlErrorReport {
+  method: string;
+  path: string;
+  code?: string;
+  number?: number;
+  message: string;
+}
+
+export interface MonitorEventReport {
+  type: string;
+  severity: 'info' | 'warning' | 'critical';
+  title: string;
+  message: string;
+  entity?: string;
+  details?: Record<string, unknown>;
+  dedupeKey: string;
+  autoResolveMinutes?: number;
+}
+
 const TIMEOUT_MS = 3000;
 /** Tope de envíos simultáneos: ante una tormenta se descarta, nunca se encola ni se bloquea la API. */
 const MAX_IN_FLIGHT = 25;
@@ -62,6 +81,45 @@ export class MonitorIngestService {
       });
     } catch (err) {
       this.logger.debug(`reportServerError: ${err instanceof Error ? err.message : String(err)}`);
+    }
+  }
+
+  /**
+   * Un error de SQL "de sistema" (timeout, deadlock, objeto inexistente, violación de clave...) frente a
+   * un THROW de negocio de un SP (número >= 50000), que es una validación esperada.
+   */
+  static isSystemSqlError(err: { code?: string; number?: number }): boolean {
+    return err.code !== 'EREQUEST' || err.number == null || err.number < 50000;
+  }
+
+  /** Reporta un error de SQL de sistema como evento de negocio (la API responde 400 y no pasa por el 5xx). */
+  async reportSqlError(report: SqlErrorReport): Promise<void> {
+    const code = report.code ?? 'SQL';
+    await this.reportEvent({
+      type: 'sql.error',
+      severity: 'warning',
+      title: `Error de SQL · ${report.method} ${report.path}`,
+      message: `${code}${report.number != null ? ` ${report.number}` : ''}: ${report.message}`.slice(0, 500),
+      entity: `${report.method} ${report.path}`,
+      details: { code, number: report.number ?? null },
+      dedupeKey: `sql:${report.method}:${report.path}:${code}:${report.number ?? ''}`,
+      autoResolveMinutes: 60,
+    });
+  }
+
+  /** Evento de negocio genérico hacia events/business. Mismo criterio que los 5xx: fire-and-forget y sin lanzar. */
+  async reportEvent(event: MonitorEventReport): Promise<void> {
+    try {
+      const target = await this.target();
+      if (!target || !target.cfg.monitorReport5xx) return;
+      if (this.throttled(event.dedupeKey)) return;
+      await this.post(`${target.base}/events/business`, target.token, {
+        appId: target.cfg.monitorAppId,
+        ...event,
+        at: new Date().toISOString(),
+      });
+    } catch (err) {
+      this.logger.debug(`reportEvent: ${err instanceof Error ? err.message : String(err)}`);
     }
   }
 
