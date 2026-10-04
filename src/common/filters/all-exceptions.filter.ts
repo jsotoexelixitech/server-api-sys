@@ -7,6 +7,7 @@ import {
   Logger,
 } from '@nestjs/common';
 import { Request, Response } from 'express';
+import { MonitorIngestService } from '../../modules/monitoring/monitor-ingest.service';
 
 /**
  * Captura TODOS los errores y devuelve una respuesta JSON uniforme.
@@ -16,6 +17,9 @@ import { Request, Response } from 'express';
 @Catch()
 export class AllExceptionsFilter implements ExceptionFilter {
   private readonly logger = new Logger(AllExceptionsFilter.name);
+
+  /** El reporter es opcional: sin él (o sin config en BD) el filtro se comporta como siempre. */
+  constructor(private readonly monitor?: MonitorIngestService) {}
 
   catch(exception: unknown, host: ArgumentsHost): void {
     const ctx = host.switchToHttp();
@@ -62,6 +66,15 @@ export class AllExceptionsFilter implements ExceptionFilter {
         `[${statusCode}] ${req.method} ${req.url}`,
         exception instanceof Error ? exception.stack : String(exception),
       );
+      this.monitor?.reportServerError({
+        method: req.method,
+        path: (req.originalUrl || req.url || '/').split('?')[0],
+        statusCode,
+        message: exception instanceof Error ? exception.message : String(exception),
+        errorName: exception instanceof Error ? exception.name : undefined,
+        stackPreview: exception instanceof Error ? exception.stack : undefined,
+        requestId: String(req.headers['x-request-id'] ?? '') || undefined,
+      });
     } else {
       const detail = Array.isArray(message) ? message.join('; ') : String(message ?? '');
       this.logger.warn(`[${statusCode}] ${req.method} ${req.url} — ${detail}`);
