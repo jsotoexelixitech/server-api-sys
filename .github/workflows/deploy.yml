@@ -20,7 +20,7 @@ jobs:
         run: npm install --prefer-offline
 
       - name: Generate Prisma client
-        run: npm run prisma:generate || true
+        run: npm run prisma:generate
 
       - name: Build project
         run: npm run build:all || npm run build
