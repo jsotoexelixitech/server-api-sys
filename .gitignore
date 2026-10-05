@@ -70,3 +70,6 @@ Thumbs.db
 /start-and-test.ps1
 /setup-labels.ps1
 /body-viaje.json
+
+# Claude Code (local)
+.claude/settings.local.json

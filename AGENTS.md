@@ -16,7 +16,8 @@ cd ~/server-api-sys && git pull && npm run build && pm2 restart sysip-nest-api
 ```
 
 Swagger QA (interno): `http://192.168.8.120:3002/docs`  
-Swagger HTTPS: `https://cierrelmds.exelixitech.com/nest-api-docs/docs` (prefijo `/nest-api-docs/`)
+Swagger HTTPS Desarrollo: `https://cierrelmds.exelixitech.com/nest-api-docs/docs` (prefijo `/nest-api-docs/`)  
+Swagger HTTPS Producción: `https://nest-api.exelixitech.com/docs`
 
 ## Skills (nest-api)
 

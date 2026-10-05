@@ -8,8 +8,7 @@ export const envValidationSchema = Joi.object({
   SWAGGER_PATH: Joi.string().default('docs'),
   /** Prefijo HTTPS cierrelmds (ej. /nest-api-docs). Vacío = rutas en raíz (/docs, /api). */
   PUBLIC_API_PREFIX: Joi.string().allow('').default(''),
-  /** Origen público para Swagger servers (sin barra final). */
-  /** Origen público HTTPS. QA srv001: nexusqa. Prod: cierrelmds. */
+  /** Origen público HTTPS. Prod: nest-api.exelixitech.com · QA: nexusqa · Dev: cierrelmds. */
   PUBLIC_API_ORIGIN: Joi.string().uri().default('https://nexusqa.exelixitech.com'),
   CORS_ORIGIN: Joi.string().default('*'),
 

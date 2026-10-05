@@ -28,6 +28,7 @@ import { CanalModule } from './modules/canal/canal.module';
 import { PortalAuthModule } from './modules/portal-auth/portal-auth.module';
 import { MonedaModule } from './modules/moneda/moneda.module';
 import { ArysModule } from './modules/arys/arys.module';
+import { MonitoringModule } from './modules/monitoring/monitoring.module';
 import { ViajeroNacionalModule } from './modules/viajero-nacional/viajero-nacional.module';
 import { DynamicSchemasModule } from './modules/dynamic-schemas/dynamic-schemas.module';
 import { ReportesSyncModule } from './modules/reportes-sync/reportes-sync.module';
@@ -75,6 +76,7 @@ import { ComponentsModule } from './modules/components/components.module';
     PortalAuthModule,
     MonedaModule,
     ArysModule,
+    MonitoringModule,
     ViajeroNacionalModule,
     DynamicSchemasModule,
     ReportesSyncModule,
