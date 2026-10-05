@@ -232,10 +232,8 @@ export class MailService {
           ? { name: opts.toName, address: toList[0] }
           : toList,
         subject: opts.subject,
-        text: opts.text,
         html: opts.html,
-        encoding: 'quoted-printable',
-        headers: { 'Content-Language': 'es' },
+        text: opts.text,
       });
       this.logger.log(`Correo ${opts.logLabel} enviado a ${toList.join(', ')}`);
       return { sent: true, mode: 'smtp', messageId: info.messageId };

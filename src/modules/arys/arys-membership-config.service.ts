@@ -1,0 +1,156 @@
+import { Injectable, Logger } from '@nestjs/common';
+import { PrismaService } from '../../database/prisma/prisma.service';
+
+export interface ArysMembershipConfigValues {
+  retryEnabled: boolean;
+  retryIntervalSeconds: number;
+  maxAttempts: number;
+  retryBaseMinutes: number;
+  retryMaxMinutes: number;
+  batchSize: number;
+  /** Reporte de fallos a Exelixi Monitor. */
+  monitorEnabled: boolean;
+  monitorUrl: string | null;
+  monitorAppId: string;
+  monitorToken: string | null;
+  /** Reportar todo 5xx de la API (requiere monitorEnabled). */
+  monitorReport5xx: boolean;
+  /** Observar tráfico externo y enviarlo al monitor en modo dry-run (nunca bloquea). */
+  monitorSecurityObserve: boolean;
+  /** Hacer cumplir la blocklist del monitor (403). Requiere además SECURITY_ENFORCE=true en el monitor. */
+  monitorSecurityEnforce: boolean;
+  /** Toda emisión de automóvil registra su membresía Arys (apagar solo ante un problema con Arys). */
+  arysEmissionEnabled: boolean;
+}
+
+/** Config sin el token, apta para devolver por la API. */
+export type ArysMembershipConfigPublic = Omit<ArysMembershipConfigValues, 'monitorToken'> & {
+  monitorTokenSet: boolean;
+};
+
+export const ARYS_CONFIG_DEFAULTS: ArysMembershipConfigValues = {
+  retryEnabled: false,
+  retryIntervalSeconds: 300,
+  maxAttempts: 5,
+  retryBaseMinutes: 15,
+  retryMaxMinutes: 360,
+  batchSize: 10,
+  monitorEnabled: false,
+  monitorUrl: null,
+  monitorAppId: 'sysip-nest-api',
+  monitorToken: null,
+  monitorReport5xx: true,
+  monitorSecurityObserve: false,
+  monitorSecurityEnforce: false,
+  arysEmissionEnabled: true,
+};
+
+const CACHE_MS = 30_000;
+
+const NUMERIC_KEYS = [
+  'retryIntervalSeconds',
+  'maxAttempts',
+  'retryBaseMinutes',
+  'retryMaxMinutes',
+  'batchSize',
+] as const;
+
+/** Config del reintento de membresías Arys, guardada en BD (fila única) y cacheada ~30 s. */
+@Injectable()
+export class ArysMembershipConfigService {
+  private readonly logger = new Logger(ArysMembershipConfigService.name);
+  private cache: { at: number; value: ArysMembershipConfigValues } | null = null;
+  private failing = false;
+
+  constructor(private readonly prisma: PrismaService) {}
+
+  async get(): Promise<ArysMembershipConfigValues> {
+    if (this.cache && Date.now() - this.cache.at < CACHE_MS) return this.cache.value;
+    // Si la BD falla se conserva la última configuración válida: caer a los valores por defecto apagaría
+    // en silencio el reporte al monitor justo cuando más falta hace.
+    let value = this.cache?.value ?? ARYS_CONFIG_DEFAULTS;
+    if (this.prisma.isEnabled()) {
+      try {
+        const row = await this.prisma.arysMembershipConfig.findUnique({ where: { id: 1 } });
+        if (row) {
+          value = {
+            retryEnabled: row.retryEnabled,
+            retryIntervalSeconds: row.retryIntervalSeconds,
+            maxAttempts: row.maxAttempts,
+            retryBaseMinutes: row.retryBaseMinutes,
+            retryMaxMinutes: row.retryMaxMinutes,
+            batchSize: row.batchSize,
+            monitorEnabled: row.monitorEnabled,
+            monitorUrl: row.monitorUrl,
+            monitorAppId: row.monitorAppId,
+            monitorToken: row.monitorToken,
+            monitorReport5xx: row.monitorReport5xx,
+            monitorSecurityObserve: row.monitorSecurityObserve,
+            monitorSecurityEnforce: row.monitorSecurityEnforce,
+            arysEmissionEnabled: row.arysEmissionEnabled,
+          };
+        }
+        this.failing = false;
+      } catch (err) {
+        // BD caída, sin permisos o sin la tabla aún: se mantiene el último valor (o los por defecto al arrancar)
+        if (!this.failing) {
+          this.logger.warn(
+            `No se pudo leer la config; se conserva la última válida: ${err instanceof Error ? err.message.split('\n').pop() : String(err)}`,
+          );
+        }
+        this.failing = true;
+      }
+    }
+    this.cache = { at: Date.now(), value };
+    return value;
+  }
+
+  /** Igual que get(), pero sin exponer el token. */
+  async getPublic(): Promise<ArysMembershipConfigPublic> {
+    const { monitorToken, ...rest } = await this.get();
+    return { ...rest, monitorTokenSet: Boolean(monitorToken) };
+  }
+
+  async update(
+    patch: Partial<ArysMembershipConfigValues>,
+    updatedBy?: string,
+  ): Promise<ArysMembershipConfigPublic> {
+    const data: Partial<ArysMembershipConfigValues> = {};
+    if (patch.retryEnabled !== undefined) data.retryEnabled = Boolean(patch.retryEnabled);
+    if (patch.monitorEnabled !== undefined) data.monitorEnabled = Boolean(patch.monitorEnabled);
+    if (patch.arysEmissionEnabled !== undefined) data.arysEmissionEnabled = Boolean(patch.arysEmissionEnabled);
+    if (patch.monitorReport5xx !== undefined) data.monitorReport5xx = Boolean(patch.monitorReport5xx);
+    if (patch.monitorSecurityObserve !== undefined) {
+      data.monitorSecurityObserve = Boolean(patch.monitorSecurityObserve);
+    }
+    if (patch.monitorSecurityEnforce !== undefined) {
+      data.monitorSecurityEnforce = Boolean(patch.monitorSecurityEnforce);
+    }
+    if (patch.monitorUrl !== undefined) {
+      const url = patch.monitorUrl?.trim() || null;
+      if (url && !/^https?:\/\//i.test(url)) {
+        throw new Error('monitorUrl debe empezar con http:// o https://');
+      }
+      data.monitorUrl = url;
+    }
+    if (patch.monitorAppId !== undefined) {
+      const id = patch.monitorAppId.trim();
+      if (!id) throw new Error('monitorAppId no puede estar vacío');
+      data.monitorAppId = id;
+    }
+    if (patch.monitorToken !== undefined) data.monitorToken = patch.monitorToken?.trim() || null;
+    for (const key of NUMERIC_KEYS) {
+      const n = patch[key];
+      if (n === undefined) continue;
+      if (!Number.isInteger(n) || n < 1) throw new Error(`${key} debe ser un entero >= 1`);
+      data[key] = n;
+    }
+    await this.prisma.arysMembershipConfig.upsert({
+      where: { id: 1 },
+      create: { id: 1, ...data, updatedBy },
+      update: { ...data, updatedBy },
+    });
+    this.cache = null;
+    return this.getPublic();
+  }
+}

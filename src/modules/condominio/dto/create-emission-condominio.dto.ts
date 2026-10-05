@@ -101,27 +101,6 @@ export class CreateEmissionCondominioDto {
   @IsString()
   xdescrip4?: string;
 
-  /** Número de apartamento (texto). Clave compuesta emisión: cédula + plan + apto. */
-  @ApiPropertyOptional({ example: '004', description: 'Apartamento del riesgo (portal residente).' })
-  @IsOptional()
-  @IsString()
-  apartamento?: string;
-
-  @ApiPropertyOptional({ example: 4, description: 'Número de apartamento normalizado (certificado Core).' })
-  @IsOptional()
-  @IsInt()
-  napartamento?: number;
-
-  @ApiPropertyOptional({ example: 4, description: 'Número de certificado (= apartamento en portal condominio).' })
-  @IsOptional()
-  @IsInt()
-  ncertificado?: number;
-
-  @ApiPropertyOptional({ example: 4, description: 'Alias de ncertificado.' })
-  @IsOptional()
-  @IsInt()
-  certificado?: number;
-
   // Arrays de staging
   @ApiPropertyOptional({ example: [1], type: [Number], description: 'IDs de dispositivos de seguridad vinculados.' })
   @IsOptional()

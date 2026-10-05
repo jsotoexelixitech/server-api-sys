@@ -92,8 +92,7 @@ export function buildCanalVisibilityUi(
   planes: PlanItem[],
 ): CanalVisibilityUi {
   const skipPago = tipoEmision != null && TIPOS_EMISION_SKIP_PAGO.includes(tipoEmision);
-  // Sin tipo en matipoemision: mostrar checkout (no saltar a emisión automática).
-  const mostrarPasoPago = tipoEmision == null ? true : !skipPago;
+  const mostrarPasoPago = !skipPago && tipoEmision != null;
   const requierePagoVerificado =
     tipoEmision === 'emit_pay' || tipoEmision === 'emit_garage_plus';
 

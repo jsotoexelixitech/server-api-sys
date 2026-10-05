@@ -184,16 +184,6 @@ Mejor: corregir `tokens.env` y volver a `bash scripts/install-partner-packages.s
 
 ## Paso 5 — Actualizar un partner cuando salga versión nueva
 
-### ¿Hay versión nueva en el registry?
-
-```bash
-cd ~/server-api-sys
-git pull origin qa   # trae scripts/check-partner-versions.sh
-bash scripts/check-partner-versions.sh
-```
-
-Salida: columnas `INSTALLED` / `LATEST` / `STATUS` (`OK` o `ACTUALIZAR`).
-
 1. Actualizar token en `tokens.env` si cambió.
 2. Opcional: fijar versión en el comando:
 

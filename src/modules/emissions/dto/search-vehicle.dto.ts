@@ -42,19 +42,6 @@ export class SearchVehicleByPlateDto {
   @IsString()
   @MaxLength(10)
   type?: string;
-
-  /** Cobertura Sis2000 (@xcober en fn_validar_placa QA). Default RCV: `RC`. */
-  @ApiPropertyOptional({ example: 'RC', description: 'Tipo cobertura (xcober), máx. 4 caracteres.' })
-  @IsOptional()
-  @IsString()
-  @MaxLength(4)
-  xcober?: string;
-
-  @ApiPropertyOptional({ example: 'RC', description: 'Alias de xcober (cober adicional).' })
-  @IsOptional()
-  @IsString()
-  @MaxLength(4)
-  coberAdicional?: string;
 }
 
 /**
@@ -98,16 +85,4 @@ export class SearchVehicleBySerialDto {
   @IsString()
   @MaxLength(10)
   type?: string;
-
-  @ApiPropertyOptional({ example: 'RC', description: 'Tipo cobertura (xcober), máx. 4 caracteres.' })
-  @IsOptional()
-  @IsString()
-  @MaxLength(4)
-  xcober?: string;
-
-  @ApiPropertyOptional({ example: 'RC', description: 'Alias de xcober (cober adicional).' })
-  @IsOptional()
-  @IsString()
-  @MaxLength(4)
-  coberAdicional?: string;
 }

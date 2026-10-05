@@ -9,6 +9,9 @@ import { DocumentBuilder, SwaggerModule } from '@nestjs/swagger';
 import { ConfigService } from '@nestjs/config';
 import { AppModule } from './app.module';
 import { AllExceptionsFilter } from './common/filters/all-exceptions.filter';
+import { MonitorIngestService } from './modules/monitoring/monitor-ingest.service';
+import { MonitorSecurityGuard } from './modules/monitoring/monitor-security-guard';
+import { MonitorSecurityObserver } from './modules/monitoring/monitor-security-observer';
 import { ResponseInterceptor } from './common/interceptors/response.interceptor';
 import {
   SWAGGER_API_DESCRIPTION,
@@ -151,7 +154,11 @@ async function bootstrap(): Promise<void> {
     }),
   );
 
-  app.useGlobalFilters(new AllExceptionsFilter());
+  app.useGlobalFilters(new AllExceptionsFilter(app.get(MonitorIngestService)));
+  // Bloqueo de IPs baneadas por el monitor: apagado por defecto (monitor_security_enforce) y falla abierto.
+  app.use(app.get(MonitorSecurityGuard).middleware());
+  // Observador de seguridad: dry-run, fire-and-forget; nunca bloquea ni retrasa la petición.
+  app.use(app.get(MonitorSecurityObserver).middleware());
   app.useGlobalInterceptors(new ResponseInterceptor(app.get(Reflector)));
 
   const showInternalSwaggerServers =

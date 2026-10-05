@@ -7,6 +7,7 @@ import {
   Logger,
 } from '@nestjs/common';
 import { Request, Response } from 'express';
+import { MonitorIngestService } from '../../modules/monitoring/monitor-ingest.service';
 
 /**
  * Captura TODOS los errores y devuelve una respuesta JSON uniforme.
@@ -16,6 +17,9 @@ import { Request, Response } from 'express';
 @Catch()
 export class AllExceptionsFilter implements ExceptionFilter {
   private readonly logger = new Logger(AllExceptionsFilter.name);
+
+  /** El reporter es opcional: sin él (o sin config en BD) el filtro se comporta como siempre. */
+  constructor(private readonly monitor?: MonitorIngestService) {}
 
   catch(exception: unknown, host: ArgumentsHost): void {
     const ctx = host.switchToHttp();
@@ -51,6 +55,18 @@ export class AllExceptionsFilter implements ExceptionFilter {
       // Usamos el status 400 (Bad Request) ya que es un error de regla de negocio
       statusCode = HttpStatus.BAD_REQUEST;
       message = sqlError.message || 'Error de validación de base de datos.';
+      // Un THROW de negocio (número >= 50000) es una validación esperada y no se reporta; un timeout,
+      // un deadlock o un objeto inexistente sí: antes se escondían tras este 400 y nadie se enteraba.
+      const sql = exception as { code?: string; number?: number };
+      if (MonitorIngestService.isSystemSqlError(sql)) {
+        void this.monitor?.reportSqlError({
+          method: req.method,
+          path: (req.originalUrl || req.url || '/').split('?')[0],
+          code: sql.code,
+          number: sql.number,
+          message: sqlError.message || '',
+        });
+      }
     } else {
       // Error NO-HTTP: bug, timeout de red, etc. — nunca filtrar info interna
       message = 'Ha ocurrido un error inesperado en el servidor.';
@@ -62,6 +78,15 @@ export class AllExceptionsFilter implements ExceptionFilter {
         `[${statusCode}] ${req.method} ${req.url}`,
         exception instanceof Error ? exception.stack : String(exception),
       );
+      this.monitor?.reportServerError({
+        method: req.method,
+        path: (req.originalUrl || req.url || '/').split('?')[0],
+        statusCode,
+        message: exception instanceof Error ? exception.message : String(exception),
+        errorName: exception instanceof Error ? exception.name : undefined,
+        stackPreview: exception instanceof Error ? exception.stack : undefined,
+        requestId: String(req.headers['x-request-id'] ?? '') || undefined,
+      });
     } else {
       const detail = Array.isArray(message) ? message.join('; ') : String(message ?? '');
       this.logger.warn(`[${statusCode}] ${req.method} ${req.url} — ${detail}`);
