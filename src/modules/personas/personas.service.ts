@@ -1317,6 +1317,8 @@ export class PersonasService {
             value: String(canal['ifuente_api'] ?? canal['ifuente'] ?? 'API').slice(0, 10),
           },
           fingreso: { type: T.DateTime, value: new Date() },
+          // Usuario Sis2000 del canal; sin valor el SP de emisión deja 7.
+          cusuario: { type: T.Int, value: this.intField(b['cusuario']) },
           asegurados: {
             type: T.NVarChar(5000),
             value: this.mapAseguradosForSp(asegurados as Record<string, unknown>[], getPar),
