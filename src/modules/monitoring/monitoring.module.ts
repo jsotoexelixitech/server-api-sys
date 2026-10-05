@@ -1,6 +1,7 @@
 import { Module } from '@nestjs/common';
 import { ArysModule } from '../arys/arys.module';
 import { MonitorIngestService } from './monitor-ingest.service';
+import { MonitorSecurityGuard } from './monitor-security-guard';
 import { MonitorSecurityObserver } from './monitor-security-observer';
 
 /**
@@ -9,7 +10,7 @@ import { MonitorSecurityObserver } from './monitor-security-observer';
  */
 @Module({
   imports: [ArysModule],
-  providers: [MonitorIngestService, MonitorSecurityObserver],
-  exports: [MonitorIngestService, MonitorSecurityObserver],
+  providers: [MonitorIngestService, MonitorSecurityObserver, MonitorSecurityGuard],
+  exports: [MonitorIngestService, MonitorSecurityObserver, MonitorSecurityGuard],
 })
 export class MonitoringModule {}
