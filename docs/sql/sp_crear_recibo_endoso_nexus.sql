@@ -148,9 +148,23 @@ BEGIN
             @totalWeight    NUMERIC(18, 6),
             @basePrimaCalc  NUMERIC(18, 2),
             @lastPrimaCalc  NUMERIC(18, 2),
-            @firstPrimaCalc NUMERIC(18, 2);
+            @firstPrimaCalc NUMERIC(18, 2),
+            @firstDias      INT,
+            @bwTo           DATE,
+            @bwFrom         DATE,
+            @bwBoundary     DATE,
+            @bwK            INT,
+            @bwN            INT,
+            @bwStop         BIT;
 
         -- Temp tables al inicio: evita DECLARE de table-variable a mitad del SP (SSMS/parseo).
+        -- Cronograma hacia atrás (recibos cobrados): seq 1 = último tramo.
+        CREATE TABLE #cuotas_bw (
+            seq    INT PRIMARY KEY,
+            fdesde DATE NOT NULL,
+            fhasta DATE NOT NULL
+        );
+
         CREATE TABLE #cuotas_plan (
             cuotaIdx INT PRIMARY KEY,
             fdesde   DATE NOT NULL,
@@ -369,6 +383,56 @@ BEGIN
         SET @curPlanD = @fdesde;
         SET @kPlan = 1;
 
+        -- Con recibos cobrados los tramos completos se anclan al fin de vigencia y el tramo
+        -- corto (prorrata) es la PRIMERA cuota. Sin cobrados no hay prorrata: cronograma hacia
+        -- adelante como siempre. Debe coincidir con buildInstallmentPlan del backend de endosos.
+        IF @hasPaidReceipt = 1 AND @totalCuotas > 1
+        BEGIN
+            SET @bwTo = @fhasta;
+            SET @bwK = 1;
+            SET @bwN = 0;
+            SET @bwStop = 0;
+
+            WHILE @bwStop = 0 AND @bwTo >= @fdesde
+            BEGIN
+                SET @bwBoundary = CONVERT(DATE, DATEADD(MM, -@bwK * @monthsPerCuota, @fhasta));
+                SET @bwN = @bwN + 1;
+
+                IF DATEADD(DAY, 1, @bwBoundary) <= @fdesde OR @bwN >= @totalCuotas
+                BEGIN
+                    SET @bwFrom = @fdesde;
+                    SET @bwStop = 1;
+                END
+                ELSE
+                    SET @bwFrom = DATEADD(DAY, 1, @bwBoundary);
+
+                INSERT INTO #cuotas_bw (seq, fdesde, fhasta) VALUES (@bwN, @bwFrom, @bwTo);
+
+                SET @bwTo = @bwBoundary;
+                SET @bwK = @bwK + 1;
+            END
+
+            -- Un tramo inicial de pocos días no merece recibo propio: se une al siguiente.
+            IF @bwN > 1 AND EXISTS (
+                SELECT 1 FROM #cuotas_bw WHERE seq = @bwN AND DATEDIFF(DAY, fdesde, fhasta) < 7
+            )
+            BEGIN
+                DELETE FROM #cuotas_bw WHERE seq = @bwN;
+                SET @bwN = @bwN - 1;
+                UPDATE #cuotas_bw SET fdesde = @fdesde WHERE seq = @bwN;
+            END
+
+            IF @bwN >= 1
+            BEGIN
+                INSERT INTO #cuotas_plan (cuotaIdx, fdesde, fhasta, dias, primaExt)
+                SELECT @bwN - seq + 1, fdesde, fhasta, DATEDIFF(DAY, fdesde, fhasta), 0
+                FROM #cuotas_bw;
+
+                SET @totalCuotas = @bwN;
+                SET @kPlan = @totalCuotas + 1;  -- evita el cronograma hacia adelante
+            END
+        END
+
         WHILE @kPlan <= @totalCuotas
         BEGIN
             IF @kPlan = @totalCuotas
@@ -390,8 +454,8 @@ BEGIN
             SET @kPlan = @kPlan + 1;
         END
 
-        -- Punto 2: Con recibos pagados, si la última cuota cubre menos días que un período estándar,
-        -- se prorratea proporcionalmente.
+        -- Punto 2: Con recibos pagados, si la PRIMERA cuota cubre menos días que un período estándar,
+        -- se prorratea proporcionalmente (el tramo corto va primero; la última cuota absorbe el redondeo).
         SET @stdDias = CASE 
             WHEN @ifrecuencia = 'M' THEN 30
             WHEN @ifrecuencia = 'B' THEN 60
@@ -401,15 +465,16 @@ BEGIN
             WHEN @ifrecuencia = 'A' THEN 365
             ELSE 365 / NULLIF(@totalCuotas, 0)
         END;
-        SELECT @lastDias = dias FROM #cuotas_plan WHERE cuotaIdx = @totalCuotas;
+        SELECT @firstDias = dias FROM #cuotas_plan WHERE cuotaIdx = 1;
 
-        IF @hasPaidReceipt = 1 AND @totalCuotas > 1 AND @lastDias < (@stdDias - 7)
+        IF @hasPaidReceipt = 1 AND @totalCuotas > 1 AND @firstDias < (@stdDias - 7)
         BEGIN
-            SET @wLast = CAST(@lastDias AS NUMERIC(18, 6)) / CAST(@stdDias AS NUMERIC(18, 6));
+            SET @wLast = CAST(@firstDias AS NUMERIC(18, 6)) / CAST(@stdDias AS NUMERIC(18, 6));
+            IF @wLast < 0.05 SET @wLast = 0.05;
             SET @totalWeight = (@totalCuotas - 1) + @wLast;
             SET @basePrimaCalc = ROUND(@mprimaTotalExt / @totalWeight, 2);
-            SET @lastPrimaCalc = ROUND(@mprimaTotalExt * (@wLast / @totalWeight), 2);
-            SET @firstPrimaCalc = @mprimaTotalExt - ((@basePrimaCalc * (@totalCuotas - 2)) + @lastPrimaCalc);
+            SET @firstPrimaCalc = ROUND(@mprimaTotalExt * (@wLast / @totalWeight), 2);
+            SET @lastPrimaCalc = @mprimaTotalExt - ((@basePrimaCalc * (@totalCuotas - 2)) + @firstPrimaCalc);
 
             UPDATE #cuotas_plan
             SET primaExt = CASE
@@ -1167,6 +1232,7 @@ BEGIN
         DROP TABLE #cobs;
         DROP TABLE #montos;
         DROP TABLE #cuotas_plan;
+        DROP TABLE #cuotas_bw;
         IF OBJECT_ID(N'tempdb..#casco_pendiente') IS NOT NULL DROP TABLE #casco_pendiente;
 
         -- 7. Actualizar el contrato con el plan y la frecuencia del endoso.
