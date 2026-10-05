@@ -14,6 +14,7 @@ type OriginConfigLike = {
   filterParams?: Record<string, FilterParamSpec | Record<string, unknown>> | null;
   defaultTipoFecha?: string | null;
   dateColByTipoFecha?: Record<string, string> | null;
+  dateColByEstado?: Record<string, string> | null;
   dateCol?: string | null;
 };
 
@@ -127,16 +128,61 @@ function resolveParamValue(
   }
 }
 
+/**
+ * Letra de estado del recibo (N/P/C/A) según filterParams.iestadorec, o null si no hay filtro.
+ */
+export function resolveEstadoLetter(
+  filtros: Record<string, unknown>,
+  originConfig: OriginConfigLike,
+): string | null {
+  const spec = originConfig.filterParams?.iestadorec;
+  if (!spec || typeof spec !== 'object') return null;
+  const value = resolveParamValue(filtros, 'iestadorec', spec as FilterParamSpec);
+  const letter = trimOrNull(value);
+  return letter === null ? null : letter.toUpperCase();
+}
+
+/**
+ * Columna de fecha del origen con la que se extrae el rango. Prioridad:
+ * tipoFecha explícito > estado (dateColByEstado) > defaultTipoFecha > dateCol.
+ * Debe coincidir con la fecha que usa el SP del reporte para ese estado
+ * (Cobrado → fecha de pago, Anulado → anulación, Pendiente → vencimiento).
+ */
 export function resolveDateColumn(
   filtros: Record<string, unknown>,
   originConfig: OriginConfigLike,
 ): string {
+  const explicitTipoFecha = trimOrNull(filtros.tipoFecha);
+  const map = originConfig.dateColByTipoFecha || {};
+
+  if (!explicitTipoFecha && originConfig.dateColByEstado) {
+    const letter = resolveEstadoLetter(filtros, originConfig);
+    const byEstado = letter ? originConfig.dateColByEstado[letter] : undefined;
+    if (byEstado) return byEstado;
+  }
+
   const tipoFecha =
-    trimOrNull(filtros.tipoFecha) ||
+    explicitTipoFecha ||
     trimOrNull(originConfig.defaultTipoFecha) ||
     'fecha_emision';
-  const map = originConfig.dateColByTipoFecha || {};
   return map[tipoFecha] || map.default || originConfig.dateCol || 'modified_at';
+}
+
+/**
+ * true si el extract aplica algún filtro del origen distinto de rango de fechas y estado
+ * (ramo, canal, productor, frecuencia, póliza, cliente, mora...).
+ */
+export function hasExtraOriginFilters(
+  filtros: Record<string, unknown>,
+  originConfig: OriginConfigLike,
+): boolean {
+  const params = buildQueryParams(filtros, originConfig);
+  return Object.entries(params).some(
+    ([name, value]) =>
+      !['desde', 'hasta', 'iestadorec'].includes(name) &&
+      value !== null &&
+      value !== undefined,
+  );
 }
 
 export function buildQueryParams(

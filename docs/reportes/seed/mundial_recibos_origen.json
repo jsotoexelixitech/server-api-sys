@@ -10,6 +10,11 @@
       "fecha_anulacion": "rec.fanulacion",
       "default": "rec.fdesde"
     },
+    "dateColByEstado": {
+      "C": "rec.fcobro",
+      "A": "rec.fanulacion",
+      "P": "rec.fhasta"
+    },
     "filterParams": {
       "desde": {
         "source": "desde",
