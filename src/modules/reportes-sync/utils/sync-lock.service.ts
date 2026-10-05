@@ -1,6 +1,5 @@
 import { Injectable } from '@nestjs/common';
 import { ReportesPgService } from '../../../database/reportes-pg.service';
-import { firstRow } from '../utils/sync.helpers';
 
 @Injectable()
 export class SyncLockService {
@@ -16,20 +15,23 @@ export class SyncLockService {
     return aseguradoraId * 1000 + entityCode;
   }
 
+  /** Locks tomados por este proceso (cada uno retiene su conexión dedicada). */
+  private readonly held = new Map<number, () => Promise<void>>();
+
   async tryAcquire(aseguradoraId: number, entidad: string): Promise<boolean> {
     const key = this.lockKey(aseguradoraId, entidad);
-    const result = await this.reportesPg.executeQuery(
-      'SELECT pg_try_advisory_lock(@key) AS locked',
-      { key },
-    );
-    const row = firstRow(result, 'tryAcquire');
-    return Boolean(row?.locked);
+    if (this.held.has(key)) return false;
+    const release = await this.reportesPg.tryAdvisoryLock(key);
+    if (!release) return false;
+    this.held.set(key, release);
+    return true;
   }
 
   async release(aseguradoraId: number, entidad: string): Promise<void> {
     const key = this.lockKey(aseguradoraId, entidad);
-    await this.reportesPg.executeQuery('SELECT pg_advisory_unlock(@key)', {
-      key,
-    });
+    const release = this.held.get(key);
+    if (!release) return;
+    this.held.delete(key);
+    await release();
   }
 }

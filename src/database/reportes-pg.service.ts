@@ -581,6 +581,42 @@ export class ReportesPgService implements OnModuleInit, OnModuleDestroy {
   }
 
   /**
+   * Toma un advisory lock de sesión en una conexión dedicada. El lock pertenece a la
+   * conexión que lo tomó: por eso se retiene el cliente hasta liberar (con el pool, el
+   * unlock podía salir por otra conexión y dejar el lock colgado).
+   * Devuelve la función de liberación, o null si otro proceso ya tiene el lock.
+   */
+  async tryAdvisoryLock(key: number): Promise<(() => Promise<void>) | null> {
+    this.assertEnabled();
+    if (!this.pool) await this.connect();
+
+    const client = await this.acquireClient();
+    try {
+      const result = await client.query(
+        'SELECT pg_try_advisory_lock($1) AS locked',
+        [key],
+      );
+      if (!result.rows?.[0]?.locked) {
+        this.releaseClient(client);
+        return null;
+      }
+    } catch (error) {
+      this.releaseClient(client, true);
+      throw error;
+    }
+
+    return async () => {
+      try {
+        await client.query('SELECT pg_advisory_unlock($1)', [key]);
+        this.releaseClient(client);
+      } catch {
+        // Descartar la conexión cierra la sesión y libera el lock en el servidor.
+        this.releaseClient(client, true);
+      }
+    };
+  }
+
+  /**
    * Ejecuta varias sentencias en una sola transacción: los lectores concurrentes
    * ven el estado anterior hasta el COMMIT (sin estados intermedios).
    */

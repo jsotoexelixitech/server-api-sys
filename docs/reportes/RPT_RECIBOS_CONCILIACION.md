@@ -25,3 +25,24 @@ node scripts/reportes/reconcile-recibos.js --desde 2026-01-01 --hasta 2026-09-14
 | Notificado 0 en PG | Los recibos en estado N no se están sincronizando. |
 
 Tras desplegar el fix y recargar el rango, la conciliación debe quedar dentro del umbral.
+
+## Refresco programado (estados desactualizados)
+
+El reporte solo se refrescaba cuando alguien lo ejecutaba. En la corrida del 2026-10-05 el último
+sync de recibos era del 01-10 y había 3.282 recibos modificados en Sis2000 desde entonces; los
+"pendientes" de más en PG eran cobros del 02-10 aún no reflejados.
+
+`SyncSchedulerService` ([sync-scheduler.service.ts](../../src/modules/reportes-sync/sync-scheduler.service.ts))
+refresca en segundo plano una ventana corta, en tres pasadas: vigencia (todos los estados),
+cobrados (por fecha de cobro) y anulados (por fecha de anulación). Un recibo que pasa de
+pendiente a cobrado se reemplaza por su `origen_clave`.
+
+| Variable | Defecto | Notas |
+|---|---|---|
+| `REPORTES_SYNC_SCHEDULE_ENABLED` | `false` | Además requiere `REPORTES_SYNC_ENABLED=true`. |
+| `REPORTES_SYNC_SCHEDULE_INTERVAL_MINUTES` | `30` | Mínimo 5. |
+| `REPORTES_SYNC_SCHEDULE_WINDOW_DAYS` | `7` | Máximo 60. |
+
+Con varias réplicas de la API cada una lanzaría su ronda; el advisory lock por
+aseguradora/entidad impide que corran a la vez. Que la pasada de cobrados use la fecha de
+cobro requiere `dateColByEstado` en `origen_config.recibos` (ver el fix de alcance del sync).
