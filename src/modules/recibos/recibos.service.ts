@@ -516,6 +516,10 @@ function paginateRows(rows, page, pageSize) {
   return rows.slice(start, start + safePageSize);
 }
 
+/** Tamaño máximo de página en consulta; solo la exportación puede pedir todo el conjunto. */
+const MAX_PAGE_SIZE = 1000;
+const EXPORT_MAX_PAGE_SIZE = 1000000;
+
 function buildExecutePayload(body, schema) {
   const filtros = body && body.filtros ? body.filtros : {};
   const desde = normalizeDate(pickFirstFilterValue(filtros, [
@@ -569,7 +573,11 @@ function buildExecutePayload(body, schema) {
   payload.bexportar = body?.bexportar ? 1 : 0;
   payload.paginacion = {
     pagina: Math.max(1, Number(body?.page) || Number(body?.pagina) || 1),
-    tamano: Math.max(1, Number(body?.pageSize) || Number(body?.tamano) || 25),
+    // Consulta en pantalla acotada; solo la exportación puede pedir el conjunto completo.
+    tamano: Math.min(
+      body?.bexportar ? EXPORT_MAX_PAGE_SIZE : MAX_PAGE_SIZE,
+      Math.max(1, Number(body?.pageSize) || Number(body?.tamano) || 25),
+    ),
   };
 
   return payload;
@@ -602,6 +610,10 @@ async function executeRecibosProcedure(body, user, headers, options = {}) {
     p_cursor_mora_producto: EXTRA_CURSOR_NAMES.moraProducto,
     p_cursor_mora_frecuencia: EXTRA_CURSOR_NAMES.moraFrecuencia,
     p_cursor_eficiencia_productor: EXTRA_CURSOR_NAMES.eficienciaProductor,
+  }, {
+    // KPIs, gráficos y detalle deben ver el mismo snapshot aunque otro usuario
+    // sincronice recibos mientras el SP abre sus cursores.
+    isolationLevel: 'REPEATABLE READ',
   });
 }
 

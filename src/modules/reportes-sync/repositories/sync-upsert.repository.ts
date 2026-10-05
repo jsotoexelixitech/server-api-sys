@@ -1,5 +1,8 @@
 import { Injectable } from '@nestjs/common';
-import { ReportesPgService } from '../../../database/reportes-pg.service';
+import {
+  ReportesPgService,
+  type PgTransaction,
+} from '../../../database/reportes-pg.service';
 
 @Injectable()
 export class SyncUpsertRepository {
@@ -8,8 +11,9 @@ export class SyncUpsertRepository {
   private async exec(
     query: string,
     params: Record<string, unknown>,
+    tx?: PgTransaction,
   ): Promise<void> {
-    const result = await this.reportesPg.executeQuery(query, params);
+    const result = await (tx ?? this.reportesPg).executeQuery(query, params);
     if ('error' in result && result.error) {
       throw new Error(result.message);
     }
@@ -30,6 +34,7 @@ export class SyncUpsertRepository {
   async insertRecibosBatch(
     aseguradoraId: number,
     rows: Record<string, unknown>[],
+    tx?: PgTransaction,
   ): Promise<void> {
     if (!rows.length) return;
 
@@ -118,6 +123,7 @@ export class SyncUpsertRepository {
         tiposRecibo: rows.map((r) => r.tipoRecibo ?? null),
         coberturas: rows.map((r) => r.coberturas ?? ''),
       },
+      tx,
     );
   }
 
