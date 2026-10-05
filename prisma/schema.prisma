@@ -63,3 +63,72 @@ model RefreshToken {
   @@map("refresh_token")
   @@schema("nest_auth")
 }
+
+/// Respaldo de registros de membresía Arys/Sarys post-emisión (un trabajo por póliza).
+/// status: PENDING | RETRYING | SUCCESS | FAILED | DEAD
+model ArysMembershipJob {
+  id             String                  @id @default(cuid())
+  cnpoliza       String                  @unique @db.VarChar(30)
+  cpoliza        String?                 @db.VarChar(19)
+  xplaca         String?                 @db.VarChar(15)
+  tipoMembresia  Int                     @map("tipo_membresia")
+  status         String                  @default("PENDING") @db.VarChar(12)
+  attempts       Int                     @default(0)
+  maxAttempts    Int                     @default(5) @map("max_attempts")
+  lastStage      String?                 @map("last_stage") @db.VarChar(20)
+  personaId      Int?                    @map("persona_id")
+  vehiculoId     Int?                    @map("vehiculo_id")
+  lastError      String?                 @map("last_error")
+  lastHttpStatus Int?                    @map("last_http_status")
+  nextRetryAt    DateTime?               @map("next_retry_at") @db.Timestamptz(6)
+  succeededAt    DateTime?               @map("succeeded_at") @db.Timestamptz(6)
+  createdAt      DateTime                @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt      DateTime                @updatedAt @map("updated_at") @db.Timestamptz(6)
+  history        ArysMembershipAttempt[]
+
+  @@index([status, nextRetryAt])
+  @@map("arys_membership_job")
+  @@schema("nest_auth")
+}
+
+/// Un intento (éxito o fallo) del flujo de membresía, con lo enviado y lo recibido.
+model ArysMembershipAttempt {
+  id           String            @id @default(cuid())
+  jobId        String            @map("job_id")
+  job          ArysMembershipJob @relation(fields: [jobId], references: [id], onDelete: Cascade)
+  attemptNo    Int               @map("attempt_no")
+  ok           Boolean
+  stage        String?           @db.VarChar(20)
+  httpStatus   Int?              @map("http_status")
+  error        String?
+  requestBody  Json?             @map("request_body")
+  responseBody String?           @map("response_body")
+  createdAt    DateTime          @default(now()) @map("created_at") @db.Timestamptz(6)
+
+  @@index([jobId])
+  @@map("arys_membership_attempt")
+  @@schema("nest_auth")
+}
+
+/// Configuración del respaldo/reintento de membresías Arys (fila única id=1). Editable en caliente, sin reiniciar PM2.
+model ArysMembershipConfig {
+  id                   Int      @id @default(1)
+  retryEnabled         Boolean  @default(false) @map("retry_enabled")
+  retryIntervalSeconds Int      @default(300) @map("retry_interval_seconds")
+  maxAttempts          Int      @default(5) @map("max_attempts")
+  retryBaseMinutes     Int      @default(15) @map("retry_base_minutes")
+  retryMaxMinutes      Int      @default(360) @map("retry_max_minutes")
+  batchSize            Int      @default(10) @map("batch_size")
+  monitorEnabled       Boolean  @default(false) @map("monitor_enabled")
+  monitorUrl           String?  @map("monitor_url") @db.VarChar(300)
+  monitorAppId         String   @default("sysip-nest-api") @map("monitor_app_id") @db.VarChar(80)
+  monitorToken         String?  @map("monitor_token") @db.VarChar(200)
+  monitorReport5xx     Boolean  @default(true) @map("monitor_report_5xx")
+  monitorSecurityObserve Boolean @default(false) @map("monitor_security_observe")
+  arysEmissionEnabled  Boolean  @default(true) @map("arys_emission_enabled")
+  updatedAt            DateTime @default(now()) @updatedAt @map("updated_at") @db.Timestamptz(6)
+  updatedBy            String?  @map("updated_by") @db.VarChar(80)
+
+  @@map("arys_membership_config")
+  @@schema("nest_auth")
+}
