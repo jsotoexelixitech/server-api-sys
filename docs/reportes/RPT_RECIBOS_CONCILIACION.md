@@ -46,3 +46,25 @@ pendiente a cobrado se reemplaza por su `origen_clave`.
 Con varias réplicas de la API cada una lanzaría su ronda; el advisory lock por
 aseguradora/entidad impide que corran a la vez. Que la pasada de cobrados use la fecha de
 cobro requiere `dateColByEstado` en `origen_config.recibos` (ver el fix de alcance del sync).
+
+## Recibos sin póliza o sin tomador en el extract
+
+El `querySql` de Mundial unía `adpoliza` y `maclient` con INNER JOIN y partía de `adpoliza`. Un
+recibo cuya póliza no existe en `adpoliza` (p. ej. colectivos `C-43-1182`) o cuyo tomador no está
+en `maclient` no llegaba a PG, aunque el reporte "Recibos" de SysIP (LEFT JOIN) sí lo mostraba.
+
+Ahora la consulta parte de `adrecibos` con LEFT JOIN y usa como respaldo los datos del propio
+recibo (`cnpoliza`, `cramo`, `cproductor`, `ccanalalt`, `ifrecuencia`, `ctenedor`).
+
+Validado contra Sis2000 (2026-01-01 a 2026-10-05), consulta actual vs nueva:
+
+| Pasada | Actual | Nueva | Perdidas | Nuevas |
+|---|---|---|---|---|
+| Anulados | 28.625 | 28.735 | 0 | 110 |
+| Cobrados | 109.552 | 109.569 | 0 | 17 |
+| Vigencia | 145.452 | 145.709 | 0 | 257 |
+
+Ninguna fila actual se pierde. Cambian solo `id_frecuencia` e `id_canal` en filas donde la póliza
+los traía en blanco: ahora toman el valor del recibo, igual que el reporte "Recibos".
+Para aplicarlo en producción: actualizar `origen_config.recibos.querySql` desde el seed y
+recargar el rango con `forceSync`.
