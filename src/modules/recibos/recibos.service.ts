@@ -621,6 +621,10 @@ async function executeRecibosProcedure(body, user, headers, options = {}) {
     p_cursor_mora_producto: EXTRA_CURSOR_NAMES.moraProducto,
     p_cursor_mora_frecuencia: EXTRA_CURSOR_NAMES.moraFrecuencia,
     p_cursor_eficiencia_productor: EXTRA_CURSOR_NAMES.eficienciaProductor,
+  }, {
+    // KPIs, gráficos y detalle deben ver el mismo snapshot aunque otro usuario
+    // sincronice recibos mientras el SP abre sus cursores.
+    isolationLevel: 'REPEATABLE READ',
   });
 }
 
