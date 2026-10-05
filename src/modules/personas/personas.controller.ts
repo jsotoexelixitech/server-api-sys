@@ -22,10 +22,10 @@ export class PersonasController {
   @Post('planes')
   @HttpCode(HttpStatus.OK)
   @ApiOperation({
-    summary: 'Planes de personas vigentes (ramo 9 = Funerario)',
+    summary: 'Planes funerarios del canal SSO (ramo 9)',
     description:
-      'Planes de personas vigentes para el ramo indicado (9 = funerario por defecto), ' +
-      'con parentescos y rangos de edad permitidos.',
+      'Lista planes como SysIP getPlanV2: sp_busca_plan_producto_nexus (cproducto + centidad + citem). ' +
+      'Resuelve gestor marketplace (U → C/P/G). Añade parentescos y tope de asegurados.',
   })
   @ApiBody({ type: GetPlanesPerDto })
   @ApiResponse({
@@ -39,7 +39,7 @@ export class PersonasController {
   })
   @Api500()
   async getPlanes(@Body() dto: GetPlanesPerDto) {
-    const planes = await this.personasService.getPlanesPer(dto.cramo, dto.ctipo ?? null);
+    const planes = await this.personasService.getPlanesPer(dto);
     return { status: true, data: { planes } };
   }
 

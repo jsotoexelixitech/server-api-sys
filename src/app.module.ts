@@ -10,6 +10,7 @@ import { ChangesModule } from './modules/changes/changes.module';
 import { PersonasModule } from './modules/personas/personas.module';
 import { CondominioModule } from './modules/condominio/condominio.module';
 import { EndososModule } from './modules/endosos/endosos.module';
+import { RmsGatewayModule } from './modules/rms-gateway/rms-gateway.module';
 
 import { AppApiModule } from './modules/app/app.module';
 import { ExternalModule } from './modules/external/external.module';
@@ -24,6 +25,8 @@ import { PrismaModule } from './database/prisma/prisma.module';
 import { ProductEmissionModule } from './modules/product-emission/product-emission.module';
 import { MailModule } from './modules/mail/mail.module';
 import { CanalModule } from './modules/canal/canal.module';
+import { PortalAuthModule } from './modules/portal-auth/portal-auth.module';
+import { MonedaModule } from './modules/moneda/moneda.module';
 import { ArysModule } from './modules/arys/arys.module';
 import { ViajeroNacionalModule } from './modules/viajero-nacional/viajero-nacional.module';
 import { DynamicSchemasModule } from './modules/dynamic-schemas/dynamic-schemas.module';
@@ -57,6 +60,7 @@ import { ComponentsModule } from './modules/components/components.module';
     PersonasModule,
     CondominioModule,
     EndososModule,
+    RmsGatewayModule,
     AppApiModule,
     ExternalModule,
     DocumentsModule,
@@ -68,6 +72,8 @@ import { ComponentsModule } from './modules/components/components.module';
     ProductEmissionModule,
     MailModule,
     CanalModule,
+    PortalAuthModule,
+    MonedaModule,
     ArysModule,
     ViajeroNacionalModule,
     DynamicSchemasModule,

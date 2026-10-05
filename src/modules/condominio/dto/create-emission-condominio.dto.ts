@@ -1,5 +1,7 @@
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
-import { IsArray, IsDateString, IsIn, IsInt, IsNotEmpty, IsNumber, IsOptional, IsString } from 'class-validator';
+import { Type } from 'class-transformer';
+import { IsArray, IsDateString, IsIn, IsInt, IsNotEmpty, IsNumber, IsOptional, IsString, ValidateNested } from 'class-validator';
+import { CotizacionPreestablecidaDto } from './cotizacion-preestablecida.dto';
 
 export class CreateEmissionCondominioDto {
   @ApiProperty({ example: 38, description: 'Código de ramo (38 = Condominio Residencial).' })
@@ -70,6 +72,16 @@ export class CreateEmissionCondominioDto {
   @IsNumber()
   mcomisionext?: number;
 
+  @ApiPropertyOptional({
+    type: CotizacionPreestablecidaDto,
+    description:
+      'Cotización ya calculada por el producto (tarificador). Si se envía, el Core no recalcula: valida contra sus tarifas y emite estos valores. Aplica igual a la emisión interna y a los enlaces de autogestión.',
+  })
+  @IsOptional()
+  @ValidateNested()
+  @Type(() => CotizacionPreestablecidaDto)
+  cotizacion?: CotizacionPreestablecidaDto;
+
   // Staging / Datos del Certificado
   @ApiProperty({ example: 'Caseta de Vigilancia, Edif Bella Vista', description: 'Dirección de cobro.' })
   @IsString()
@@ -100,6 +112,27 @@ export class CreateEmissionCondominioDto {
   @IsOptional()
   @IsString()
   xdescrip4?: string;
+
+  /** Número de apartamento (texto). Clave compuesta emisión: cédula + plan + apto. */
+  @ApiPropertyOptional({ example: '004', description: 'Apartamento del riesgo (portal residente).' })
+  @IsOptional()
+  @IsString()
+  apartamento?: string;
+
+  @ApiPropertyOptional({ example: 4, description: 'Número de apartamento normalizado (certificado Core).' })
+  @IsOptional()
+  @IsInt()
+  napartamento?: number;
+
+  @ApiPropertyOptional({ example: 4, description: 'Número de certificado (= apartamento en portal condominio).' })
+  @IsOptional()
+  @IsInt()
+  ncertificado?: number;
+
+  @ApiPropertyOptional({ example: 4, description: 'Alias de ncertificado.' })
+  @IsOptional()
+  @IsInt()
+  certificado?: number;
 
   // Arrays de staging
   @ApiPropertyOptional({ example: [1], type: [Number], description: 'IDs de dispositivos de seguridad vinculados.' })

@@ -7,7 +7,7 @@
     collectPayment                → @accion=UPDATE_TRAN
 
   SQL reemplazado:
-    INSERT INTO pago_movil (...) WHERE NOT EXISTS (referencia)
+    INSERT INTO pago_movil (...) → usar spEnsurePagoMovilRcv_Nexus (docs/sql/spEnsurePagoMovilRcv_Nexus.sql)
     SELECT TOP 1 ... FROM cbreporte_pago WHERE ctransaccion=...
     UPDATE cbreporte_tran SET fingreso, mpagoext WHERE ctransaccion=...
 */

@@ -4,13 +4,16 @@ import { EndososService } from './endosos.service';
 import { CrearReciboEndosoDto } from './dto/crear-recibo.dto';
 import { ApiCrudErrors } from '../../common/swagger/api-error-responses';
 import { SWAGGER_TAGS } from '../../common/swagger/swagger-tags.constants';
+import { NestProtected } from '../auth/decorators/nest-protected.decorator';
+import { NEST_AUTH_SCOPES } from '../auth/scopes/nest-auth-scopes.constants';
 
 /**
  * Ruta legacy usada por el motor de endosos:
- * POST /api/v1/endoso-recibos/crearRecibo
+ * POST /api/endoso-recibos/crearRecibo
  */
 @ApiTags(SWAGGER_TAGS.ENDOSOS)
 @Controller('endoso-recibos')
+@NestProtected(NEST_AUTH_SCOPES.ENDOSOS_WRITE)
 export class EndosoRecibosController {
   constructor(private readonly endososService: EndososService) {}
 

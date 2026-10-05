@@ -3,6 +3,8 @@ export const NEST_AUTH_SCOPES = {
   EMISSIONS_AUTO: 'emissions:auto',
   EMISSIONS_PERSON: 'emissions:person',
   EMISSIONS_CONDOMINIO: 'emissions:condominio',
+  /** Replicar tasas del tarificador de Condominio/Hogar (matarifa_d, ramos 16 y 38). */
+  TARIFAS_CONDOMINIO: 'tarifas:condominio',
   COLLECTION_WRITE: 'collection:write',
   DOCUMENTS_WRITE: 'documents:write',
   ADMIN_KEYS: 'admin:keys',
@@ -12,10 +14,12 @@ export const NEST_AUTH_SCOPES = {
   RENOVATIONS_WRITE: 'renovations:write',
   /** Catálogos INMA / valrep (consultas auxiliares de emisión). */
   CATALOG_READ: 'catalog:read',
-  /** Endosos bajo /api/endosos/ o /api/v1/endosos/. */
+  /** Endosos bajo /api/endosos/, /api/v1/endosos/ o /api/endoso-recibos/. */
   ENDOSOS_WRITE: 'endosos:write',
   /** Reportes partner (/api/v1/report/) y reportes ET (dynamic-schemas, siniestros, etc.). */
   REPORT_WRITE: 'report:write',
+  /** Login de usuarios Sis2000 (seusuariosweb) para el portal La Mundial. */
+  PORTAL_LOGIN: 'portal:login',
 } as const;
 
 export type NestAuthScopeId =
@@ -55,6 +59,12 @@ export const NEST_AUTH_SCOPE_CATALOG: NestAuthScopeMeta[] = [
     label: 'Emisión condominio',
     description: 'Emitir pólizas de condominio',
     routes: ['POST /api/v1/condominio/emision'],
+  },
+  {
+    id: NEST_AUTH_SCOPES.TARIFAS_CONDOMINIO,
+    label: 'Tarifas condominio/hogar',
+    description: 'Actualizar la tasa por cobertura (ramos 16 y 38) desde el tarificador de Técnica',
+    routes: ['PUT /api/v1/condominio/tarificador/tasa'],
   },
   {
     id: NEST_AUTH_SCOPES.COLLECTION_WRITE,
@@ -113,6 +123,13 @@ export const NEST_AUTH_SCOPE_CATALOG: NestAuthScopeMeta[] = [
     label: 'Reportes',
     description:
       'Reportes partner (recibos, comisiones) y reportes dinámicos ET (esquemas, siniestros, recibos, pólizas, sync)',
+    routes: [],
+  },
+  {
+    id: NEST_AUTH_SCOPES.PORTAL_LOGIN,
+    label: 'Login portal La Mundial',
+    description:
+      'Validar usuario/clave Sis2000 (seusuariosweb) y resolver entidad del marketplace',
     routes: [],
   },
 ];
@@ -186,6 +203,41 @@ export function toRouteGrantLine(method: string, path: string): string {
   return `${String(method).toUpperCase()} ${normalizeHttpPath(path)}`;
 }
 
+/** Solo grants granulares `METHOD /path` (sin comprobar scope legacy). */
+export function explicitRouteGrantMatches(
+  granted: string[],
+  method: string,
+  path: string,
+): boolean {
+  if (!granted?.length) return false;
+
+  const methodUpper = String(method).toUpperCase();
+  const requestPath = normalizeHttpPath(path);
+  for (const grant of granted) {
+    const normalized = String(grant ?? '').trim();
+    if (!normalized.includes(' ')) continue;
+    const space = normalized.indexOf(' ');
+    const grantMethod = normalized.slice(0, space).toUpperCase();
+    if (grantMethod !== methodUpper) continue;
+    const grantPath = normalized.slice(space + 1);
+    if (pathMatchesRouteTemplate(grantPath, path)) return true;
+  }
+
+  if (
+    methodUpper === 'POST' &&
+    /\/api\/v1\/mail\/funeral-[a-z0-9-]+$/i.test(requestPath)
+  ) {
+    for (const grant of granted) {
+      const normalized = String(grant ?? '').trim();
+      if (!normalized.toUpperCase().startsWith('POST ')) continue;
+      const grantPath = normalizeHttpPath(normalized.slice(5));
+      if (/\/api\/v1\/mail\/funeral-[a-z0-9-]+$/i.test(grantPath)) return true;
+    }
+  }
+
+  return false;
+}
+
 /** Scope completo (legacy) o grant por ruta individual en `granted`. */
 export function grantMatchesRoute(
   granted: string[],
@@ -196,16 +248,5 @@ export function grantMatchesRoute(
   if (!requiredScope) return true;
   if (!granted?.length) return false;
   if (scopeMatches(granted, requiredScope)) return true;
-
-  const methodUpper = String(method).toUpperCase();
-  for (const grant of granted) {
-    const normalized = String(grant ?? '').trim();
-    if (!normalized.includes(' ')) continue;
-    const space = normalized.indexOf(' ');
-    const grantMethod = normalized.slice(0, space).toUpperCase();
-    if (grantMethod !== methodUpper) continue;
-    const grantPath = normalized.slice(space + 1);
-    if (pathMatchesRouteTemplate(grantPath, path)) return true;
-  }
-  return false;
+  return explicitRouteGrantMatches(granted, method, path);
 }

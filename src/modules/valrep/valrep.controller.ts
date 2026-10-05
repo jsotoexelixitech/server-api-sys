@@ -6,6 +6,8 @@ import { GetCotizacionAutoDto } from './dto/get-cotizacion-auto.dto';
 import { CalculatePlanCoberturasDto } from './dto/calculate-plan-coberturas.dto';
 import { GetFrecuenciaDto } from './dto/get-frecuencia.dto';
 import { GetProductosPersonasDto } from './dto/get-productos-personas.dto';
+import { GetProductosMarketplaceDto } from './dto/get-productos-marketplace.dto';
+import { MarketplaceProductosService } from './marketplace-productos.service';
 import { GetPlanesProductoDto } from './dto/get-planes-producto.dto';
 import { GetMatipoemisionDto } from './dto/get-matipoemision.dto';
 import { GetMatipopagoEntidadesDto } from './dto/get-matipopago-entidades.dto';
@@ -23,6 +25,7 @@ export class ValrepController {
   constructor(
     private readonly valrepService: ValrepService,
     private readonly personasService: PersonasService,
+    private readonly marketplaceProductos: MarketplaceProductosService,
   ) {}
 
   // ── GET /api/v1/valrep/matipos ─────────────────────────────────────────
@@ -43,8 +46,9 @@ export class ValrepController {
   @ApiExcludeEndpoint()
   @HttpCode(HttpStatus.OK)
   @ApiOperation({
-    summary: 'Planes de personas vigentes (ramo 9 = Funerario)',
-    description: 'Devuelve los planes de personas con formato plan en lugar de planes.',
+    summary: 'Planes funerarios del canal (formato plan[])',
+    description:
+      'Igual que POST /personas/planes: productos y planes del canal SSO, no una lista fija de cplan.',
   })
   @ApiBody({ type: GetPlanesPerDto })
   @ApiResponse({
@@ -58,7 +62,7 @@ export class ValrepController {
   })
   @Api500()
   async getPlanesPer(@Body() dto: GetPlanesPerDto) {
-    const plan = await this.personasService.getPlanesPer(dto.cramo, dto.ctipo ?? null);
+    const plan = await this.personasService.getPlanesPer(dto);
     return { status: true, data: { plan } };
   }
 
@@ -230,12 +234,49 @@ export class ValrepController {
     return { status: true, data: productos };
   }
 
+  @Post('productos/marketplace')
+  @HttpCode(HttpStatus.OK)
+  @ApiOperation({
+    summary: 'Marketplace La Mundial · Productos enriquecidos (maproductos)',
+    description:
+      'Equivalente SysIP `Valrep.getProducts`: catálogo con planes permitidos, campos de presentación y opcionalmente `url` + `qr`. ' +
+      '**No sustituye** `POST /valrep/productos` (SP spBuscaProductosEntidad).',
+    operationId: 'valrepProductosMarketplace',
+  })
+  @ApiBody({ type: GetProductosMarketplaceDto })
+  @ApiResponse({
+    status: 200,
+    schema: {
+      example: {
+        status: true,
+        data: {
+          productos: [
+            {
+              cproducto: '57',
+              cramo: 45,
+              xdescripcion_l: 'Seguro Funerario',
+              mmonto_inicial: '8,39$',
+              xurl_presentacion: 'https://canva.link/…',
+            },
+          ],
+          cantidad: 1,
+        },
+      },
+    },
+  })
+  @ApiCommonErrors()
+  async getProductosMarketplace(@Body() dto: GetProductosMarketplaceDto) {
+    const data = await this.marketplaceProductos.getProductosMarketplace(dto);
+    return { status: true, data };
+  }
+
   @Post('planes/producto')
   @HttpCode(HttpStatus.OK)
   @ApiOperation({
     summary: 'Funerario paso 2 · Planes por producto',
     description:
       'Planes asociados al producto seleccionado, con parentescos y rangos de edad permitidos.\n\n' +
+      'Con `csubitem` + `centidad` se excluyen planes restringidos al gestor (mausuplan itipouso=E).\n\n' +
       '**Siguiente paso:** `POST /valrep/planes/detalle` con `cramo` y `cplan`.',
     operationId: 'funerarioValrepPlanesProducto',
   })
@@ -299,7 +340,9 @@ export class ValrepController {
     summary: 'Paso 3 · Planes RCV disponibles',
     description:
       'Planes de automóvil disponibles con parentescos y coberturas. ' +
-      'El `cplan` devuelto se usa en frecuencia, cotización y emisión.',
+      'El `cplan` devuelto se usa en frecuencia, cotización y emisión.\n\n' +
+      'Con `csubitem` + `centidad` se excluyen planes restringidos al gestor (mausuplan itipouso=E). ' +
+      'RCV (cramo 18) usa cproducto 24 para la exclusión; otros ramos requieren `cproducto` en el body.',
     operationId: 'valrepPlanesV2',
   })
   @ApiBody({ type: GetPlanesV2Dto })
@@ -320,8 +363,11 @@ export class ValrepController {
   })
   @ApiCommonErrors()
   async getPlanesV2(@Body() dto: GetPlanesV2Dto) {
-    const plan = await this.valrepService.getPlanesV2(dto);
-    return { status: true, data: { plan } };
+    const { planes, mensaje } = await this.valrepService.getPlanesV2(dto);
+    return {
+      status: true,
+      data: { plan: planes, message: mensaje ?? null, mensaje: mensaje ?? null },
+    };
   }
 
   // ── POST /api/v1/valrep/frecuencia ─────────────────────────────────────
@@ -348,14 +394,28 @@ export class ValrepController {
             { cvalor: 'M', xdescripcion: 'MENSUAL' },
           ],
         },
+        plan: [
+          { cplan: 'RCVBAS', ifrecuencia: 'A', xfrecuencia: 'ANUAL', ndias: null },
+          { cplan: 'RCVBAS', ifrecuencia: 'S', xfrecuencia: 'SEMESTRAL', ndias: null },
+        ],
       },
     },
   })
   @ApiResponse({ status: 400, description: 'cplan requerido o inválido' })
   @Api500()
   async getFrecuencia(@Body() body: GetFrecuenciaDto) {
-    const frecuencias = await this.valrepService.getFrecuencia(body.cplan, body.cramo);
-    return { status: true, data: { frecuencias } };
+    const frecuencias = await this.valrepService.getFrecuencia(
+      body.cplan,
+      body.cramo,
+      body.cproductor,
+    );
+    const plan = frecuencias.map((f) => ({
+      cplan: f.cplan ?? body.cplan,
+      ifrecuencia: f.cvalor,
+      xfrecuencia: f.xdescripcion,
+      ndias: f.ndias ?? null,
+    }));
+    return { status: true, data: { frecuencias }, plan };
   }
 
   // ── GET /api/v1/valrep/recargosRCV ─────────────────────────────────────
@@ -509,4 +569,63 @@ export class ValrepController {
     const data = await this.valrepService.getMatipopagoEntidades(dto);
     return { status: true, data };
   }
+
+  // ── POST /api/v1/valrep/brokers ─────────────────────────────────────────
+
+  @Post('brokers')
+  @HttpCode(HttpStatus.OK)
+  @ApiOperation({
+    summary: 'Catálogo de productores / brokers',
+    description:
+      'Consulta la lista de productores en la tabla `maproduc` mediante SP `dbo.sp_ma_obtener_productores_nexus`. Paridad con SysIP-backend `POST /api/v1/valrep/brokers`.',
+    operationId: 'valrepBrokers',
+  })
+  @ApiResponse({
+    status: 200,
+    schema: {
+      example: {
+        status: true,
+        data: {
+          broker: [
+            { cproductor: 1, xproductor: 'IDLER MEDINA, GRACIELA E EDELVAIS' },
+          ],
+        },
+      },
+    },
+  })
+  @ApiCommonErrors()
+  async getBrokersPost() {
+    const broker = await this.valrepService.getBrokers();
+    return { status: true, data: { broker } };
+  }
+
+  // ── GET /api/v1/valrep/brokers ──────────────────────────────────────────
+
+  @Get('brokers')
+  @HttpCode(HttpStatus.OK)
+  @ApiOperation({
+    summary: 'Catálogo de productores / brokers (GET)',
+    description:
+      'Versión GET para consulta directa de productores.',
+    operationId: 'valrepBrokersGet',
+  })
+  @ApiResponse({
+    status: 200,
+    schema: {
+      example: {
+        status: true,
+        data: {
+          broker: [
+            { cproductor: 1, xproductor: 'IDLER MEDINA, GRACIELA E EDELVAIS' },
+          ],
+        },
+      },
+    },
+  })
+  @ApiCommonErrors()
+  async getBrokersGet() {
+    const broker = await this.valrepService.getBrokers();
+    return { status: true, data: { broker } };
+  }
 }
+

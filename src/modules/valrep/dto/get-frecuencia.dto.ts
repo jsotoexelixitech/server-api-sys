@@ -15,4 +15,12 @@ export class GetFrecuenciaDto {
   @IsOptional()
   @IsInt()
   cramo?: number;
+
+  @ApiPropertyOptional({
+    example: 348,
+    description: 'Código de productor/corredor (opcional, para consultar frecuencias especiales en maplanes_frec_produc)',
+  })
+  @IsOptional()
+  @IsInt()
+  cproductor?: number;
 }

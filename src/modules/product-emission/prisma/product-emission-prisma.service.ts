@@ -36,6 +36,7 @@ export class ProductEmissionPrismaService
 {
   private readonly logger = new Logger(ProductEmissionPrismaService.name);
   private readonly enabled: boolean;
+  private readonly hasDatabaseUrl: boolean;
 
   constructor(config: ConfigService) {
     const url = config.get<string>('PRODUCT_EMISSION_DATABASE_URL')?.trim();
@@ -46,9 +47,10 @@ export class ProductEmissionPrismaService
           ? ['warn', 'error']
           : ['error'],
     });
-    this.enabled = Boolean(url) && CLIENT_GENERATED;
+    this.hasDatabaseUrl = Boolean(url);
+    this.enabled = this.hasDatabaseUrl && CLIENT_GENERATED;
 
-    if (Boolean(url) && !CLIENT_GENERATED) {
+    if (this.hasDatabaseUrl && !CLIENT_GENERATED) {
       this.logger.warn(
         'PRODUCT_EMISSION_DATABASE_URL configurado pero el cliente Prisma de product-emission no ha sido generado. ' +
           'Corra: npm run prisma:generate:product-emission (y prisma:migrate:product-emission).',
@@ -62,10 +64,6 @@ export class ProductEmissionPrismaService
 
   async onModuleInit(): Promise<void> {
     if (!this.enabled) {
-      this.logger.warn(
-        'product-emission deshabilitado: generará documentos pero NO persistirá pólizas en BD ' +
-          '(falta PRODUCT_EMISSION_DATABASE_URL o el cliente Prisma generado).',
-      );
       return;
     }
     await (this as any).$connect();

@@ -1,26 +1,33 @@
-import { ApiProperty } from '@nestjs/swagger';
-import { IsIn, IsNotEmpty, IsString } from 'class-validator';
+import { ApiPropertyOptional } from '@nestjs/swagger';
+import { IsIn, IsOptional, IsString } from 'class-validator';
 
 /**
- * Body para POST /valrep/productos.
- * Réplica de SysIP valrepController.getProducts (fb_organizacion_swagger).
- * Nota: la ruta SysIP NO usa spBuscaProductosEntidad; usa SQL legacy getProducts.
+ * Body para POST /valrep/productos (marketplace SysIP / spBuscaProductosEntidad).
+ * Si no envía centidad+citem, puede resolver por gestor (correo) o cproductor.
  */
 export class GetProductosPersonasDto {
-  @ApiProperty({
-    example: '80080',
-    description: 'Código de productor o comercializador (citem).',
-  })
+  @ApiPropertyOptional({ example: '80080' })
+  @IsOptional()
   @IsString()
-  @IsNotEmpty()
-  citem: string;
+  citem?: string;
 
-  @ApiProperty({
-    example: 'P',
-    description: 'P = productor, C = comercializador.',
-    enum: ['P', 'C'],
-  })
+  @ApiPropertyOptional({ example: 'P', enum: ['P', 'C', 'G'] })
+  @IsOptional()
+  @IsIn(['P', 'C', 'G'])
+  centidad?: string;
+
+  @ApiPropertyOptional({ description: 'Correo del gestor (magestor.xcorreo).' })
+  @IsOptional()
   @IsString()
-  @IsIn(['P', 'C'])
-  centidad: string;
+  cgestor_in?: string;
+
+  @ApiPropertyOptional({ description: 'Código gestor Sis2000.' })
+  @IsOptional()
+  @IsString()
+  cgestor?: string;
+
+  @ApiPropertyOptional({ example: '80080' })
+  @IsOptional()
+  @IsString()
+  cproductor?: string;
 }

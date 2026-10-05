@@ -15,6 +15,8 @@ yarn-error.log*
 .env
 .env.local
 .env.*.local
+partner-tokens.env
+**/tokens.env
 
 # Cobertura de tests
 coverage/

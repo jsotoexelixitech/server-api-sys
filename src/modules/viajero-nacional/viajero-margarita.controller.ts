@@ -19,7 +19,8 @@ export class ViajeroMargaritaController {
   @NestProtected(NEST_AUTH_SCOPES.EMISSIONS_PERSON)
   @ApiOperation({
     summary: 'Emitir viajero 7 días',
-    description: 'Emisión personas. Ramo, plan y vigencia de 7 días los fija el servidor.',
+    description:
+      'Emisión personas. Solo 7 días corridos (fhasta = fdesde + 7). Canal marketplace en el JSON: canal{}, gestor{} o centidad/citem/csub (P/C/G). No usa JWT.',
     operationId: 'viajero7DiasEmision',
   })
   @ApiHeader(APIKEY_HEADER)

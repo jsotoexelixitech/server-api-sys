@@ -117,4 +117,22 @@ export class CreateEmissionPersonDto {
   @ApiPropertyOptional({ type: [Object], description: 'Lista de beneficiarios (opcional, informativa).' })
   @IsOptional() @IsArray()
   beneficiarios?: unknown[];
+
+  // Planos (viajero 3/7): el whitelist los borra si no están acá; el mapper arma beneficiarios[].
+  @ApiPropertyOptional({ example: 'V' }) @IsOptional() @IsString() tipo_cedula_beneficiario?: string;
+  @ApiPropertyOptional({ example: 17777888 }) @IsOptional() rif_beneficiario?: number | string;
+  @ApiPropertyOptional({ example: 17777888 }) @IsOptional() xrif_beneficiario?: number | string;
+  @ApiPropertyOptional() @IsOptional() @IsString() nombre_beneficiario?: string;
+  @ApiPropertyOptional() @IsOptional() @IsString() apellido_beneficiario?: string;
+  @ApiPropertyOptional() @IsOptional() @IsString() sexo_beneficiario?: string;
+  @ApiPropertyOptional() @IsOptional() @IsString() estado_civil_beneficiario?: string;
+  @ApiPropertyOptional() @IsOptional() @IsDateString() fnac_beneficiario?: string;
+  @ApiPropertyOptional() @IsOptional() estado_beneficiario?: number | string;
+  @ApiPropertyOptional() @IsOptional() ciudad_beneficiario?: number | string;
+  @ApiPropertyOptional() @IsOptional() @IsString() direccion_beneficiario?: string;
+  @ApiPropertyOptional() @IsOptional() @IsString() telefono_beneficiario?: string;
+  @ApiPropertyOptional() @IsOptional() @IsString() correo_beneficiario?: string;
+  @ApiPropertyOptional() @IsOptional() cparen_beneficiario?: number | string;
+  @ApiPropertyOptional() @IsOptional() nparentesco_beneficiario?: number | string;
+  @ApiPropertyOptional() @IsOptional() pporce_beneficiario?: number | string;
 }

@@ -15,12 +15,18 @@ import {
   AUTO_IFRECUENCIA_VALUES,
   AutoIfrecuenciaCode,
 } from '../valrep/constants/auto-ifrecuencia.constants';
+import { RmsGatewayService } from '../rms-gateway/rms-gateway.service';
+import { RmsSyncService } from '../rms-gateway/rms-sync.service';
 
 @Injectable()
 export class EndososService {
   private readonly logger = new Logger(EndososService.name);
 
-  constructor(private readonly db: MssqlService) {}
+  constructor(
+    private readonly db: MssqlService,
+    private readonly rmsGateway: RmsGatewayService,
+    private readonly rmsSync: RmsSyncService,
+  ) {}
 
   /**
    * Búsqueda general de pólizas con filtros y paginado.
@@ -65,6 +71,7 @@ export class EndososService {
 
   /**
    * Consulta detallada de póliza por número de póliza (cnpoliza).
+   * El SP de autos hace join a mamarca; en salud caemos a adpoliza+maclient.
    */
   async getPolizaByCnpoliza(cnpoliza: string) {
     try {
@@ -83,7 +90,13 @@ export class EndososService {
       return { poliza, certificado, recibos };
     } catch (err: any) {
       if (err instanceof NotFoundException) throw err;
-      this.logger.error(`Error en getPolizaByCnpoliza: ${err.message}`, err.stack);
+      const msg = String(err?.message ?? '');
+      this.logger.warn(`getPolizaByCnpoliza SP falló (${msg}); fallback personas`);
+      const row = await this.rmsGateway.loadPolizaRow(cnpoliza);
+      if (row) {
+        return { poliza: row, certificado: null, recibos: [] };
+      }
+      this.logger.error(`Error en getPolizaByCnpoliza: ${msg}`, err.stack);
       throw new InternalServerErrorException(err.message || 'Error al obtener detalle de la póliza.');
     }
   }
@@ -265,6 +278,7 @@ export class EndososService {
         throw new BadRequestException(message || 'Error al anular póliza');
       }
 
+      this.rmsGateway.notifyPolizaActualizada(dto.cnpoliza);
       return { status: true, message, cnpoliza: dto.cnpoliza };
     } catch (err: any) {
       if (err instanceof BadRequestException) throw err;
@@ -294,6 +308,7 @@ export class EndososService {
         throw new BadRequestException(message || 'Error al reactivar la póliza');
       }
 
+      this.rmsGateway.notifyPolizaActualizada(dto.cnpoliza);
       return { status: true, message, cnpoliza: dto.cnpoliza };
     } catch (err: any) {
       if (err instanceof BadRequestException) throw err;
@@ -333,6 +348,20 @@ export class EndososService {
         throw new BadRequestException(message || 'Error al cambiar datos de la póliza');
       }
 
+      await this.rmsSync.enqueueSisToRmsAfterEndoso({
+        cnpoliza: dto.cnpoliza,
+        fanopol: dto.fanopol,
+        fmespol: dto.fmespol,
+        tipoCambio: dto.tipoCambio,
+        cci_rif: dto.cci_rif,
+        icedula: dto.icedula,
+        xcliente: dto.xcliente,
+        xnombre: dto.xnombre,
+        xapellido: dto.xapellido,
+        xdireccion: dto.xdireccion,
+        xtelefono: dto.xtelefono,
+        xcorreo: dto.xcorreo,
+      });
       return { status: true, message, cnpoliza: dto.cnpoliza };
     } catch (err: any) {
       if (err instanceof BadRequestException) throw err;

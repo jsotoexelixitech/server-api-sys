@@ -2,12 +2,18 @@ import { Injectable, NotFoundException } from '@nestjs/common';
 import { OpenAPIObject } from '@nestjs/swagger/dist/interfaces';
 import {
   canonicalizePathTemplate,
+  explicitRouteGrantMatches,
   grantMatchesRoute,
+  pathMatchesRouteTemplate,
 } from '../auth/scopes/nest-auth-scopes.constants';
 import {
+  buildRouteCatalog,
   buildScopeCatalog,
+  expandGrantsToRoutes,
   inferScopeFromPath,
 } from '../auth/scopes/scope-catalog.registry';
+import { describeRouteLine } from '../auth/scopes/route-descriptions';
+import { SWAGGER_TAGS } from '../../common/swagger/swagger-tags.constants';
 import { OpenApiDocumentStore } from './open-api-document.store';
 import { pruneOpenApiComponents } from './prune-openapi-components';
 
@@ -44,6 +50,7 @@ export class OpenApiFilterService {
       if (this.isAlwaysHidden(pathKey)) continue;
 
       const nextPathItem: Record<string, unknown> = {};
+      let hasHttpOp = false;
 
       for (const [method, operation] of Object.entries(pathItem)) {
         if (!HTTP_METHODS.has(method)) {
@@ -57,15 +64,23 @@ export class OpenApiFilterService {
           this.canViewOperation(grantedScopes, method, pathKey, scopeIndex)
         ) {
           nextPathItem[method] = operation;
+          hasHttpOp = true;
           const tags = (operation as { tags?: string[] }).tags;
           tags?.forEach((tag) => visibleTags.add(tag));
         }
       }
 
-      if (Object.keys(nextPathItem).length > 0) {
+      if (hasHttpOp) {
         filteredPaths[pathKey] = nextPathItem as typeof pathItem;
       }
     }
+
+    this.appendGrantedCatalogRoutes(
+      grantedScopes,
+      source,
+      filteredPaths,
+      visibleTags,
+    );
 
     const titleSuffix = keyName ? ` — ${keyName}` : '';
     const components = pruneOpenApiComponents(source.components, [
@@ -111,13 +126,149 @@ export class OpenApiFilterService {
     const requiredScope =
       scopeIndex.get(lookupKey) ?? inferScopeFromPath(normalizedPath);
 
-    if (!requiredScope) return true;
+    if (!requiredScope) {
+      return explicitRouteGrantMatches(
+        grantedScopes,
+        method,
+        normalizedPath,
+      );
+    }
     return grantMatchesRoute(
       grantedScopes,
       method,
       normalizedPath,
       requiredScope,
     );
+  }
+
+  /**
+   * Rutas concedidas en la key (líneas METHOD /path o scopes expandidos) que no
+   * están en OpenAPI o no pasaron el primer filtro — p. ej. partner sin @ApiOperation
+   * o catálogo runtime distinto al momento de crear la key.
+   */
+  private appendGrantedCatalogRoutes(
+    grantedScopes: string[],
+    source: OpenAPIObject,
+    filteredPaths: NonNullable<OpenAPIObject['paths']>,
+    visibleTags: Set<string>,
+  ): void {
+    if (!grantedScopes?.length) return;
+
+    const catalog = buildRouteCatalog();
+    const seen = new Set<string>();
+
+    for (const routeLine of this.collectGrantedRouteLines(grantedScopes)) {
+      const space = routeLine.indexOf(' ');
+      if (space <= 0) continue;
+
+      const method = routeLine.slice(0, space).toLowerCase();
+      if (!HTTP_METHODS.has(method)) continue;
+
+      const pathKey = this.normalizePath(routeLine.slice(space + 1));
+      const dedupeKey = `${method.toUpperCase()} ${pathKey}`;
+      if (seen.has(dedupeKey)) continue;
+
+      const catalogEntry = catalog.find((entry) => {
+        const routeSpace = entry.routeId.indexOf(' ');
+        if (routeSpace <= 0) return false;
+        const entryMethod = entry.routeId.slice(0, routeSpace).toLowerCase();
+        const entryPath = entry.routeId.slice(routeSpace + 1);
+        return (
+          entryMethod === method &&
+          pathMatchesRouteTemplate(entryPath, pathKey)
+        );
+      });
+
+      const scopeId =
+        catalogEntry?.scopeId ?? inferScopeFromPath(pathKey);
+      const allowed = scopeId
+        ? grantMatchesRoute(grantedScopes, method, pathKey, scopeId)
+        : explicitRouteGrantMatches(grantedScopes, method, pathKey);
+      if (!allowed) continue;
+
+      seen.add(dedupeKey);
+
+      const existingItem = filteredPaths[pathKey];
+      if (
+        existingItem &&
+        typeof existingItem === 'object' &&
+        (existingItem as Record<string, unknown>)[method]
+      ) {
+        continue;
+      }
+
+      const sourcePathKey = this.resolveSourcePathKey(source.paths, pathKey);
+      const sourceItem = sourcePathKey ? source.paths?.[sourcePathKey] : undefined;
+      const fromDoc =
+        sourceItem && typeof sourceItem === 'object'
+          ? (sourceItem as Record<string, unknown>)[method]
+          : undefined;
+
+      const isPartner = /\/api\/v1\/partner\//i.test(pathKey);
+      const operation =
+        fromDoc && typeof fromDoc === 'object'
+          ? fromDoc
+          : {
+              tags: [
+                isPartner
+                  ? SWAGGER_TAGS.PARTNER
+                  : (catalogEntry?.scopeLabel ?? 'API'),
+              ],
+              summary:
+                catalogEntry?.description ?? describeRouteLine(routeLine),
+              description:
+                catalogEntry?.scopeDescription ??
+                'Endpoint autorizado para esta API key (schema no disponible).',
+              responses: { '200': { description: 'Respuesta exitosa' } },
+              ...(method === 'post' || method === 'put' || method === 'patch'
+                ? {
+                    requestBody: {
+                      description: 'Payload dinámico (el partner no expuso el schema explícitamente)',
+                      content: {
+                        'application/json': {
+                          schema: { type: 'object' },
+                        },
+                      },
+                    },
+                  }
+                : {}),
+            };
+
+      const nextItem = {
+        ...(existingItem && typeof existingItem === 'object' ? existingItem : {}),
+        [method]: operation,
+      };
+      filteredPaths[pathKey] = nextItem as NonNullable<
+        OpenAPIObject['paths']
+      >[string];
+
+      const tags = (operation as { tags?: string[] }).tags;
+      tags?.forEach((tag) => visibleTags.add(tag));
+    }
+  }
+
+  private collectGrantedRouteLines(grantedScopes: string[]): string[] {
+    const lines = new Set<string>();
+    for (const grant of grantedScopes) {
+      const trimmed = String(grant ?? '').trim();
+      if (trimmed.includes(' ')) lines.add(trimmed);
+    }
+    for (const route of expandGrantsToRoutes(grantedScopes)) {
+      lines.add(route);
+    }
+    return [...lines].sort();
+  }
+
+  private resolveSourcePathKey(
+    paths: OpenAPIObject['paths'] | undefined,
+    normalizedPath: string,
+  ): string | undefined {
+    if (!paths) return undefined;
+    if (paths[normalizedPath]) return normalizedPath;
+    for (const key of Object.keys(paths)) {
+      if (pathMatchesRouteTemplate(key, normalizedPath)) return key;
+    }
+    return undefined;
   }
 
   private isAlwaysVisible(path: string): boolean {

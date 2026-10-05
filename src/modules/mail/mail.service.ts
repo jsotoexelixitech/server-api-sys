@@ -6,7 +6,12 @@ import { renderPolicyWelcomeHtml } from './templates/policy-welcome.template';
 import type { SendPolicyEmailDto } from './dto/send-policy-email.dto';
 import type { SendFuneralPaymentLinkDto } from './dto/send-funeral-payment-link.dto';
 import type { SendFuneralReviewAlertDto } from './dto/send-funeral-review-alert.dto';
+import type { SendFuneralRejectedDto } from './dto/send-funeral-rejected.dto';
 import { buildFuneralPaymentLinkEmail } from './templates/funeral-payment-link.template';
+import { buildFuneralReviewAlertEmail } from './templates/funeral-review-alert.template';
+import { buildFuneralRejectedEmail } from './templates/funeral-rejected.template';
+import { buildLamundialBrandedEmail } from './templates/lamundial-branded.template';
+import type { SendTemplatedMailDto } from './dto/send-templated-mail.dto';
 
 export type PolicyEmissionMailResult = {
   sent: boolean;
@@ -58,85 +63,191 @@ export class MailService {
   async sendFuneralPaymentLinkEmail(
     dto: SendFuneralPaymentLinkDto,
   ): Promise<PolicyEmissionMailResult> {
-    if (!this.isEnabled()) {
-      return { sent: false, mode: 'disabled', error: 'MAIL_ENABLED=false' };
-    }
-
-    const fromEmail = this.config.get<string>('SMTP_FROM', 'info@lamundialdeseguros.com');
-    const fromName = this.config.get<string>('SMTP_FROM_NAME', 'La Mundial de Seguros');
-    const replyTo = this.config.get<string>('SMTP_REPLY_TO', fromEmail);
-    const name = dto.name?.trim() || 'Cliente';
-    const planName = dto.planName?.trim() || 'Funerario';
-
-    let expiresLabel: string | undefined;
-    if (dto.expiresAt) {
-      try {
-        expiresLabel = new Date(dto.expiresAt).toLocaleString('es-VE', {
-          dateStyle: 'medium',
-          timeStyle: 'short',
-        });
-      } catch {
-        expiresLabel = dto.expiresAt;
-      }
-    }
-
-    const { subject, html, text } = buildFuneralPaymentLinkEmail({
-      nombre: name,
-      planName,
-      paymentUrl: dto.paymentUrl,
-      expiresLabel,
-      callCenterPhone: this.config.get<string>('CALL_CENTER_PHONE'),
+    return this.sendTemplatedEmail({
+      to: dto.to,
+      toName: dto.name,
+      template: 'funeral-payment-link',
+      data: {
+        name: dto.name,
+        planName: dto.planName,
+        productLabel: dto.productLabel,
+        paymentUrl: dto.paymentUrl,
+        expiresAt: dto.expiresAt,
+      },
     });
-
-    try {
-      const info = await this.getTransporter().sendMail({
-        from: `"${fromName}" <${fromEmail}>`,
-        replyTo,
-        to: { name, address: dto.to },
-        subject,
-        html,
-        text,
-      });
-      this.logger.log(`Correo link pago funerario enviado a ${dto.to}`);
-      return { sent: true, mode: 'smtp', messageId: info.messageId };
-    } catch (err) {
-      const msg = err instanceof Error ? err.message : String(err);
-      this.logger.error(`Fallo correo link pago funerario: ${msg}`);
-      return { sent: false, mode: 'smtp', error: msg };
-    }
   }
 
   async sendFuneralReviewAlertEmail(
     dto: SendFuneralReviewAlertDto,
   ): Promise<PolicyEmissionMailResult> {
+    return this.sendTemplatedEmail({
+      to: dto.to,
+      template: 'funeral-review-alert',
+      data: {
+        tomadorNombre: dto.tomadorNombre,
+        planName: dto.planName,
+        productLabel: dto.productLabel,
+        scoreTotal: dto.scoreTotal,
+      },
+    });
+  }
+
+  async sendFuneralRejectedEmail(
+    dto: SendFuneralRejectedDto,
+  ): Promise<PolicyEmissionMailResult> {
+    return this.sendTemplatedEmail({
+      to: dto.to,
+      toName: dto.tomadorNombre,
+      template: 'funeral-rejected',
+      data: {
+        tomadorNombre: dto.tomadorNombre,
+        planName: dto.planName,
+        productLabel: dto.productLabel,
+        reason: dto.reason,
+      },
+    });
+  }
+
+  async sendTemplatedEmail(dto: SendTemplatedMailDto): Promise<PolicyEmissionMailResult> {
     if (!this.isEnabled()) {
       return { sent: false, mode: 'disabled', error: 'MAIL_ENABLED=false' };
     }
+
+    const built = this.buildTemplate(dto);
+    if ('error' in built) {
+      return { sent: false, mode: 'smtp', error: built.error };
+    }
+
+    const recipients = [
+      dto.to.trim().toLowerCase(),
+      ...(dto.toExtra || []).map((e) => e.trim().toLowerCase()),
+    ].filter((e, i, arr) => e.includes('@') && arr.indexOf(e) === i);
+
+    return this.sendSmtp({
+      to: recipients,
+      toName: dto.toName,
+      subject: built.subject,
+      html: built.html,
+      text: built.text,
+      logLabel: dto.template,
+    });
+  }
+
+  private buildTemplate(dto: SendTemplatedMailDto):
+    | { subject: string; html: string; text: string }
+    | { error: string } {
+    const data = dto.data && typeof dto.data === 'object' ? dto.data : {};
+    const str = (key: string, fallback = ''): string => {
+      const v = data[key];
+      if (v == null) return fallback;
+      const t = String(v).trim();
+      return t || fallback;
+    };
+    const phone = this.config.get<string>('CALL_CENTER_PHONE');
+
+    if (dto.template === 'funeral-payment-link') {
+      const paymentUrl = str('paymentUrl');
+      if (!paymentUrl) return { error: 'data.paymentUrl es obligatorio.' };
+      let expiresLabel: string | undefined;
+      const expiresAt = str('expiresAt');
+      if (expiresAt) {
+        try {
+          expiresLabel = new Date(expiresAt).toLocaleString('es-VE', {
+            dateStyle: 'medium',
+            timeStyle: 'short',
+          });
+        } catch {
+          expiresLabel = expiresAt;
+        }
+      }
+      return buildFuneralPaymentLinkEmail({
+        nombre: str('name', 'Cliente'),
+        planName: str('planName', 'Funerario'),
+        productLabel: str('productLabel', 'Funerario'),
+        paymentUrl,
+        expiresLabel,
+        callCenterPhone: phone,
+      });
+    }
+
+    if (dto.template === 'funeral-review-alert') {
+      return buildFuneralReviewAlertEmail({
+        tomadorNombre: str('tomadorNombre', 'Tomador'),
+        planName: str('planName', 'Funerario'),
+        productLabel: str('productLabel', 'Funerario'),
+        scoreTotal: str('scoreTotal', '—'),
+        callCenterPhone: phone,
+      });
+    }
+
+    if (dto.template === 'funeral-rejected') {
+      return buildFuneralRejectedEmail({
+        tomadorNombre: str('tomadorNombre', 'Cliente'),
+        planName: str('planName', 'Funerario'),
+        productLabel: str('productLabel', 'Funerario'),
+        reason: str('reason'),
+        callCenterPhone: phone,
+      });
+    }
+
+    const fieldsFromDto = Array.isArray(dto.fields)
+      ? dto.fields.map((f) => ({ label: String(f.label || ''), value: String(f.value || '') }))
+      : [];
+    const fieldsFromData = Array.isArray(data.fields)
+      ? (data.fields as Array<{ label?: string; value?: string }>).map((f) => ({
+          label: String(f?.label || ''),
+          value: String(f?.value || ''),
+        }))
+      : [];
+    const subject = str('subject');
+    const title = str('title');
+    const intro = str('intro');
+    if (!subject || !title || !intro) {
+      return { error: 'Plantilla branded requiere data.subject, data.title y data.intro.' };
+    }
+    return buildLamundialBrandedEmail({
+      subject,
+      eyebrow: str('eyebrow', 'La Mundial de Seguros'),
+      title,
+      intro,
+      fields: (fieldsFromDto.length ? fieldsFromDto : fieldsFromData).filter((f) => f.label),
+      ctaLabel: str('ctaLabel') || undefined,
+      ctaUrl: str('ctaUrl') || undefined,
+      extraNote: str('extraNote') || undefined,
+      callCenterPhone: phone,
+    });
+  }
+
+  private async sendSmtp(opts: {
+    to: string | string[];
+    toName?: string;
+    subject: string;
+    html: string;
+    text: string;
+    logLabel: string;
+  }): Promise<PolicyEmissionMailResult> {
     const fromEmail = this.config.get<string>('SMTP_FROM', 'info@lamundialdeseguros.com');
     const fromName = this.config.get<string>('SMTP_FROM_NAME', 'La Mundial de Seguros');
     const replyTo = this.config.get<string>('SMTP_REPLY_TO', fromEmail);
-    const tomador = dto.tomadorNombre?.trim() || 'Tomador';
-    const planName = dto.planName?.trim() || 'Funerario';
-    const score = dto.scoreTotal?.trim() || '—';
-    const subject = `Funerario: solicitud referida pendiente de revisión (${planName})`;
-    const text = `Hay una solicitud funeraria referida.\nTomador: ${tomador}\nPlan: ${planName}\nScore: ${score}\nRevísla en la vista técnica de emisión.`;
-    const html = `<p>Hay una solicitud funeraria <strong>referida</strong> que requiere aprobación.</p>
-<p>Tomador: ${tomador}<br/>Plan: ${planName}<br/>Score: ${score}</p>
-<p>Ábrela en el módulo de autorización / vista técnica.</p>`;
+    const toList = Array.isArray(opts.to) ? opts.to : [opts.to];
     try {
       const info = await this.getTransporter().sendMail({
         from: `"${fromName}" <${fromEmail}>`,
         replyTo,
-        to: dto.to,
-        subject,
-        html,
-        text,
+        to: toList.length === 1 && opts.toName
+          ? { name: opts.toName, address: toList[0] }
+          : toList,
+        subject: opts.subject,
+        text: opts.text,
+        html: opts.html,
+        encoding: 'quoted-printable',
+        headers: { 'Content-Language': 'es' },
       });
-      this.logger.log(`Alerta revisión funerario enviada a ${dto.to}`);
+      this.logger.log(`Correo ${opts.logLabel} enviado a ${toList.join(', ')}`);
       return { sent: true, mode: 'smtp', messageId: info.messageId };
     } catch (err) {
       const msg = err instanceof Error ? err.message : String(err);
-      this.logger.error(`Fallo alerta revisión funerario: ${msg}`);
+      this.logger.error(`Fallo correo ${opts.logLabel}: ${msg}`);
       return { sent: false, mode: 'smtp', error: msg };
     }
   }

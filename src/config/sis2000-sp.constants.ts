@@ -12,6 +12,9 @@ export const SP_VALIDATE_AUTOMOVIL_LEGACY = 'speeValidateAutomovilGeneral';
 
 export const SP_PRE_EMISION_AUTO_RCV = 'sp_pre_emision_automovil_rcv_nexus';
 
+/** Contador Sis2000 (POLIZA ramo 25 3/7 días; POL_VEH solo auto). */
+export const SP_CONTADOR_NEXUS = 'sp_contador_nexus';
+
 /** Invocado al final del pre-SP (no desde nest-api directamente). */
 export const SP_EMISION_AUTO_RCV = 'sp_emision_automovil_rcv_nexus';
 
@@ -48,7 +51,35 @@ export const SP_GET_SUSTANCIAS_NEXUS = 'sp_get_sustancias_nexus';
 /** Frecuencias de pago por plan RCV (POST /valrep/frecuencia). */
 export const SP_BUSCA_FRECUENCIA_PLAN_NEXUS = 'sp_busca_frecuencia_plan_nexus';
 
+/** Planes funerarios por producto + canal (POST /personas/planes y /valrep/planes/producto). */
+export const SP_BUSCA_PLAN_PRODUCTO_NEXUS = 'sp_busca_plan_producto_nexus';
+
+/** Detalle / parentescos plan personas (override: MSSQL_SP_BUSCA_DETALLE_PLAN). */
+export const SP_BUSCA_DETALLE_PLAN = 'spBuscaDetallePlan';
+export const SP_BUSCA_DETALLE_PLAN_NEXUS = 'sp_busca_detalle_plan_nexus';
+
+/** Cotización personas (override: MSSQL_SP_CALCULO_PER). */
+export const SP_CALCULO_PER = 'spCalculoPer';
+export const SP_CALCULO_PER_NEXUS = 'sp_calculo_per_nexus';
+
+/** Validación pre-emisión personas (override: MSSQL_SP_VALIDATE_PERSON). */
+export const SP_VALIDATE_PERSON = 'speeValidatePersonGeneral';
+export const SP_VALIDATE_PERSON_NEXUS = 'spee_validate_person_general_nexus';
+
+/** Póliza reciente por titular (override: MSSQL_SP_GET_POLIZA_RECIENTE_TITULAR). */
+export const SP_GET_POLIZA_RECIENTE_TITULAR = 'spGetPolizaRecienteTitular';
+export const SP_GET_POLIZA_RECIENTE_TITULAR_NEXUS =
+  'sp_get_poliza_reciente_titular_nexus';
+
+/** Canal API key → productor/entidad (override: MSSQL_SP_GET_MACLIENT_API). */
+export const SP_GET_MACLIENT_API_DEFAULT = SP_GET_MACLIENT_API;
+export const SP_GET_MACLIENT_API_SNAKE = 'sp_get_maclient_api';
+
 // ── Condominio ──────────────────────────────────────────────────────────────
 export const SP_BUSCA_PLANES_CONDOMINIO = 'sp_busca_planes_condominio_nexus';
 export const SP_CALCULO_COTIZACION_CONDOMINIO = 'sp_calculo_cotizacion_condominio_nexus';
 export const SP_PRE_EMISION_CONDOMINIO = 'sp_pre_emision_condominio_nexus';
+
+// ── Productores / Brokers ───────────────────────────────────────────────────
+export const SP_OBTENER_PRODUCTORES_NEXUS = 'sp_ma_obtener_productores_nexus';
+

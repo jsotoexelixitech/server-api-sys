@@ -1,10 +1,11 @@
-import { Body, Controller, Get, HttpCode, HttpStatus, Post, Query } from '@nestjs/common';
+import { Body, Controller, Get, HttpCode, HttpStatus, Post, Put, Query } from '@nestjs/common';
 import { ApiBody, ApiHeader, ApiOperation, ApiResponse, ApiTags } from '@nestjs/swagger';
 import { CondominioService } from './condominio.service';
 import { GetPlanesCondominioDto } from './dto/get-planes-condominio.dto';
 import { CotizacionCondominioDto } from './dto/cotizacion-condominio.dto';
 import { CreateEmissionCondominioDto } from './dto/create-emission-condominio.dto';
 import { GetByRamoDto } from './dto/get-by-ramo.dto';
+import { GetTarificadorDto, UpdateTarificadorTasaDto } from './dto/tarificador.dto';
 import { NestProtected } from '../auth/decorators/nest-protected.decorator';
 import { NestApiKey } from '../auth/decorators/nest-api-key.decorator';
 import { NEST_AUTH_SCOPES } from '../auth/scopes/nest-auth-scopes.constants';
@@ -46,7 +47,7 @@ export class CondominioController {
             id: 'condominio',
             nombre: 'Combinado Empresarial (Condominio)',
             cramo: 16,
-            cplan_defecto: 'CONDOM',
+            cplan_defecto: '1',
             descripcion: 'Seguro combinado multirriesgo para la protección de áreas comunes de condominios, locales comerciales y oficinas.'
           }
         ]
@@ -75,7 +76,7 @@ export class CondominioController {
           id: 'condominio',
           nombre: 'Combinado Empresarial (Condominio)',
           cramo: 16,
-          cplan_defecto: 'CONDOM',
+          cplan_defecto: '1',
           descripcion: 'Seguro combinado multirriesgo para la protección de áreas comunes de condominios, locales comerciales y oficinas.'
         }
       ]
@@ -90,7 +91,7 @@ export class CondominioController {
     
 *   **Hogar**: cramo 38 (plan por defecto: RESIDE)
 *   **Vecinos**: cramo 28 (plan por defecto: IGEMA)
-*   **Condominio**: cramo 16 (plan por defecto: CONDOM)
+*   **Condominio**: cramo 16 (plan por defecto: 1)
     
 *Nota: Si se envía el campo 'cplan', se filtrará únicamente ese plan. Si se omite, se retornarán todos los planes del ramo con sus coberturas para poder compararlos.*`,
   })
@@ -397,6 +398,37 @@ export class CondominioController {
   })
   async getSustancias(@Query() query: GetByRamoDto) {
     const data = await this.condominioService.getSustancias(query.cramo);
+    return { status: true, data };
+  }
+
+  @Get('tarificador')
+  @ApiOperation({
+    summary: 'Tarifario vigente de Condominio (ramo 16) u Hogar (ramo 38)',
+    description: 'Devuelve por plan las coberturas vigentes con su porcentaje sobre la suma asegurada del plan, tasa (pprima) y prima base (mprima), tomados de maplantar.',
+  })
+  async getTarificador(@Query() query: GetTarificadorDto) {
+    const data = await this.condominioService.getTarificador(query);
+    return { status: true, data };
+  }
+
+  @Get('tarificador/tasas')
+  @ApiOperation({
+    summary: 'Tasas vigentes por cobertura (matarifa_d)',
+    description: 'Devuelve la tasa (pprima) vigente de cada cobertura del ramo y quién la modificó por última vez.',
+  })
+  async getTarificadorTasas(@Query() query: GetTarificadorDto) {
+    const data = await this.condominioService.getTarificadorTasas(query);
+    return { status: true, data };
+  }
+
+  @Put('tarificador/tasa')
+  @NestProtected(NEST_AUTH_SCOPES.TARIFAS_CONDOMINIO)
+  @ApiOperation({
+    summary: 'Replicar la tasa de una cobertura en el Core',
+    description: 'Actualiza matarifa_d.pprima (tarifa vigente) y registra el usuario en cusuariomod. Solo ramos 16 y 38. Requiere el scope tarifas:condominio.',
+  })
+  async updateTarificadorTasa(@Body() dto: UpdateTarificadorTasaDto) {
+    const data = await this.condominioService.updateTarificadorTasa(dto);
     return { status: true, data };
   }
 }

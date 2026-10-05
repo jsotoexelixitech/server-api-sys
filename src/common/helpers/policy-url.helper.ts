@@ -6,11 +6,18 @@ export const DEFAULT_POLICY_PDF_BASE =
 export const DEFAULT_INGRESO_CAJA_BASE =
   'https://qaapi.lamundialdeseguros.com/sis2000/ingreso_caja';
 
-/** PDF estático Club Arys (mismo asset que SysIP QA). */
+/** PDF estático Club Arys — producción (SysIP environment.prod). */
 export const DEFAULT_ARYS_TRADICIONAL_PDF_URL =
-  'https://qasys2000.lamundialdeseguros.com/assets/Arys_Tradicional.pdf';
+  'https://sys2000.lamundialdeseguros.com/assets/Arys_Tradicional.pdf';
 
 export const DEFAULT_ARYS_AUTO_BI_PDF_URL =
+  'https://sys2000.lamundialdeseguros.com/assets/ArysAutoBi.pdf';
+
+/** Solo QA/cierre: definir ARYS_* en .env apuntando a qasys2000. */
+export const QA_ARYS_TRADICIONAL_PDF_URL =
+  'https://qasys2000.lamundialdeseguros.com/assets/Arys_Tradicional.pdf';
+
+export const QA_ARYS_AUTO_BI_PDF_URL =
   'https://qasys2000.lamundialdeseguros.com/assets/ArysAutoBi.pdf';
 
 /** Normaliza base desde env; corrige valores truncados (.co sin /sis2000/...). */

@@ -1,9 +1,11 @@
-import { BadRequestException, Injectable, InternalServerErrorException, Logger } from '@nestjs/common';
+import { BadRequestException, ConflictException, Injectable, InternalServerErrorException, Logger } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { MssqlService } from '../../database/mssql.service';
 import { GetPlanesCondominioDto } from './dto/get-planes-condominio.dto';
 import { CotizacionCondominioDto } from './dto/cotizacion-condominio.dto';
 import { CreateEmissionCondominioDto } from './dto/create-emission-condominio.dto';
+import { GetTarificadorDto, UpdateTarificadorTasaDto } from './dto/tarificador.dto';
+import { CotizacionPreestablecidaDto } from './dto/cotizacion-preestablecida.dto';
 import { parseSPError, toUserFacingError } from '../../common/helpers/sp-error.helper';
 import { buildPolicyPdfUrl } from '../../common/helpers/policy-url.helper';
 import {
@@ -85,6 +87,70 @@ export class CondominioService {
       acc = next;
     }
     return (acc || text).slice(0, XAVECALLE_MAX).trim() || fallback;
+  }
+
+  /** Apartamento → número de certificado Core (004 → 4). Ignora hash legacy en ncertificado si hay apto. */
+  private resolveCertificadoApto(dto: CreateEmissionCondominioDto): number | null {
+    const fromText = String(dto.apartamento ?? '').replace(/\D/g, '');
+    if (fromText) {
+      const n = parseInt(fromText, 10);
+      if (Number.isFinite(n) && n > 0) return n;
+    }
+    if (dto.napartamento != null && Number(dto.napartamento) > 0) {
+      return Math.trunc(Number(dto.napartamento));
+    }
+    const legacy = dto.ncertificado ?? dto.certificado;
+    if (legacy != null && Number(legacy) > 0 && Number(legacy) <= 9999) {
+      return Math.trunc(Number(legacy));
+    }
+    return null;
+  }
+
+  /**
+   * Valida póliza vigente por clave compuesta cédula + plan + apartamento (certificado).
+   * Permite otra póliza RESIDE/Hogar del mismo titular en distinto apto.
+   */
+  private async assertPolizaVigenteCondominioPorApto(
+    rifAsegurado: number,
+    cramo: number,
+    cplan: string,
+    fdesde: string,
+    ccerti: number | null,
+  ): Promise<void> {
+    if (!ccerti || !rifAsegurado || (cramo !== 38 && cramo !== 28)) return;
+
+    const T = this.db.types;
+    const req = this.db.request();
+    req.input('rif', T.Numeric(12, 0), rifAsegurado);
+    req.input('cramo', T.Int, cramo);
+    req.input('cplan', T.Char(6), cplan);
+    req.input('fdesde', T.Date, fdesde);
+    req.input('ccerti', T.Int, ccerti);
+
+    const result = await req.query(`
+      SELECT TOP 1
+        LTRIM(RTRIM(p.cnpoliza)) AS cnpoliza,
+        c.ccerti AS ccerti
+      FROM adpoliza p
+      INNER JOIN adpolcob c
+        ON c.cpoliza = p.cpoliza
+        AND c.fanopol = p.fanopol
+        AND c.fmespol = p.fmespol
+      WHERE p.casegurado = @rif
+        AND p.cramo = @cramo
+        AND LTRIM(RTRIM(p.cplan)) = LTRIM(RTRIM(@cplan))
+        AND p.iestado = 'V'
+        AND p.fhasta > @fdesde
+        AND c.ccerti = @ccerti
+      ORDER BY p.fhasta DESC
+    `);
+
+    const row = result.recordset?.[0] as { cnpoliza?: string; ccerti?: number } | undefined;
+    if (row?.cnpoliza) {
+      throw new BadRequestException(
+        `Se ha detectado una póliza vigente (${row.cnpoliza}) con el mismo asegurado, plan y apartamento.`,
+      );
+    }
   }
 
   /**
@@ -253,6 +319,20 @@ export class CondominioService {
         );
       }
 
+      const ccertiApto = this.resolveCertificadoApto(dto);
+      if ((dto.cramo === 38 || dto.cramo === 28) && !ccertiApto) {
+        throw new BadRequestException(
+          'El número de apartamento es obligatorio para emitir Hogar/RC por unidad (clave cédula + plan + apartamento).',
+        );
+      }
+      await this.assertPolizaVigenteCondominioPorApto(
+        rifAsegurado,
+        dto.cramo,
+        dto.plan,
+        fdesde,
+        ccertiApto,
+      );
+
       // 4. Cotización interna si faltan campos calculados
       let prima = dto.prima;
       let msumaasegext = dto.msumaasegext;
@@ -260,6 +340,32 @@ export class CondominioService {
       let pcomision = dto.pcomision;
       let mcomision = dto.mcomision;
       let mcomisionext = dto.mcomisionext;
+
+      // Cotización preestablecida (producto/enlace de autogestión): se valida y se usa tal cual, sin recalcular.
+      let coberturasJson: string | null = null;
+      if (dto.cotizacion) {
+        await this.validarCotizacionPreestablecida(dto.cramo, dto.cotizacion, dispositivos, sustancias);
+        const cot = dto.cotizacion;
+        const comisionTotal = cot.coberturas.reduce((acc, c) => acc + (c.comision ?? 0), 0);
+        prima = cot.prima_total;
+        msumaasegext = cot.suma_asegurada;
+        mcomisionext = this.toMoney(comisionTotal, 0);
+        mcomision = this.toMoney(comisionTotal * tasa, 0);
+        pcomision = cot.prima_total > 0 ? this.toMoney((comisionTotal / cot.prima_total) * 100, 0) : 0;
+        coberturasJson = JSON.stringify(
+          cot.coberturas.map((c) => ({
+            ccober: c.ccober.trim(),
+            ctarifa: c.ctarifa.trim(),
+            msumaasegext: c.suma_asegurada,
+            mprimabrutaext: c.prima_bruta,
+            mdescuentoext: c.descuento,
+            mrecargoext: c.recargo,
+            mprimaext: c.prima,
+            pcomision: c.pcomision ?? 0,
+            mcomisionext: c.comision ?? 0,
+          })),
+        );
+      }
 
       if (prima === undefined || msumaasegext === undefined || mcomisionext === undefined) {
         const cotResult = await this.cotizar({
@@ -333,10 +439,17 @@ export class CondominioService {
       req.input('xdescrip3', T.VarChar(250), dto.xdescrip3 != null ? String(dto.xdescrip3).slice(0, 250) : null);
       req.input('xdescrip4', T.VarChar(250), dto.xdescrip4 != null ? String(dto.xdescrip4).slice(0, 250) : null);
 
+      if (ccertiApto != null) {
+        req.input('ncertificado', T.Int, ccertiApto);
+        req.input('napartamento', T.Int, ccertiApto);
+        req.input('ccerti', T.Int, ccertiApto);
+      }
+
       // Arrays JSON (IDs escalares — el SP hace OPENJSON … SMALLINT '$')
       req.input('dispositivos', T.NVarChar(T.MAX), JSON.stringify(dispositivos));
       req.input('sustancias', T.NVarChar(T.MAX), JSON.stringify(sustancias));
       req.input('equipos', T.NVarChar(T.MAX), equiposJson);
+      if (coberturasJson) req.input('coberturas', T.NVarChar(T.MAX), coberturasJson);
 
       // Tomador
       req.input('icedula_tomador', T.Char(1), dto.tipo_cedula_tomador ?? 'V');
@@ -419,6 +532,69 @@ export class CondominioService {
     }
   }
 
+  /**
+   * Valida que una cotización preestablecida cuadre con las tarifas del Core:
+   * cobertura vigente en matarifa_d, prima = suma × pprima / 100, descuentos (madisseg), recargos (masustac),
+   * comisión (maarancel) y totales. Evita que un enlace externo emita con primas alteradas.
+   */
+  private async validarCotizacionPreestablecida(
+    cramo: number,
+    cot: CotizacionPreestablecidaDto,
+    dispositivos: number[],
+    sustancias: number[],
+  ) {
+    const TOL = 0.02;
+    const near = (a: number, b: number) => Math.abs(Number(a) - Number(b)) <= TOL;
+    const errors: string[] = [];
+    const T = this.db.types;
+
+    const tasas = await this.getTarificadorTasas({ cramo } as GetTarificadorDto);
+    const porCob = new Map(tasas.tasas.map((t) => [`${t.ccober}|${t.ctarifa}`, t]));
+
+    const descRes = dispositivos.length
+      ? await this.db.request().input('cramo', T.Int, cramo)
+          .query(`SELECT ISNULL(SUM(pdisseg), 0) AS pct FROM madisseg WHERE cramo = @cramo AND cdisseg IN (${dispositivos.map(Number).join(',')})`)
+      : null;
+    const recRes = sustancias.length
+      ? await this.db.request().input('cramo', T.Int, cramo)
+          .query(`SELECT ISNULL(SUM(porcenta), 0) AS pct FROM masustac WHERE cramo = @cramo AND csustanc IN (${sustancias.map(Number).join(',')})`)
+      : null;
+    const descPct = Number(descRes?.recordset?.[0]?.pct ?? 0);
+    const recPct = Number(recRes?.recordset?.[0]?.pct ?? 0);
+    if (!near(cot.descuento_pct ?? 0, descPct)) errors.push(`descuento_pct (${cot.descuento_pct ?? 0}) no coincide con los dispositivos (${descPct}).`);
+    if (!near(cot.recargo_pct ?? 0, recPct)) errors.push(`recargo_pct (${cot.recargo_pct ?? 0}) no coincide con las sustancias (${recPct}).`);
+
+    let sumaPrimas = 0;
+    let sumaBasica: number | null = null;
+    for (const c of cot.coberturas) {
+      const key = `${c.ccober.trim()}|${c.ctarifa.trim()}`;
+      const t = porCob.get(key);
+      if (!t) {
+        errors.push(`La cobertura ${key} no tiene tarifa vigente en el Core.`);
+        continue;
+      }
+      if (c.ccober.trim() === '1') sumaBasica = c.suma_asegurada;
+      const bruta = (c.suma_asegurada * t.pprima) / 100;
+      const desc = (c.prima_bruta * descPct) / 100;
+      const rec = (c.prima_bruta * recPct) / 100;
+      if (!near(c.prima_bruta, bruta)) errors.push(`Cobertura ${key}: prima bruta ${c.prima_bruta} no coincide con suma × tasa (${bruta.toFixed(2)}).`);
+      if (!near(c.descuento, desc)) errors.push(`Cobertura ${key}: descuento ${c.descuento} no coincide (${desc.toFixed(2)}).`);
+      if (!near(c.recargo, rec)) errors.push(`Cobertura ${key}: recargo ${c.recargo} no coincide (${rec.toFixed(2)}).`);
+      if (!near(c.prima, c.prima_bruta - c.descuento + c.recargo)) errors.push(`Cobertura ${key}: prima neta no cuadra con bruta - descuento + recargo.`);
+      const pcom = t.pcomision ?? 0;
+      if (!near(c.pcomision ?? 0, pcom)) errors.push(`Cobertura ${key}: pcomision ${c.pcomision ?? 0} no coincide con el Core (${pcom}).`);
+      if (!near(c.comision ?? 0, (c.prima * pcom) / 100)) errors.push(`Cobertura ${key}: comisión no cuadra con prima × pcomision.`);
+      sumaPrimas += c.prima;
+    }
+    if (sumaBasica === null) errors.push('La cotización debe incluir la cobertura básica (ccober 1).');
+    else if (!near(sumaBasica, cot.suma_asegurada)) errors.push('La suma asegurada de la cobertura básica no coincide con suma_asegurada.');
+    if (!near(sumaPrimas, cot.prima_total)) errors.push(`prima_total (${cot.prima_total}) no coincide con la suma de primas (${sumaPrimas.toFixed(2)}).`);
+
+    if (errors.length) {
+      throw new BadRequestException(`Cotización preestablecida inválida: ${errors.join(' ')}`);
+    }
+  }
+
   async getFrecuencias() {
     return [
       { codigo: 'A', descripcion: 'Anual', cuotas: 1 },
@@ -443,5 +619,119 @@ export class CondominioService {
       .input('cramo', T.Int, cramo)
       .query('SELECT csustanc, xsustanc, porcenta FROM masustac WHERE cramo = @cramo');
     return res.recordset;
+  }
+
+  /**
+   * Tarifario vigente (maplantar) de un ramo: coberturas, % sobre la suma asegurada del plan y tasas.
+   * La suma asegurada del plan es la de la cobertura básica (ccober = '1').
+   */
+  async getTarificador(dto: GetTarificadorDto) {
+    const T = this.db.types;
+    const req = this.db.request();
+    req.input('cramo', T.Int, dto.cramo);
+    req.input('cplan', T.Char(6), dto.cplan ?? null);
+    const result = await req.query(`
+      SELECT RTRIM(p.cplan) AS cplan, RTRIM(p.xplan) AS xplan, RTRIM(pt.ccober) AS ccober,
+             RTRIM(c.xdescripcion_l) AS xcobertura, RTRIM(pt.ctarifa) AS ctarifa,
+             pt.msumamin, pt.msumamax, pt.pprima, pt.mprima
+      FROM maplantar pt
+      INNER JOIN maplanes p ON p.cramo = pt.cramo AND p.cplan = pt.cplan AND p.iestado = 'V'
+      INNER JOIN macoberturas c ON c.cramo = pt.cramo AND c.ccobertura = pt.ccober
+      WHERE pt.cramo = @cramo AND pt.iestado = 'V'
+        AND (@cplan IS NULL OR RTRIM(pt.cplan) = RTRIM(@cplan))
+      ORDER BY p.cplan, CASE WHEN RTRIM(pt.ccober) = '1' THEN 0 ELSE 1 END, TRY_CAST(RTRIM(pt.ccober) AS INT), pt.ccober
+    `);
+
+    const planes = new Map<string, any>();
+    for (const r of result.recordset) {
+      let plan = planes.get(r.cplan);
+      if (!plan) {
+        plan = { cplan: r.cplan, xplan: r.xplan, suma_asegurada: 0, coberturas: [] };
+        planes.set(r.cplan, plan);
+      }
+      if (r.ccober === '1') plan.suma_asegurada = Number(r.msumamax) || 0;
+      plan.coberturas.push({
+        ccober: r.ccober,
+        xcobertura: r.xcobertura,
+        ctarifa: r.ctarifa,
+        msumamin: Number(r.msumamin),
+        msumamax: Number(r.msumamax),
+        pprima: Number(r.pprima),
+        mprima: Number(r.mprima),
+      });
+    }
+    for (const plan of planes.values()) {
+      for (const c of plan.coberturas) {
+        c.porcentaje_sa = plan.suma_asegurada > 0
+          ? Number(((c.msumamax / plan.suma_asegurada) * 100).toFixed(4))
+          : null;
+      }
+    }
+    return { cramo: dto.cramo, planes: [...planes.values()] };
+  }
+
+  /** Tasas vigentes por cobertura del ramo (matarifa_d) con la última modificación registrada. */
+  async getTarificadorTasas(dto: GetTarificadorDto) {
+    const T = this.db.types;
+    const result = await this.db
+      .request()
+      .input('cramo', T.Int, dto.cramo)
+      .query(`
+        SELECT RTRIM(d.ccober) AS ccober, RTRIM(d.ctarifa) AS ctarifa, RTRIM(c.xdescripcion_l) AS xcobertura,
+               d.pprima, d.fultmod, d.cusuariomod, ISNULL(ara.pcomision, 0) AS pcomision
+        FROM matarifa_d d
+        INNER JOIN macoberturas c ON c.cramo = d.cramo AND c.ccobertura = d.ccober
+        LEFT JOIN maarancel ara ON ara.cramo = d.cramo AND ara.iestado = 'V' AND ara.ctarifa = d.ctarifa
+        WHERE d.cramo = @cramo AND d.iestado = 'V'
+          AND d.fdesde <= GETDATE() AND (d.fhasta IS NULL OR d.fhasta >= GETDATE())
+        ORDER BY TRY_CAST(RTRIM(d.ccober) AS INT), d.ccober
+      `);
+    return {
+      cramo: dto.cramo,
+      tasas: result.recordset.map((r) => ({
+        ccober: r.ccober,
+        ctarifa: r.ctarifa,
+        xcobertura: r.xcobertura,
+        pprima: Number(r.pprima),
+        pcomision: Number(r.pcomision),
+        fultmod: r.fultmod,
+        cusuariomod: r.cusuariomod == null ? null : Number(r.cusuariomod),
+      })),
+    };
+  }
+
+  /** Replica la tasa (pprima) de una cobertura en matarifa_d dejando constancia del usuario que la modificó. */
+  async updateTarificadorTasa(dto: UpdateTarificadorTasaDto) {
+    const T = this.db.types;
+    const keyReq = () =>
+      this.db
+        .request()
+        .input('cramo', T.Int, dto.cramo)
+        .input('ccober', T.Char(4), dto.ccober)
+        .input('ctarifa', T.Char(4), dto.ctarifa);
+    const where = `cramo = @cramo AND RTRIM(ccober) = RTRIM(@ccober) AND RTRIM(ctarifa) = RTRIM(@ctarifa)
+                   AND iestado = 'V' AND fdesde <= GETDATE() AND (fhasta IS NULL OR fhasta >= GETDATE())`;
+
+    const current = await keyReq().query(`SELECT pprima, fultmod, cusuariomod FROM matarifa_d WHERE ${where}`);
+    if (current.recordset.length === 0) {
+      throw new BadRequestException('La cobertura no tiene una tarifa vigente en el Core (matarifa_d).');
+    }
+    if (current.recordset.length > 1) {
+      throw new ConflictException('La cobertura tiene más de una tarifa vigente en el Core; corrígelo antes de replicar.');
+    }
+    const before = current.recordset[0];
+
+    const upd = await keyReq()
+      .input('pprima', T.Numeric(18, 6), dto.pprima)
+      .input('cusuario', T.Numeric(18, 0), dto.cusuario)
+      .query(`UPDATE matarifa_d SET pprima = @pprima, fultmod = GETDATE(), cusuariomod = @cusuario,
+                     cprog = 'NEXUS_TARIFICADOR' WHERE ${where}`);
+    if ((upd.rowsAffected?.[0] ?? 0) !== 1) {
+      throw new ConflictException('No se actualizó exactamente un registro; el cambio no se aplicó.');
+    }
+    this.logger.warn(
+      `tarificador: ramo=${dto.cramo} cober=${dto.ccober} pprima ${before.pprima} -> ${dto.pprima} usuario=${dto.cusuario} (${dto.xusuario ?? 's/n'})`,
+    );
+    return { before: { pprima: Number(before.pprima) }, after: { pprima: dto.pprima, cusuariomod: dto.cusuario } };
   }
 }

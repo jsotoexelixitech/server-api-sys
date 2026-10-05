@@ -9,12 +9,21 @@ import { MssqlService } from '../../database/mssql.service';
 import { parseSPError } from '../../common/helpers/sp-error.helper';
 import {
   SP_BUSCA_FRECUENCIA_PLAN_NEXUS,
+  SP_BUSCA_PLAN_PRODUCTO_NEXUS,
   SP_CALCULO_AUTO_NEXUS,
   SP_GET_SUSTANCIAS_NEXUS,
+  SP_OBTENER_PRODUCTORES_NEXUS,
 } from '../../config/sis2000-sp.constants';
 import { GetPlanesV2Dto } from './dto/get-planes-v2.dto';
+import { GetPlanesProductoDto } from './dto/get-planes-producto.dto';
 import { GetCotizacionAutoDto } from './dto/get-cotizacion-auto.dto';
 import { CalculatePlanCoberturasDto } from './dto/calculate-plan-coberturas.dto';
+import {
+  MausuplanRepository,
+  RCV_AUTO_CPRODUCTO,
+} from './repositories/mausuplan.repository';
+import { GetProductosPersonasDto } from './dto/get-productos-personas.dto';
+import { MarketplaceCanalResolver } from './marketplace-canal.resolver';
 
 export interface CotizacionResult {
   mprimaext: number;
@@ -32,6 +41,11 @@ export interface PlanItem {
   [key: string]: unknown;
   parentescos?: ParentescoPlan[];
   coberturas?: CoberturaPlan[];
+}
+
+export interface PlanesQueryResult {
+  planes: PlanItem[];
+  mensaje: string;
 }
 
 interface ParentescoPlan {
@@ -84,9 +98,14 @@ export interface CalculatePlanCoberturasResponse {
 export class ValrepService {
   private readonly logger = new Logger(ValrepService.name);
 
+  private static readonly EMPTY_AFTER_CSUBITEM_MSG =
+    'No hay planes disponibles para este usuario según las restricciones del gestor.';
+
   constructor(
     private readonly db: MssqlService,
     private readonly config: ConfigService,
+    private readonly mausuplanRepo: MausuplanRepository,
+    private readonly marketplaceCanal: MarketplaceCanalResolver,
   ) {}
 
   /** Placeholder Sis2000 en catálogos geo — no es estado/ciudad válido. */
@@ -99,7 +118,7 @@ export class ValrepService {
     return parseInt(this.config.get<string>('LAMUNDIAL_RAMO_BINACIONAL', '28') ?? '28', 10);
   }
 
-  async getPlanesV2(body: GetPlanesV2Dto): Promise<PlanItem[]> {
+  async getPlanesV2(body: GetPlanesV2Dto): Promise<PlanesQueryResult> {
     try {
       const req = this.db.request();
       const T = this.db.types;
@@ -143,9 +162,16 @@ export class ValrepService {
       }
 
       const recordset = result.recordset ?? [];
-      const planes = await this.enrichWithParentescos(recordset);
-      return await this.enrichWithCoberturas(planes);
+      let planes = await this.enrichWithParentescos(recordset);
+      planes = await this.enrichWithCoberturas(planes);
+
+      return this.applyCsubitemExclusion(planes, {
+        csubitem: body.csubitem,
+        centidad: body.centidad,
+        cproducto: this.resolveCproductoForExclusion(body),
+      }, mensaje);
     } catch (err) {
+      if (err instanceof BadRequestException) throw err;
       const msg = err instanceof Error ? err.message : String(err);
       this.logger.error(`getPlanesV2 error: ${msg}`);
       throw new InternalServerErrorException(
@@ -319,6 +345,19 @@ export class ValrepService {
     return (
       process.env.MSSQL_SP_BUSCA_FRECUENCIA_PLAN_NEXUS?.trim() ||
       SP_BUSCA_FRECUENCIA_PLAN_NEXUS
+    );
+  }
+
+  private spBuscaPlanProductoNexusName(): string {
+    return (
+      process.env.MSSQL_SP_BUSCA_PLAN_PRODUCTO_NEXUS?.trim() ||
+      SP_BUSCA_PLAN_PRODUCTO_NEXUS
+    );
+  }
+
+  private spBuscaDetallePlanName(): string {
+    return (
+      process.env.MSSQL_SP_BUSCA_DETALLE_PLAN?.trim() || 'spBuscaDetallePlan'
     );
   }
 
@@ -524,6 +563,46 @@ export class ValrepService {
     }
   }
 
+  /** Tope de dependientes Sis2000 (`maplanes_per.nmax_dep`) en cada plan. */
+  private async enrichWithNmaxDep(planes: PlanItem[]): Promise<PlanItem[]> {
+    const ramos = [
+      ...new Set(
+        planes
+          .map((plan) => Number(plan['cramo']))
+          .filter((cramo) => Number.isFinite(cramo)),
+      ),
+    ];
+    for (const cramo of ramos) {
+      try {
+        const T = this.db.types;
+        const req = this.db.request();
+        req.input('cramo', T.Int, cramo);
+        const result = await req.query<{ cplan: string; nmax_dep: number | null }>(`
+          SELECT LTRIM(RTRIM(cplan)) AS cplan, nmax_dep
+          FROM maplanes_per
+          WHERE cramo = @cramo AND iestado = 'V'
+        `);
+        const limits = new Map<string, number | null>();
+        for (const row of result.recordset ?? []) {
+          const cplan = String(row.cplan ?? '').trim();
+          if (!cplan) continue;
+          const nmax = row.nmax_dep == null ? null : Number(row.nmax_dep);
+          limits.set(cplan, Number.isFinite(nmax as number) ? nmax : null);
+        }
+        for (const plan of planes) {
+          if (Number(plan['cramo']) !== cramo) continue;
+          const cplan = String(plan['cplan'] ?? '').trim();
+          if (!limits.has(cplan)) continue;
+          plan['nmax_dep'] = limits.get(cplan) ?? null;
+        }
+      } catch (err) {
+        const msg = err instanceof Error ? err.message : String(err);
+        this.logger.warn(`enrichWithNmaxDep ramo=${cramo}: ${msg}`);
+      }
+    }
+    return planes;
+  }
+
   private async enrichWithParentescos(planes: PlanItem[]): Promise<PlanItem[]> {
     for (const plan of planes) {
       try {
@@ -663,38 +742,35 @@ export class ValrepService {
     }
   }
 
-  async getFrecuencia(cplan: string, cramo?: number) {
+  async getFrecuencia(cplan: string, cramo?: number, cproductor?: number) {
     const spName = this.spBuscaFrecuenciaPlanNexusName();
-    const ramoPersonas = 9;
     try {
       const T = this.db.types;
       const req = this.db.request();
       req.input('cplan', T.VarChar(10), cplan);
       req.input('cramo', T.Int, cramo ?? null);
+      req.input('cproductor', T.Numeric(17), cproductor ?? null);
       req.output('berror', T.Bit, false);
       req.output('mensaje', T.NVarChar(60), '');
 
-      this.logger.log(`getFrecuencia: EXEC ${spName} cplan=${cplan} cramo=${cramo ?? 'null'}`);
+      this.logger.log(
+        `getFrecuencia: EXEC ${spName} cplan=${cplan} cramo=${cramo ?? 'null'} cproductor=${cproductor ?? 'null'}`,
+      );
       const result = await req.execute(spName);
-      const rows = (result.recordset ?? []) as {
+      let rows = (result.recordset ?? []) as {
         cvalor: string;
         xdescripcion: string;
         ndias?: number | null;
+        cplan?: string;
       }[];
-      if (Boolean(result.output['berror']) || !rows.length) {
-        // Personas/funerario (ramo 9): maplanes_frec suele estar vacío. SysIP
-        // persons-alt deja ANUAL y cotiza con ifrecuencia=A. No devolver 400.
-        if (Number(cramo) === ramoPersonas) {
-          this.logger.warn(
-            `getFrecuencia: plan=${cplan} cramo=9 sin filas en ${spName} — fallback ANUAL`,
-          );
-          return [{ cvalor: 'A', xdescripcion: 'ANUAL' }];
-        }
-        throw new BadRequestException(
-          String(result.output['mensaje'] ?? 'No se encontraron frecuencias para el plan.'),
+
+      if ((Boolean(result.output['berror']) && !rows.length) || !rows.length) {
+        this.logger.warn(
+          `getFrecuencia: plan=${cplan} cramo=${cramo ?? 'null'} cproductor=${cproductor ?? 'null'} sin filas en ${spName} — fallback ANUAL`,
         );
+        return [{ cvalor: 'A', xdescripcion: 'ANUAL' }];
       }
-      // El SP puede devolver varias filas con el mismo cvalor (A, B, D…).
+      // El SP o la tabla maplanes_frec_produc pueden devolver varias filas con el mismo cvalor (A, B, D…).
       return rows.filter((row, index, all) => {
         const code = String(row.cvalor ?? '').trim();
         if (!code) return false;
@@ -709,6 +785,80 @@ export class ValrepService {
   }
 
   // ── Funerario: catálogo valrep (pasos 1–3, solo SP) ───────────────────────
+
+  /**
+   * Producto Sis2000 para consultar exclusiones en mausuplan (itipouso=E).
+   * RCV nacional (cramo 18) → producto '24'.
+   */
+  private resolveCproductoForExclusion(body: {
+    cramo?: number;
+    cproducto?: string;
+    csubitem?: string;
+  }): string {
+    if (!body.csubitem?.trim()) {
+      return body.cproducto?.trim() ?? RCV_AUTO_CPRODUCTO;
+    }
+    if (body.cramo === 18) {
+      return RCV_AUTO_CPRODUCTO;
+    }
+    const cp = body.cproducto?.trim();
+    if (!cp) {
+      throw new BadRequestException(
+        'cproducto es requerido cuando cramo !== 18 y se envía csubitem.',
+      );
+    }
+    return cp;
+  }
+
+  /**
+   * Excluye planes restringidos al gestor (mausuplan itipouso=E).
+   * Prioridad sobre canal/visibility en consumidores downstream.
+   */
+  private async applyCsubitemExclusion(
+    planes: PlanItem[],
+    opts: { csubitem?: string; centidad?: string; cproducto: string },
+    spMensaje: string,
+  ): Promise<PlanesQueryResult> {
+    const csubitem = opts.csubitem?.trim();
+    if (!csubitem) {
+      return { planes, mensaje: spMensaje };
+    }
+
+    const centidad = opts.centidad?.trim();
+    const isGestorCompuesto = csubitem.includes('-') && !csubitem.includes('@');
+    if (!centidad && !isGestorCompuesto) {
+      throw new BadRequestException(
+        'centidad es requerida cuando se envía csubitem (depende del usuario logueado).',
+      );
+    }
+
+    const excluded = await this.mausuplanRepo.getExcludedPlans({
+      cproducto: opts.cproducto,
+      centidad: centidad?.toUpperCase() ?? 'G',
+      citem: csubitem,
+    });
+
+    if (!excluded.length) {
+      return { planes, mensaje: spMensaje };
+    }
+
+    const excludedSet = new Set(excluded.map((c) => c.trim()));
+    const filtered = planes.filter(
+      (p) => !excludedSet.has(String(p['cplan'] ?? '').trim()),
+    );
+
+    if (!filtered.length) {
+      this.logger.warn(
+        `applyCsubitemExclusion: todos los planes excluidos centidad=${centidad} csubitem=${csubitem}`,
+      );
+      return {
+        planes: [],
+        mensaje: ValrepService.EMPTY_AFTER_CSUBITEM_MSG,
+      };
+    }
+
+    return { planes: filtered, mensaje: spMensaje };
+  }
 
   private resolveEntidadItem(body: { citem?: string; centidad?: string }) {
     let citem: string | null = null;
@@ -739,7 +889,7 @@ export class ValrepService {
     req.output('berror', T.Bit, false);
     req.output('mensaje', T.NVarChar(60), '');
 
-    const result = await req.execute('spBuscaDetallePlan');
+    const result = await req.execute(this.spBuscaDetallePlanName());
     const berror = Boolean(result.output['berror']);
     const mensaje: string = result.output['mensaje'] ?? '';
 
@@ -783,10 +933,11 @@ export class ValrepService {
 
   /** Paso 1 funerario — spBuscaProductosEntidad (SysIP getProductos). */
   async getProductosPersonas(
-    body: { citem: string; centidad: string },
+    body: GetProductosPersonasDto,
   ): Promise<Record<string, unknown>[]> {
-    const citem = String(body.citem).trim();
-    const centidad = String(body.centidad).trim().toUpperCase();
+    const resolved = await this.marketplaceCanal.resolve(body);
+    const citem = resolved.citem;
+    const centidad = resolved.centidad;
 
     try {
       const T = this.db.types;
@@ -821,14 +972,11 @@ export class ValrepService {
     }
   }
 
-  /** Paso 2 funerario — spBuscaPlanProducto + parentescos vía spBuscaDetallePlan. */
-  async getPlanesProducto(body: {
-    cproducto: string;
-    citem?: string;
-    centidad?: string;
-  }): Promise<{ planes: PlanItem[]; mensaje: string }> {
+  /** Paso 2 funerario — sp_busca_plan_producto_nexus + parentescos / nmax_dep. */
+  async getPlanesProducto(body: GetPlanesProductoDto): Promise<PlanesQueryResult> {
     const cproducto = String(body.cproducto).trim();
     const { citem, centidad } = this.resolveEntidadItem(body);
+    const spName = this.spBuscaPlanProductoNexusName();
 
     try {
       const T = this.db.types;
@@ -838,20 +986,34 @@ export class ValrepService {
       req.input('centidad', T.Char(1), centidad);
       req.output('mensaje', T.NVarChar(60), '');
 
-      const result = await req.execute('spBuscaPlanProducto');
+      const result = await req.execute(spName);
       const mensaje: string = result.output['mensaje'] ?? '';
       const recordset = (result.recordset ?? []) as PlanItem[];
       if (!recordset.length) {
         throw new BadRequestException(mensaje || 'No se encuentra planes asociados');
       }
 
-      const planes = await this.enrichPlanesWithDetalleSp(recordset);
-      if (mensaje) this.logger.log(`spBuscaPlanProducto: ${mensaje}`);
-      return { planes, mensaje };
+      const rawCodes = recordset
+        .map((row) => String(row['cplan'] ?? '').trim())
+        .filter(Boolean);
+      this.logger.log(
+        `${spName} cproducto=${cproducto} centidad=${centidad} citem=${citem} raw=${rawCodes.join(',')}`,
+      );
+
+      let planes = await this.enrichWithNmaxDep(
+        await this.enrichWithParentescos(recordset),
+      );
+      if (mensaje) this.logger.log(`${spName}: ${mensaje}`);
+
+      return this.applyCsubitemExclusion(planes, {
+        csubitem: body.csubitem,
+        centidad: body.centidad,
+        cproducto,
+      }, mensaje);
     } catch (err) {
       if (err instanceof BadRequestException) throw err;
       const msg = err instanceof Error ? err.message : String(err);
-      this.logger.error(`getPlanesProducto cproducto=${cproducto}: ${msg}`);
+      this.logger.error(`getPlanesProducto ${spName} cproducto=${cproducto}: ${msg}`);
       throw new InternalServerErrorException(
         'Error al obtener planes del producto.',
       );
@@ -1165,4 +1327,34 @@ export class ValrepService {
       );
     }
   }
+
+  /**
+   * Catálogo de productores / brokers — invoca SP dbo.sp_ma_obtener_productores_nexus
+   * Paridad con SysIP-backend POST/GET /api/v1/valrep/brokers.
+   */
+  async getBrokers(): Promise<{ cproductor: number; xproductor: string }[]> {
+    try {
+      const req = this.db.request();
+      const result = await req.execute(SP_OBTENER_PRODUCTORES_NEXUS);
+      const rows = (result.recordset ?? []) as {
+        cproductor: number | string;
+        xproductor: string;
+      }[];
+
+      return rows
+        .map((r) => ({
+          cproductor: Number(r.cproductor),
+          xproductor: String(r.xproductor ?? '').trim(),
+        }))
+        .filter((r) => r.cproductor > 0 && r.xproductor !== '')
+        .sort((a, b) => a.xproductor.localeCompare(b.xproductor));
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : String(err);
+      this.logger.error(`getBrokers: ${msg}`);
+      throw new InternalServerErrorException(
+        'Error al obtener la lista de productores.',
+      );
+    }
+  }
 }
+

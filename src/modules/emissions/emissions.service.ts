@@ -10,6 +10,7 @@ import { MssqlService } from '../../database/mssql.service';
 import { formatValidateAutoError, parseSPError } from '../../common/helpers/sp-error.helper';
 import { buildPolicyPdfUrl, resolveClubArysPdfUrl } from '../../common/helpers/policy-url.helper';
 import {
+  SP_CONTADOR_NEXUS,
   SP_PRE_EMISION_AUTO_RCV,
   SP_REPAIR_RCV_COBERTURAS,
   SP_SEARCH_AUTOMOBILE_PROPIETARY,
@@ -162,6 +163,33 @@ export class EmissionsService {
     return {};
   }
 
+  /** cpoliza + casegurado para activate tarjeta RCV post-emisión. */
+  private async lookupPolicyTarjetaKeys(
+    cnpoliza: string,
+  ): Promise<{ cpoliza?: number; casegurado?: number }> {
+    const poliza = String(cnpoliza ?? '').trim();
+    if (!poliza) return {};
+
+    const T = this.db.types;
+    const req = this.db.request();
+    req.input('cnpoliza', T.NVarChar(30), poliza);
+    const result = await req.query(`
+      SELECT TOP 1 p.cpoliza, p.casegurado
+      FROM adpoliza p
+      WHERE RTRIM(p.cnpoliza) = RTRIM(@cnpoliza)
+      ORDER BY p.fingreso DESC
+    `);
+    const row = result.recordset?.[0] as Record<string, unknown> | undefined;
+    if (!row) return {};
+
+    const cpoliza = Number(row['cpoliza']);
+    const casegurado = Number(row['casegurado']);
+    return {
+      ...(Number.isFinite(cpoliza) && cpoliza > 0 ? { cpoliza } : {}),
+      ...(Number.isFinite(casegurado) && casegurado > 0 ? { casegurado } : {}),
+    };
+  }
+
   /** Fallback: última póliza/recibo por placa tras emisión RCV2. */
   private async lookupEmissionByPlaca(xplaca: string): Promise<Record<string, unknown>> {
     const T = this.db.types;
@@ -209,7 +237,7 @@ export class EmissionsService {
     const plan = String(this.pick(body, 'cplan', 'plan') ?? '')
       .trim()
       .toUpperCase();
-    if (['RCVBAS', 'RUSPAT'].includes(plan)) return true;
+    if (['RCVBAS', 'RUSPAT', 'FARMPA', 'FARMMO'].includes(plan)) return true;
     const centidad = String(this.pick(body, 'centidad') ?? '').trim().toUpperCase();
     return centidad === 'P';
   }
@@ -315,9 +343,89 @@ export class EmissionsService {
     })();
   }
 
+  /** QA Sis2000: fn_validar_* exigen @xcober (nvarchar(4)); legacy solo 2 params. */
+  private resolveValidateXcober(dto: {
+    xcober?: string;
+    coberAdicional?: string;
+    cober_adicional?: string;
+  }): string {
+    const raw =
+      dto.xcober
+      ?? dto.coberAdicional
+      ?? dto.cober_adicional
+      ?? 'RC';
+    const s = String(raw).trim().slice(0, 4);
+    return s || 'RC';
+  }
+
+  private isSqlTooManyArguments(err: unknown): boolean {
+    const msg = err instanceof Error ? err.message : String(err);
+    return /too many arguments/i.test(msg);
+  }
+
+  private async fnValidarPlacaActive(
+    xplaca: string,
+    fdesde: Date,
+    xcober: string,
+  ): Promise<boolean> {
+    const T = this.db.types;
+    const query = async (withXcober: boolean) => {
+      const req = this.db.request();
+      req.input('xplaca', T.VarChar(15), xplaca);
+      req.input('fdesde', T.Date, fdesde);
+      if (withXcober) {
+        req.input('xcober', T.NVarChar(4), xcober);
+      }
+      const sql = withXcober
+        ? 'SELECT ISNULL(dbo.fn_validar_placa(@xplaca, @fdesde, @xcober), 0) AS is_active'
+        : 'SELECT ISNULL(dbo.fn_validar_placa(@xplaca, @fdesde), 0) AS is_active';
+      const result = await req.query(sql);
+      return Boolean(result.recordset?.[0]?.['is_active']);
+    };
+
+    try {
+      return await query(true);
+    } catch (err) {
+      if (this.isSqlTooManyArguments(err)) {
+        return query(false);
+      }
+      throw err;
+    }
+  }
+
+  private async fnValidarSerialActive(
+    xsercar: string,
+    fdesde: Date,
+    xcober: string,
+  ): Promise<boolean> {
+    const T = this.db.types;
+    const query = async (withXcober: boolean) => {
+      const req = this.db.request();
+      req.input('xsercar', T.VarChar(60), xsercar);
+      req.input('fdesde', T.Date, fdesde);
+      if (withXcober) {
+        req.input('xcober', T.NVarChar(4), xcober);
+      }
+      const sql = withXcober
+        ? 'SELECT ISNULL(dbo.fn_validar_serialCar(@xsercar, @fdesde, @xcober), 0) AS is_active'
+        : 'SELECT ISNULL(dbo.fn_validar_serialCar(@xsercar, @fdesde), 0) AS is_active';
+      const result = await req.query(sql);
+      return Boolean(result.recordset?.[0]?.['is_active']);
+    };
+
+    try {
+      return await query(true);
+    } catch (err) {
+      if (this.isSqlTooManyArguments(err)) {
+        return query(false);
+      }
+      throw err;
+    }
+  }
+
   /**
    * Migración de SysIP Express `POST /api/v1/emissions/automobile/vehicle`.
-   * Usa `dbo.fn_validar_placa(@xplaca, @fdesde)` — no la búsqueda por vhcerti.
+   * Usa `dbo.fn_validar_placa(@xplaca, @fdesde[, @xcober])` — no la búsqueda por vhcerti.
    *
    * Compat Express:
    * - Placa activa → `{ status: true, message }` (`type === 'warning'` cambia el texto)
@@ -333,14 +441,12 @@ export class EmissionsService {
     }
 
     try {
-      const req = this.db.request();
-      const T = this.db.types;
-      req.input('xplaca', T.VarChar(15), xplaca);
-      req.input('fdesde', T.Date, new Date(dto.fdesde));
-      const result = await req.query(`
-        SELECT ISNULL(dbo.fn_validar_placa(@xplaca, @fdesde), 0) AS is_active
-      `);
-      const isActive = Boolean(result.recordset?.[0]?.['is_active']);
+      const xcober = this.resolveValidateXcober(dto);
+      const isActive = await this.fnValidarPlacaActive(
+        xplaca,
+        new Date(dto.fdesde),
+        xcober,
+      );
 
       if (isActive) {
         const message =
@@ -361,7 +467,7 @@ export class EmissionsService {
 
   /**
    * Migración de SysIP Express `POST /api/v1/emissions/automobile/serial`.
-   * Usa `dbo.fn_validar_serialCar(@xsercar, @fdesde)`.
+   * Usa `dbo.fn_validar_serialCar(@xsercar, @fdesde[, @xcober])`.
    *
    * Compat Express:
    * - Serial activo → `{ status: true, message }` (`type === 'warning'` cambia el texto)
@@ -377,14 +483,12 @@ export class EmissionsService {
     }
 
     try {
-      const req = this.db.request();
-      const T = this.db.types;
-      req.input('xsercar', T.VarChar(60), xsercar);
-      req.input('fdesde', T.Date, new Date(dto.fdesde));
-      const result = await req.query(`
-        SELECT ISNULL(dbo.fn_validar_serialCar(@xsercar, @fdesde), 0) AS is_active
-      `);
-      const isActive = Boolean(result.recordset?.[0]?.['is_active']);
+      const xcober = this.resolveValidateXcober(dto);
+      const isActive = await this.fnValidarSerialActive(
+        xsercar,
+        new Date(dto.fdesde),
+        xcober,
+      );
 
       if (isActive) {
         const message =
@@ -762,6 +866,8 @@ export class EmissionsService {
         if (dateKey in b) b[dateKey] = this.dateField(b[dateKey]);
       }
 
+      await this.resolveMarketplaceEntity(b);
+
       if (
         (canal['ctipocanal'] === 'T' ||
           canal['ctipocanal'] === 'A' ||
@@ -874,34 +980,49 @@ export class EmissionsService {
     }
   }
 
-  /** Sincroniza macontadores POL_VEH con el máximo cnpoliza conocido (adpóliza + cola). */
-  private async syncPolVehCounter(cramo: number): Promise<void> {
+  /**
+   * Avanza el contador POL_VEH con `sp_contador_nexus` (mismo EXEC que el pre-SP RCV).
+   * No hace UPDATE directo a macontadores.
+   */
+  private async syncPolVehCounter(
+    cramo: number,
+    fdesde?: string | null,
+    csucur = 1,
+  ): Promise<void> {
+    const T = this.db.types;
     const req = this.db.request();
-    req.input('cramo', this.db.types.Int, cramo);
+    req.input('cramo', T.Int, cramo);
+    req.input('csucur', T.Numeric(4, 0), csucur);
+    req.input(
+      'fdesde',
+      T.Date,
+      fdesde ? new Date(String(fdesde).slice(0, 10)) : new Date(),
+    );
     const result = await req.query(`
-      DECLARE @max BIGINT;
+      DECLARE @cpoliza NUMERIC(19);
+      DECLARE @cnpoliza NVARCHAR(17);
+      DECLARE @crecibo NUMERIC(19);
+      DECLARE @cnrecibo NVARCHAR(17);
+      DECLARE @cproces NUMERIC(13);
 
-      SELECT @max = MAX(TRY_CAST(RIGHT(cnpoliza, 10) AS BIGINT))
-      FROM adpoliza
-      WHERE cramo = @cramo AND cnpoliza LIKE CAST(@cramo AS VARCHAR) + '-%';
+      EXEC ${SP_CONTADOR_NEXUS}
+        @cpoliza OUTPUT,
+        @cnpoliza OUTPUT,
+        @crecibo OUTPUT,
+        @cnrecibo OUTPUT,
+        @cproces OUTPUT,
+        @csucur,
+        @fdesde,
+        @cramo,
+        'POL_VEH';
 
-      DECLARE @maxPending BIGINT;
-      SELECT @maxPending = MAX(TRY_CAST(RIGHT(cnpoliza, 10) AS BIGINT))
-      FROM TMEMISION_AUTOMOVIL_RCV2
-      WHERE cramo = @cramo
-        AND cnpoliza IS NOT NULL
-        AND LTRIM(RTRIM(cnpoliza)) <> ''
-        AND cnpoliza LIKE CAST(@cramo AS VARCHAR) + '-%';
-
-      IF @maxPending > ISNULL(@max, 0) SET @max = @maxPending;
-
-      IF @max IS NOT NULL
-        UPDATE macontadores SET qcontador = @max WHERE ccontador = 'POL_VEH';
-
-      SELECT ISNULL(qcontador, 0) AS qcontador FROM macontadores WHERE ccontador = 'POL_VEH';
+      SELECT @cpoliza AS cpoliza, @cnpoliza AS cnpoliza, @crecibo AS crecibo,
+             @cnrecibo AS cnrecibo, @cproces AS cproces;
     `);
-    const q = result.recordset?.[0]?.['qcontador'];
-    this.logger.log(`syncPolVehCounter: cramo=${cramo} qcontador=${q ?? '?'}`);
+    const row = result.recordset?.[0];
+    this.logger.log(
+      `syncPolVehCounter: EXEC ${SP_CONTADOR_NEXUS} cramo=${cramo} cnpoliza=${row?.['cnpoliza'] ?? '?'}`,
+    );
   }
 
   private async bumpPolVehCounter(): Promise<void> {
@@ -1079,6 +1200,96 @@ export class EmissionsService {
   }
 
   /**
+   * Resuelve los datos de entidad provenientes del marketplace/iframe:
+   * - cramo dinámico recibido.
+   * - centidad = 'P' -> cproductor = citem; si viene cgestor, se asigna cgestor y se busca en magestor ccanalalt y cscanalalt.
+   * - centidad = 'C' -> ccanalalt = citem; busca en magestor filtrando por ccanalalt para obtener cgestor y cscanalalt.
+   */
+  private async resolveMarketplaceEntity(b: Record<string, unknown>): Promise<void> {
+    const centidad = String(this.pick(b, 'centidad', 'entidad') ?? '').trim().toUpperCase();
+    const citemRaw = this.pick(b, 'citem', 'item');
+    const citemStr = citemRaw != null ? String(citemRaw).trim() : '';
+    const citemNum = this.intField(citemRaw);
+    const cgestorParam = String(this.pick(b, 'cgestor', 'gestor') ?? '').trim();
+    const cramoParam = this.intField(this.pick(b, 'cramo', 'ramo'));
+
+    if (cramoParam != null && cramoParam > 0) {
+      b['cramo'] = cramoParam;
+      this.logger.log(`resolveMarketplaceEntity: cramo=${cramoParam}`);
+    }
+
+    if (!centidad && !cgestorParam && !citemRaw) {
+      return;
+    }
+
+    const T = this.db.types;
+
+    if (centidad === 'P') {
+      if (citemNum != null) {
+        b['cproductor'] = citemNum;
+      }
+      b['ctipocanal'] = b['ctipocanal'] ?? (b['cproductor'] === 80080 ? 'D' : 'T');
+
+      if (cgestorParam !== '') {
+        b['cgestor'] = cgestorParam;
+
+        const req = this.db.request();
+        req.input('cgestor', T.VarChar(50), cgestorParam);
+        req.input('citem', T.VarChar(50), citemStr);
+        const result = await req.query(`
+          SELECT TOP 1 ccanalalt, cscanalalt, cgestor
+          FROM magestor
+          WHERE cgestor = @cgestor OR cgestor = @citem
+          ORDER BY CASE WHEN cgestor = @cgestor THEN 0 ELSE 1 END, fingreso DESC
+        `);
+        const row = result.recordset?.[0];
+        if (row) {
+          if (row.ccanalalt != null) {
+            b['ccanalalt'] = Number(row.ccanalalt);
+          }
+          if (row.cscanalalt != null) {
+            b['cscanalalt'] = Number(row.cscanalalt);
+          }
+          if (row.cgestor) {
+            b['cgestor'] = String(row.cgestor).trim();
+          }
+        }
+      }
+      this.logger.log(
+        `resolveMarketplaceEntity: centidad=P cproductor=${b['cproductor']} cgestor=${b['cgestor']} ccanalalt=${b['ccanalalt']} cscanalalt=${b['cscanalalt']}`,
+      );
+    } else if (centidad === 'C') {
+      if (citemNum != null) {
+        b['ccanalalt'] = citemNum;
+      }
+      b['ctipocanal'] = 'A';
+
+      if (citemNum != null) {
+        const req = this.db.request();
+        req.input('ccanalalt', T.Int, citemNum);
+        const result = await req.query(`
+          SELECT TOP 1 cgestor, cscanalalt
+          FROM magestor
+          WHERE ccanalalt = @ccanalalt
+          ORDER BY fingreso DESC
+        `);
+        const row = result.recordset?.[0];
+        if (row) {
+          if (row.cgestor != null && String(row.cgestor).trim() !== '') {
+            b['cgestor'] = String(row.cgestor).trim();
+          }
+          if (row.cscanalalt != null) {
+            b['cscanalalt'] = Number(row.cscanalalt);
+          }
+        }
+      }
+      this.logger.log(
+        `resolveMarketplaceEntity: centidad=C ccanalalt=${b['ccanalalt']} cgestor=${b['cgestor']} cscanalalt=${b['cscanalalt']}`,
+      );
+    }
+  }
+
+  /**
    * Gestor del canal (magestor): un guion en cgestor identifica el código UUID del gestor.
    * Marketplace canal: se persiste en adpoliza tras emitir.
    */
@@ -1108,26 +1319,42 @@ export class EmissionsService {
     return this.lookupChannelGestor(ccanalalt);
   }
 
-  private async applyPolicyGestor(cnpoliza: string, cgestor: string): Promise<void> {
+  private async applyPolicyGestorAndCanal(
+    cnpoliza: string,
+    cgestor?: string | null,
+    ccanalalt?: number | null,
+    cscanalalt?: number | null,
+    cproductor?: number | null,
+  ): Promise<void> {
     const poliza = String(cnpoliza ?? '').trim();
-    const gestor = String(cgestor ?? '').trim();
-    if (!poliza || !gestor) return;
+    if (!poliza) return;
 
     const T = this.db.types;
     const req = this.db.request();
     req.input('cnpoliza', T.NVarChar(30), poliza);
-    req.input('cgestor', T.VarChar(50), gestor);
-    const result = await req.query(`
+    req.input('cgestor', T.VarChar(50), cgestor ? String(cgestor).trim() : null);
+    req.input('ccanalalt', T.Int, ccanalalt ?? null);
+    req.input('cscanalalt', T.Int, cscanalalt ?? null);
+    req.input('cproductor', T.Numeric(11, 0), cproductor ?? null);
+
+    await req.query(`
       UPDATE adpoliza
-      SET cgestor = @cgestor
-      WHERE RTRIM(cnpoliza) = RTRIM(@cnpoliza)
+      SET cgestor = COALESCE(@cgestor, cgestor),
+          ccanalalt = COALESCE(@ccanalalt, ccanalalt),
+          cscanalalt = COALESCE(@cscanalalt, cscanalalt),
+          cproductor = COALESCE(@cproductor, cproductor)
+      WHERE RTRIM(cnpoliza) = RTRIM(@cnpoliza);
+
+      UPDATE adrecibos
+      SET cgestor = COALESCE(@cgestor, cgestor),
+          ccanalalt = COALESCE(@ccanalalt, ccanalalt),
+          cscanalalt = COALESCE(@cscanalalt, cscanalalt),
+          cproductor = COALESCE(@cproductor, cproductor)
+      WHERE RTRIM(cnpoliza) = RTRIM(@cnpoliza);
     `);
-    const rows = Number(result.rowsAffected?.[0] ?? 0);
-    if (rows === 0) {
-      this.logger.warn(`applyPolicyGestor: sin filas cnpoliza=${poliza} cgestor=${gestor}`);
-      return;
-    }
-    this.logger.log(`applyPolicyGestor OK cnpoliza=${poliza} cgestor=${gestor}`);
+    this.logger.log(
+      `applyPolicyGestorAndCanal OK cnpoliza=${poliza} gestor=${cgestor} canal=${ccanalalt} scanal=${cscanalalt} prod=${cproductor}`,
+    );
   }
 
   private async emitLocalAutomobile(
@@ -1473,9 +1700,9 @@ export class EmissionsService {
     );
     this.logger.log(`emitLocal SP params ${preEmisionSp}: ${JSON.stringify(spPayload)}`);
 
-    await this.syncPolVehCounter(
-      this.intField(this.pick(b, 'cramo', 'ramo')) ?? defaultRamo,
-    );
+    const cramoEmit = this.intField(this.pick(b, 'cramo', 'ramo')) ?? defaultRamo;
+    const fdesdeEmit =
+      this.dateField(b['fdesde']) ?? this.dateField(b['fecha_emision'] ?? femision);
 
     let spResult: {
       recordset?: Record<string, unknown>[];
@@ -1487,10 +1714,8 @@ export class EmissionsService {
       const msg = parseSPError(err);
       this.throwIfBinacEmissionBlockedBySis2000(b, msg);
       if (!this.isCounterCollisionMessage(msg)) throw err;
-      this.logger.warn(`emitLocal: contador POL_VEH desfasado (${msg}); reintento tras sync`);
-      await this.syncPolVehCounter(
-        this.intField(this.pick(b, 'cramo', 'ramo')) ?? defaultRamo,
-      );
+      this.logger.warn(`emitLocal: contador POL_VEH desfasado (${msg}); reintento tras ${SP_CONTADOR_NEXUS}`);
+      await this.syncPolVehCounter(cramoEmit, fdesdeEmit);
       const retryReq = this.db.request();
       Object.entries(params).forEach(([key, field]) =>
         retryReq.input(key, (field as { type: unknown }).type, (field as { value: unknown }).value),
@@ -1538,23 +1763,34 @@ export class EmissionsService {
     }
 
     const ccanalalt = this.intField(this.pick(b, 'ccanalalt', 'ccanalalt_in'));
-    if (ccanalalt != null) {
+    const explicitGestor = this.pick<string>(b, 'cgestor');
+    const cgestor =
+      explicitGestor != null && String(explicitGestor).trim() !== ''
+        ? String(explicitGestor).trim()
+        : ccanalalt != null
+          ? await this.resolveEmissionGestor(b, ccanalalt)
+          : null;
+    const cproductor = this.intField(this.pick(b, 'cproductor'));
+    const cscanalalt = this.intField(this.pick(b, 'cscanalalt', 'cscanalalt_in'));
+
+    if (cgestor || ccanalalt != null || cproductor != null || cscanalalt != null) {
       try {
-        const cgestor = await this.resolveEmissionGestor(b, ccanalalt);
-        if (cgestor) {
-          await this.applyPolicyGestor(cnpoliza, cgestor);
-        } else {
-          this.logger.warn(
-            `emitLocal: canal ${ccanalalt} sin gestor en magestor (filtro UUID) cnpoliza=${cnpoliza}`,
-          );
-        }
+        await this.applyPolicyGestorAndCanal(
+          cnpoliza,
+          cgestor,
+          ccanalalt,
+          cscanalalt,
+          cproductor,
+        );
       } catch (err) {
         const msg = err instanceof Error ? err.message : String(err);
-        this.logger.warn(`applyPolicyGestor falló cnpoliza=${cnpoliza}: ${msg}`);
+        this.logger.warn(`applyPolicyGestorAndCanal falló cnpoliza=${cnpoliza}: ${msg}`);
       }
     }
 
     this.scheduleArysMembershipRegistration(cnpoliza, b);
+
+    const tarjetaKeys = await this.lookupPolicyTarjetaKeys(cnpoliza);
 
     return {
       message: 'Póliza generada exitosamente',
@@ -1565,6 +1801,7 @@ export class EmissionsService {
       ncuota,
       fanopol,
       fmespol,
+      ...tarjetaKeys,
     };
   }
 

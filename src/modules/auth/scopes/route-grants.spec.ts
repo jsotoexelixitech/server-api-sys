@@ -116,6 +116,33 @@ describe('grantMatchesRoute', () => {
     ).toBe(false);
   });
 
+  it('permite plantillas funerario hermanas si ya hay un mail/funeral-*', () => {
+    expect(
+      grantMatchesRoute(
+        ['POST /api/v1/mail/funeral-review-alert'],
+        'POST',
+        '/api/v1/mail/funeral-rejected',
+        'emissions:auto',
+      ),
+    ).toBe(true);
+    expect(
+      grantMatchesRoute(
+        ['POST /api/v1/mail/funeral-payment-link'],
+        'POST',
+        '/api/v1/mail/funeral-rejected',
+        'emissions:auto',
+      ),
+    ).toBe(true);
+    expect(
+      grantMatchesRoute(
+        ['POST /api/v1/mail/policy-emission'],
+        'POST',
+        '/api/v1/mail/funeral-rejected',
+        'emissions:auto',
+      ),
+    ).toBe(false);
+  });
+
   it('permite rutas públicas (sin scope requerido)', () => {
     expect(
       grantMatchesRoute([], 'POST', '/api/v1/personas/cotizacion', undefined),

@@ -31,6 +31,7 @@ import {
   parsePartnerPackageNames,
 } from './partner/partner-loader';
 import { readPartnerPackagesConfig } from './partner/partner-env';
+import { warnCatalogRoutesMissingFromOpenApi } from './modules/docs/open-api-catalog-audit';
 import { OpenApiDocumentStore } from './modules/docs/open-api-document.store';
 import { joinPublicPath } from './common/config/public-path';
 import { nestRequestAuthAls } from './modules/auth/nest-request-auth.context';
@@ -86,7 +87,8 @@ async function bootstrap(): Promise<void> {
   if (publicPaths.prefix) {
     app.getHttpAdapter().getInstance().use(`${publicPaths.prefix}/assets`, staticAssets);
   }
-  app.getHttpAdapter().getInstance().use(
+  const httpServerEarly = app.getHttpAdapter().getInstance();
+  httpServerEarly.use(
     '/admin',
     express.static(join(assetsDir, 'admin'), {
       index: 'index.html',
@@ -95,6 +97,25 @@ async function bootstrap(): Promise<void> {
       },
     }),
   );
+
+  const faviconFile = join(assetsDir, 'brand', 'favicon-64.png');
+  httpServerEarly.get('/favicon.ico', (_req: express.Request, res: express.Response) => {
+    if (!existsSync(faviconFile)) {
+      res.status(204).end();
+      return;
+    }
+    res.type('image/png');
+    res.setHeader('Cache-Control', 'public, max-age=86400');
+    res.sendFile(faviconFile);
+  });
+  httpServerEarly.get('/', (_req: express.Request, res: express.Response) => {
+    res.json({
+      status: true,
+      service: 'sysip-nest-api',
+      docs: `/${swaggerPath}`,
+      admin: '/admin',
+    });
+  });
 
   const brandLogoUrl = publicPaths.brandAssetUrl('brand/logo-lamundial-sidebar.png');
   const brandFaviconUrl = publicPaths.brandAssetUrl('brand/favicon-64.png');
@@ -206,6 +227,7 @@ async function bootstrap(): Promise<void> {
       }
     }
     app.get(OpenApiDocumentStore).setDocument(document);
+    warnCatalogRoutesMissingFromOpenApi(document, bootstrapLog);
 
     // Copia sanitizada solo para swagger-ui-init.js (Nest String.replace + $')
     const documentForUi = sanitizeSwaggerDocForNestUi(
