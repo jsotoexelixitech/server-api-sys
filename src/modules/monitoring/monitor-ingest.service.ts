@@ -141,6 +141,24 @@ export class MonitorIngestService {
     }
   }
 
+  /** Blocklist del monitor para esta app (GET security/blocklist). Devuelve null si no se pudo leer: el guard falla abierto. */
+  async fetchBlocklist(): Promise<{ enforce: boolean; bans: Array<{ ip: string; expiresAt: string }> } | null> {
+    try {
+      const target = await this.target();
+      if (!target) return null;
+      const res = await fetch(`${target.base}/security/blocklist?appId=${encodeURIComponent(target.cfg.monitorAppId)}`, {
+        headers: { 'x-monitor-ingest-token': target.token },
+        signal: AbortSignal.timeout(TIMEOUT_MS),
+      });
+      if (!res.ok) return null;
+      const data = (await res.json()) as { enforce?: boolean; bans?: Array<{ ip: string; expiresAt: string }> };
+      return { enforce: data.enforce === true, bans: Array.isArray(data.bans) ? data.bans : [] };
+    } catch (err) {
+      this.logger.debug(`fetchBlocklist: ${err instanceof Error ? err.message : String(err)}`);
+      return null;
+    }
+  }
+
   /** ¿Está activo el observador de seguridad? Permite a quien llama evitar trabajo si no lo está. */
   async securityObserveEnabled(): Promise<boolean> {
     const cfg = await this.config.get();

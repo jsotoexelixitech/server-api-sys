@@ -130,7 +130,7 @@ export class ArysController {
   @ApiOperation({
     summary: 'Actualizar la configuración del reintento (sin reiniciar PM2)',
     description:
-      'Campos opcionales: retryEnabled, retryIntervalSeconds, maxAttempts, retryBaseMinutes, retryMaxMinutes, batchSize, monitorEnabled, monitorUrl, monitorAppId, monitorToken, monitorReport5xx, monitorSecurityObserve, arysEmissionEnabled. Se aplica en ~30 s. El token nunca se devuelve.',
+      'Campos opcionales: retryEnabled, retryIntervalSeconds, maxAttempts, retryBaseMinutes, retryMaxMinutes, batchSize, monitorEnabled, monitorUrl, monitorAppId, monitorToken, monitorReport5xx, monitorSecurityObserve, monitorSecurityEnforce, arysEmissionEnabled. Se aplica en ~30 s. El token nunca se devuelve.',
   })
   async updateConfig(@Body() body: Partial<ArysMembershipConfigValues>) {
     return { status: true, result: await this.membershipConfig.update(body) };
