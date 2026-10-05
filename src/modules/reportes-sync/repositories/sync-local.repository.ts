@@ -19,6 +19,52 @@ const LOCAL_DATE_COLUMNS: Record<string, string> = {
   polizas: 'fecha_emision_poliza',
 };
 
+/**
+ * Columna local (PG) equivalente a la expresión de fecha del origen usada en el extract.
+ * Lista cerrada: el nombre de columna se interpola en el SQL del DELETE.
+ */
+const LOCAL_DATE_COLUMN_BY_ORIGIN_FIELD: Record<string, Record<string, string>> = {
+  recibos: {
+    femision: 'fecha_emision',
+    fdesde: 'fecha_desde',
+    fhasta: 'fecha_hasta',
+    fcobro: 'fecha_pago',
+    fanulacion: 'fecha_anulacion',
+  },
+};
+
+/** id_estatus local por letra de estado del origen (N/P/C/A). */
+const LOCAL_ESTATUS_BY_LETTER: Record<string, number> = {
+  N: 1,
+  P: 2,
+  C: 3,
+  A: 4,
+};
+
+export type LocalDeleteScope = {
+  /** Expresión de fecha del origen (p. ej. rec.fcobro) con la que se extrajo el rango. */
+  originDateExpr?: string | null;
+  /** Letra de estado aplicada en el extract (N/P/C/A), si hubo filtro. */
+  estadoLetter?: string | null;
+  /**
+   * El extract aplicó filtros adicionales (ramo, canal, productor...) que el DELETE no
+   * puede replicar: borrar el rango completo eliminaría filas que no se reinsertan.
+   * Se omite el DELETE por rango; el INSERT ya reemplaza por clave de origen.
+   */
+  skipRangeDelete?: boolean;
+};
+
+/** Traduce la expresión de fecha del origen a columna local; null si no hay equivalente. */
+export function resolveLocalDateColumn(
+  entidad: string,
+  originDateExpr?: string | null,
+): string | null {
+  const map = LOCAL_DATE_COLUMN_BY_ORIGIN_FIELD[entidad];
+  if (!map || !originDateExpr) return null;
+  const field = originDateExpr.trim().replace(/^\w+\./, '').toLowerCase();
+  return map[field] ?? null;
+}
+
 @Injectable()
 export class SyncLocalRepository {
   constructor(private readonly reportesPg: ReportesPgService) {}
@@ -41,13 +87,18 @@ export class SyncLocalRepository {
     entidad: string,
     desde?: Date | null,
     hasta?: Date | null,
+    scope?: LocalDeleteScope,
   ): Promise<number> {
     if (CATALOG_TABLES[entidad as CatalogEntidad]) return 0;
 
     const table = LOCAL_TABLES[entidad];
     if (!table) return 0;
+    if (scope?.skipRangeDelete) return 0;
 
-    const dateCol = LOCAL_DATE_COLUMNS[entidad];
+    // El DELETE debe cubrir exactamente lo que el extract vuelve a insertar: misma
+    // columna de fecha y mismo estado. Si no, se pierden filas que el extract no trae.
+    const scopedCol = resolveLocalDateColumn(entidad, scope?.originDateExpr);
+    const dateCol = scopedCol || LOCAL_DATE_COLUMNS[entidad];
     const params: Record<string, unknown> = { aseguradoraId };
     const clauses = ['id_aseguradora = @aseguradoraId'];
 
@@ -56,8 +107,20 @@ export class SyncLocalRepository {
       params.desde = desde;
     }
     if (dateCol && hasta) {
-      clauses.push(`${dateCol} <= @hasta`);
+      // Columnas timestamp: el extract usa < hasta + 1 día (incluye todo el día final).
+      clauses.push(
+        scopedCol
+          ? `${dateCol} < (@hasta::date + 1)`
+          : `${dateCol} <= @hasta`,
+      );
       params.hasta = hasta;
+    }
+    if (scopedCol && scope?.estadoLetter) {
+      const idEstatus = LOCAL_ESTATUS_BY_LETTER[scope.estadoLetter];
+      if (idEstatus !== undefined) {
+        clauses.push('id_estatus = @idEstatus');
+        params.idEstatus = idEstatus;
+      }
     }
 
     const query = `DELETE FROM ${table} WHERE ${clauses.join(' AND ')}`;

@@ -5,8 +5,16 @@ import { InsurerAdapterFactory } from './insurers/adapters/insurer-adapter.facto
 import { SyncWatermarkRepository } from './repositories/sync-watermark.repository';
 import { SyncLockService } from './utils/sync-lock.service';
 import { SyncUpsertRepository } from './repositories/sync-upsert.repository';
-import { SyncLocalRepository } from './repositories/sync-local.repository';
+import {
+  SyncLocalRepository,
+  type LocalDeleteScope,
+} from './repositories/sync-local.repository';
 import { isCatalogEntidad } from './utils/sync-catalog.constants';
+import {
+  hasExtraOriginFilters,
+  resolveDateColumn,
+  resolveEstadoLetter,
+} from './utils/origin-query.params';
 import { mapRowFromConfig } from './insurers/mapping/column-mapper';
 import type {
   InsurerAdapter,
@@ -76,6 +84,25 @@ export class SyncService {
 
   private isSyncEnabled(): boolean {
     return this.config.get<boolean>('REPORTES_SYNC_ENABLED', false) === true;
+  }
+
+  /**
+   * Alcance del DELETE local de recibos: solo cuando el extract filtra el rango con el
+   * placeholder SYNC_DATE_COL (modo query); en otros modos se conserva el comportamiento previo.
+   */
+  private buildDeleteScope(
+    entidad: string,
+    plan: ExtractionPlan | undefined,
+    syncFiltros: Record<string, unknown>,
+  ): LocalDeleteScope | undefined {
+    const originConfig = plan?.originConfig;
+    if (entidad !== 'recibos' || !originConfig?.querySql) return undefined;
+    if (!originConfig.querySql.includes('/*SYNC_DATE_COL*/')) return undefined;
+    return {
+      originDateExpr: resolveDateColumn(syncFiltros, originConfig),
+      estadoLetter: resolveEstadoLetter(syncFiltros, originConfig),
+      skipRangeDelete: hasExtraOriginFilters(syncFiltros, originConfig),
+    };
   }
 
   private getTtlMs(entidad: string): number {
@@ -528,6 +555,7 @@ export class SyncService {
           entidad,
           filtros.desde,
           filtros.hasta,
+          this.buildDeleteScope(entidad, plan, syncFiltros),
         );
       }
 
