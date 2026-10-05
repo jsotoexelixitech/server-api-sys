@@ -158,6 +158,16 @@ export class PersonasService {
     return Number.isFinite(n) ? n : null;
   }
 
+  /** precargo / pdescuento (%) del asegurado solo si vienen con valor > 0. */
+  private pctFields(a: Record<string, unknown>): { precargo?: number; pdescuento?: number } {
+    const precargo = this.decimalField(a.precargo);
+    const pdescuento = this.decimalField(a.pdescuento);
+    return {
+      ...(precargo && precargo > 0 ? { precargo } : {}),
+      ...(pdescuento && pdescuento > 0 ? { pdescuento } : {}),
+    };
+  }
+
   /** JSON de asegurados al formato OPENJSON del pre-SP personas. */
   private mapAseguradosForSp(
     lista: Record<string, unknown>[],
@@ -190,6 +200,8 @@ export class PersonasService {
         correo_asegurado: a.xcorreo_asegurado ?? a.correo_asegurado ?? a.email ?? null,
         npeso_asegurado: this.decimalField(a.npeso_asegurado ?? a.peso),
         nestatura_asegurado: this.decimalField(a.nestatura_asegurado ?? a.estatura),
+        // % del cuestionario (pre-SP v3 los guarda en _ASEG; v2 ignora estas claves).
+        ...this.pctFields(a),
       };
     });
     return JSON.stringify(mapped);
@@ -1328,6 +1340,14 @@ export class PersonasService {
             value: this.mapBeneficiariosForSp(beneficiarios as Record<string, unknown>[], getPar),
           },
         };
+
+        // % del titular (cuestionario): solo si viene, para no romper el pre-SP v2 que no tiene estos parámetros.
+        const titularPct = this.pctFields({
+          precargo: b['precargo_titular'],
+          pdescuento: b['pdescuento_titular'],
+        });
+        if (titularPct.precargo) params.precargo_titular = { type: T.Numeric(13, 2), value: titularPct.precargo };
+        if (titularPct.pdescuento) params.pdescuento_titular = { type: T.Numeric(13, 2), value: titularPct.pdescuento };
 
         Object.entries(params).forEach(([key, field]) =>
           req.input(key, (field as { type: unknown }).type, (field as { value: unknown }).value),
