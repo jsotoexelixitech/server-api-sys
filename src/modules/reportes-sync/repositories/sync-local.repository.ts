@@ -1,5 +1,8 @@
 import { Injectable } from '@nestjs/common';
-import { ReportesPgService } from '../../../database/reportes-pg.service';
+import {
+  ReportesPgService,
+  type PgTransaction,
+} from '../../../database/reportes-pg.service';
 import { firstRow } from '../utils/sync.helpers';
 import {
   CATALOG_TABLES,
@@ -88,6 +91,7 @@ export class SyncLocalRepository {
     desde?: Date | null,
     hasta?: Date | null,
     scope?: LocalDeleteScope,
+    tx?: PgTransaction,
   ): Promise<number> {
     if (CATALOG_TABLES[entidad as CatalogEntidad]) return 0;
 
@@ -124,7 +128,7 @@ export class SyncLocalRepository {
     }
 
     const query = `DELETE FROM ${table} WHERE ${clauses.join(' AND ')}`;
-    const result = await this.reportesPg.executeQuery(query, params);
+    const result = await (tx ?? this.reportesPg).executeQuery(query, params);
     if ('error' in result && result.error) {
       throw new Error(result.message);
     }
@@ -139,6 +143,7 @@ export class SyncLocalRepository {
     aseguradoraId: number,
     entidad: string,
     origenClaves: string[],
+    tx?: PgTransaction,
   ): Promise<number> {
     if (CATALOG_TABLES[entidad as CatalogEntidad]) return 0;
     const table = LOCAL_TABLES[entidad];
@@ -149,7 +154,7 @@ export class SyncLocalRepository {
     );
     if (unique.length === 0) return 0;
 
-    const result = await this.reportesPg.executeQuery(
+    const result = await (tx ?? this.reportesPg).executeQuery(
       `DELETE FROM ${table}
        WHERE id_aseguradora = @aseguradoraId
          AND origen_clave = ANY(@origenClaves::text[])`,

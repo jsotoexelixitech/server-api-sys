@@ -33,6 +33,21 @@ export interface ReportesQueryError {
 
 export type ReportesQueryResult = ReportesQuerySuccess | ReportesQueryError;
 
+/** Ejecutor ligado a una transacción abierta; lanza ante error (provoca ROLLBACK). */
+export interface PgTransaction {
+  executeQuery(
+    query: string,
+    params?: Record<string, unknown>,
+  ): Promise<ReportesQuerySuccess>;
+}
+
+export type PgIsolationLevel = 'READ COMMITTED' | 'REPEATABLE READ';
+
+export interface ExecuteSpOptions {
+  /** REPEATABLE READ: todos los cursores del SP ven el mismo snapshot. */
+  isolationLevel?: PgIsolationLevel;
+}
+
 type PgRoutineRow = {
   schema_name: string;
   routine_name: string;
@@ -565,9 +580,38 @@ export class ReportesPgService implements OnModuleInit, OnModuleDestroy {
     };
   }
 
+  /**
+   * Ejecuta varias sentencias en una sola transacción: los lectores concurrentes
+   * ven el estado anterior hasta el COMMIT (sin estados intermedios).
+   */
+  async runInTransaction<T>(fn: (tx: PgTransaction) => Promise<T>): Promise<T> {
+    this.assertEnabled();
+    if (!this.pool) await this.connect();
+
+    const client = await this.acquireClient();
+    let hadError = false;
+    try {
+      await client.query('BEGIN');
+      const tx: PgTransaction = {
+        executeQuery: async (query, params = {}) =>
+          normalizeResult(await client.query(buildNamedQuery(query, params))),
+      };
+      const result = await fn(tx);
+      await client.query('COMMIT');
+      return result;
+    } catch (error) {
+      hadError = true;
+      await safeRollback(client);
+      throw error;
+    } finally {
+      this.releaseClient(client, hadError);
+    }
+  }
+
   async executeSP(
     spName: string,
     params: Record<string, unknown> = {},
+    options: ExecuteSpOptions = {},
   ): Promise<ReportesQueryResult> {
     try {
       this.assertEnabled();
@@ -581,7 +625,11 @@ export class ReportesPgService implements OnModuleInit, OnModuleDestroy {
             throw new Error(`PostgreSQL routine "${spName}" not found`);
           }
 
-          await client.query('BEGIN');
+          await client.query(
+            options.isolationLevel === 'REPEATABLE READ'
+              ? 'BEGIN ISOLATION LEVEL REPEATABLE READ'
+              : 'BEGIN',
+          );
           const result =
             routine.prokind === 'p'
               ? await this.executeProcedure(client, routine, params)
