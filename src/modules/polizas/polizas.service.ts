@@ -6,6 +6,10 @@ import { DynamicSchemasService } from '../dynamic-schemas/dynamic-schemas.servic
 import { AseguradoraResolverService } from '../reportes-sync/aseguradora-resolver.service';
 import { SyncContextService } from '../reportes-sync/sync-context.service';
 import { buildReportExportBuffer } from '../reportes-shared/report-export.util';
+import {
+  mapEstatusCatalogRows,
+  normalizeEstatusFiltro,
+} from './polizas-estatus.util';
 
 
 let reportesPgRef;
@@ -216,6 +220,41 @@ async function getCanalesCatalog(campo, aseguradoraId = null) {
   return result;
 }
 
+/**
+ * Catálogo de estatus para el filtro. El campo cestatus puede no tener lista_valores y usar
+ * un catálogo dinámico, así que se consulta: 1) el SP del campo (xsp_lista) o sp_obtener_estatus,
+ * 2) la tabla `estatus` directamente. Las opciones salen con la descripción en mayúsculas como
+ * valor, porque sp_rpt_polizas compara contra poliza.estatus_poliza (texto), no contra el ID.
+ * Nunca devuelve error: un [] deja actuar al respaldo del schema.
+ */
+async function getEstatusCatalog(campo, aseguradoraId = null) {
+  const configured = String(campo?.xsp_lista || '').trim();
+  const spName = configured || 'sp_obtener_estatus';
+
+  try {
+    // sp_obtener_estatus no recibe parámetros; un SP configurado puede pedir la aseguradora.
+    const result = await getDb().executeSP(
+      spName,
+      configured && aseguradoraId ? { p_id_aseguradora: aseguradoraId } : {},
+    );
+    if (!result?.error) {
+      const options = mapEstatusCatalogRows(result?.recordset);
+      if (options.length > 0) return options;
+    }
+  } catch (_) {
+    // cae al respaldo por tabla
+  }
+
+  const direct = await getDb().executeQuery(
+    `SELECT id AS cestatus, descripcion AS xdescripcion
+     FROM estatus
+     WHERE activo = TRUE
+     ORDER BY id ASC`,
+  );
+  if (direct?.error) return [];
+  return mapEstatusCatalogRows(direct.recordset);
+}
+
 function opcionesFromCampo(campo) {
   if (!Array.isArray(campo?.opciones) || campo.opciones.length === 0) return [];
   return campo.opciones
@@ -304,6 +343,10 @@ function buildExecutePayload(body, schema) {
       payload.filtros[targetKey] = picked;
     }
   }
+
+  // sp_rpt_polizas compara con poliza.estatus_poliza (texto en mayúsculas): un ID numérico
+  // del catálogo ('3') no coincidiría con 'PAGADO'.
+  payload.filtros.cestatus = normalizeEstatusFiltro(payload.filtros.cestatus);
 
   const aseguradoraId = filtros.aseguradoraId ?? filtros.id_aseguradora;
   if (aseguradoraId !== undefined && aseguradoraId !== null && String(aseguradoraId).trim() !== '') {
@@ -858,7 +901,9 @@ function buildPolizasGraphics(graficoDefinitions, rows, filtros) {
 /**
  * Mismo contrato que siniestros.getFiltros:
  * { ramos, estatus, productos, canales, productores, moneda? }
- * Estatus y moneda: SOLO lista_valores (nunca sp_obtener_estatus / sp_lista).
+ * Estatus: lista_valores fija si existe; si no, catálogo (sp_obtener_estatus o tabla estatus)
+ * con la descripción en mayúsculas como valor; si no, opciones del schema.
+ * Moneda: SOLO lista_valores.
  * Canales: sp_lista del campo ccanal (p. ej. sp_obtener_canales_alternos).
  */
 async function loadFiltrosOpciones(user, headers, aseguradoraId = null) {
@@ -870,24 +915,29 @@ async function loadFiltrosOpciones(user, headers, aseguradoraId = null) {
 
   const campos = (schema.campos || []).filter((c) => !c.hidden);
   const canalCampo = findCampo(campos, 'ccanal', 'canal');
+  const estatusCampo = findCampo(campos, 'cestatus', 'estatus');
 
-  const [ramos, productores, canales, estatusDb, monedaDb] = await Promise.all([
+  const [ramos, productores, canales, estatusDb, estatusCatalog, monedaDb] = await Promise.all([
     getRamosCatalog(resolvedAseguradoraId),
     getProductoresCatalog(resolvedAseguradoraId),
     getCanalesCatalog(canalCampo, resolvedAseguradoraId),
     opcionesDesdeListaValoresDb('cestatus'),
+    getEstatusCatalog(estatusCampo, resolvedAseguradoraId),
     opcionesDesdeListaValoresDb('moneda'),
   ]);
   if (ramos.error) return ramos;
   if (productores.error) return productores;
   if (canales.error) return canales;
 
-  const estatusCampo = findCampo(campos, 'cestatus', 'estatus');
   const monedaCampo = findCampo(campos, 'moneda', 'cmoneda');
   const estatusFromSchema = opcionesFromCampo(estatusCampo);
   const monedaFromSchema = opcionesFromCampo(monedaCampo);
 
-  const estatus = estatusDb.length > 0 ? estatusDb : estatusFromSchema;
+  const estatus = estatusDb.length > 0
+    ? estatusDb
+    : estatusCatalog.length > 0
+      ? estatusCatalog
+      : estatusFromSchema;
   const moneda = monedaDb.length > 0 ? monedaDb : monedaFromSchema;
 
   return {
