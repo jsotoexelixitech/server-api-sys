@@ -13,6 +13,7 @@ const row = {
   monitorToken: 'tok',
   monitorReport5xx: true,
   monitorSecurityObserve: false,
+  monitorSecurityEnforce: false,
 };
 
 function build(findUnique: jest.Mock) {

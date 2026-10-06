@@ -2,6 +2,7 @@ import { Module } from '@nestjs/common';
 import { SyncContextService } from './sync-context.service';
 import { SyncService } from './sync.service';
 import { SyncOrchestratorService } from './sync-orchestrator.service';
+import { SyncSchedulerService } from './sync-scheduler.service';
 import { AseguradoraResolverService } from './aseguradora-resolver.service';
 import { SyncUpsertRepository } from './repositories/sync-upsert.repository';
 import { SyncWatermarkRepository } from './repositories/sync-watermark.repository';
@@ -28,6 +29,7 @@ import { OriginAdapterFactory } from './origin-db/origin-adapter.factory';
     SyncService,
     SyncContextService,
     SyncOrchestratorService,
+    SyncSchedulerService,
   ],
   exports: [
     SyncContextService,
