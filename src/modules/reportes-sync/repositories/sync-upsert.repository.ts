@@ -1,5 +1,8 @@
 import { Injectable } from '@nestjs/common';
-import { ReportesPgService } from '../../../database/reportes-pg.service';
+import {
+  ReportesPgService,
+  type PgTransaction,
+} from '../../../database/reportes-pg.service';
 
 @Injectable()
 export class SyncUpsertRepository {
@@ -8,8 +11,9 @@ export class SyncUpsertRepository {
   private async exec(
     query: string,
     params: Record<string, unknown>,
+    tx?: PgTransaction,
   ): Promise<void> {
-    const result = await this.reportesPg.executeQuery(query, params);
+    const result = await (tx ?? this.reportesPg).executeQuery(query, params);
     if ('error' in result && result.error) {
       throw new Error(result.message);
     }
@@ -30,6 +34,7 @@ export class SyncUpsertRepository {
   async insertRecibosBatch(
     aseguradoraId: number,
     rows: Record<string, unknown>[],
+    tx?: PgTransaction,
   ): Promise<void> {
     if (!rows.length) return;
 
@@ -38,7 +43,7 @@ export class SyncUpsertRepository {
        id_aseguradora, origen_clave, fecha_emision, fecha_anulacion, fecha_desde, fecha_hasta,
        poliza, recibo, cliente, cedula, id_ramo, id_canal, id_productor, id_frecuencia,
        id_estatus, monto_recibo, monto_recibo_ext, numero_cuota, moneda, fecha_pago, tipo_recibo,
-       coberturas, synced_at
+       coberturas, tipo_canal, synced_at
      )
      SELECT
        @aseguradoraId,
@@ -63,6 +68,7 @@ export class SyncUpsertRepository {
        t.fecha_pago,
        t.tipo_recibo,
        t.coberturas,
+       t.tipo_canal,
        NOW()
      FROM unnest(
        @origenClaves::text[],
@@ -85,12 +91,13 @@ export class SyncUpsertRepository {
        @monedas::text[],
        @fechasPago::timestamptz[],
        @tiposRecibo::text[],
-       @coberturas::text[]
+       @coberturas::text[],
+       @tiposCanal::text[]
      ) AS t(
        origen_clave, fecha_emision, fecha_anulacion, fecha_desde, fecha_hasta,
        poliza, recibo, cliente, cedula, id_ramo, id_canal, id_productor, id_frecuencia,
        id_estatus, monto_recibo, monto_recibo_ext, numero_cuota, moneda, fecha_pago,
-       tipo_recibo, coberturas
+       tipo_recibo, coberturas, tipo_canal
      )`,
       {
         aseguradoraId,
@@ -117,7 +124,9 @@ export class SyncUpsertRepository {
         fechasPago: rows.map((r) => r.fechaPago ?? null),
         tiposRecibo: rows.map((r) => r.tipoRecibo ?? null),
         coberturas: rows.map((r) => r.coberturas ?? ''),
+        tiposCanal: rows.map((r) => r.tipoCanal ?? null),
       },
+      tx,
     );
   }
 
@@ -143,7 +152,8 @@ export class SyncUpsertRepository {
        monto_reserva_ext, monto_pagado_bs, monto_pagado_ext, tipo_movimiento, numero_orden_pago,
        fecha_emision_orden, fecha_pago_orden, id_estatus, productor, plan_poliza,
        id_sucursal_receptora, sucursal_receptora, id_anulacion, anulacion, fecha_anulacion,
-       id_rechazo, rechazo, fecha_rechazo, tasa_cambio, cobertura_afectada, synced_at
+       id_rechazo, rechazo, fecha_rechazo, tasa_cambio, cobertura_afectada, id_canal, tipo_canal,
+       synced_at
      ) VALUES (
        @aseguradoraId, @origenClave, @idRamo, @numeroPoliza, @numeroSiniestro,
        @cedulaAsegurado, @nombreApellidoAsegurado, @certificado, @placa, @serialCarroceria,
@@ -153,7 +163,8 @@ export class SyncUpsertRepository {
        @montoReservaExt, @montoPagadoBs, @montoPagadoExt, @tipoMovimiento, @numeroOrdenPago,
        @fechaEmisionOrden, @fechaPagoOrden, @idEstatus, @productor, @planPoliza,
        @idSucursalReceptora, @sucursalReceptora, @idAnulacion, @anulacion, @fechaAnulacion,
-       @idRechazo, @rechazo, @fechaRechazo, @tasaCambio, @coberturaAfectada, NOW()
+       @idRechazo, @rechazo, @fechaRechazo, @tasaCambio, @coberturaAfectada, @idCanal, @tipoCanal,
+       NOW()
      )
      ON CONFLICT (id_aseguradora, origen_clave) WHERE origen_clave IS NOT NULL
      DO UPDATE SET
@@ -199,6 +210,8 @@ export class SyncUpsertRepository {
        fecha_rechazo = EXCLUDED.fecha_rechazo,
        tasa_cambio = EXCLUDED.tasa_cambio,
        cobertura_afectada = EXCLUDED.cobertura_afectada,
+       id_canal = EXCLUDED.id_canal,
+       tipo_canal = EXCLUDED.tipo_canal,
        synced_at = NOW()`,
       {
         aseguradoraId,
@@ -245,6 +258,8 @@ export class SyncUpsertRepository {
         fechaRechazo: row.fechaRechazo,
         tasaCambio: row.tasaCambio,
         coberturaAfectada: row.coberturaAfectada ?? '',
+        idCanal: row.idCanal ?? null,
+        tipoCanal: row.tipoCanal ?? null,
       },
     );
   }

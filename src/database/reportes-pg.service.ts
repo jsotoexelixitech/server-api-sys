@@ -33,6 +33,21 @@ export interface ReportesQueryError {
 
 export type ReportesQueryResult = ReportesQuerySuccess | ReportesQueryError;
 
+/** Ejecutor ligado a una transacción abierta; lanza ante error (provoca ROLLBACK). */
+export interface PgTransaction {
+  executeQuery(
+    query: string,
+    params?: Record<string, unknown>,
+  ): Promise<ReportesQuerySuccess>;
+}
+
+export type PgIsolationLevel = 'READ COMMITTED' | 'REPEATABLE READ';
+
+export interface ExecuteSpOptions {
+  /** REPEATABLE READ: todos los cursores del SP ven el mismo snapshot. */
+  isolationLevel?: PgIsolationLevel;
+}
+
 type PgRoutineRow = {
   schema_name: string;
   routine_name: string;
@@ -565,9 +580,74 @@ export class ReportesPgService implements OnModuleInit, OnModuleDestroy {
     };
   }
 
+  /**
+   * Toma un advisory lock de sesión en una conexión dedicada. El lock pertenece a la
+   * conexión que lo tomó: por eso se retiene el cliente hasta liberar (con el pool, el
+   * unlock podía salir por otra conexión y dejar el lock colgado).
+   * Devuelve la función de liberación, o null si otro proceso ya tiene el lock.
+   */
+  async tryAdvisoryLock(key: number): Promise<(() => Promise<void>) | null> {
+    this.assertEnabled();
+    if (!this.pool) await this.connect();
+
+    const client = await this.acquireClient();
+    try {
+      const result = await client.query(
+        'SELECT pg_try_advisory_lock($1) AS locked',
+        [key],
+      );
+      if (!result.rows?.[0]?.locked) {
+        this.releaseClient(client);
+        return null;
+      }
+    } catch (error) {
+      this.releaseClient(client, true);
+      throw error;
+    }
+
+    return async () => {
+      try {
+        await client.query('SELECT pg_advisory_unlock($1)', [key]);
+        this.releaseClient(client);
+      } catch {
+        // Descartar la conexión cierra la sesión y libera el lock en el servidor.
+        this.releaseClient(client, true);
+      }
+    };
+  }
+
+  /**
+   * Ejecuta varias sentencias en una sola transacción: los lectores concurrentes
+   * ven el estado anterior hasta el COMMIT (sin estados intermedios).
+   */
+  async runInTransaction<T>(fn: (tx: PgTransaction) => Promise<T>): Promise<T> {
+    this.assertEnabled();
+    if (!this.pool) await this.connect();
+
+    const client = await this.acquireClient();
+    let hadError = false;
+    try {
+      await client.query('BEGIN');
+      const tx: PgTransaction = {
+        executeQuery: async (query, params = {}) =>
+          normalizeResult(await client.query(buildNamedQuery(query, params))),
+      };
+      const result = await fn(tx);
+      await client.query('COMMIT');
+      return result;
+    } catch (error) {
+      hadError = true;
+      await safeRollback(client);
+      throw error;
+    } finally {
+      this.releaseClient(client, hadError);
+    }
+  }
+
   async executeSP(
     spName: string,
     params: Record<string, unknown> = {},
+    options: ExecuteSpOptions = {},
   ): Promise<ReportesQueryResult> {
     try {
       this.assertEnabled();
@@ -581,7 +661,11 @@ export class ReportesPgService implements OnModuleInit, OnModuleDestroy {
             throw new Error(`PostgreSQL routine "${spName}" not found`);
           }
 
-          await client.query('BEGIN');
+          await client.query(
+            options.isolationLevel === 'REPEATABLE READ'
+              ? 'BEGIN ISOLATION LEVEL REPEATABLE READ'
+              : 'BEGIN',
+          );
           const result =
             routine.prokind === 'p'
               ? await this.executeProcedure(client, routine, params)

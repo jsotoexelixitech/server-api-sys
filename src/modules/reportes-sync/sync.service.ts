@@ -1,12 +1,24 @@
 import { Injectable, Logger } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
+import {
+  ReportesPgService,
+  type PgTransaction,
+} from '../../database/reportes-pg.service';
 import { InsurerConnectionService } from './insurers/insurer-connection.service';
 import { InsurerAdapterFactory } from './insurers/adapters/insurer-adapter.factory';
 import { SyncWatermarkRepository } from './repositories/sync-watermark.repository';
 import { SyncLockService } from './utils/sync-lock.service';
 import { SyncUpsertRepository } from './repositories/sync-upsert.repository';
-import { SyncLocalRepository } from './repositories/sync-local.repository';
+import {
+  SyncLocalRepository,
+  type LocalDeleteScope,
+} from './repositories/sync-local.repository';
 import { isCatalogEntidad } from './utils/sync-catalog.constants';
+import {
+  hasExtraOriginFilters,
+  resolveDateColumn,
+  resolveEstadoLetter,
+} from './utils/origin-query.params';
 import { mapRowFromConfig } from './insurers/mapping/column-mapper';
 import type {
   InsurerAdapter,
@@ -61,6 +73,7 @@ export class SyncService {
     private readonly syncLock: SyncLockService,
     private readonly upsertRepo: SyncUpsertRepository,
     private readonly localRepo: SyncLocalRepository,
+    private readonly reportesPg: ReportesPgService,
   ) {
     this.upsertHandlers = {
       recibos: (id, row) => this.upsertRepo.upsertRecibo(id, row),
@@ -76,6 +89,25 @@ export class SyncService {
 
   private isSyncEnabled(): boolean {
     return this.config.get<boolean>('REPORTES_SYNC_ENABLED', false) === true;
+  }
+
+  /**
+   * Alcance del DELETE local de recibos: solo cuando el extract filtra el rango con el
+   * placeholder SYNC_DATE_COL (modo query); en otros modos se conserva el comportamiento previo.
+   */
+  private buildDeleteScope(
+    entidad: string,
+    plan: ExtractionPlan | undefined,
+    syncFiltros: Record<string, unknown>,
+  ): LocalDeleteScope | undefined {
+    const originConfig = plan?.originConfig;
+    if (entidad !== 'recibos' || !originConfig?.querySql) return undefined;
+    if (!originConfig.querySql.includes('/*SYNC_DATE_COL*/')) return undefined;
+    return {
+      originDateExpr: resolveDateColumn(syncFiltros, originConfig),
+      estadoLetter: resolveEstadoLetter(syncFiltros, originConfig),
+      skipRangeDelete: hasExtraOriginFilters(syncFiltros, originConfig),
+    };
   }
 
   private getTtlMs(entidad: string): number {
@@ -217,6 +249,7 @@ export class SyncService {
     adapter: InsurerAdapter,
     batch: Record<string, unknown>[],
     connectionConfig: InsurerConnectionConfig,
+    tx?: PgTransaction,
   ): Promise<number> {
     const mappedRows: Record<string, unknown>[] = [];
     for (const row of batch) {
@@ -231,7 +264,7 @@ export class SyncService {
     if (mappedRows.length === 0) return 0;
 
     if (entidad === 'recibos') {
-      await this.upsertRepo.insertRecibosBatch(aseguradoraId, mappedRows);
+      await this.upsertRepo.insertRecibosBatch(aseguradoraId, mappedRows, tx);
       return mappedRows.length;
     }
 
@@ -454,6 +487,9 @@ export class SyncService {
         entidad,
         rowsSynced: 0,
         skipped: true,
+        // El reporte seguirá con los datos locales vigentes (consistentes: la escritura
+        // de recibos es transaccional) pero pueden no incluir el sync en curso.
+        stale: true,
         warning: 'Sincronización en curso por otro proceso',
         durationMs: Date.now() - started,
       };
@@ -519,70 +555,85 @@ export class SyncService {
               plan.params,
             );
 
-      if (!skipDelete) {
-        this.syncLog(
-          `${entidad}: borrando en PG destino (aseguradora ${aseguradoraId}, rango fechas); origen no se toca`,
-        );
-        await this.localRepo.deleteLocalRows(
-          aseguradoraId,
-          entidad,
-          filtros.desde,
-          filtros.hasta,
-        );
-      }
-
-      // Recibos: también borrar por origen_clave del extract (el filtro puede usar
-      // fecha_pago/desde/hasta ≠ fecha_emision del DELETE por rango).
-      if (entidad === 'recibos' && !catalog) {
-        const claves = this.collectOrigenClaves(
-          entidad,
-          rows,
-          adapter,
-          connectionConfig,
-        );
-        if (claves.length > 0) {
+      // Escritura en PG destino. Para recibos va en UNA transacción (DELETE + INSERT):
+      // los lectores concurrentes (otro usuario ejecutando el reporte) ven el estado
+      // anterior completo hasta el COMMIT, nunca un rango a medias.
+      const writeTarget = async (tx?: PgTransaction) => {
+        if (!skipDelete) {
           this.syncLog(
-            `${entidad}: borrando ${claves.length} claves de origen en PG destino antes de INSERT`,
+            `${entidad}: borrando en PG destino (aseguradora ${aseguradoraId}, rango fechas); origen no se toca`,
           );
-          await this.localRepo.deleteByOrigenClaves(
+          await this.localRepo.deleteLocalRows(
             aseguradoraId,
             entidad,
-            claves,
+            filtros.desde,
+            filtros.hasta,
+            this.buildDeleteScope(entidad, plan, syncFiltros),
+            tx,
           );
         }
-      }
 
-      let rowsSynced = 0;
-      let maxModifiedAt: Date | null = null;
-
-      const batchSize = this.getBatchSize();
-      const rowsToWrite =
-        entidad === 'recibos'
-          ? this.dedupeRowsByOrigenClave(
+        // Recibos: también borrar por origen_clave del extract (el filtro puede usar
+        // fecha_pago/desde/hasta ≠ fecha_emision del DELETE por rango).
+        if (entidad === 'recibos' && !catalog) {
+          const claves = this.collectOrigenClaves(
+            entidad,
+            rows,
+            adapter,
+            connectionConfig,
+          );
+          if (claves.length > 0) {
+            this.syncLog(
+              `${entidad}: borrando ${claves.length} claves de origen en PG destino antes de INSERT`,
+            );
+            await this.localRepo.deleteByOrigenClaves(
+              aseguradoraId,
               entidad,
-              rows,
-              adapter,
-              connectionConfig,
-            )
-          : rows;
+              claves,
+              tx,
+            );
+          }
+        }
 
-      for (let i = 0; i < rowsToWrite.length; i += batchSize) {
-        const batch = rowsToWrite.slice(i, i + batchSize);
-        rowsSynced += await this.upsertBatch(
-          entidad,
-          aseguradoraId,
-          adapter,
-          batch,
-          connectionConfig,
-        );
-        maxModifiedAt = this.trackMaxModified(
-          batch,
-          adapter,
-          entidad,
-          maxModifiedAt,
-          connectionConfig,
-        );
-      }
+        let written = 0;
+        let maxModified: Date | null = null;
+
+        const batchSize = this.getBatchSize();
+        const rowsToWrite =
+          entidad === 'recibos'
+            ? this.dedupeRowsByOrigenClave(
+                entidad,
+                rows,
+                adapter,
+                connectionConfig,
+              )
+            : rows;
+
+        for (let i = 0; i < rowsToWrite.length; i += batchSize) {
+          const batch = rowsToWrite.slice(i, i + batchSize);
+          written += await this.upsertBatch(
+            entidad,
+            aseguradoraId,
+            adapter,
+            batch,
+            connectionConfig,
+            tx,
+          );
+          maxModified = this.trackMaxModified(
+            batch,
+            adapter,
+            entidad,
+            maxModified,
+            connectionConfig,
+          );
+        }
+        return { rowsSynced: written, maxModifiedAt: maxModified };
+      };
+
+      const { rowsSynced, maxModifiedAt } =
+        entidad === 'recibos' && !catalog
+          ? await this.reportesPg.runInTransaction((tx) => writeTarget(tx))
+          : await writeTarget();
 
       await this.watermarkRepo.upsertWatermark(aseguradoraId, entidad, {
         lastModifiedAt: maxModifiedAt,

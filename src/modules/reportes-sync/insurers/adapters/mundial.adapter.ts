@@ -117,6 +117,7 @@ export const mundialAdapter: InsurerAdapter = {
       cedula: toStr(pick(row, 'cedula', 'documento')),
       idRamo: toNum(pick(row, 'id_ramo', 'idramo', 'cramo')),
       idCanal: toNum(pick(row, 'id_canal', 'idcanal', 'ccanal', 'ccanalalt')),
+      tipoCanal: toStr(pick(row, 'tipo_canal', 'tipocanal')),
       idProductor: toNum(pick(row, 'id_productor', 'idproductor', 'cproductor')),
       idFrecuencia: toStr(pick(row, 'id_frecuencia', 'idfrecuencia')),
       idEstatus: mapIestadorec(
@@ -186,6 +187,8 @@ export const mundialAdapter: InsurerAdapter = {
       fechaPagoOrden: toDateOnly(pick(row, 'fecha_pago_orden')),
       idEstatus: toNum(pick(row, 'id_estatus', 'cestatus')),
       productor: toStr(pick(row, 'productor', 'cproductor')),
+      idCanal: toNum(pick(row, 'id_canal', 'idcanal')),
+      tipoCanal: toStr(pick(row, 'tipo_canal', 'tipocanal')),
       planPoliza: toStr(pick(row, 'plan_poliza')),
       idSucursalReceptora: toNum(pick(row, 'id_sucursal_receptora')),
       sucursalReceptora: toStr(pick(row, 'sucursal_receptora')),

@@ -10,6 +10,7 @@ export type ResolvedOriginConfig = {
   watermarkCol: string;
   watermarkExpr: string | null;
   dateColByTipoFecha: Record<string, string> | null;
+  dateColByEstado: Record<string, string> | null;
   defaultTipoFecha: string | null;
   filterParams: Record<string, Record<string, unknown>> | null;
   apiUrl: string | null;
@@ -79,6 +80,8 @@ export function resolveOriginConfig(
     watermarkExpr: pickDb(fromDb.watermarkExpr as string | null),
     dateColByTipoFecha:
       (fromDb.dateColByTipoFecha as Record<string, string>) || null,
+    dateColByEstado:
+      (fromDb.dateColByEstado as Record<string, string>) || null,
     defaultTipoFecha: pickDb(fromDb.defaultTipoFecha as string | null),
     filterParams:
       (fromDb.filterParams as Record<string, Record<string, unknown>>) || null,
