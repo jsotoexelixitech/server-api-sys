@@ -13,7 +13,7 @@
     "dateColByEstado": {
       "C": "rec.fcobro",
       "A": "rec.fanulacion",
-      "P": "rec.fhasta"
+      "P": "rec.fdesde"
     },
     "filterParams": {
       "desde": {

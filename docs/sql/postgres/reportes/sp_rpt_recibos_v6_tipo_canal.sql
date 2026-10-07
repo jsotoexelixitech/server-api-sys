@@ -74,7 +74,7 @@ BEGIN
 		  AND (
 		    (v_iestado IS NULL AND r.id_estatus <> 4 AND (v_fdesde IS NULL OR r.fecha_desde BETWEEN v_fdesde AND v_fhasta))
 		    OR (v_iestado = 1 AND r.id_estatus = 1 AND (v_fdesde IS NULL OR r.fecha_desde BETWEEN v_fdesde AND v_fhasta))
-		    OR (v_iestado = 2 AND r.id_estatus IN (2) AND r.fecha_pago IS NULL AND (v_fdesde IS NULL OR r.fecha_hasta BETWEEN v_fdesde AND v_fhasta))
+		    OR (v_iestado = 2 AND r.id_estatus IN (2) AND r.fecha_pago IS NULL AND (v_fdesde IS NULL OR r.fecha_desde BETWEEN v_fdesde AND v_fhasta))
 		    OR (v_iestado = 3 AND r.id_estatus = 3 AND (v_fdesde IS NULL OR r.fecha_pago BETWEEN v_fdesde AND v_fhasta))
 		    OR (v_iestado = 4 AND r.id_estatus = 4 AND (v_fdesde IS NULL OR r.fecha_anulacion BETWEEN v_fdesde AND v_fhasta))
 		    OR (v_iestado = 5 AND r.id_estatus = 5)

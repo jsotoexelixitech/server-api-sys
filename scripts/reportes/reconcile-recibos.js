@@ -1,7 +1,7 @@
 /**
  * Conciliación de recibos: Sis2000 (origen) vs PostgreSQL reportes (destino del sync).
  * Solo lectura en ambos lados. Compara por mes y por estado usando la misma fecha que el
- * SP sp_rpt_recibos_v6 (Cobrado→fecha de pago, Anulado→anulación, Pendiente→vencimiento,
+ * SP sp_rpt_recibos_v6 (Cobrado→fecha de pago, Anulado→anulación, Pendiente→vigencia (fdesde),
  * Notificado→vigencia), de modo que una diferencia equivale a datos que el reporte no ve.
  *
  * Uso:
@@ -21,7 +21,7 @@ const { Pool } = require('pg');
 
 const ESTADOS = [
   { letra: 'C', id: 3, nombre: 'Cobrado', origen: 'fcobro', destino: 'fecha_pago' },
-  { letra: 'P', id: 2, nombre: 'Pendiente', origen: 'fhasta', destino: 'fecha_hasta' },
+  { letra: 'P', id: 2, nombre: 'Pendiente', origen: 'fdesde', destino: 'fecha_desde' },
   { letra: 'A', id: 4, nombre: 'Anulado', origen: 'fanulacion', destino: 'fecha_anulacion' },
   { letra: 'N', id: 1, nombre: 'Notificado', origen: 'fdesde', destino: 'fecha_desde' },
 ];

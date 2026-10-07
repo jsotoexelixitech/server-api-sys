@@ -8,7 +8,7 @@ node scripts/reportes/reconcile-recibos.js --desde 2026-01-01 --hasta 2026-09-14
 ```
 
 - Solo lectura en ambos lados. Compara conteos por **estado y mes** con la misma fecha que usa
-  `sp_rpt_recibos_v6` (Cobrado→pago, Anulado→anulación, Pendiente→vencimiento, Notificado→vigencia).
+  `sp_rpt_recibos_v6` (Cobrado→pago, Anulado→anulación, Pendiente→vigencia, Notificado→vigencia).
 - `--json` imprime el detalle para integrarlo al monitor. Salida: `0` OK, `2` sobre el umbral, `1` error.
 - Para producción apuntar el `.env` (o variables) a la base `Sis2000` (`RECONCILE_ORIGEN_DB`) y al
   PG de reportes productivo.

@@ -15,7 +15,7 @@ const originConfig = {
   dateColByEstado: {
     C: 'rec.fcobro',
     A: 'rec.fanulacion',
-    P: 'rec.fhasta',
+    P: 'rec.fdesde',
   },
   filterParams: {
     desde: { source: 'desde', type: 'date' },
@@ -58,7 +58,7 @@ describe('resolveDateColumn', () => {
 
   it('Anulado y Pendiente usan su propia fecha', () => {
     expect(resolveDateColumn({ estado: 4 }, originConfig)).toBe('rec.fanulacion');
-    expect(resolveDateColumn({ estado: 2 }, originConfig)).toBe('rec.fhasta');
+    expect(resolveDateColumn({ estado: 2 }, originConfig)).toBe('rec.fdesde');
   });
 
   it('sin estado conserva la vigencia (comportamiento previo)', () => {
