@@ -485,20 +485,21 @@ function isAllRamoFilter(value) {
 function isAutomovilFilter(value) {
   if (value === null) return false;
   const normalized = String(value).trim().toLowerCase();
-  return normalized === '4' || normalized === 'automovil' || normalized === 'automóvil';
+  return normalized === 'automovil' || normalized === 'automóvil';
 }
 
 function isAutomovilRow(row) {
-  const ramoId = getRowValue(row, ['cramo', 'id_ramo', 'c_ramo', 'ramo_id']);
+  // El id de ramo cambia entre aseguradoras/ambientes (en QA el 4 es VIDA COLECTIVO y
+  // AUTOMOVIL es el 18): se reconoce por la descripción, nunca por un id fijo.
   const ramoLabel = getRowValue(row, ['ramo', 'Ramo', 'xramo', 'x_ramo', 'descripcion_ramo']);
-  if (String(ramoId ?? '').trim() === '4') return true;
   return normalizeText(ramoLabel).toUpperCase() === 'AUTOMOVIL';
 }
 
 function applyVehicleColumnsVisibility(rows, requestedRamo) {
   const list = Array.isArray(rows) ? rows : [];
 
-  if (isAutomovilFilter(requestedRamo)) {
+  // Con un ramo específico (llega el id, p. ej. 18) se decide por las filas devueltas.
+  if (!isAllRamoFilter(requestedRamo) && (isAutomovilFilter(requestedRamo) || list.some(isAutomovilRow))) {
     // Fuerza columnas en la grilla aunque la primera fila no las traiga.
     return list.map((row) => ({ ...row, ...Object.fromEntries(VEHICLE_COLUMNS.map((col) => [col, row[col] ?? null])) }));
   }
