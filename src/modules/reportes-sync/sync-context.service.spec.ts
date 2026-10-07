@@ -49,7 +49,7 @@ describe('SyncContextService · sync al consultar recibos', () => {
     expect(syncService.syncIncremental).toHaveBeenCalledTimes(1);
   });
 
-  it('solo afecta a recibos: siniestros y pólizas siguen sincronizando al consultar', async () => {
+  it('cada entidad tiene su propia variable: desactivar recibos no afecta a siniestros ni pólizas', async () => {
     const { service, syncService } = build({
       REPORTES_SYNC_ENABLED: true,
       REPORTES_SYNC_RECIBOS_ON_EXECUTE: false,
@@ -57,6 +57,27 @@ describe('SyncContextService · sync al consultar recibos', () => {
     await service.maybeSyncBeforeReport('siniestros', body);
     await service.maybeSyncBeforeReport('polizas', body);
     expect(syncService.syncIncremental).toHaveBeenCalledTimes(2);
+  });
+
+  it('REPORTES_SYNC_SINIESTROS_ON_EXECUTE=false: la consulta de siniestros no sincroniza', async () => {
+    const { service, syncService } = build({
+      REPORTES_SYNC_ENABLED: true,
+      REPORTES_SYNC_SINIESTROS_ON_EXECUTE: false,
+    });
+    const result = (await service.maybeSyncBeforeReport('siniestros', body)) as { skipped: boolean };
+    expect(result.skipped).toBe(true);
+    expect(syncService.syncIncremental).not.toHaveBeenCalled();
+    await service.maybeSyncBeforeReport('recibos', body);
+    expect(syncService.syncIncremental).toHaveBeenCalledTimes(1);
+  });
+
+  it('siniestros con forceSync sincroniza aunque la consulta lo tenga desactivado', async () => {
+    const { service, syncService } = build({
+      REPORTES_SYNC_ENABLED: true,
+      REPORTES_SYNC_SINIESTROS_ON_EXECUTE: false,
+    });
+    await service.maybeSyncBeforeReport('siniestros', { ...body, forceSync: true });
+    expect(syncService.syncIncremental).toHaveBeenCalledTimes(1);
   });
 
   it('con el sync general apagado no sincroniza nada', async () => {

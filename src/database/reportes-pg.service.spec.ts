@@ -98,3 +98,48 @@ describe('ReportesPgService.executeSP aislamiento', () => {
     expect(client.statements).not.toContain('BEGIN ISOLATION LEVEL REPEATABLE READ');
   });
 });
+
+describe('ReportesPgService.executeQuery · consultas con muchos parámetros', () => {
+  it('convierte decenas de miles de parámetros con nombre sin degradarse (búsqueda O(1))', async () => {
+    const { service } = buildService();
+    const pool = (service as unknown as { pool: { query: jest.Mock } }).pool;
+    pool.query = jest.fn(async () => ({ rows: [], rowCount: 0 }));
+
+    const N = 30_000;
+    const params: Record<string, unknown> = {};
+    const marcadores: string[] = [];
+    for (let i = 0; i < N; i += 1) {
+      params['p' + i] = i;
+      marcadores.push('@p' + i);
+    }
+
+    const t0 = Date.now();
+    const result = await service.executeQuery('INSERT INTO t VALUES (' + marcadores.join(',') + ')', params);
+    const ms = Date.now() - t0;
+
+    expect('error' in result && result.error).toBeFalsy();
+    const llamada = pool.query.mock.calls[0][0] as { text: string; values: unknown[] };
+    expect(llamada.values).toHaveLength(N);
+    expect(llamada.values[0]).toBe(0);
+    expect(llamada.values[N - 1]).toBe(N - 1);
+    expect(llamada.text).toContain('$' + N);
+    // Con la búsqueda lineal anterior esto tardaba varios segundos.
+    expect(ms).toBeLessThan(1500);
+  });
+
+  it('un parámetro repetido en la consulta reutiliza el mismo marcador', async () => {
+    const { service } = buildService();
+    const pool = (service as unknown as { pool: { query: jest.Mock } }).pool;
+    pool.query = jest.fn(async () => ({ rows: [], rowCount: 0 }));
+    await service.executeQuery('SELECT @a, @b, @a', { a: 1, b: 2 });
+    const llamada = pool.query.mock.calls[0][0] as { text: string; values: unknown[] };
+    expect(llamada.text).toBe('SELECT $1, $2, $1');
+    expect(llamada.values).toEqual([1, 2]);
+  });
+
+  it('un parámetro sin valor sigue siendo un error explícito', async () => {
+    const { service } = buildService();
+    const result = await service.executeQuery('SELECT @falta', {});
+    expect('error' in result && result.error).toBe(true);
+  });
+});

@@ -14,6 +14,7 @@ import {
   type LocalDeleteScope,
 } from './repositories/sync-local.repository';
 import { isCatalogEntidad } from './utils/sync-catalog.constants';
+import { debeFrenarReemplazo } from './utils/sync-guard';
 import {
   hasExtraOriginFilters,
   resolveDateColumn,
@@ -25,6 +26,9 @@ import type {
   InsurerConnectionConfig,
 } from './insurers/adapters/insurer-adapter.types';
 import type { ExtractionPlan } from './insurers/extraction/extraction.planner';
+
+/** Entidades cuya escritura va en una sola transacción (los lectores ven siempre un estado completo). */
+const ENTIDADES_ATOMICAS = new Set(['recibos', 'siniestros']);
 
 export type SyncResult = {
   entidad: string;
@@ -265,6 +269,11 @@ export class SyncService {
 
     if (entidad === 'recibos') {
       await this.upsertRepo.insertRecibosBatch(aseguradoraId, mappedRows, tx);
+      return mappedRows.length;
+    }
+
+    if (entidad === 'siniestros') {
+      await this.upsertRepo.upsertSiniestrosBatch(aseguradoraId, mappedRows, tx);
       return mappedRows.length;
     }
 
@@ -559,11 +568,12 @@ export class SyncService {
       // los lectores concurrentes (otro usuario ejecutando el reporte) ven el estado
       // anterior completo hasta el COMMIT, nunca un rango a medias.
       const writeTarget = async (tx?: PgTransaction) => {
+        let borradas = 0;
         if (!skipDelete) {
           this.syncLog(
             `${entidad}: borrando en PG destino (aseguradora ${aseguradoraId}, rango fechas); origen no se toca`,
           );
-          await this.localRepo.deleteLocalRows(
+          borradas = await this.localRepo.deleteLocalRows(
             aseguradoraId,
             entidad,
             filtros.desde,
@@ -627,11 +637,26 @@ export class SyncService {
             connectionConfig,
           );
         }
+        // Freno de seguridad del reemplazo COMPLETO (sin rango): si entra menos de la mitad de lo
+        // que se borró (p. ej. el origen devolvió casi nada), se revierte y se deja el estado anterior.
+        if (
+          tx &&
+          debeFrenarReemplazo({
+            borradas,
+            escritas: written,
+            reemplazoCompleto: !filtros.desde && !filtros.hasta,
+            sinBorrado: skipDelete,
+          })
+        ) {
+          throw new Error(
+            `${entidad}: el reemplazo completo borraría ${borradas} filas y solo insertaría ${written}; se revierte para no perder datos`,
+          );
+        }
         return { rowsSynced: written, maxModifiedAt: maxModified };
       };
 
       const { rowsSynced, maxModifiedAt } =
-        entidad === 'recibos' && !catalog
+        ENTIDADES_ATOMICAS.has(entidad) && !catalog
           ? await this.reportesPg.runInTransaction((tx) => writeTarget(tx))
           : await writeTarget();
 
