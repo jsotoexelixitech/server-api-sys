@@ -73,10 +73,21 @@ export interface PlanPerItem {
   ndias?: number | null;
 }
 
+/** Cobertura del plan cotizado (detalle de spCalculoPer o, en prorrata, solo el nombre). */
+export interface CotizacionPerCobertura {
+  ccobertura: string;
+  xcobertura: string;
+  msumaasegext: number;
+  mprima: number;
+  mprimaext: number;
+}
+
 export interface CotizacionPerResult {
   mprima: number;
   mprimaext: number;
   ptasa: number;
+  /** Coberturas del plan, sumadas entre asegurados. Vacío si el SP no trae detalle. */
+  coberturas: CotizacionPerCobertura[];
 }
 
 /** Formato legacy SysIP (`/app/getCotizacionPer`, `/external/getCotizacionPer`). */
@@ -912,6 +923,7 @@ export class PersonasService {
 
       let mprimatotal = 0;
       let mprimatotalext = 0;
+      const coberturas = new Map<string, CotizacionPerCobertura>();
 
       for (const asegurado of body.asegurados) {
         if (useProrrata) {
@@ -937,6 +949,12 @@ export class PersonasService {
           mprimatotal += Number(totals[0]['mprima']) || 0;
           mprimatotalext += Number(totals[0]['mprimaext']) || 0;
         }
+        // Primer resultado del SP: una fila por cobertura del asegurado (#temp_calculo_per).
+        this.addCoberturas(coberturas, (result.recordsets?.[0] ?? []) as Record<string, unknown>[]);
+      }
+
+      if (useProrrata && coberturas.size === 0) {
+        this.addCoberturas(coberturas, await this.getCoberturasPlanPer(ramo, body.cplan));
       }
 
       if (mprimatotalext === 0 && mprimatotal === 0) {
@@ -955,12 +973,50 @@ export class PersonasService {
         `getCotizacionPer: plan=${body.cplan} asegurados=${body.asegurados.length} mprimaext=$${mprimaext} mprima=Bs${mprima}`,
       );
 
-      return { mprima, mprimaext, ptasa };
+      return { mprima, mprimaext, ptasa, coberturas: [...coberturas.values()] };
     } catch (err) {
       if (err instanceof BadRequestException) throw err;
       const msg = err instanceof Error ? err.message : String(err);
       this.logger.error(`getCotizacionPer: ${msg}`);
       throw new BadRequestException(msg);
+    }
+  }
+
+  /** Suma por cobertura las filas de detalle (suma asegurada: la mayor; primas: se suman). */
+  private addCoberturas(
+    acc: Map<string, CotizacionPerCobertura>,
+    rows: Record<string, unknown>[],
+  ): void {
+    for (const row of rows) {
+      const ccobertura = this.optionalText(row['ccobertura']);
+      if (!ccobertura) continue;
+      const xcobertura = this.optionalText(row['xcobertura'] ?? row['xdescripcion_l']) ?? `Cobertura ${ccobertura}`;
+      const prev = acc.get(ccobertura) ?? { ccobertura, xcobertura, msumaasegext: 0, mprima: 0, mprimaext: 0 };
+      prev.msumaasegext = Math.max(prev.msumaasegext, Number(row['msumaasegext']) || 0);
+      prev.mprima = parseFloat((prev.mprima + (Number(row['mprima']) || 0)).toFixed(2));
+      prev.mprimaext = parseFloat((prev.mprimaext + (Number(row['mprimaext']) || 0)).toFixed(2));
+      acc.set(ccobertura, prev);
+    }
+  }
+
+  /** Coberturas del plan (nombre) para cotizaciones sin detalle por cobertura (viajero prorrata). */
+  private async getCoberturasPlanPer(cramo: number, cplan: string): Promise<Record<string, unknown>[]> {
+    try {
+      const req = this.db.request();
+      req.input('cramo', this.db.types.Int, cramo);
+      req.input('cplan', this.db.types.VarChar(10), cplan);
+      const result = await req.query(`
+        SELECT DISTINCT LTRIM(RTRIM(CAST(c.ccobertura AS nvarchar(10)))) AS ccobertura,
+               LTRIM(RTRIM(m.xdescripcion_l)) AS xcobertura
+        FROM maplcober_per c
+        INNER JOIN macoberturas m ON m.ccobertura = c.ccobertura AND m.cramo = c.cramo
+        WHERE c.cramo = @cramo AND LTRIM(RTRIM(c.cplan)) = LTRIM(RTRIM(@cplan))
+      `);
+      return (result.recordset ?? []) as Record<string, unknown>[];
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : String(err);
+      this.logger.warn(`getCoberturasPlanPer cramo=${cramo} cplan=${cplan}: ${msg}`);
+      return [];
     }
   }
 
