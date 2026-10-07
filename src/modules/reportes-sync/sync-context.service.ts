@@ -29,6 +29,16 @@ export class SyncContextService {
     return this.config.get<boolean>('REPORTES_SYNC_ENABLED', false) === true;
   }
 
+  /**
+   * ¿Debe la consulta/exportación de recibos sincronizar por su cuenta? Con
+   * REPORTES_SYNC_RECIBOS_ON_EXECUTE=false lo hace solo el refresco programado, y la
+   * consulta lee de PG (1-2 s en vez de esperar la extracción desde el origen).
+   */
+  isSyncOnExecuteEnabled(entidad: string): boolean {
+    if (entidad !== 'recibos') return true;
+    return this.config.get<boolean>('REPORTES_SYNC_RECIBOS_ON_EXECUTE', true) !== false;
+  }
+
   private parseDate(value: unknown): Date | undefined {
     if (!value) return undefined;
     const d = new Date(value as string | number | Date);
@@ -111,6 +121,19 @@ export class SyncContextService {
       if (!this.isSyncEnabled()) {
         const result = { skipped: true, reason: 'REPORTES_SYNC_ENABLED=false' };
         this.syncLog(`${entidad}: omitido (REPORTES_SYNC_ENABLED=false)`);
+        return result;
+      }
+
+      const forced = Boolean(
+        body?.forceSync || (body?.sync as Record<string, unknown>)?.force,
+      );
+      if (!forced && !this.isSyncOnExecuteEnabled(entidad)) {
+        const result = {
+          skipped: true,
+          reason:
+            'sync al consultar desactivado (REPORTES_SYNC_RECIBOS_ON_EXECUTE=false): lo hace el refresco programado',
+        };
+        this.syncLog(`${entidad}: omitido (${result.reason})`);
         return result;
       }
 
