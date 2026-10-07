@@ -6,6 +6,12 @@ import { AseguradoraResolverService } from './aseguradora-resolver.service';
 import { CATALOG_ENTIDADES } from './utils/sync-catalog.constants';
 import { SyncService, type SyncResult } from './sync.service';
 
+/** Entidades que un refresco programado mantiene al día, con la variable que desactiva el sync al consultar. */
+const SYNC_ON_EXECUTE_VAR: Record<string, string> = {
+  recibos: 'REPORTES_SYNC_RECIBOS_ON_EXECUTE',
+  siniestros: 'REPORTES_SYNC_SINIESTROS_ON_EXECUTE',
+};
+
 export type SyncFiltrosBuilt = Record<string, unknown> & {
   aseguradoraId: number | null;
   desde?: Date;
@@ -35,8 +41,9 @@ export class SyncContextService {
    * consulta lee de PG (1-2 s en vez de esperar la extracción desde el origen).
    */
   isSyncOnExecuteEnabled(entidad: string): boolean {
-    if (entidad !== 'recibos') return true;
-    return this.config.get<boolean>('REPORTES_SYNC_RECIBOS_ON_EXECUTE', true) !== false;
+    const variable = SYNC_ON_EXECUTE_VAR[entidad];
+    if (!variable) return true;
+    return this.config.get<boolean>(variable, true) !== false;
   }
 
   private parseDate(value: unknown): Date | undefined {
