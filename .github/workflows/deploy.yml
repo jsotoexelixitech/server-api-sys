@@ -1,23 +1,207 @@
-name: Deploy to Server 120 (PM2)
+name: Deploy (PM2)
+
+# main -> Producción (172.30.149.75)   |   qa -> QA (192.168.8.121)
+#
+# Requisitos (ver docs/DEPLOY.md):
+#  - Un runner self-hosted en cada servidor, con la etiqueta "produccion" o "qa" (además de self-hosted, Linux, X64).
+#  - GitHub Environments "production" y "qa" (Settings > Environments). En "production" conviene exigir aprobación.
+#  - Archivo .env del servidor FUERA del workspace (APP_ENV_FILE), con los secretos. El deploy lo copia a .env.
+#  - Variables no secretas del Environment (vars.*) que, si existen, pisan la línea correspondiente del .env.
 
 on:
   push:
     branches:
       - main
-      - master
+      - qa
   workflow_dispatch:
+    inputs:
+      target:
+        description: 'Ambiente a desplegar (la rama del run debe ser main para production, qa para qa)'
+        type: choice
+        required: true
+        options:
+          - production
+          - qa
+
+# Un despliegue por ambiente a la vez; no se cancelan despliegues en curso.
+concurrency:
+  group: deploy-${{ github.ref_name }}
+  cancel-in-progress: false
 
 jobs:
+  resolve:
+    name: Resolver ambiente
+    runs-on: ubuntu-latest
+    outputs:
+      target: ${{ steps.r.outputs.target }}
+      runner_label: ${{ steps.r.outputs.runner_label }}
+      pm2_env: ${{ steps.r.outputs.pm2_env }}
+      server: ${{ steps.r.outputs.server }}
+      pg_host: ${{ steps.r.outputs.pg_host }}
+      sis_db: ${{ steps.r.outputs.sis_db }}
+    steps:
+      - id: r
+        shell: bash
+        env:
+          EVENT: ${{ github.event_name }}
+          REF: ${{ github.ref_name }}
+          INPUT_TARGET: ${{ inputs.target }}
+        run: |
+          set -euo pipefail
+          if [ "$EVENT" = "workflow_dispatch" ]; then
+            TARGET="$INPUT_TARGET"
+          elif [ "$REF" = "main" ]; then
+            TARGET="production"
+          elif [ "$REF" = "qa" ]; then
+            TARGET="qa"
+          else
+            echo "::error::La rama '$REF' no despliega a ningún ambiente."; exit 1
+          fi
+
+          case "$TARGET" in
+            production)
+              EXPECTED_REF="main"; LABEL="produccion"; PM2_ENV="production"
+              SERVER="172.30.149.75"; PG_HOST="172.30.149.75"; SIS_DB="sis2000" ;;
+            qa)
+              EXPECTED_REF="qa"; LABEL="qa"; PM2_ENV="qa"
+              SERVER="192.168.8.121"; PG_HOST="192.168.8.121"; SIS_DB="sis2000_qa" ;;
+            *)
+              echo "::error::Ambiente desconocido: $TARGET"; exit 1 ;;
+          esac
+
+          if [ "$REF" != "$EXPECTED_REF" ]; then
+            echo "::error::'$TARGET' solo se despliega desde la rama '$EXPECTED_REF' (este run es de '$REF')."; exit 1
+          fi
+
+          {
+            echo "target=$TARGET"
+            echo "runner_label=$LABEL"
+            echo "pm2_env=$PM2_ENV"
+            echo "server=$SERVER"
+            echo "pg_host=$PG_HOST"
+            echo "sis_db=$SIS_DB"
+          } >> "$GITHUB_OUTPUT"
+          echo "Ambiente: $TARGET (rama $REF, servidor $SERVER, runner '$LABEL')"
+
   deploy:
-    name: Deploy to QA Server (srv001)
-    runs-on: [self-hosted, Linux, X64]
+    name: Deploy ${{ needs.resolve.outputs.target }} (${{ needs.resolve.outputs.server }})
+    needs: resolve
+    runs-on: [self-hosted, Linux, X64, "${{ needs.resolve.outputs.runner_label }}"]
+    environment: ${{ needs.resolve.outputs.target }}
+    timeout-minutes: 30
+    env:
+      TARGET: ${{ needs.resolve.outputs.target }}
+      PM2_ENV: ${{ needs.resolve.outputs.pm2_env }}
+      EXPECTED_PG_HOST: ${{ needs.resolve.outputs.pg_host }}
+      EXPECTED_SIS_DB: ${{ needs.resolve.outputs.sis_db }}
+      # Archivo con los secretos y la configuración base, mantenido en el servidor (fuera del workspace).
+      APP_ENV_FILE: ${{ vars.APP_ENV_FILE || format('/opt/sysip/env/nest-api.{0}.env', needs.resolve.outputs.target) }}
 
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
 
+      - name: Setup Node.js 20
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20.x
+          cache: npm
+
+      - name: Cargar .env del servidor
+        shell: bash
+        run: |
+          set -euo pipefail
+          if [ ! -f "$APP_ENV_FILE" ]; then
+            echo "::error::No existe $APP_ENV_FILE en el servidor. Cree el archivo con las variables de .env.example (ver docs/DEPLOY.md)."
+            exit 1
+          fi
+          install -m 600 "$APP_ENV_FILE" .env
+          echo "Copiado $APP_ENV_FILE -> .env"
+
+      - name: Aplicar variables del Environment (vars)
+        shell: bash
+        # Solo variables NO secretas. Si la variable está definida en GitHub (Settings > Environments > Variables),
+        # reemplaza o agrega la línea en .env; si no, se respeta lo que diga el archivo del servidor.
+        env:
+          V_PORT: ${{ vars.PORT }}
+          V_CORS_ORIGIN: ${{ vars.CORS_ORIGIN }}
+          V_REPORTES_ENABLED: ${{ vars.REPORTES_ENABLED }}
+          V_REPORTES_SYNC_ENABLED: ${{ vars.REPORTES_SYNC_ENABLED }}
+          V_REPORTES_SYNC_SCHEDULE_ENABLED: ${{ vars.REPORTES_SYNC_SCHEDULE_ENABLED }}
+          V_REPORTES_SYNC_SCHEDULE_INTERVAL_MINUTES: ${{ vars.REPORTES_SYNC_SCHEDULE_INTERVAL_MINUTES }}
+          V_REPORTES_SYNC_SCHEDULE_WINDOW_DAYS: ${{ vars.REPORTES_SYNC_SCHEDULE_WINDOW_DAYS }}
+          V_REPORTES_SYNC_SCHEDULE_ENTIDADES: ${{ vars.REPORTES_SYNC_SCHEDULE_ENTIDADES }}
+          V_REPORTES_SYNC_RECIBOS_ON_EXECUTE: ${{ vars.REPORTES_SYNC_RECIBOS_ON_EXECUTE }}
+          V_REPORTES_SYNC_SINIESTROS_ON_EXECUTE: ${{ vars.REPORTES_SYNC_SINIESTROS_ON_EXECUTE }}
+          V_REPORTES_SYNC_TTL_SECONDS: ${{ vars.REPORTES_SYNC_TTL_SECONDS }}
+          V_REPORTES_SYNC_CATALOG_TTL_SECONDS: ${{ vars.REPORTES_SYNC_CATALOG_TTL_SECONDS }}
+          V_REPORTES_SYNC_TIMEOUT_MS: ${{ vars.REPORTES_SYNC_TIMEOUT_MS }}
+          V_REPORTES_SYNC_BATCH_SIZE: ${{ vars.REPORTES_SYNC_BATCH_SIZE }}
+        run: |
+          set -euo pipefail
+          upsert() {
+            local key="$1" val="$2" tmp
+            tmp="$(mktemp)"
+            grep -vE "^${key}=" .env > "$tmp" || true
+            printf '%s=%s\n' "$key" "$val" >> "$tmp"
+            cat "$tmp" > .env
+            rm -f "$tmp"
+            echo "  ${key}=${val}"
+          }
+          echo "Variables aplicadas desde el Environment '$TARGET':"
+          n=0
+          while IFS='=' read -r name value; do
+            case "$name" in
+              V_*)
+                if [ -n "$value" ]; then upsert "${name#V_}" "$value"; n=$((n+1)); fi ;;
+            esac
+          done < <(env | sort)
+          [ "$n" -gt 0 ] || echo "  (ninguna: se usa el archivo del servidor tal cual)"
+
+      - name: Validar configuración (.env)
+        shell: bash
+        run: |
+          set -euo pipefail
+          get() { grep -E "^$1=" .env | tail -1 | cut -d= -f2- | sed -e 's/^"//' -e 's/"$//' -e "s/^'//" -e "s/'$//" || true; }
+          lower() { printf '%s' "$1" | tr '[:upper:]' '[:lower:]'; }
+          fail=0
+          err() { echo "::error::$1"; fail=1; }
+
+          # 1) Obligatorias (src/config/env.validation.ts)
+          for v in SERVER_BD NAME_BD USER_BD PASSWORD_BD; do
+            [ -n "$(get $v)" ] || err "Falta $v en el .env del servidor."
+          done
+
+          # 2) Si los reportes están activos, la conexión a PG reportes es obligatoria
+          if [ "$(lower "$(get REPORTES_ENABLED)")" = "true" ]; then
+            for v in REPORTES_PG_HOST REPORTES_PG_USER REPORTES_PG_PASSWORD REPORTES_PG_DATABASE; do
+              [ -n "$(get $v)" ] || err "REPORTES_ENABLED=true y falta $v."
+            done
+            # 3) Guardas de ambiente: evitan desplegar producción apuntando a QA (o al revés)
+            [ "$(get REPORTES_PG_HOST)" = "$EXPECTED_PG_HOST" ] \
+              || err "REPORTES_PG_HOST es '$(get REPORTES_PG_HOST)' y para '$TARGET' debe ser '$EXPECTED_PG_HOST'."
+          fi
+          [ "$(lower "$(get NAME_BD)")" = "$EXPECTED_SIS_DB" ] \
+            || err "NAME_BD es '$(get NAME_BD)' y para '$TARGET' debe ser '$EXPECTED_SIS_DB'."
+
+          # 4) Avisos (no bloquean)
+          if [ "$(lower "$(get REPORTES_SYNC_ENABLED)")" = "true" ]; then
+            [ "$(lower "$(get REPORTES_SYNC_SCHEDULE_ENABLED)")" = "true" ] \
+              || echo "::warning::REPORTES_SYNC_SCHEDULE_ENABLED no es true: los reportes solo se actualizarán al consultarlos."
+            [ "$(lower "$(get REPORTES_SYNC_RECIBOS_ON_EXECUTE)")" = "false" ] \
+              || echo "::warning::REPORTES_SYNC_RECIBOS_ON_EXECUTE no es false: la consulta de recibos sincroniza y puede tardar."
+            [ "$(lower "$(get REPORTES_SYNC_SINIESTROS_ON_EXECUTE)")" = "false" ] \
+              || echo "::warning::REPORTES_SYNC_SINIESTROS_ON_EXECUTE no es false: la consulta de siniestros sincroniza y puede tardar."
+          fi
+
+          [ "$fail" -eq 0 ] || { echo "Configuración inválida para '$TARGET'. No se despliega."; exit 1; }
+          echo "Configuración válida para '$TARGET'."
+
       - name: Install dependencies
-        run: npm install --prefer-offline
+        run: npm ci --prefer-offline
+
+      - name: Verificar esquema de PG reportes (columnas del sync)
+        run: node scripts/deploy/preflight-reportes.js
 
       - name: Generate Prisma client
         run: npm run prisma:generate
@@ -28,9 +212,28 @@ jobs:
       - name: Restart PM2 service
         run: |
           mkdir -p ./logs
-          if pm2 describe "sysip-nest-api" > /dev/null 2>&1; then
-            pm2 restart ecosystem.config.js --env production --update-env
-          else
-            pm2 start ecosystem.config.js --env production
-          fi
+          pm2 startOrRestart ecosystem.config.js --env "$PM2_ENV" --update-env
           pm2 save
+
+      - name: Verificar que la API quedó arriba
+        shell: bash
+        run: |
+          set -euo pipefail
+          port="$(grep -E '^PORT=' .env | tail -1 | cut -d= -f2- | tr -d '"' || true)"; port="${port:-3001}"
+          for i in $(seq 1 15); do
+            status="$(pm2 jlist | node -e "let s='';process.stdin.on('data',d=>s+=d).on('end',()=>{const a=JSON.parse(s).find(p=>p.name==='sysip-nest-api');console.log(a?a.pm2_env.status:'no-existe')})")"
+            code="$(curl -s -o /dev/null -w '%{http_code}' --max-time 5 "http://127.0.0.1:${port}/api" || true)"
+            echo "intento $i: pm2=$status http=$code"
+            if [ "$status" = "online" ] && [ "$code" != "000" ]; then
+              {
+                echo "### Deploy $TARGET OK"
+                echo "- Commit: \`${GITHUB_SHA::7}\` (rama \`${GITHUB_REF_NAME}\`)"
+                echo "- PM2: online, puerto ${port}, entorno \`${PM2_ENV}\`"
+              } >> "$GITHUB_STEP_SUMMARY"
+              exit 0
+            fi
+            sleep 4
+          done
+          echo "::error::La API no respondió tras el despliegue. Revise: pm2 logs sysip-nest-api"
+          pm2 logs sysip-nest-api --lines 40 --nostream || true
+          exit 1
