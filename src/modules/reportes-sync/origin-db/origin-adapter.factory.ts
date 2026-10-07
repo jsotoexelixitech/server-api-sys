@@ -15,6 +15,17 @@ import { PostgresOriginAdapter } from './postgres-origin.adapter';
 import { MysqlOriginAdapter } from './mysql-origin.adapter';
 import { OracleOriginAdapter } from './oracle-origin.adapter';
 
+/** Variables de entorno sin validar llegan como texto: "false" no debe leerse como verdadero. */
+function toBool(value: unknown, fallback: boolean): boolean {
+  if (typeof value === 'boolean') return value;
+  if (typeof value === 'string') {
+    const v = value.trim().toLowerCase();
+    if (['true', '1', 'yes', 'si', 'sí'].includes(v)) return true;
+    if (['false', '0', 'no'].includes(v)) return false;
+  }
+  return fallback;
+}
+
 @Injectable()
 export class OriginAdapterFactory {
   constructor(private readonly config: ConfigService) {}
@@ -24,11 +35,8 @@ export class OriginAdapterFactory {
     const timeout = Number(
       this.config.get<number>('REPORTES_SYNC_TIMEOUT_MS', 30000),
     );
-    const encrypt = this.config.get<boolean>('DB_ENCRYPT', false);
-    const trustCert = this.config.get<boolean>(
-      'DB_TRUST_SERVER_CERTIFICATE',
-      true,
-    );
+    const encrypt = toBool(this.config.get('DB_ENCRYPT'), false);
+    const trustCert = toBool(this.config.get('DB_TRUST_SERVER_CERTIFICATE'), true);
 
     switch (tipoDb) {
       case 'mssql': {
