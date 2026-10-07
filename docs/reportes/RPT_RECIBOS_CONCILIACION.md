@@ -102,3 +102,32 @@ a borrar (con más de 100 filas), el reemplazo se revierte y queda el estado ant
 La escritura pasó de un `INSERT` por siniestro a lotes de 500 filas. Medido en PG de desarrollo, 3.200 filas:
 **1,25 s por lotes contra ~6,5 s fila por fila**. Hizo falta corregir `buildNamedQuery` (búsqueda lineal por cada
 parámetro con nombre): con 23.500 parámetros por lote el lote tardaba más que el método anterior.
+
+## Sync al consultar por alcance (escritura por diferencias)
+
+Con `REPORTES_SYNC_RECIBOS_ON_EXECUTE=true` (y `REPORTES_SYNC_SINIESTROS_ON_EXECUTE=true`) cada consulta o exportación
+refresca primero **exactamente lo que el usuario pidió** (rango, estado, ramo, canal, productor, póliza, cliente...) y
+responde desde PG. Cambios que lo hacen viable:
+
+| Cambio | Qué resuelve |
+|---|---|
+| **Una transformación por fila.** `pick()` ya no reconstruye un mapa de columnas en cada llamada y la escritura de recibos transforma cada fila una sola vez (antes 4). | La preparación de 16.000 filas pasó de ~2 s (más repeticiones) a ~60 ms. Beneficia también a siniestros y pólizas. |
+| **Escritura por diferencias** (`REPORTES_SYNC_RECIBOS_DELTA=true`). `INSERT ... ON CONFLICT DO UPDATE ... WHERE (fila actual) IS DISTINCT FROM (fila nueva)`: solo se escribe lo nuevo o modificado. Lo que ya no vino del origen dentro del alcance se borra (con freno de seguridad). | Menos escritura de tuplas e índices, y la transacción sigue siendo atómica. |
+| **Vigencia por alcance** (`REPORTES_SYNC_SCOPE_TTL_SECONDS`, 30 s). La repetición de una misma consulta (paginación, gráficos) no vuelve al origen; otro rango sí. | Antes el TTL era por entidad: el sync de otro usuario o del refresco programado hacía que tu consulta se saltara el refresco. |
+| **Espera del candado** (`REPORTES_SYNC_LOCK_WAIT_SECONDS`, 45 s). Si hay un sync en curso, la consulta espera y luego refresca su rango. | Antes respondía de inmediato con datos locales sin refrescar. |
+
+### Medido en QA (Sis2000_QA → PG QA)
+| Alcance | Antes | Ahora |
+|---|---|---|
+| Un mes (16.001 recibos) | ~11,9 s (origen 2,3 s + escritura 9,4 s) | ~3,9 s (origen 2,5 s + escritura 1,3 s) |
+| 01/01 a 14/09/2026 (104.051 recibos) | ~75 s (estimado por proporción) | ~23 s (origen 15 s + escritura 8 s) |
+
+Con el cambio, el tiempo lo domina la lectura del origen (≈0,14 ms por fila). Una segunda consulta del mismo alcance dentro
+de 30 s no toca el origen.
+
+### Garantías y límites
+- Si el origen devuelve menos de la mitad de lo que había en el alcance (más de 100 filas), la transacción se revierte.
+- Con filtros distintos de fecha y estado (ramo, canal, productor, póliza...) se inserta y actualiza, pero no se borra lo
+  que ya no existe en el origen (igual que antes).
+- La vigencia por alcance es memoria del proceso: asume una sola instancia de la API (PM2 en modo fork).
+- `REPORTES_SYNC_RECIBOS_DELTA=false` vuelve al comportamiento anterior (borrar el rango e insertar todo).

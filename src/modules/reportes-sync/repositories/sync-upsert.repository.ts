@@ -4,6 +4,50 @@ import {
   type PgTransaction,
 } from '../../../database/reportes-pg.service';
 
+/**
+ * Columnas de `recibo` que se comparan al decidir si una fila cambió (todas menos la clave y synced_at).
+ * Lista cerrada: se interpola en el SQL.
+ */
+export const RECIBO_COLUMNAS_COMPARABLES: readonly string[] = [
+  'fecha_emision',
+  'fecha_anulacion',
+  'fecha_desde',
+  'fecha_hasta',
+  'poliza',
+  'recibo',
+  'cliente',
+  'cedula',
+  'id_ramo',
+  'id_canal',
+  'id_productor',
+  'id_frecuencia',
+  'id_estatus',
+  'monto_recibo',
+  'monto_recibo_ext',
+  'numero_cuota',
+  'moneda',
+  'fecha_pago',
+  'tipo_recibo',
+  'coberturas',
+  'tipo_canal',
+  'placa',
+  'tipo_vehiculo',
+];
+
+/**
+ * Inserta lo nuevo y actualiza SOLO lo que cambió (IS DISTINCT FROM, comparado por PG con los tipos de la
+ * tabla). Las filas idénticas no se tocan: sin escritura de tupla ni de índices, y synced_at conserva la
+ * fecha del último cambio real. Requiere el índice único parcial uq_recibo_aseguradora_origen.
+ */
+export const RECIBOS_ON_CONFLICT_SOLO_CAMBIOS = [
+  'ON CONFLICT (id_aseguradora, origen_clave) WHERE origen_clave IS NOT NULL',
+  'DO UPDATE SET',
+  RECIBO_COLUMNAS_COMPARABLES.map((c) => `  ${c} = EXCLUDED.${c}`).join(',\n') + ',',
+  '  synced_at = NOW()',
+  `WHERE (${RECIBO_COLUMNAS_COMPARABLES.map((c) => `recibo.${c}`).join(', ')})`,
+  `  IS DISTINCT FROM (${RECIBO_COLUMNAS_COMPARABLES.map((c) => `EXCLUDED.${c}`).join(', ')})`,
+].join('\n');
+
 /** Filas por sentencia: 47 columnas × 500 = 23.500 parámetros (límite de PG: 65.535). */
 export const SINIESTRO_LOTE = 500;
 
@@ -123,9 +167,30 @@ export class SyncUpsertRepository {
     rows: Record<string, unknown>[],
     tx?: PgTransaction,
   ): Promise<void> {
-    if (!rows.length) return;
+    await this.execRecibos(aseguradoraId, rows, '', tx);
+  }
 
-    await this.exec(
+  /**
+   * Escribe solo lo nuevo o modificado (ver RECIBOS_ON_CONFLICT_SOLO_CAMBIOS).
+   * Devuelve cuántas filas se insertaron o cambiaron realmente.
+   */
+  async upsertRecibosChangedBatch(
+    aseguradoraId: number,
+    rows: Record<string, unknown>[],
+    tx?: PgTransaction,
+  ): Promise<number> {
+    return this.execRecibos(aseguradoraId, rows, RECIBOS_ON_CONFLICT_SOLO_CAMBIOS, tx);
+  }
+
+  private async execRecibos(
+    aseguradoraId: number,
+    rows: Record<string, unknown>[],
+    sufijoSql: string,
+    tx?: PgTransaction,
+  ): Promise<number> {
+    if (!rows.length) return 0;
+
+    const result = await (tx ?? this.reportesPg).executeQuery(
       `INSERT INTO recibo (
        id_aseguradora, origen_clave, fecha_emision, fecha_anulacion, fecha_desde, fecha_hasta,
        poliza, recibo, cliente, cedula, id_ramo, id_canal, id_productor, id_frecuencia,
@@ -189,7 +254,8 @@ export class SyncUpsertRepository {
        poliza, recibo, cliente, cedula, id_ramo, id_canal, id_productor, id_frecuencia,
        id_estatus, monto_recibo, monto_recibo_ext, numero_cuota, moneda, fecha_pago,
        tipo_recibo, coberturas, tipo_canal, placa, tipo_vehiculo
-     )`,
+     )
+     ${sufijoSql}`,
       {
         aseguradoraId,
         origenClaves: rows.map((r) => r.origenClave ?? null),
@@ -219,8 +285,11 @@ export class SyncUpsertRepository {
         placas: rows.map((r) => r.placa ?? null),
         tiposVehiculo: rows.map((r) => r.tipoVehiculo ?? null),
       },
-      tx,
     );
+    if ('error' in result && result.error) {
+      throw new Error(result.message);
+    }
+    return result.rowsAffected || 0;
   }
 
   /** @deprecated usar insertRecibosBatch */
