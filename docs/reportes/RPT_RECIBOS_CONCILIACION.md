@@ -42,6 +42,7 @@ pendiente a cobrado se reemplaza por su `origen_clave`.
 | `REPORTES_SYNC_SCHEDULE_ENABLED` | `false` | Además requiere `REPORTES_SYNC_ENABLED=true`. |
 | `REPORTES_SYNC_SCHEDULE_INTERVAL_MINUTES` | `30` | Mínimo 5. |
 | `REPORTES_SYNC_SCHEDULE_WINDOW_DAYS` | `7` | Máximo 60. |
+| `REPORTES_SYNC_RECIBOS_ON_EXECUTE` | `true` | `false` = la consulta y exportación de recibos **no** sincronizan: responden de PG en 1-2 s y el refresco programado mantiene los datos. `forceSync` sigue funcionando. Solo aplica a recibos. |
 
 Con varias réplicas de la API cada una lanzaría su ronda; el advisory lock por
 aseguradora/entidad impide que corran a la vez. Que la pasada de cobrados use la fecha de
@@ -68,3 +69,21 @@ Ninguna fila actual se pierde. Cambian solo `id_frecuencia` e `id_canal` en fila
 los traía en blanco: ahora toman el valor del recibo, igual que el reporte "Recibos".
 Para aplicarlo en producción: actualizar `origen_config.recibos.querySql` desde el seed y
 recargar el rango con `forceSync`.
+
+### Configuración recomendada: datos con a lo sumo 5 minutos de atraso
+
+```
+REPORTES_SYNC_ENABLED=true
+REPORTES_SYNC_SCHEDULE_ENABLED=true
+REPORTES_SYNC_SCHEDULE_INTERVAL_MINUTES=5      # mínimo permitido
+REPORTES_SYNC_SCHEDULE_WINDOW_DAYS=7
+REPORTES_SYNC_RECIBOS_ON_EXECUTE=false
+```
+
+Costo medido de una ronda (3 pasadas, ventana de 7 días, Sis2000 de producción, 2026-10-07): ~8.200 filas,
+~3 s de extracción y ~5 s de escritura estimada, es decir unos 10 s de 300 s. Si una ronda no ha terminado cuando
+vence la siguiente, esa se omite.
+
+Límite a tener en cuenta: con la consulta sin sync, un rango **anterior** a lo ya cargado en PG (p. ej. 2024) no
+se trae por sí solo. Los cambios de estado de recibos antiguos sí llegan, porque el cobro o la anulación llevan
+fecha reciente y caen en la ventana de 7 días. Para cargar un rango histórico: `forceSync` de ese rango.

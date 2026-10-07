@@ -149,6 +149,8 @@ export const envValidationSchema = Joi.object({
   REPORTES_SYNC_TTL_SECONDS: Joi.number().default(120),
   REPORTES_SYNC_CATALOG_TTL_SECONDS: Joi.number().default(3600),
   REPORTES_SYNC_TIMEOUT_MS: Joi.number().default(30000),
+  /** false = la consulta de recibos no sincroniza; lo hace el refresco programado (REPORTES_SYNC_SCHEDULE_*). */
+  REPORTES_SYNC_RECIBOS_ON_EXECUTE: Joi.boolean().default(true),
   /**
    * Conexión a la BD de ORIGEN de cada aseguradora (sync de reportes). Se convierten a boolean:
    * el driver mssql rechaza el texto "false"/"true" en `encrypt` y el sync falla con
