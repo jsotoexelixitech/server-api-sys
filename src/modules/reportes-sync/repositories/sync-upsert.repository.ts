@@ -4,6 +4,93 @@ import {
   type PgTransaction,
 } from '../../../database/reportes-pg.service';
 
+/** Filas por sentencia: 47 columnas × 500 = 23.500 parámetros (límite de PG: 65.535). */
+export const SINIESTRO_LOTE = 500;
+
+/** Columna de PG ← clave del objeto mapeado (mapSiniestroRow); `def` = valor si viene vacío. */
+export const SINIESTRO_COLUMNAS: ReadonlyArray<{ col: string; key: string; def?: unknown }> = [
+  { col: 'origen_clave', key: 'origenClave' },
+  { col: 'id_ramo', key: 'idRamo' },
+  { col: 'numero_poliza', key: 'numeroPoliza' },
+  { col: 'numero_siniestro', key: 'numeroSiniestro' },
+  { col: 'cedula_asegurado', key: 'cedulaAsegurado' },
+  { col: 'nombre_apellido_asegurado', key: 'nombreApellidoAsegurado' },
+  { col: 'certificado', key: 'certificado' },
+  { col: 'placa', key: 'placa' },
+  { col: 'serial_carroceria', key: 'serialCarroceria' },
+  { col: 'serial_motor', key: 'serialMotor' },
+  { col: 'color_vehiculo', key: 'colorVehiculo' },
+  { col: 'numero_puestos', key: 'numeroPuestos' },
+  { col: 'marca_vehiculo', key: 'marcaVehiculo' },
+  { col: 'modelo_vehiculo', key: 'modeloVehiculo' },
+  { col: 'version_vehiculo', key: 'versionVehiculo' },
+  { col: 'cedula_siniestrado', key: 'cedulaSiniestrado' },
+  { col: 'nombre_apellido_siniestrado', key: 'nombreApellidoSiniestrado' },
+  { col: 'fecha_ocurrencia', key: 'fechaOcurrencia' },
+  { col: 'fecha_notificacion', key: 'fechaNotificacion' },
+  { col: 'moneda', key: 'moneda' },
+  { col: 'monto_siniestro_bs', key: 'montoSiniestroBs' },
+  { col: 'monto_siniestro_ext', key: 'montoSiniestroExt' },
+  { col: 'monto_reserva_bs', key: 'montoReservaBs' },
+  { col: 'monto_reserva_ext', key: 'montoReservaExt' },
+  { col: 'monto_pagado_bs', key: 'montoPagadoBs' },
+  { col: 'monto_pagado_ext', key: 'montoPagadoExt' },
+  { col: 'tipo_movimiento', key: 'tipoMovimiento' },
+  { col: 'numero_orden_pago', key: 'numeroOrdenPago' },
+  { col: 'fecha_emision_orden', key: 'fechaEmisionOrden' },
+  { col: 'fecha_pago_orden', key: 'fechaPagoOrden' },
+  { col: 'id_estatus', key: 'idEstatus' },
+  { col: 'productor', key: 'productor' },
+  { col: 'plan_poliza', key: 'planPoliza' },
+  { col: 'id_sucursal_receptora', key: 'idSucursalReceptora' },
+  { col: 'sucursal_receptora', key: 'sucursalReceptora' },
+  { col: 'id_anulacion', key: 'idAnulacion' },
+  { col: 'anulacion', key: 'anulacion' },
+  { col: 'fecha_anulacion', key: 'fechaAnulacion' },
+  { col: 'id_rechazo', key: 'idRechazo' },
+  { col: 'rechazo', key: 'rechazo' },
+  { col: 'fecha_rechazo', key: 'fechaRechazo' },
+  { col: 'tasa_cambio', key: 'tasaCambio' },
+  { col: 'cobertura_afectada', key: 'coberturaAfectada', def: '' },
+  { col: 'id_canal', key: 'idCanal' },
+  { col: 'tipo_canal', key: 'tipoCanal' },
+  { col: 'tipo_vehiculo', key: 'tipoVehiculo' },
+];
+
+const NL = '\n';
+
+/** Arma el INSERT multi-fila con parámetros con nombre (@r{fila}c{columna}). */
+export function buildSiniestrosUpsert(
+  aseguradoraId: number,
+  rows: Record<string, unknown>[],
+): { query: string; params: Record<string, unknown> } {
+  const params: Record<string, unknown> = { aseguradoraId };
+  const cols = SINIESTRO_COLUMNAS;
+  const values = rows.map((row, r) => {
+    const marcadores = cols.map((c, k) => {
+      const nombre = `r${r}c${k}`;
+      const valor = row[c.key];
+      params[nombre] = valor === undefined || valor === null ? (c.def ?? null) : valor;
+      return `@${nombre}`;
+    });
+    return `(@aseguradoraId, ${marcadores.join(', ')}, NOW())`;
+  });
+  const SEP = ',' + NL + '       ';
+  const actualiza = cols
+    .filter((c) => c.col !== 'origen_clave')
+    .map((c) => `${c.col} = EXCLUDED.${c.col}`)
+    .join(SEP);
+  const query = `INSERT INTO siniestro (
+       id_aseguradora, ${cols.map((c) => c.col).join(', ')}, synced_at
+     ) VALUES
+       ${values.join(SEP)}
+     ON CONFLICT (id_aseguradora, origen_clave) WHERE origen_clave IS NOT NULL
+     DO UPDATE SET
+       ${actualiza},
+       synced_at = NOW()`;
+  return { query, params };
+}
+
 @Injectable()
 export class SyncUpsertRepository {
   constructor(private readonly reportesPg: ReportesPgService) {}
@@ -43,7 +130,7 @@ export class SyncUpsertRepository {
        id_aseguradora, origen_clave, fecha_emision, fecha_anulacion, fecha_desde, fecha_hasta,
        poliza, recibo, cliente, cedula, id_ramo, id_canal, id_productor, id_frecuencia,
        id_estatus, monto_recibo, monto_recibo_ext, numero_cuota, moneda, fecha_pago, tipo_recibo,
-       coberturas, synced_at
+       coberturas, tipo_canal, placa, tipo_vehiculo, synced_at
      )
      SELECT
        @aseguradoraId,
@@ -68,6 +155,9 @@ export class SyncUpsertRepository {
        t.fecha_pago,
        t.tipo_recibo,
        t.coberturas,
+       t.tipo_canal,
+       t.placa,
+       t.tipo_vehiculo,
        NOW()
      FROM unnest(
        @origenClaves::text[],
@@ -90,12 +180,15 @@ export class SyncUpsertRepository {
        @monedas::text[],
        @fechasPago::timestamptz[],
        @tiposRecibo::text[],
-       @coberturas::text[]
+       @coberturas::text[],
+       @tiposCanal::text[],
+       @placas::text[],
+       @tiposVehiculo::text[]
      ) AS t(
        origen_clave, fecha_emision, fecha_anulacion, fecha_desde, fecha_hasta,
        poliza, recibo, cliente, cedula, id_ramo, id_canal, id_productor, id_frecuencia,
        id_estatus, monto_recibo, monto_recibo_ext, numero_cuota, moneda, fecha_pago,
-       tipo_recibo, coberturas
+       tipo_recibo, coberturas, tipo_canal, placa, tipo_vehiculo
      )`,
       {
         aseguradoraId,
@@ -122,6 +215,9 @@ export class SyncUpsertRepository {
         fechasPago: rows.map((r) => r.fechaPago ?? null),
         tiposRecibo: rows.map((r) => r.tipoRecibo ?? null),
         coberturas: rows.map((r) => r.coberturas ?? ''),
+        tiposCanal: rows.map((r) => r.tipoCanal ?? null),
+        placas: rows.map((r) => r.placa ?? null),
+        tiposVehiculo: rows.map((r) => r.tipoVehiculo ?? null),
       },
       tx,
     );
@@ -139,120 +235,34 @@ export class SyncUpsertRepository {
     aseguradoraId: number,
     row: Record<string, unknown>,
   ): Promise<void> {
-    await this.exec(
-      `INSERT INTO siniestro (
-       id_aseguradora, origen_clave, id_ramo, numero_poliza, numero_siniestro,
-       cedula_asegurado, nombre_apellido_asegurado, certificado, placa, serial_carroceria,
-       serial_motor, color_vehiculo, numero_puestos, marca_vehiculo, modelo_vehiculo,
-       version_vehiculo, cedula_siniestrado, nombre_apellido_siniestrado, fecha_ocurrencia,
-       fecha_notificacion, moneda, monto_siniestro_bs, monto_siniestro_ext, monto_reserva_bs,
-       monto_reserva_ext, monto_pagado_bs, monto_pagado_ext, tipo_movimiento, numero_orden_pago,
-       fecha_emision_orden, fecha_pago_orden, id_estatus, productor, plan_poliza,
-       id_sucursal_receptora, sucursal_receptora, id_anulacion, anulacion, fecha_anulacion,
-       id_rechazo, rechazo, fecha_rechazo, tasa_cambio, cobertura_afectada, synced_at
-     ) VALUES (
-       @aseguradoraId, @origenClave, @idRamo, @numeroPoliza, @numeroSiniestro,
-       @cedulaAsegurado, @nombreApellidoAsegurado, @certificado, @placa, @serialCarroceria,
-       @serialMotor, @colorVehiculo, @numeroPuestos, @marcaVehiculo, @modeloVehiculo,
-       @versionVehiculo, @cedulaSiniestrado, @nombreApellidoSiniestrado, @fechaOcurrencia,
-       @fechaNotificacion, @moneda, @montoSiniestroBs, @montoSiniestroExt, @montoReservaBs,
-       @montoReservaExt, @montoPagadoBs, @montoPagadoExt, @tipoMovimiento, @numeroOrdenPago,
-       @fechaEmisionOrden, @fechaPagoOrden, @idEstatus, @productor, @planPoliza,
-       @idSucursalReceptora, @sucursalReceptora, @idAnulacion, @anulacion, @fechaAnulacion,
-       @idRechazo, @rechazo, @fechaRechazo, @tasaCambio, @coberturaAfectada, NOW()
-     )
-     ON CONFLICT (id_aseguradora, origen_clave) WHERE origen_clave IS NOT NULL
-     DO UPDATE SET
-       id_ramo = EXCLUDED.id_ramo,
-       numero_poliza = EXCLUDED.numero_poliza,
-       numero_siniestro = EXCLUDED.numero_siniestro,
-       cedula_asegurado = EXCLUDED.cedula_asegurado,
-       nombre_apellido_asegurado = EXCLUDED.nombre_apellido_asegurado,
-       certificado = EXCLUDED.certificado,
-       placa = EXCLUDED.placa,
-       serial_carroceria = EXCLUDED.serial_carroceria,
-       serial_motor = EXCLUDED.serial_motor,
-       color_vehiculo = EXCLUDED.color_vehiculo,
-       numero_puestos = EXCLUDED.numero_puestos,
-       marca_vehiculo = EXCLUDED.marca_vehiculo,
-       modelo_vehiculo = EXCLUDED.modelo_vehiculo,
-       version_vehiculo = EXCLUDED.version_vehiculo,
-       cedula_siniestrado = EXCLUDED.cedula_siniestrado,
-       nombre_apellido_siniestrado = EXCLUDED.nombre_apellido_siniestrado,
-       fecha_ocurrencia = EXCLUDED.fecha_ocurrencia,
-       fecha_notificacion = EXCLUDED.fecha_notificacion,
-       moneda = EXCLUDED.moneda,
-       monto_siniestro_bs = EXCLUDED.monto_siniestro_bs,
-       monto_siniestro_ext = EXCLUDED.monto_siniestro_ext,
-       monto_reserva_bs = EXCLUDED.monto_reserva_bs,
-       monto_reserva_ext = EXCLUDED.monto_reserva_ext,
-       monto_pagado_bs = EXCLUDED.monto_pagado_bs,
-       monto_pagado_ext = EXCLUDED.monto_pagado_ext,
-       tipo_movimiento = EXCLUDED.tipo_movimiento,
-       numero_orden_pago = EXCLUDED.numero_orden_pago,
-       fecha_emision_orden = EXCLUDED.fecha_emision_orden,
-       fecha_pago_orden = EXCLUDED.fecha_pago_orden,
-       id_estatus = EXCLUDED.id_estatus,
-       productor = EXCLUDED.productor,
-       plan_poliza = EXCLUDED.plan_poliza,
-       id_sucursal_receptora = EXCLUDED.id_sucursal_receptora,
-       sucursal_receptora = EXCLUDED.sucursal_receptora,
-       id_anulacion = EXCLUDED.id_anulacion,
-       anulacion = EXCLUDED.anulacion,
-       fecha_anulacion = EXCLUDED.fecha_anulacion,
-       id_rechazo = EXCLUDED.id_rechazo,
-       rechazo = EXCLUDED.rechazo,
-       fecha_rechazo = EXCLUDED.fecha_rechazo,
-       tasa_cambio = EXCLUDED.tasa_cambio,
-       cobertura_afectada = EXCLUDED.cobertura_afectada,
-       synced_at = NOW()`,
-      {
-        aseguradoraId,
-        origenClave: row.origenClave,
-        idRamo: row.idRamo,
-        numeroPoliza: row.numeroPoliza,
-        numeroSiniestro: row.numeroSiniestro,
-        cedulaAsegurado: row.cedulaAsegurado,
-        nombreApellidoAsegurado: row.nombreApellidoAsegurado,
-        certificado: row.certificado,
-        placa: row.placa,
-        serialCarroceria: row.serialCarroceria,
-        serialMotor: row.serialMotor,
-        colorVehiculo: row.colorVehiculo,
-        numeroPuestos: row.numeroPuestos,
-        marcaVehiculo: row.marcaVehiculo,
-        modeloVehiculo: row.modeloVehiculo,
-        versionVehiculo: row.versionVehiculo,
-        cedulaSiniestrado: row.cedulaSiniestrado,
-        nombreApellidoSiniestrado: row.nombreApellidoSiniestrado,
-        fechaOcurrencia: row.fechaOcurrencia,
-        fechaNotificacion: row.fechaNotificacion,
-        moneda: row.moneda,
-        montoSiniestroBs: row.montoSiniestroBs,
-        montoSiniestroExt: row.montoSiniestroExt,
-        montoReservaBs: row.montoReservaBs,
-        montoReservaExt: row.montoReservaExt,
-        montoPagadoBs: row.montoPagadoBs,
-        montoPagadoExt: row.montoPagadoExt,
-        tipoMovimiento: row.tipoMovimiento,
-        numeroOrdenPago: row.numeroOrdenPago,
-        fechaEmisionOrden: row.fechaEmisionOrden,
-        fechaPagoOrden: row.fechaPagoOrden,
-        idEstatus: row.idEstatus,
-        productor: row.productor,
-        planPoliza: row.planPoliza,
-        idSucursalReceptora: row.idSucursalReceptora,
-        sucursalReceptora: row.sucursalReceptora,
-        idAnulacion: row.idAnulacion,
-        anulacion: row.anulacion,
-        fechaAnulacion: row.fechaAnulacion,
-        idRechazo: row.idRechazo,
-        rechazo: row.rechazo,
-        fechaRechazo: row.fechaRechazo,
-        tasaCambio: row.tasaCambio,
-        coberturaAfectada: row.coberturaAfectada ?? '',
-      },
-    );
+    await this.upsertSiniestrosBatch(aseguradoraId, [row]);
+  }
+
+  /**
+   * INSERT multi-fila (ON CONFLICT DO UPDATE por origen_clave) de siniestros. Antes cada
+   * siniestro era una sentencia aparte (~2 ms por fila de ida y vuelta); aquí van en lotes
+   * de SINIESTRO_LOTE filas. Si el mismo origen_clave llega dos veces, gana la última fila
+   * (Postgres no permite actualizar dos veces una fila en la misma sentencia).
+   */
+  async upsertSiniestrosBatch(
+    aseguradoraId: number,
+    rows: Record<string, unknown>[],
+    tx?: PgTransaction,
+  ): Promise<void> {
+    const porClave = new Map<string, Record<string, unknown>>();
+    const sinClave: Record<string, unknown>[] = [];
+    for (const row of rows) {
+      const clave = row.origenClave == null ? '' : String(row.origenClave).trim();
+      if (clave === '') sinClave.push(row);
+      else porClave.set(clave, row);
+    }
+    const unicas = [...porClave.values(), ...sinClave];
+
+    for (let i = 0; i < unicas.length; i += SINIESTRO_LOTE) {
+      const lote = unicas.slice(i, i + SINIESTRO_LOTE);
+      const { query, params } = buildSiniestrosUpsert(aseguradoraId, lote);
+      await this.exec(query, params, tx);
+    }
   }
 
   async upsertPoliza(
