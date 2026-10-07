@@ -57,6 +57,7 @@ BEGIN
                 nombre_apellido_asegurado,
                 certificado,
                 placa AS placa_vehiculo,
+                tipo_vehiculo AS tipo_vehiculo,
                 serial_carroceria,
                 serial_motor,
                 color_vehiculo,
