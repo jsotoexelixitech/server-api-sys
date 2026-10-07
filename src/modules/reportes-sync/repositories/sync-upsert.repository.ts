@@ -43,7 +43,7 @@ export class SyncUpsertRepository {
        id_aseguradora, origen_clave, fecha_emision, fecha_anulacion, fecha_desde, fecha_hasta,
        poliza, recibo, cliente, cedula, id_ramo, id_canal, id_productor, id_frecuencia,
        id_estatus, monto_recibo, monto_recibo_ext, numero_cuota, moneda, fecha_pago, tipo_recibo,
-       coberturas, tipo_canal, synced_at
+       coberturas, tipo_canal, placa, tipo_vehiculo, synced_at
      )
      SELECT
        @aseguradoraId,
@@ -69,6 +69,8 @@ export class SyncUpsertRepository {
        t.tipo_recibo,
        t.coberturas,
        t.tipo_canal,
+       t.placa,
+       t.tipo_vehiculo,
        NOW()
      FROM unnest(
        @origenClaves::text[],
@@ -92,12 +94,14 @@ export class SyncUpsertRepository {
        @fechasPago::timestamptz[],
        @tiposRecibo::text[],
        @coberturas::text[],
-       @tiposCanal::text[]
+       @tiposCanal::text[],
+       @placas::text[],
+       @tiposVehiculo::text[]
      ) AS t(
        origen_clave, fecha_emision, fecha_anulacion, fecha_desde, fecha_hasta,
        poliza, recibo, cliente, cedula, id_ramo, id_canal, id_productor, id_frecuencia,
        id_estatus, monto_recibo, monto_recibo_ext, numero_cuota, moneda, fecha_pago,
-       tipo_recibo, coberturas, tipo_canal
+       tipo_recibo, coberturas, tipo_canal, placa, tipo_vehiculo
      )`,
       {
         aseguradoraId,
@@ -125,6 +129,8 @@ export class SyncUpsertRepository {
         tiposRecibo: rows.map((r) => r.tipoRecibo ?? null),
         coberturas: rows.map((r) => r.coberturas ?? ''),
         tiposCanal: rows.map((r) => r.tipoCanal ?? null),
+        placas: rows.map((r) => r.placa ?? null),
+        tiposVehiculo: rows.map((r) => r.tipoVehiculo ?? null),
       },
       tx,
     );

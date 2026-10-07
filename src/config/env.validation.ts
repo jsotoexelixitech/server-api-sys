@@ -149,6 +149,13 @@ export const envValidationSchema = Joi.object({
   REPORTES_SYNC_TTL_SECONDS: Joi.number().default(120),
   REPORTES_SYNC_CATALOG_TTL_SECONDS: Joi.number().default(3600),
   REPORTES_SYNC_TIMEOUT_MS: Joi.number().default(30000),
+  /**
+   * Conexión a la BD de ORIGEN de cada aseguradora (sync de reportes). Se convierten a boolean:
+   * el driver mssql rechaza el texto "false"/"true" en `encrypt` y el sync falla con
+   * 'The "encrypt" property must be set to "strict", or of type boolean.'
+   */
+  DB_ENCRYPT: Joi.boolean().default(false),
+  DB_TRUST_SERVER_CERTIFICATE: Joi.boolean().default(true),
   REPORTES_SYNC_BATCH_SIZE: Joi.number().default(1000),
   GEMINI_API_KEY: Joi.string().allow('').optional(),
   GEMINI_MODEL: Joi.string().default('gemini-2.5-flash-lite'),

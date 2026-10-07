@@ -34,7 +34,7 @@ Para recibos sin póliza en `adpoliza` se usa el productor del propio recibo.
 ## Orden de aplicación (importante)
 El código nuevo escribe columnas que aún no existen en producción: **si se despliega antes del paso 1, el sync falla**.
 
-1. **DDL** (aditivo, idempotente): `docs/sql/postgres/reportes/ddl_tipo_canal.sql`.
+1. **DDL** (aditivo, idempotente): `docs/sql/postgres/reportes/ddl_tipo_canal.sql` y `ddl_vehiculo_recibo.sql` (placa y tipo de vehículo).
 2. **Desplegar** el backend.
 3. **SP**: `sp_rpt_recibos_v6_tipo_canal.sql` y `sp_rpt_siniestros_v2_tipo_canal.sql` (`CREATE OR REPLACE`, firma sin cambios).
    Parten de las definiciones de producción del 2026-10-06 (el `sp_rpt_recibos_v6_def.sql` de la raíz está desactualizado).
@@ -51,13 +51,15 @@ El código nuevo escribe columnas que aún no existen en producción: **si se de
 
 Rollback: las columnas nuevas pueden quedar sin usar; restaurar el `querySql` desde el respaldo del paso 4 y recrear los SP anteriores.
 
-## Tipo de vehículo (fuera de esta fase)
-Se obtiene de **`matipos.xtipo`**, unido a `vhcerti.ctipo`:
+## Placa y tipo de vehículo en recibos
+Columnas **Placa** y **Tipo de Vehículo** en el reporte de recibos (las dos que traía el reporte anterior "Recibos";
+solo ramo automóvil, ~99,95 % de esos recibos tienen vehículo). Se obtienen en el extract desde Sis2000:
 ```sql
 LEFT JOIN vhcerti vh ON vh.cpoliza = rec.cpoliza AND vh.fanopol = rec.fanopol
-                    AND vh.fmespol = rec.fmespol AND vh.ccerti = rec.ccerti
-LEFT JOIN matipos tv ON tv.cramo = rec.cramo AND tv.ctipo = vh.ctipo   -- tv.xtipo = tipo de vehículo
+                    AND vh.fmespol = rec.fmespol AND vh.ccerti = rec.ccerti   -- vh.xplaca = placa
+LEFT JOIN matipos tv ON tv.cramo = rec.cramo AND tv.ctipo = vh.ctipo           -- tv.xtipo = tipo de vehículo
 ```
-Valores del ramo 18: PARTICULARES, RUSTICO, CARGA, MOTOCICLETA, REMOLQUE, AUTOBUS, N/D (`ctipo` 0 = TODOS).
-El reporte legacy "Recibos" ya lo trae así (`SPReRecibos_v3`, `tv.xtipo AS tipo_vehiculo`). El extract de siniestros usa
-`vhcerti` y `mavinma` (marca, modelo, versión) pero no `matipos`.
+La unión es 1 a 1 (0 recibos con más de un vehículo). Tipos en el ramo 18: MOTOCICLETA, PARTICULARES, RUSTICO, CARGA,
+MINIBUSES, REMOLQUE, AUTOBUS, PICK-UP, MOTO-CARRO; el ~18 % queda vacío porque `vhcerti.ctipo` viene nulo en origen.
+Objetos: `recibo.placa varchar(15)` y `recibo.tipo_vehiculo varchar(60)` (`ddl_vehiculo_recibo.sql`) y el detalle de
+`sp_rpt_recibos_v6_tipo_canal.sql`. Siniestros ya trae marca, modelo, versión y placa por su propio extract.
