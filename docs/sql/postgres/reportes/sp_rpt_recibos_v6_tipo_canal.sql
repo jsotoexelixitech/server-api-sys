@@ -4,7 +4,8 @@
 -- Cambios respecto a producción:
 --   * detalle: canal = nombre del canal alterno o, si no tiene, el tipo de canal; nueva columna tipo_canal.
 --   * "mora por canal": LEFT JOIN + el mismo respaldo, para no excluir los recibos sin canal alterno.
--- Requiere antes docs/sql/postgres/reportes/ddl_tipo_canal.sql. La firma no cambia (CREATE OR REPLACE).
+--   * detalle: columnas placa y tipo_vehiculo (solo ramo automóvil).
+-- Requiere antes docs/sql/postgres/reportes/ddl_tipo_canal.sql y ddl_vehiculo_recibo.sql. La firma no cambia (CREATE OR REPLACE).
 -- Rollback: volver a crear el SP con la definición anterior (copia en el historial de git).
 
 CREATE OR REPLACE PROCEDURE public.sp_rpt_recibos_v6(IN p_payload_json jsonb, IN p_usuario numeric, INOUT p_cursor_kpi refcursor DEFAULT 'p_cursor_kpi'::refcursor, INOUT p_cursor_detalle refcursor DEFAULT 'p_cursor_detalle'::refcursor, INOUT p_cursor_emitido_cobrado_vencido refcursor DEFAULT 'p_cursor_emitido_cobrado_vencido'::refcursor, INOUT p_cursor_aging_mora refcursor DEFAULT 'p_cursor_aging_mora'::refcursor, INOUT p_cursor_mora_canal refcursor DEFAULT 'p_cursor_mora_canal'::refcursor, INOUT p_cursor_mora_producto refcursor DEFAULT 'p_cursor_mora_producto'::refcursor, INOUT p_cursor_mora_frecuencia refcursor DEFAULT 'p_cursor_mora_frecuencia'::refcursor, INOUT p_cursor_eficiencia_productor refcursor DEFAULT 'p_cursor_eficiencia_productor'::refcursor)
@@ -434,6 +435,8 @@ BEGIN
             TRIM(ram.descripcion) AS ramo,
             COALESCE(c.descripcion, r.tipo_canal) AS canal,
             r.tipo_canal AS tipo_canal,
+            r.placa AS placa,
+            r.tipo_vehiculo AS tipo_vehiculo,
             p.descripcion AS productor_nombre,
             CASE
                 WHEN r.id_frecuencia = 'A' THEN 'Anual'
