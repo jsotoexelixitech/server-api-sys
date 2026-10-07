@@ -54,6 +54,7 @@ export const SINIESTRO_COLUMNAS: ReadonlyArray<{ col: string; key: string; def?:
   { col: 'cobertura_afectada', key: 'coberturaAfectada', def: '' },
   { col: 'id_canal', key: 'idCanal' },
   { col: 'tipo_canal', key: 'tipoCanal' },
+  { col: 'tipo_vehiculo', key: 'tipoVehiculo' },
 ];
 
 const NL = '\n';

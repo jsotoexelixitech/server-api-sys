@@ -191,6 +191,7 @@ export const mundialAdapter: InsurerAdapter = {
       productor: toStr(pick(row, 'productor', 'cproductor')),
       idCanal: toNum(pick(row, 'id_canal', 'idcanal')),
       tipoCanal: toStr(pick(row, 'tipo_canal', 'tipocanal')),
+      tipoVehiculo: toStr(pick(row, 'tipo_vehiculo', 'tipovehiculo')),
       planPoliza: toStr(pick(row, 'plan_poliza')),
       idSucursalReceptora: toNum(pick(row, 'id_sucursal_receptora')),
       sucursalReceptora: toStr(pick(row, 'sucursal_receptora')),
