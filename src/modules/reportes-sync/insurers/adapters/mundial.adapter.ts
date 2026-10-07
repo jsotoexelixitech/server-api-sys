@@ -118,6 +118,8 @@ export const mundialAdapter: InsurerAdapter = {
       idRamo: toNum(pick(row, 'id_ramo', 'idramo', 'cramo')),
       idCanal: toNum(pick(row, 'id_canal', 'idcanal', 'ccanal', 'ccanalalt')),
       tipoCanal: toStr(pick(row, 'tipo_canal', 'tipocanal')),
+      placa: toStr(pick(row, 'placa')),
+      tipoVehiculo: toStr(pick(row, 'tipo_vehiculo', 'tipovehiculo')),
       idProductor: toNum(pick(row, 'id_productor', 'idproductor', 'cproductor')),
       idFrecuencia: toStr(pick(row, 'id_frecuencia', 'idfrecuencia')),
       idEstatus: mapIestadorec(

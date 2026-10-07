@@ -50,3 +50,25 @@ describe('mundialAdapter · canal y tipo de canal', () => {
     expect(row.tipoCanal ?? null).toBeNull();
   });
 });
+
+describe('mundialAdapter · placa y tipo de vehículo en recibos', () => {
+  const base = { recibo: '18-1', poliza: 'P', fecha_desde: '2026-03-07', tipo_recibo: 'P' };
+
+  it('mapea placa y tipo_vehiculo del extract', () => {
+    const row = mundialAdapter.mapRow('recibos', {
+      ...base,
+      placa: 'AB123CD',
+      tipo_vehiculo: 'MOTOCICLETA',
+    }) as Record<string, unknown>;
+
+    expect(row.placa).toBe('AB123CD');
+    expect(row.tipoVehiculo).toBe('MOTOCICLETA');
+  });
+
+  it('recibos sin vehículo (otros ramos) quedan nulos', () => {
+    const row = mundialAdapter.mapRow('recibos', base) as Record<string, unknown>;
+
+    expect(row.placa ?? null).toBeNull();
+    expect(row.tipoVehiculo ?? null).toBeNull();
+  });
+});
