@@ -19,3 +19,16 @@ export function debeFrenarReemplazo(args: {
   if (sinBorrado || !reemplazoCompleto) return false;
   return borradas > SYNC_FRENO_MIN_BORRADAS && escritas < borradas * SYNC_FRENO_RATIO;
 }
+
+/** Solo se evalúa si se van a borrar más de N filas huérfanas (en alcances chicos una variación no es señal). */
+export const SYNC_HUERFANAS_MIN = 100;
+
+/**
+ * Freno de la escritura por diferencias: las "huérfanas" son filas del alcance local cuya clave ya no vino
+ * del origen. Si son más que las filas recibidas (el origen devolvió menos de la mitad de lo que había),
+ * se revierte la transacción en vez de borrar un alcance casi completo por una lectura incompleta.
+ */
+export function debeFrenarHuerfanas(args: { huerfanas: number; recibidas: number }): boolean {
+  const { huerfanas, recibidas } = args;
+  return huerfanas > SYNC_HUERFANAS_MIN && huerfanas > recibidas;
+}
