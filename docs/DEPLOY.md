@@ -5,7 +5,7 @@ GitHub. Toda la configuración vive en un archivo del servidor.
 
 | Rama | Ambiente | Servidor | Runner (etiqueta) | PM2 (`--env`) |
 |---|---|---|---|---|
-| `main` | production | 172.30.149.75 | `produccion` | `production` |
+| `main` | production | 172.30.149.75 | `Srv-Gcia-proyect` | `production` |
 | `qa` | qa | 192.168.8.121 | `qa` | `qa` |
 
 Un push a `main` o `qa` despliega. También se puede lanzar a mano (Actions > Deploy (PM2) > Run workflow), pero el
@@ -25,7 +25,7 @@ Cualquier otra rama no despliega.
 ## Preparación única en cada servidor
 
 ### Runner
-Registrar un runner self-hosted con las etiquetas `self-hosted`, `Linux`, `X64` y, además, `produccion`
+Registrar un runner self-hosted con las etiquetas `self-hosted`, `Linux`, `X64` y, además, `Srv-Gcia-proyect`
 (172.30.149.75) o `qa` (192.168.8.121). El usuario del runner necesita `pm2`, `node`/`npm` y `curl`.
 
 ### Archivo de configuración

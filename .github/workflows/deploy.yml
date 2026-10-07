@@ -2,7 +2,7 @@ name: Deploy (PM2)
 
 # main -> Producción (172.30.149.75)   |   qa -> QA (192.168.8.121)
 #
-# Solo runners self-hosted, uno por servidor, con la etiqueta "produccion" o "qa"
+# Solo runners self-hosted, uno por servidor, con la etiqueta "Srv-Gcia-proyect" o "qa"
 # (además de self-hosted, Linux, X64). No usa GitHub Environments ni secretos de GitHub:
 # toda la configuración (incluidos los secretos) vive en un archivo del propio servidor,
 # fuera del workspace del runner. Ver docs/DEPLOY.md.
@@ -30,12 +30,12 @@ concurrency:
 jobs:
   deploy:
     name: Deploy ${{ (github.event_name == 'workflow_dispatch' && inputs.target) || (github.ref_name == 'main' && 'production') || 'qa' }}
-    # El runner se elige por etiqueta: production -> "produccion", qa -> "qa".
+    # El runner se elige por etiqueta: production -> "Srv-Gcia-proyect", qa -> "qa".
     runs-on:
       - self-hosted
       - Linux
       - X64
-      - ${{ ((github.event_name == 'workflow_dispatch' && inputs.target) || (github.ref_name == 'main' && 'production') || 'qa') == 'production' && 'produccion' || 'qa' }}
+      - ${{ ((github.event_name == 'workflow_dispatch' && inputs.target) || (github.ref_name == 'main' && 'production') || 'qa') == 'production' && 'Srv-Gcia-proyect' || 'qa' }}
     timeout-minutes: 30
     env:
       EVENT: ${{ github.event_name }}
