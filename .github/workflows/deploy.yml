@@ -2,11 +2,10 @@ name: Deploy (PM2)
 
 # main -> Producción (172.30.149.75)   |   qa -> QA (192.168.8.121)
 #
-# Requisitos (ver docs/DEPLOY.md):
-#  - Un runner self-hosted en cada servidor, con la etiqueta "produccion" o "qa" (además de self-hosted, Linux, X64).
-#  - GitHub Environments "production" y "qa" (Settings > Environments). En "production" conviene exigir aprobación.
-#  - Archivo .env del servidor FUERA del workspace (APP_ENV_FILE), con los secretos. El deploy lo copia a .env.
-#  - Variables no secretas del Environment (vars.*) que, si existen, pisan la línea correspondiente del .env.
+# Solo runners self-hosted, uno por servidor, con la etiqueta "produccion" o "qa"
+# (además de self-hosted, Linux, X64). No usa GitHub Environments ni secretos de GitHub:
+# toda la configuración (incluidos los secretos) vive en un archivo del propio servidor,
+# fuera del workspace del runner. Ver docs/DEPLOY.md.
 
 on:
   push:
@@ -29,23 +28,23 @@ concurrency:
   cancel-in-progress: false
 
 jobs:
-  resolve:
-    name: Resolver ambiente
-    runs-on: ubuntu-latest
-    outputs:
-      target: ${{ steps.r.outputs.target }}
-      runner_label: ${{ steps.r.outputs.runner_label }}
-      pm2_env: ${{ steps.r.outputs.pm2_env }}
-      server: ${{ steps.r.outputs.server }}
-      pg_host: ${{ steps.r.outputs.pg_host }}
-      sis_db: ${{ steps.r.outputs.sis_db }}
+  deploy:
+    name: Deploy ${{ (github.event_name == 'workflow_dispatch' && inputs.target) || (github.ref_name == 'main' && 'production') || 'qa' }}
+    # El runner se elige por etiqueta: production -> "produccion", qa -> "qa".
+    runs-on:
+      - self-hosted
+      - Linux
+      - X64
+      - ${{ ((github.event_name == 'workflow_dispatch' && inputs.target) || (github.ref_name == 'main' && 'production') || 'qa') == 'production' && 'produccion' || 'qa' }}
+    timeout-minutes: 30
+    env:
+      EVENT: ${{ github.event_name }}
+      REF: ${{ github.ref_name }}
+      INPUT_TARGET: ${{ inputs.target }}
+
     steps:
-      - id: r
+      - name: Resolver y validar ambiente
         shell: bash
-        env:
-          EVENT: ${{ github.event_name }}
-          REF: ${{ github.ref_name }}
-          INPUT_TARGET: ${{ inputs.target }}
         run: |
           set -euo pipefail
           if [ "$EVENT" = "workflow_dispatch" ]; then
@@ -60,10 +59,10 @@ jobs:
 
           case "$TARGET" in
             production)
-              EXPECTED_REF="main"; LABEL="produccion"; PM2_ENV="production"
+              EXPECTED_REF="main"; PM2_ENV="production"
               SERVER="172.30.149.75"; PG_HOST="172.30.149.75"; SIS_DB="sis2000" ;;
             qa)
-              EXPECTED_REF="qa"; LABEL="qa"; PM2_ENV="qa"
+              EXPECTED_REF="qa"; PM2_ENV="qa"
               SERVER="192.168.8.121"; PG_HOST="192.168.8.121"; SIS_DB="sis2000_qa" ;;
             *)
               echo "::error::Ambiente desconocido: $TARGET"; exit 1 ;;
@@ -73,31 +72,19 @@ jobs:
             echo "::error::'$TARGET' solo se despliega desde la rama '$EXPECTED_REF' (este run es de '$REF')."; exit 1
           fi
 
+          # Archivo con secretos y configuración, en el servidor (puede redefinirse con APP_ENV_FILE en el runner).
+          APP_ENV_FILE="${APP_ENV_FILE:-/opt/sysip/env/nest-api.${TARGET}.env}"
+
           {
-            echo "target=$TARGET"
-            echo "runner_label=$LABEL"
-            echo "pm2_env=$PM2_ENV"
-            echo "server=$SERVER"
-            echo "pg_host=$PG_HOST"
-            echo "sis_db=$SIS_DB"
-          } >> "$GITHUB_OUTPUT"
-          echo "Ambiente: $TARGET (rama $REF, servidor $SERVER, runner '$LABEL')"
+            echo "TARGET=$TARGET"
+            echo "PM2_ENV=$PM2_ENV"
+            echo "SERVER=$SERVER"
+            echo "EXPECTED_PG_HOST=$PG_HOST"
+            echo "EXPECTED_SIS_DB=$SIS_DB"
+            echo "APP_ENV_FILE=$APP_ENV_FILE"
+          } >> "$GITHUB_ENV"
+          echo "Ambiente: $TARGET (rama $REF, servidor $SERVER, pm2 --env $PM2_ENV, config $APP_ENV_FILE)"
 
-  deploy:
-    name: Deploy ${{ needs.resolve.outputs.target }} (${{ needs.resolve.outputs.server }})
-    needs: resolve
-    runs-on: [self-hosted, Linux, X64, "${{ needs.resolve.outputs.runner_label }}"]
-    environment: ${{ needs.resolve.outputs.target }}
-    timeout-minutes: 30
-    env:
-      TARGET: ${{ needs.resolve.outputs.target }}
-      PM2_ENV: ${{ needs.resolve.outputs.pm2_env }}
-      EXPECTED_PG_HOST: ${{ needs.resolve.outputs.pg_host }}
-      EXPECTED_SIS_DB: ${{ needs.resolve.outputs.sis_db }}
-      # Archivo con los secretos y la configuración base, mantenido en el servidor (fuera del workspace).
-      APP_ENV_FILE: ${{ vars.APP_ENV_FILE || format('/opt/sysip/env/nest-api.{0}.env', needs.resolve.outputs.target) }}
-
-    steps:
       - name: Checkout repository
         uses: actions/checkout@v4
 
@@ -117,46 +104,6 @@ jobs:
           fi
           install -m 600 "$APP_ENV_FILE" .env
           echo "Copiado $APP_ENV_FILE -> .env"
-
-      - name: Aplicar variables del Environment (vars)
-        shell: bash
-        # Solo variables NO secretas. Si la variable está definida en GitHub (Settings > Environments > Variables),
-        # reemplaza o agrega la línea en .env; si no, se respeta lo que diga el archivo del servidor.
-        env:
-          V_PORT: ${{ vars.PORT }}
-          V_CORS_ORIGIN: ${{ vars.CORS_ORIGIN }}
-          V_REPORTES_ENABLED: ${{ vars.REPORTES_ENABLED }}
-          V_REPORTES_SYNC_ENABLED: ${{ vars.REPORTES_SYNC_ENABLED }}
-          V_REPORTES_SYNC_SCHEDULE_ENABLED: ${{ vars.REPORTES_SYNC_SCHEDULE_ENABLED }}
-          V_REPORTES_SYNC_SCHEDULE_INTERVAL_MINUTES: ${{ vars.REPORTES_SYNC_SCHEDULE_INTERVAL_MINUTES }}
-          V_REPORTES_SYNC_SCHEDULE_WINDOW_DAYS: ${{ vars.REPORTES_SYNC_SCHEDULE_WINDOW_DAYS }}
-          V_REPORTES_SYNC_SCHEDULE_ENTIDADES: ${{ vars.REPORTES_SYNC_SCHEDULE_ENTIDADES }}
-          V_REPORTES_SYNC_RECIBOS_ON_EXECUTE: ${{ vars.REPORTES_SYNC_RECIBOS_ON_EXECUTE }}
-          V_REPORTES_SYNC_SINIESTROS_ON_EXECUTE: ${{ vars.REPORTES_SYNC_SINIESTROS_ON_EXECUTE }}
-          V_REPORTES_SYNC_TTL_SECONDS: ${{ vars.REPORTES_SYNC_TTL_SECONDS }}
-          V_REPORTES_SYNC_CATALOG_TTL_SECONDS: ${{ vars.REPORTES_SYNC_CATALOG_TTL_SECONDS }}
-          V_REPORTES_SYNC_TIMEOUT_MS: ${{ vars.REPORTES_SYNC_TIMEOUT_MS }}
-          V_REPORTES_SYNC_BATCH_SIZE: ${{ vars.REPORTES_SYNC_BATCH_SIZE }}
-        run: |
-          set -euo pipefail
-          upsert() {
-            local key="$1" val="$2" tmp
-            tmp="$(mktemp)"
-            grep -vE "^${key}=" .env > "$tmp" || true
-            printf '%s=%s\n' "$key" "$val" >> "$tmp"
-            cat "$tmp" > .env
-            rm -f "$tmp"
-            echo "  ${key}=${val}"
-          }
-          echo "Variables aplicadas desde el Environment '$TARGET':"
-          n=0
-          while IFS='=' read -r name value; do
-            case "$name" in
-              V_*)
-                if [ -n "$value" ]; then upsert "${name#V_}" "$value"; n=$((n+1)); fi ;;
-            esac
-          done < <(env | sort)
-          [ "$n" -gt 0 ] || echo "  (ninguna: se usa el archivo del servidor tal cual)"
 
       - name: Validar configuración (.env)
         shell: bash
