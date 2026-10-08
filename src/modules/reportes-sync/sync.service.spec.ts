@@ -17,7 +17,8 @@ function build(
     filterParams?: Record<string, unknown>;
   } = {},
 ) {
-  const cfg: Env = { REPORTES_SYNC_ENABLED: true, ...env };
+  // Por defecto sin paralelismo de extracción: cada prueba cuenta lecturas del origen.
+  const cfg: Env = { REPORTES_SYNC_ENABLED: true, REPORTES_SYNC_EXTRACT_PARALLEL: 1, ...env };
   const config = { get: jest.fn((k: string, d?: unknown) => (k in cfg ? cfg[k] : d)) };
 
   const originConfig = {
@@ -27,7 +28,12 @@ function build(
     filterParams: opts.filterParams ?? {},
   };
   const adapter = {
-    planEntityExtraction: jest.fn(() => ({ source: 'db', query: 'SELECT 1', params: {}, originConfig })),
+    planEntityExtraction: jest.fn((_e: string, _w: unknown, f: { desde?: Date; hasta?: Date }) => ({
+      source: 'db',
+      query: 'SELECT 1',
+      params: { desde: f.desde, hasta: f.hasta },
+      originConfig,
+    })),
     mapRow: jest.fn((_entidad: string, row: Record<string, unknown>) => row),
   };
   const insurerConnection = {
@@ -66,7 +72,7 @@ function build(
     localRepo as never,
     reportesPg as never,
   );
-  return { service, insurerConnection, syncLock, upsertRepo, localRepo, watermarkRepo };
+  return { service, adapter, insurerConnection, syncLock, upsertRepo, localRepo, watermarkRepo };
 }
 
 const filtros = {
@@ -206,5 +212,76 @@ describe('SyncService · candado', () => {
     const r = await service.syncIncremental('recibos', filtros, { scopeKey: 'recibos|A' });
     expect(r.skipped).toBe(true);
     expect(r.stale).toBe(true);
+  });
+});
+
+describe('SyncService · lectura del origen en paralelo', () => {
+  const ancho = {
+    aseguradoraId: 1,
+    desde: new Date('2026-01-01T00:00:00Z'),
+    hasta: new Date('2026-03-31T00:00:00Z'), // 90 días
+  };
+  const ymd = (d: unknown) => (d as Date).toISOString().slice(0, 10);
+
+  function origenPorTramo(insurerConnection: { querySource: jest.Mock }) {
+    // cada tramo devuelve filas distintas según su fecha de inicio
+    insurerConnection.querySource.mockImplementation(async (_id: number, _q: string, params: { desde: Date }) => [
+      { origenClave: `R-${ymd(params.desde)}-1`, poliza: 'P', idEstatus: 3 },
+      { origenClave: `R-${ymd(params.desde)}-2`, poliza: 'P', idEstatus: 3 },
+    ]);
+  }
+
+  it('un rango ancho de recibos se lee en 4 tramos consecutivos y se unen las filas', async () => {
+    const { service, insurerConnection, upsertRepo } = build({ REPORTES_SYNC_EXTRACT_PARALLEL: 4 });
+    origenPorTramo(insurerConnection);
+    const r = await service.syncIncremental('recibos', ancho, { ignoreTtl: true });
+
+    expect(insurerConnection.querySource).toHaveBeenCalledTimes(4);
+    const rangos = (insurerConnection.querySource.mock.calls as unknown as Array<[number, string, { desde: Date; hasta: Date }]>).map((c) => [ymd(c[2].desde), ymd(c[2].hasta)]);
+    expect(rangos[0][0]).toBe('2026-01-01');
+    expect(rangos[3][1]).toBe('2026-03-31');
+    for (let i = 1; i < rangos.length; i += 1) {
+      const fin = new Date(`${rangos[i - 1][1]}T00:00:00Z`).getTime() + 24 * 3600 * 1000;
+      expect(new Date(`${rangos[i][0]}T00:00:00Z`).getTime()).toBe(fin); // sin huecos ni traslapes
+    }
+    expect(r.rowsSynced).toBe(8); // 4 tramos × 2 filas
+    const escritas = (upsertRepo.upsertRecibosChangedBatch.mock.calls[0] as unknown[])[1] as unknown[];
+    expect(escritas).toHaveLength(8);
+  });
+
+  it('con REPORTES_SYNC_EXTRACT_PARALLEL=1 hace una sola lectura', async () => {
+    const { service, insurerConnection } = build({ REPORTES_SYNC_EXTRACT_PARALLEL: 1 });
+    await service.syncIncremental('recibos', ancho, { ignoreTtl: true });
+    expect(insurerConnection.querySource).toHaveBeenCalledTimes(1);
+  });
+
+  it('un rango corto no se parte', async () => {
+    const { service, insurerConnection } = build({ REPORTES_SYNC_EXTRACT_PARALLEL: 4 });
+    await service.syncIncremental(
+      'recibos',
+      { aseguradoraId: 1, desde: new Date('2026-01-01T00:00:00Z'), hasta: new Date('2026-01-10T00:00:00Z') },
+      { ignoreTtl: true },
+    );
+    expect(insurerConnection.querySource).toHaveBeenCalledTimes(1);
+  });
+
+  it('sin rango de fechas no se parte', async () => {
+    const { service, insurerConnection } = build({ REPORTES_SYNC_EXTRACT_PARALLEL: 4 });
+    await service.syncIncremental('recibos', { aseguradoraId: 1 }, { ignoreTtl: true });
+    expect(insurerConnection.querySource).toHaveBeenCalledTimes(1);
+  });
+
+  it('si un tramo falla, el sync falla completo y conserva los datos locales', async () => {
+    const { service, insurerConnection, upsertRepo } = build({ REPORTES_SYNC_EXTRACT_PARALLEL: 4 });
+    let n = 0;
+    insurerConnection.querySource.mockImplementation(async () => {
+      n += 1;
+      if (n === 3) throw new Error('timeout del origen');
+      return FILAS;
+    });
+    const r = await service.syncIncremental('recibos', ancho, { ignoreTtl: true });
+    expect(r.stale).toBe(true);
+    expect(r.warning).toContain('timeout del origen');
+    expect(upsertRepo.upsertRecibosChangedBatch).not.toHaveBeenCalled();
   });
 });

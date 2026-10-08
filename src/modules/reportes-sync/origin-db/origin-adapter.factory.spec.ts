@@ -76,3 +76,16 @@ describe('envValidationSchema · DB_ENCRYPT y DB_TRUST_SERVER_CERTIFICATE', () =
     expect(value.DB_TRUST_SERVER_CERTIFICATE).toBe(true);
   });
 });
+
+describe('OriginAdapterFactory · tamaño de paquete del origen', () => {
+  it('por defecto usa 16384 bytes (el del driver es 4096)', () => {
+    expect(opcionesMssql({}).packetSize).toBe(16384);
+  });
+
+  it('se puede configurar y se limita al rango que admite SQL Server', () => {
+    expect(opcionesMssql({ REPORTES_SYNC_ORIGIN_PACKET_SIZE: 8192 }).packetSize).toBe(8192);
+    expect(opcionesMssql({ REPORTES_SYNC_ORIGIN_PACKET_SIZE: 99999 }).packetSize).toBe(32767);
+    expect(opcionesMssql({ REPORTES_SYNC_ORIGIN_PACKET_SIZE: 10 }).packetSize).toBe(512);
+    expect(opcionesMssql({ REPORTES_SYNC_ORIGIN_PACKET_SIZE: 'abc' }).packetSize).toBe(16384);
+  });
+});
