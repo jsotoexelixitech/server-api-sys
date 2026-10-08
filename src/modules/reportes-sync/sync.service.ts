@@ -14,7 +14,8 @@ import {
   type LocalDeleteScope,
 } from './repositories/sync-local.repository';
 import { isCatalogEntidad } from './utils/sync-catalog.constants';
-import { debeFrenarReemplazo } from './utils/sync-guard';
+import { debeFrenarHuerfanas, debeFrenarReemplazo } from './utils/sync-guard';
+import { SyncScopeCache } from './utils/sync-scope-cache';
 import {
   hasExtraOriginFilters,
   resolveDateColumn,
@@ -33,6 +34,11 @@ const ENTIDADES_ATOMICAS = new Set(['recibos', 'siniestros']);
 export type SyncResult = {
   entidad: string;
   rowsSynced: number;
+  /** Recibos con escritura por diferencias: filas realmente nuevas o modificadas. */
+  rowsChanged?: number;
+  /** Milisegundos de la lectura en el origen y de la escritura en PG (solo syncs que escriben). */
+  extractMs?: number;
+  writeMs?: number;
   skipped: boolean;
   stale?: boolean;
   reason?: string;
@@ -58,11 +64,17 @@ type SyncOptions = {
   ignoreTtl?: boolean;
   /** Si hay datos locales, no bloquear el reporte con un full-resync (salvo force). */
   preferLocal?: boolean;
+  /**
+   * Identifica el alcance (filtros del usuario). Con clave, la vigencia es por alcance y no por entidad,
+   * y si otro sync tiene el candado se espera en lugar de omitir el refresco.
+   */
+  scopeKey?: string;
 };
 
 @Injectable()
 export class SyncService {
   private readonly logger = new Logger(SyncService.name);
+  private readonly scopeCache = new SyncScopeCache();
 
   private readonly upsertHandlers: Record<
     string,
@@ -127,6 +139,35 @@ export class SyncService {
     );
   }
 
+  /** Escritura de recibos por diferencias (solo lo nuevo o modificado). Desactivable por si hiciera falta. */
+  private isDeltaEnabled(): boolean {
+    return this.config.get<boolean>('REPORTES_SYNC_RECIBOS_DELTA', true) !== false;
+  }
+
+  /** Vigencia de un alcance ya sincronizado antes de volver a consultar el origen. */
+  private getScopeTtlMs(): number {
+    return Number(this.config.get<number>('REPORTES_SYNC_SCOPE_TTL_SECONDS', 30)) * 1000;
+  }
+
+  /** Espera máxima por el candado cuando la consulta pide su propio alcance. */
+  private getLockWaitMs(): number {
+    return Number(this.config.get<number>('REPORTES_SYNC_LOCK_WAIT_SECONDS', 45)) * 1000;
+  }
+
+  /** Intenta el candado; con espera, reintenta cada 500 ms hasta agotarla. */
+  private async acquireSyncLock(
+    aseguradoraId: number,
+    entidad: string,
+    waitMs: number,
+  ): Promise<boolean> {
+    const limite = Date.now() + Math.max(0, waitMs);
+    for (;;) {
+      if (await this.syncLock.tryAcquire(aseguradoraId, entidad)) return true;
+      if (Date.now() >= limite) return false;
+      await new Promise((resolve) => setTimeout(resolve, 500));
+    }
+  }
+
   private getBatchSize(): number {
     return Number(this.config.get<number>('REPORTES_SYNC_BATCH_SIZE', 1000));
   }
@@ -182,11 +223,14 @@ export class SyncService {
     const scope = context.refreshScope ? ' (alcance completo)' : '';
     const full = context.fullResync ? ' (carga completa)' : '';
     this.syncLog(
-      `${result.entidad}: ${result.rowsSynced} filas desde ${origin}${mode}${scope}${full} → PostgreSQL (${durationSec}s)`,
+      `${result.entidad}: ${result.rowsSynced} filas desde ${origin}${mode}${scope}${full} → PostgreSQL` +
+        `${result.rowsChanged !== undefined ? ` (${result.rowsChanged} nuevas o modificadas)` : ''} (${durationSec}s` +
+        `${result.extractMs !== undefined ? `: origen ${(result.extractMs / 1000).toFixed(1)}s, escritura ${((result.writeMs ?? 0) / 1000).toFixed(1)}s` : ''})`,
       {
         aseguradoraId: context.aseguradoraId,
         rowsRead: context.rowsRead,
         rowsSynced: result.rowsSynced,
+        rowsChanged: result.rowsChanged,
       },
     );
   }
@@ -361,6 +405,96 @@ export class SyncService {
     return maxModifiedAt;
   }
 
+  /**
+   * Recibos, escritura por diferencias (dentro de la transacción del sync):
+   *  1. Inserta lo nuevo y actualiza SOLO lo que cambió (las filas idénticas no se escriben).
+   *  2. Borra las filas del alcance cuya clave ya no vino del origen (recibos eliminados o fuera del rango),
+   *     con freno de seguridad si fueran más que las recibidas.
+   * Mismo resultado final que borrar el rango e insertar todo, con una fracción de la escritura.
+   */
+  private async writeRecibosDelta(args: {
+    aseguradoraId: number;
+    rows: Record<string, unknown>[];
+    adapter: InsurerAdapter;
+    connectionConfig: InsurerConnectionConfig;
+    filtros: SyncFiltros;
+    syncFiltros: SyncFiltros;
+    plan: ExtractionPlan | undefined;
+    tx?: PgTransaction;
+  }): Promise<{ rowsSynced: number; maxModifiedAt: Date | null; rowsChanged: number }> {
+    const { aseguradoraId, rows, adapter, connectionConfig, filtros, syncFiltros, plan, tx } = args;
+
+    // Cada fila se transforma UNA sola vez; antes se repetía en deduplicar, insertar, recolectar claves
+    // y calcular la fecha máxima (con 16.000 filas eso eran ~8 s de CPU, más que la propia escritura).
+    const t0 = Date.now();
+    const mapeadas = rows.map((row) => this.mapRowForSync('recibos', row, adapter, connectionConfig));
+
+    // Una fila por clave de origen (la última aparición gana). Sin clave no hay forma de identificarla:
+    // ON CONFLICT no aplicaría y se duplicaría en cada sync.
+    const vistas = new Set<string>();
+    const unicas: Record<string, unknown>[] = [];
+    for (let i = mapeadas.length - 1; i >= 0; i -= 1) {
+      const m = mapeadas[i];
+      const clave = m.origenClave != null ? String(m.origenClave).trim() : '';
+      if (!clave || vistas.has(clave)) continue;
+      vistas.add(clave);
+      unicas.push(m);
+    }
+    unicas.reverse();
+
+    const limiteFecha = new Date(Date.now() + 24 * 60 * 60 * 1000);
+    let maxModified: Date | null = null;
+    for (const m of unicas) {
+      const candidata = m.origenModifiedAt;
+      if (candidata instanceof Date && candidata <= limiteFecha && (!maxModified || candidata > maxModified)) {
+        maxModified = candidata;
+      }
+    }
+    const tPreparar = Date.now() - t0;
+
+    const batchSize = this.getBatchSize();
+    let cambiadas = 0;
+    for (let i = 0; i < unicas.length; i += batchSize) {
+      cambiadas += await this.upsertRepo.upsertRecibosChangedBatch(
+        aseguradoraId,
+        unicas.slice(i, i + batchSize),
+        tx,
+      );
+    }
+    const tUpsert = Date.now() - t0 - tPreparar;
+
+    const claves = unicas.map((m) => String(m.origenClave));
+    const scope = this.buildDeleteScope('recibos', plan, syncFiltros);
+    const tPurga0 = Date.now();
+    let huerfanas = 0;
+    if (!scope?.skipRangeDelete) {
+      huerfanas = await this.localRepo.deleteScopeNotIn(
+        aseguradoraId,
+        'recibos',
+        claves,
+        filtros.desde,
+        filtros.hasta,
+        scope,
+        tx,
+      );
+      if (debeFrenarHuerfanas({ huerfanas, recibidas: claves.length })) {
+        throw new Error(
+          `recibos: se borrarían ${huerfanas} filas del alcance y el origen devolvió ${claves.length}; se revierte para no perder datos`,
+        );
+      }
+    }
+    this.syncLog(
+      `recibos: ${unicas.length} leídas, ${cambiadas} nuevas o modificadas, ${huerfanas} eliminadas del alcance`,
+      {
+        aseguradoraId,
+        msPreparar: tPreparar,
+        msUpsert: tUpsert,
+        msPurga: Date.now() - tPurga0,
+      },
+    );
+    return { rowsSynced: unicas.length, maxModifiedAt: maxModified, rowsChanged: cambiadas };
+  }
+
   async syncIncremental(
     entidad: string,
     filtros: SyncFiltros,
@@ -451,7 +585,7 @@ export class SyncService {
       null;
 
     // Execute/consulta: priorizar datos ya cargados; forceSync refresca desde origen.
-    if (options.preferLocal && !options.force && localCount > 0) {
+    if (options.preferLocal && !options.force && !options.scopeKey && localCount > 0) {
       const result: SyncResult = {
         entidad,
         rowsSynced: 0,
@@ -468,8 +602,28 @@ export class SyncService {
       return result;
     }
 
+    // Con alcance (consulta del usuario) la vigencia es por filtros, no por entidad: otro usuario, o el
+    // refresco programado, sincronizando OTRO rango no debe dejar sin refrescar el rango que se pide.
+    if (
+      options.scopeKey &&
+      !options.force &&
+      this.scopeCache.isFresh(options.scopeKey, this.getScopeTtlMs())
+    ) {
+      const result: SyncResult = {
+        entidad,
+        rowsSynced: 0,
+        skipped: true,
+        reason: `alcance sincronizado hace ${Math.round((this.scopeCache.ageMs(options.scopeKey) ?? 0) / 1000)}s`,
+        durationMs: Date.now() - started,
+        aseguradoraId,
+      };
+      this.logSyncResult(result, { aseguradoraId, origin: 'TTL por alcance' });
+      return result;
+    }
+
     if (
       !options.ignoreTtl &&
+      !options.scopeKey &&
       !needsFullLoad &&
       !lastError &&
       lastRunAt &&
@@ -490,7 +644,10 @@ export class SyncService {
       return result;
     }
 
-    const acquired = await this.syncLock.tryAcquire(aseguradoraId, entidad);
+    // Consulta con alcance propio: espera a que termine el sync en curso (otro usuario o el programado)
+    // y luego refresca su rango, en vez de responder con datos locales sin refrescar.
+    const waitMs = options.scopeKey && !options.force ? this.getLockWaitMs() : 0;
+    const acquired = await this.acquireSyncLock(aseguradoraId, entidad, waitMs);
     if (!acquired) {
       const result: SyncResult = {
         entidad,
@@ -503,6 +660,26 @@ export class SyncService {
         durationMs: Date.now() - started,
       };
       this.logSyncResult(result, { aseguradoraId });
+      return result;
+    }
+
+    // Tras esperar, otra consulta con los mismos filtros pudo haber sincronizado ya este alcance.
+    if (
+      options.scopeKey &&
+      !options.force &&
+      waitMs > 0 &&
+      this.scopeCache.isFresh(options.scopeKey, this.getScopeTtlMs())
+    ) {
+      await this.syncLock.release(aseguradoraId, entidad);
+      const result: SyncResult = {
+        entidad,
+        rowsSynced: 0,
+        skipped: true,
+        reason: 'alcance sincronizado por otra consulta mientras se esperaba',
+        durationMs: Date.now() - started,
+        aseguradoraId,
+      };
+      this.logSyncResult(result, { aseguradoraId, origin: 'TTL por alcance' });
       return result;
     }
 
@@ -551,6 +728,7 @@ export class SyncService {
         connectionConfig,
       );
 
+      const tExtract = Date.now();
       const rows =
         plan.source === 'api'
           ? await this.insurerConnection.fetchFromApi(
@@ -564,10 +742,24 @@ export class SyncService {
               plan.params,
             );
 
+      const extractMs = Date.now() - tExtract;
+
       // Escritura en PG destino. Para recibos va en UNA transacción (DELETE + INSERT):
       // los lectores concurrentes (otro usuario ejecutando el reporte) ven el estado
       // anterior completo hasta el COMMIT, nunca un rango a medias.
       const writeTarget = async (tx?: PgTransaction) => {
+        if (entidad === 'recibos' && !catalog && this.isDeltaEnabled()) {
+          return this.writeRecibosDelta({
+            aseguradoraId,
+            rows,
+            adapter,
+            connectionConfig,
+            filtros,
+            syncFiltros,
+            plan,
+            tx,
+          });
+        }
         let borradas = 0;
         if (!skipDelete) {
           this.syncLog(
@@ -652,13 +844,16 @@ export class SyncService {
             `${entidad}: el reemplazo completo borraría ${borradas} filas y solo insertaría ${written}; se revierte para no perder datos`,
           );
         }
-        return { rowsSynced: written, maxModifiedAt: maxModified };
+        return { rowsSynced: written, maxModifiedAt: maxModified, rowsChanged: undefined };
       };
 
-      const { rowsSynced, maxModifiedAt } =
+      const tWrite = Date.now();
+      const { rowsSynced, maxModifiedAt, rowsChanged } =
         ENTIDADES_ATOMICAS.has(entidad) && !catalog
           ? await this.reportesPg.runInTransaction((tx) => writeTarget(tx))
           : await writeTarget();
+
+      const writeMs = Date.now() - tWrite;
 
       await this.watermarkRepo.upsertWatermark(aseguradoraId, entidad, {
         lastModifiedAt: maxModifiedAt,
@@ -666,10 +861,14 @@ export class SyncService {
         rowsSynced,
         lastError: null,
       });
+      if (options.scopeKey) this.scopeCache.mark(options.scopeKey);
 
       const result: SyncResult = {
         entidad,
         rowsSynced,
+        rowsChanged,
+        extractMs,
+        writeMs,
         skipped: false,
         refreshScope: Boolean(filtros.refreshScope),
         fullResync: Boolean(syncFiltros.fullResync),
