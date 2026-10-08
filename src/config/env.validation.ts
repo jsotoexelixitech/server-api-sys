@@ -159,6 +159,10 @@ export const envValidationSchema = Joi.object({
   REPORTES_SYNC_SCOPE_TTL_SECONDS: Joi.number().integer().min(0).default(30),
   /** Segundos máximos que una consulta espera el sync en curso antes de responder con datos locales. */
   REPORTES_SYNC_LOCK_WAIT_SECONDS: Joi.number().integer().min(0).default(45),
+  /** Conexiones en paralelo para leer rangos anchos de recibos (1 = sin paralelismo; máximo 5). */
+  REPORTES_SYNC_EXTRACT_PARALLEL: Joi.number().integer().min(1).max(5).default(4),
+  /** Tamaño de paquete TDS de la conexión de origen (bytes). */
+  REPORTES_SYNC_ORIGIN_PACKET_SIZE: Joi.number().integer().min(512).max(32767).default(16384),
   /** Entidades que refresca el proceso programado (separadas por coma). */
   REPORTES_SYNC_SCHEDULE_ENTIDADES: Joi.string().default('recibos,siniestros'),
   /**

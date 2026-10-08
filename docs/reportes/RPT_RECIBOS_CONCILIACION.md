@@ -120,10 +120,23 @@ responde desde PG. Cambios que lo hacen viable:
 | Alcance | Antes | Ahora |
 |---|---|---|
 | Un mes (16.001 recibos) | ~11,9 s (origen 2,3 s + escritura 9,4 s) | ~3,9 s (origen 2,5 s + escritura 1,3 s) |
-| 01/01 a 14/09/2026 (104.051 recibos) | ~75 s (estimado por proporción) | ~23 s (origen 15 s + escritura 8 s) |
+| 01/01 a 14/09/2026 (104.051 recibos) | ~75 s (estimado por proporción) | ~17 a 19 s (origen ~9 s + escritura ~7 s) |
 
-Con el cambio, el tiempo lo domina la lectura del origen (≈0,14 ms por fila). Una segunda consulta del mismo alcance dentro
-de 30 s no toca el origen.
+Una segunda consulta del mismo alcance dentro de 30 s no toca el origen.
+
+### Dónde se iba el tiempo de la lectura del origen (Sis2000)
+Medido en Sis2000 con 40.000 recibos: la consulta de extracción, con todos sus joins, resuelve en **~0,25 s** en el
+servidor cuando devuelve una sola fila agregada, y tarda **~3 s** cuando entrega las 40.000 filas. El resto es
+transporte y procesamiento de filas en Node (esperas `ASYNC_NETWORK_IO`), no la consulta. Por eso optimizar el SQL no
+ayuda (probado: tabla temporal, `OPTION (RECOMPILE)`) y `FOR JSON` es 3 veces más lento. Lo que sí ayudó:
+
+| Cambio | Efecto medido |
+|---|---|
+| Lectura en paralelo por tramos de fechas (`REPORTES_SYNC_EXTRACT_PARALLEL=4`), solo recibos con rango ≥ 30 días | 95.000 filas: de ~17 s a ~9 s (2 veces) |
+| Paquete TDS de 16.384 bytes (`REPORTES_SYNC_ORIGIN_PACKET_SIZE`, antes 4.096) | ~25 a 30 % menos en una prueba ruidosa |
+
+Estos números se midieron desde un equipo remoto, con Sis2000 y PG por red. En el servidor de la API la escritura (PG en
+la misma máquina) debería ser más rápida; el log del sync ahora informa el tiempo de origen y el de escritura por separado.
 
 ### Garantías y límites
 - Si el origen devuelve menos de la mitad de lo que había en el alcance (más de 100 filas), la transacción se revierte.
