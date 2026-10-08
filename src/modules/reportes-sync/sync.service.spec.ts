@@ -285,3 +285,61 @@ describe('SyncService · lectura del origen en paralelo', () => {
     expect(upsertRepo.upsertRecibosChangedBatch).not.toHaveBeenCalled();
   });
 });
+
+describe('SyncService · siniestros al consultar con filtros', () => {
+  const origenSiniestros = {
+    mode: 'query',
+    querySql: 'SELECT * FROM snsinies s WHERE CAST(/*SYNC_DATE_COL*/ AS date) >= @desde',
+    dateColByTipoFecha: { default: 's.fnotifi', fecha_ocurrencia: 's.focursin' },
+    defaultTipoFecha: 'fecha_notificacion',
+    filterParams: {
+      desde: { source: 'desde', type: 'date' },
+      hasta: { source: 'hasta', type: 'date' },
+      ramo: { source: 'ramo', type: 'int' },
+      productor: { source: 'productor', type: 'int' },
+    },
+  };
+
+  function armar() {
+    const h = build();
+    (h.insurerConnection.getConnectionConfig as jest.Mock).mockResolvedValue({
+      adapterCodigo: 'MUNDIAL',
+      tipoDb: 'mssql',
+      origenConfig: { siniestros: origenSiniestros },
+    });
+    (h.adapter.planEntityExtraction as jest.Mock).mockImplementation(() => ({
+      source: 'db',
+      query: 'SELECT 1',
+      params: {},
+      originConfig: origenSiniestros,
+    }));
+    (h.upsertRepo as unknown as Record<string, jest.Mock>).upsertSiniestrosBatch = jest.fn(async () => undefined);
+    return h;
+  }
+
+  const base = { aseguradoraId: 1 };
+
+  it('con filtro de ramo no borra por rango: solo actualiza', async () => {
+    const { service, localRepo } = armar();
+    await service.syncIncremental('siniestros', { ...base, ramo: 18 }, { ignoreTtl: true });
+    const scope = (localRepo.deleteLocalRows.mock.calls[0] as unknown[])[4] as { skipRangeDelete?: boolean };
+    expect(scope).toMatchObject({ skipRangeDelete: true });
+  });
+
+  it('con rango de fechas tampoco borra por rango (el extract puede filtrar por otra fecha)', async () => {
+    const { service, localRepo } = armar();
+    await service.syncIncremental(
+      'siniestros',
+      { ...base, desde: new Date('2026-01-01T00:00:00Z'), hasta: new Date('2026-03-31T00:00:00Z') },
+      { ignoreTtl: true },
+    );
+    const scope = (localRepo.deleteLocalRows.mock.calls[0] as unknown[])[4] as { skipRangeDelete?: boolean };
+    expect(scope).toMatchObject({ skipRangeDelete: true });
+  });
+
+  it('sin filtros es el reemplazo completo de siempre', async () => {
+    const { service, localRepo } = armar();
+    await service.syncIncremental('siniestros', { ...base }, { ignoreTtl: true });
+    expect((localRepo.deleteLocalRows.mock.calls[0] as unknown[])[4]).toBeUndefined();
+  });
+});
