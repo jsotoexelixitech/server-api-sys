@@ -118,6 +118,18 @@ export class SyncService {
     syncFiltros: Record<string, unknown>,
   ): LocalDeleteScope | undefined {
     const originConfig = plan?.originConfig;
+
+    // Siniestros: el extract filtra por lo que eligió el usuario (ramo, estatus, productor, moneda, póliza,
+    // fechas de ocurrencia o de estatus...), pero el DELETE local solo conoce fecha_notificacion. Con cualquier
+    // filtro, borrar por rango eliminaría siniestros que el extract no vuelve a traer (otros ramos o estatus)
+    // hasta el siguiente reemplazo completo. Con filtros solo se actualiza (upsert por clave); sin filtros es el
+    // reemplazo completo de siempre, que además hace el refresco programado.
+    if (entidad === 'siniestros' && originConfig?.querySql?.includes('/*SYNC_DATE_COL*/')) {
+      const conFiltros =
+        Boolean(syncFiltros.desde || syncFiltros.hasta) || hasExtraOriginFilters(syncFiltros, originConfig);
+      return conFiltros ? { skipRangeDelete: true } : undefined;
+    }
+
     if (entidad !== 'recibos' || !originConfig?.querySql) return undefined;
     if (!originConfig.querySql.includes('/*SYNC_DATE_COL*/')) return undefined;
     return {
