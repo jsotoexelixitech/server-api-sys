@@ -37,6 +37,9 @@ export class OriginAdapterFactory {
     );
     const encrypt = toBool(this.config.get('DB_ENCRYPT'), false);
     const trustCert = toBool(this.config.get('DB_TRUST_SERVER_CERTIFICATE'), true);
+    // Paquetes TDS más grandes = menos viajes al entregar miles de filas (el valor por defecto es 4096).
+    const packetSizeEnv = Math.floor(Number(this.config.get('REPORTES_SYNC_ORIGIN_PACKET_SIZE', 16384)));
+    const packetSize = Number.isFinite(packetSizeEnv) ? Math.min(32767, Math.max(512, packetSizeEnv)) : 16384;
 
     switch (tipoDb) {
       case 'mssql': {
@@ -49,11 +52,13 @@ export class OriginAdapterFactory {
           connectionTimeout: timeout,
           requestTimeout: timeout,
           pool: { max: 5, min: 0, idleTimeoutMillis: 60000 },
+          // packetSize lo acepta el driver (tedious) aunque el tipo de mssql no lo declare.
           options: {
             encrypt,
             trustServerCertificate: trustCert,
             enableArithAbort: true,
-          },
+            packetSize,
+          } as sql.config['options'],
         };
         return new MssqlOriginAdapter(mssqlConfig);
       }

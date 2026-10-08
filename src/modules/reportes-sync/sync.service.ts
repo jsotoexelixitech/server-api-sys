@@ -16,6 +16,7 @@ import {
 import { isCatalogEntidad } from './utils/sync-catalog.constants';
 import { debeFrenarHuerfanas, debeFrenarReemplazo } from './utils/sync-guard';
 import { SyncScopeCache } from './utils/sync-scope-cache';
+import { partirRango, tramosParaRango } from './utils/sync-range';
 import {
   hasExtraOriginFilters,
   resolveDateColumn,
@@ -147,6 +148,15 @@ export class SyncService {
   /** Vigencia de un alcance ya sincronizado antes de volver a consultar el origen. */
   private getScopeTtlMs(): number {
     return Number(this.config.get<number>('REPORTES_SYNC_SCOPE_TTL_SECONDS', 30)) * 1000;
+  }
+
+  /**
+   * Conexiones simultáneas para leer un rango ancho de recibos (tramos de fechas). Con 1 se desactiva.
+   * El pool del origen admite 5.
+   */
+  private getExtractParallelism(): number {
+    const n = Math.floor(Number(this.config.get<number>('REPORTES_SYNC_EXTRACT_PARALLEL', 4)));
+    return Number.isFinite(n) ? Math.min(5, Math.max(1, n)) : 1;
   }
 
   /** Espera máxima por el candado cuando la consulta pide su propio alcance. */
@@ -381,6 +391,52 @@ export class SyncService {
       }
     }
     return maxModifiedAt;
+  }
+
+  /**
+   * Lectura del origen. Entregar las filas al API es lo que más tarda (el servidor resuelve los joins en una
+   * fracción de segundo), así que un rango ancho de recibos se parte en tramos de fechas consecutivos que se
+   * leen en paralelo por conexiones distintas. Mismo resultado: los tramos son disjuntos y cubren el rango.
+   */
+  private async extractFromSource(args: {
+    aseguradoraId: number;
+    entidad: string;
+    adapter: InsurerAdapter;
+    plan: ExtractionPlan;
+    watermarkDate: Date | null;
+    syncFiltros: SyncFiltros;
+    connectionConfig: InsurerConnectionConfig;
+  }) {
+    const { aseguradoraId, entidad, adapter, plan, watermarkDate, syncFiltros, connectionConfig } = args;
+    if (plan.source === 'api') throw new Error('extractFromSource no aplica a orígenes por API');
+    const esQueryConRango =
+      entidad === 'recibos' && Boolean(plan.originConfig?.querySql?.includes('/*SYNC_DATE_COL*/'));
+    const tramos = esQueryConRango
+      ? tramosParaRango(syncFiltros.desde, syncFiltros.hasta, this.getExtractParallelism())
+      : 1;
+
+    if (tramos <= 1 || !syncFiltros.desde || !syncFiltros.hasta) {
+      return this.insurerConnection.querySource(aseguradoraId, plan.query, plan.params);
+    }
+
+    const rangos = partirRango(syncFiltros.desde, syncFiltros.hasta, tramos);
+    const planes = rangos.map((rango) => {
+      const sub = adapter.planEntityExtraction(
+        entidad,
+        watermarkDate,
+        { ...syncFiltros, desde: rango.desde, hasta: rango.hasta },
+        connectionConfig.schemaOrigen,
+        connectionConfig.tipoDb,
+        connectionConfig,
+      );
+      if (sub.source === 'api') throw new Error('extractFromSource no aplica a orígenes por API');
+      return sub;
+    });
+    this.syncLog(`${entidad}: leyendo el origen en ${planes.length} tramos de fechas en paralelo`, { aseguradoraId });
+    const partes = await Promise.all(
+      planes.map((p) => this.insurerConnection.querySource(aseguradoraId, p.query, p.params)),
+    );
+    return partes.flat();
   }
 
   /**
@@ -714,11 +770,15 @@ export class SyncService {
               watermarkDate,
               syncFiltros,
             )
-          : await this.insurerConnection.querySource(
+          : await this.extractFromSource({
               aseguradoraId,
-              plan.query,
-              plan.params,
-            );
+              entidad,
+              adapter,
+              plan,
+              watermarkDate,
+              syncFiltros,
+              connectionConfig,
+            });
 
       const extractMs = Date.now() - tExtract;
 
