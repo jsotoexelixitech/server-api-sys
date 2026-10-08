@@ -4,6 +4,7 @@ import { InsurerConnectionService } from './insurers/insurer-connection.service'
 import { shouldRefreshScope } from './utils/sync-query.utils';
 import { AseguradoraResolverService } from './aseguradora-resolver.service';
 import { CATALOG_ENTIDADES } from './utils/sync-catalog.constants';
+import { buildScopeKey } from './utils/sync-scope-cache';
 import { SyncService, type SyncResult } from './sync.service';
 
 /** Entidades que un refresco programado mantiene al día, con la variable que desactiva el sync al consultar. */
@@ -172,6 +173,8 @@ export class SyncContextService {
         force: Boolean(
           body?.forceSync || (body?.sync as Record<string, unknown>)?.force,
         ),
+        // Vigencia y espera por los filtros que eligió el usuario (no por entidad).
+        scopeKey: buildScopeKey(entidad, filtros),
         ...options,
       });
     } catch (error) {
