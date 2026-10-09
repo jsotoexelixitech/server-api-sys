@@ -1,6 +1,8 @@
-import { Injectable, Logger } from '@nestjs/common';
+import { HttpException, Injectable, Logger } from '@nestjs/common';
 import * as T from 'mssql';
 import { MssqlService } from '../../../database/mssql.service';
+import { ValrepService } from '../../valrep/valrep.service';
+import type { CalculatePlanCoberturasResponse } from '../../valrep/valrep.service';
 
 /**
  * Rutas del Core que consume el backend del Motor de Endosos, centralizadas en server-api-sys.
@@ -60,19 +62,16 @@ const RECEIPT_STATUS_SQL = `
     ELSE TRIM(iestadorec)
   END`;
 
-/** Campos que spCalculoAuto necesita para poder calcular (el resto tiene valor por defecto). */
+/** Campos mínimos para cotizar; `suma`, `tipo` y `puestos` se completan desde el catálogo INMA si no llegan. */
 const CALCULO_REQUIRED = [
   'cmarca',
   'cmodelo',
   'cversion',
   'cano',
   'idPlan',
-  'suma',
   'fdesde',
   'fhasta',
-  'tipo',
   'uso',
-  'puestos',
 ] as const;
 
 const missingCalculoFields = (body: Record<string, any>): string[] =>
@@ -87,7 +86,10 @@ const toInt = (v: unknown): number | null => {
 export class EndososCoreService {
   private readonly logger = new Logger(EndososCoreService.name);
 
-  constructor(private readonly db: MssqlService) {}
+  constructor(
+    private readonly db: MssqlService,
+    private readonly valrep: ValrepService,
+  ) {}
 
   // ─── policies-info (searchPolicies) ────────────────────────────────────────
 
@@ -807,70 +809,63 @@ export class EndososCoreService {
     }
   }
 
-  // ─── calcular-plan-sis / planes-solicitud (spCalculoAuto) ──────────────────
+  // ─── calcular-plan-sis / planes-solicitud (sp_calculo_auto_nexus vía Valrep) ─
 
-  private async spCalculoAuto(plan: Record<string, any>, cusuario: number): Promise<any[][]> {
-    const req = this.db.request();
-    req.input('cmarca', T.NVarChar(4), plan.cmarca);
-    req.input('cmodelo', T.NVarChar(4), plan.cmodelo);
-    req.input('cversion', T.NVarChar(4), plan.cversion);
-    req.input('cano', T.Int, plan.cano);
-    req.input('cplan', T.VarChar(20), plan.idPlan);
-    req.input('sumaAseg', T.Numeric(18, 2), plan.suma);
-    req.input('sumaAsegBl', T.Numeric(18, 2), plan.sumaAsegBl);
-    req.input('sumaAsegAd', T.Numeric(18, 2), plan.sumaAsegAd);
-    req.input('iplaca', T.Char(1), plan.iplaca || 'N');
-    req.input('fdesde', T.Date, plan.fdesde);
-    req.input('fhasta', T.Date, plan.fhasta);
-    req.input('tasaPt', T.Numeric(18, 2), plan.tasaPt);
-    req.input('tasaCa', T.Numeric(18, 2), plan.tasaCa);
-    req.input('tasaPp', T.Numeric(18, 2), plan.tasaPp);
-    req.input('recargo', T.Numeric(18, 2), plan.recargo);
-    req.input('tipoV', T.Numeric(4), plan.tipo);
-    req.input('uso', T.Numeric(4), plan.uso);
-    req.input('puestos', T.Numeric(4), plan.puestos);
-    req.input('toneladas', T.Numeric(4), plan.toneladas || 0);
-    req.input('recargoRcv', T.Numeric(6), plan.recargoRcv);
-    req.input('cramo', T.Numeric(4), plan.cramo || 18);
-    req.input('cusuario', T.Numeric(20), cusuario);
-    req.input('coberAdicional', T.VarChar(2), plan.coberAdicional || 'RC');
-    const res = await req.execute('spCalculoAuto');
-    return res.recordsets as unknown as any[][];
+  /**
+   * Delegan en `ValrepService.calculatePlanCoberturas` (`sp_calculo_auto_nexus`): mismas columnas y totales que el
+   * `spCalculoAuto` legado, y además completa tipo/puestos/suma desde INMA y fija el usuario de cálculo del Core.
+   */
+  private async calcularConValrep(body: Record<string, any>): Promise<CalculatePlanCoberturasResponse> {
+    const num = (v: unknown): number | undefined => {
+      if (v === undefined || v === null || String(v).trim() === '') return undefined;
+      const n = Number(v);
+      return Number.isFinite(n) ? n : undefined;
+    };
+    return this.valrep.calculatePlanCoberturas({
+      cmarca: String(body.cmarca).trim(),
+      cmodelo: String(body.cmodelo).trim(),
+      cversion: String(body.cversion).trim(),
+      cano: num(body.cano) as number,
+      idPlan: String(body.idPlan).trim(),
+      suma: num(body.suma),
+      sumaAsegBl: num(body.sumaAsegBl),
+      sumaAsegAd: num(body.sumaAsegAd),
+      iplaca: body.iplaca ? String(body.iplaca) : undefined,
+      fdesde: String(body.fdesde),
+      fhasta: String(body.fhasta),
+      tasaPt: num(body.tasaPt) ?? null,
+      tasaCa: num(body.tasaCa) ?? null,
+      tasaPp: num(body.tasaPp) ?? null,
+      recargo: num(body.recargo),
+      tipo: num(body.tipo),
+      uso: num(body.uso) as number,
+      puestos: num(body.puestos),
+      toneladas: num(body.toneladas),
+      recargoRcv: num(body.recargoRcv),
+      cramo: num(body.cramo),
+      coberAdicional: body.coberAdicional ? String(body.coberAdicional) : undefined,
+    } as any);
+  }
+
+  private calcError(err: any, ctx: string): CoreResult {
+    if (err instanceof HttpException) {
+      const status = err.getStatus();
+      const resp: any = err.getResponse();
+      const raw = typeof resp === 'string' ? resp : resp?.message;
+      const message = Array.isArray(raw) ? raw.join('; ') : String(raw ?? err.message);
+      return fail(message, status === 500 ? 500 : 400);
+    }
+    this.logger.error(`${ctx}: ${err?.message}`, err?.stack);
+    return fail(err?.message || 'Problemas en el calculo');
   }
 
   async calculatePlanSis(body: Record<string, any>): Promise<CoreResult> {
     const missing = missingCalculoFields(body);
     if (missing.length) return fail(`Faltan campos requeridos para calcular: ${missing.join(', ')}.`, 400);
     try {
-      const sets = await this.spCalculoAuto(body, toInt(body?.cusuario) ?? 7);
-      if (!sets || sets.length === 0) {
-        return fail('Error en calculos, por favor validar informacion');
-      }
-      const detalle = sets[0] ?? [];
-      const precio = sets[1] && sets[1][0] ? sets[1][0] : null;
-      if (!precio || detalle.length === 0) {
-        return fail('Error en calculos, por favor validar informacion');
-      }
-      const { totalPA, totalCA, totalPT, totalAP, totalPP } = precio;
-      return ok({
-        message: 'Calculo generado con exito',
-        status: true,
-        mount: detalle,
-        pa: totalPA,
-        ca: totalCA,
-        pt: totalPT,
-        ap: totalAP,
-        pp: totalPP,
-        boolPT: totalPT > 0,
-        boolPP: totalPP > 0,
-        boolCA: totalCA > 0,
-        boolBl: totalAP > 0,
-        boolAd: totalAP > 0,
-        cproducto: detalle[0].cproducto,
-      });
+      return ok(await this.calcularConValrep(body));
     } catch (err: any) {
-      this.logger.error(`calculatePlanSis: ${err.message}`, err.stack);
-      return fail(err.message || 'Problemas en el calculo');
+      return this.calcError(err, 'calculatePlanSis');
     }
   }
 
@@ -878,42 +873,29 @@ export class EndososCoreService {
     const missing = missingCalculoFields(body);
     if (missing.length) return fail(`Faltan campos requeridos para calcular: ${missing.join(', ')}.`, 400);
     try {
-      const sets = await this.spCalculoAuto(body, toInt(body?.cusuario) ?? 7);
-      if (!sets || sets.length === 0) {
-        return fail('Error en cálculos, por favor validar información');
-      }
-      const detalle = sets[0] ?? [];
-      const precio = sets[1] && sets[1][0] ? sets[1][0] : null;
-      if (!precio) return fail('No se encontraron datos de precios para esta solicitud');
-
-      const { totalPA, totalCA, totalPT, totalAP, totalPP } = precio;
-      const coberPT = totalPT > 0;
-      const coberCA = totalCA > 0;
-      const coberPP = totalPP > 0;
-      const coberBl = totalAP > 0;
-      const coberAd = totalAP > 0;
-
+      const calc = await this.calcularConValrep(body);
+      const detalle = (calc.mount ?? []) as any[];
+      const { pa, ca, pt, pp, ap } = calc;
       const planes: Record<string, any> = {};
       for (const item of detalle) {
         const cplan = String(item.cplan).trim();
-        const xplan = String(item.xplan).trim();
         if (!planes[cplan]) {
           planes[cplan] = {
             cplan,
-            xplan,
+            xplan: String(item.xplan).trim(),
             tipoPlan: item.cproducto,
-            PT: Number(totalPT).toFixed(2),
-            CA: Number(totalCA).toFixed(2),
-            PA: Number(totalPA).toFixed(2),
-            PP: Number(totalPP).toFixed(2),
+            PT: Number(pt).toFixed(2),
+            CA: Number(ca).toFixed(2),
+            PA: Number(pa).toFixed(2),
+            PP: Number(pp).toFixed(2),
             TCA: item.tasaCA,
             TPT: item.tasaPT,
             TPP: item.tasaPP,
-            boolPT: coberPT,
-            boolCA: coberCA,
-            boolPP: coberPP,
-            boolBl: coberBl,
-            boolAd: coberAd,
+            boolPT: pt > 0,
+            boolCA: ca > 0,
+            boolPP: pp > 0,
+            boolBl: ap > 0,
+            boolAd: ap > 0,
             coberturas: [],
           };
         }
@@ -927,8 +909,7 @@ export class EndososCoreService {
       }
       return ok({ message: 'Calculo generado con exito', status: true, planes: Object.values(planes) });
     } catch (err: any) {
-      this.logger.error(`calculatePlanSolicitud: ${err.message}`, err.stack);
-      return fail(err.message || 'Problemas en el calculo');
+      return this.calcError(err, 'calculatePlanSolicitud');
     }
   }
 

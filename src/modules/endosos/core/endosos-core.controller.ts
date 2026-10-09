@@ -297,11 +297,11 @@ export class EndososCoreController {
           ifrecuencia: 'A',
           contrato: {
             xplaca: 'AB123CD',
-            cmarca: '074',
-            cmodelo: '001',
-            cversion: '01',
-            cano: 2020,
-            mvalor: 15000,
+            cmarca: '001',
+            cmodelo: '015',
+            cversion: '08',
+            cano: 2022,
+            mvalor: 55314,
             xmarca: 'TOYOTA',
             xmodelo: 'COROLLA',
             xversion: 'XEI',
@@ -391,12 +391,12 @@ export class EndososCoreController {
     summary: 'Prima del plan calculada como Sis2000',
     operationId: 'endososCoreCalcularPlanSis',
     description:
-      'Ejecuta `spCalculoAuto` para un vehículo y un plan: prima por cobertura y totales. Es la **fuente de verdad de la prima** ' +
+      'Ejecuta `sp_calculo_auto_nexus` (a través de Valrep) para un vehículo y un plan: prima por cobertura y totales. Es la **fuente de verdad de la prima** ' +
       'del plan destino al ampliar un plan.\n\n' +
       '- **Clave en Parametrización:** `calculatePlan`.\n' +
       '- **Obligatorios:** `cmarca`, `cmodelo`, `cversion`, `cano`, `idPlan`, `suma`, `fdesde`, `fhasta`, `tipo`, `uso`, `puestos`. ' +
       'Si falta alguno responde **400** listándolos.\n' +
-      '- `coberAdicional`: `RC` solo RCV (por defecto), `CA` / `PT` / `PP` añaden casco. El `cusuario` define qué casco puede tarifar.\n' +
+      '- `coberAdicional`: `RC` solo RCV (por defecto), `CA` / `PT` / `PP` añaden casco. El usuario de cálculo lo fija el Core (no el body).\n' +
       '- `mount[]` es el detalle por cobertura; `pa`, `ca`, `pt`, `pp`, `ap` son los totales (RCV, amplia, pérdida total, parcial y aditamentos) ' +
       'y `boolCA`/`boolPT`/`boolPP`/`boolBl`/`boolAd` indican qué coberturas aplican.\n\n' +
       '**Equivale a** `POST /api/v1/emissions/calculatePlanSis` de SysIP-backend.',
@@ -407,15 +407,15 @@ export class EndososCoreController {
       soloRcv: {
         summary: 'Solo RCV',
         value: {
-          cmarca: '074', cmodelo: '001', cversion: '01', cano: 2020, idPlan: 'Auto', suma: 15000,
-          fdesde: '2026-10-09', fhasta: '2027-10-09', tipo: 1, uso: 2, puestos: 5, cramo: 18, cusuario: 1422, coberAdicional: 'RC',
+          cmarca: '001', cmodelo: '015', cversion: '08', cano: 2022, idPlan: 'Auto', suma: 15000,
+          fdesde: '2026-10-09', fhasta: '2027-10-09', uso: 2, cramo: 18, coberAdicional: 'RC',
         },
       },
       conCasco: {
         summary: 'Con Cobertura Amplia',
         value: {
-          cmarca: '074', cmodelo: '001', cversion: '01', cano: 2020, idPlan: 'Auto', suma: 15000,
-          fdesde: '2026-10-09', fhasta: '2027-10-09', tipo: 1, uso: 2, puestos: 5, cramo: 18, cusuario: 1422, coberAdicional: 'CA',
+          cmarca: '001', cmodelo: '015', cversion: '08', cano: 2022, idPlan: 'Auto', suma: 15000,
+          fdesde: '2026-10-09', fhasta: '2027-10-09', uso: 2, cramo: 18, coberAdicional: 'CA',
         },
       },
     },
@@ -441,10 +441,10 @@ export class EndososCoreController {
   })
   @CoreError(
     400,
-    'Faltan campos obligatorios.',
-    'Faltan campos requeridos para calcular: cmarca, cmodelo, cversion, cano, idPlan, suma, fdesde, fhasta, tipo, uso, puestos.',
+    'Faltan campos obligatorios, vehículo no encontrado en el catálogo INMA o plan/parámetros inválidos (el mensaje lo indica).',
+    'Faltan campos requeridos para calcular: cmarca, cmodelo, cversion, cano, idPlan, fdesde, fhasta, uso.',
   )
-  @CoreError(500, 'El procedimiento no devolvió cálculo (vehículo/plan inexistente) o falló.', 'Error en calculos, por favor validar informacion')
+  @CoreError(500, 'Error inesperado del procedimiento o de base de datos.', 'Mensaje del error SQL.')
   @CoreAuthErrors()
   async calcularPlanSis(@Body() body: Record<string, any>, @Res({ passthrough: true }) res: Response) {
     return this.send(res, await this.core.calculatePlanSis(body ?? {}));
@@ -456,7 +456,7 @@ export class EndososCoreController {
     summary: 'Planes con coberturas y tasas para una solicitud',
     operationId: 'endososCorePlanesSolicitud',
     description:
-      'Mismo cálculo y mismos campos obligatorios que `calcular-plan-sis`, pero la respuesta viene **agrupada por plan**, con las ' +
+      'Mismo cálculo (`sp_calculo_auto_nexus`) y mismos campos obligatorios que `calcular-plan-sis`, pero la respuesta viene **agrupada por plan**, con las ' +
       'tasas de casco (`TCA`, `TPT`, `TPP`) y las coberturas de cada plan. Endosos lo usa para armar las tarjetas de CA/PT/PP.\n\n' +
       '- **Clave en Parametrización:** `planesSolicitud`.\n' +
       '- Las primas totales (`PA`, `CA`, `PT`, `PP`) vienen como texto con 2 decimales.\n\n' +
@@ -468,8 +468,8 @@ export class EndososCoreController {
       cotizacion: {
         summary: 'Cotización RCV + casco',
         value: {
-          cmarca: '074', cmodelo: '001', cversion: '01', cano: 2020, idPlan: 'Auto', suma: 15000,
-          fdesde: '2026-10-09', fhasta: '2027-10-09', tipo: 1, uso: 2, puestos: 5, cramo: 18, cusuario: 1422, coberAdicional: 'CA',
+          cmarca: '001', cmodelo: '015', cversion: '08', cano: 2022, idPlan: 'Auto', suma: 15000,
+          fdesde: '2026-10-09', fhasta: '2027-10-09', uso: 2, cramo: 18, coberAdicional: 'CA',
         },
       },
     },
@@ -499,10 +499,10 @@ export class EndososCoreController {
   })
   @CoreError(
     400,
-    'Faltan campos obligatorios.',
+    'Faltan campos obligatorios, vehículo no encontrado en el catálogo INMA o plan/parámetros inválidos (el mensaje lo indica).',
     'Faltan campos requeridos para calcular: cmarca, cmodelo, cversion, cano, idPlan, suma, fdesde, fhasta, tipo, uso, puestos.',
   )
-  @CoreError(500, 'Sin precios para la solicitud o error SQL.', 'No se encontraron datos de precios para esta solicitud')
+  @CoreError(500, 'Error inesperado del procedimiento o de base de datos.', 'Mensaje del error SQL.')
   @CoreAuthErrors()
   async planesSolicitud(@Body() body: Record<string, any>, @Res({ passthrough: true }) res: Response) {
     return this.send(res, await this.core.calculatePlanSolicitud(body ?? {}));
