@@ -107,23 +107,26 @@ export class PlanCoberturasRequestDoc {
 }
 
 export class CalcularPlanRequestDoc {
-  @ApiProperty({ example: '074', description: 'Código de marca.' })
+  @ApiProperty({ example: '001', description: 'Código de marca. Debe existir en el catálogo INMA junto con modelo, versión y año.' })
   cmarca: string;
 
-  @ApiProperty({ example: '001', description: 'Código de modelo.' })
+  @ApiProperty({ example: '015', description: 'Código de modelo.' })
   cmodelo: string;
 
-  @ApiProperty({ example: '01', description: 'Código de versión.' })
+  @ApiProperty({ example: '08', description: 'Código de versión.' })
   cversion: string;
 
-  @ApiProperty({ example: 2020, description: 'Año del vehículo.' })
+  @ApiProperty({ example: 2022, description: 'Año del vehículo.' })
   cano: number;
 
   @ApiProperty({ example: 'Auto', description: 'Plan a calcular (`cplan`). Para CA/PT/PP use un plan Auto*.' })
   idPlan: string;
 
-  @ApiProperty({ example: 15000, description: 'Suma asegurada del casco (valor del vehículo) en USD.' })
-  suma: number;
+  @ApiPropertyOptional({
+    example: 15000,
+    description: 'Suma asegurada del casco (valor del vehículo) en USD. Si se omite, se toma el valor del vehículo en el catálogo INMA.',
+  })
+  suma?: number;
 
   @ApiProperty({ example: '2026-10-09', description: 'Inicio de vigencia (YYYY-MM-DD).' })
   fdesde: string;
@@ -131,14 +134,14 @@ export class CalcularPlanRequestDoc {
   @ApiProperty({ example: '2027-10-09', description: 'Fin de vigencia (YYYY-MM-DD).' })
   fhasta: string;
 
-  @ApiProperty({ example: 1, description: 'Tipo de vehículo (`ctipo`).' })
-  tipo: number;
+  @ApiPropertyOptional({ example: 2, description: 'Tipo de vehículo (`ctipo`). Si se omite, se toma de INMA.' })
+  tipo?: number;
 
-  @ApiProperty({ example: 2, description: 'Uso del vehículo (`cuso`).' })
+  @ApiProperty({ example: 2, description: 'Uso del vehículo (`cuso`), p. ej. 2 = particular.' })
   uso: number;
 
-  @ApiProperty({ example: 5, description: 'Puestos.' })
-  puestos: number;
+  @ApiPropertyOptional({ example: 7, description: 'Puestos. Si se omite, se toman del catálogo INMA.' })
+  puestos?: number;
 
   @ApiPropertyOptional({
     example: 'RC',
@@ -180,8 +183,8 @@ export class CalcularPlanRequestDoc {
 
   @ApiPropertyOptional({
     example: 1422,
-    default: 7,
-    description: 'Usuario que calcula (`cusuario`). Determina qué coberturas de casco puede tarifar.',
+    description:
+      'Se ignora: el usuario de cálculo lo fija el Core (`LAMUNDIAL_CUSUARIO_SP_CALCULO`, 1422 por defecto) para que coincida con la emisión.',
   })
   cusuario?: number;
 }
