@@ -60,6 +60,24 @@ const RECEIPT_STATUS_SQL = `
     ELSE TRIM(iestadorec)
   END`;
 
+/** Campos que spCalculoAuto necesita para poder calcular (el resto tiene valor por defecto). */
+const CALCULO_REQUIRED = [
+  'cmarca',
+  'cmodelo',
+  'cversion',
+  'cano',
+  'idPlan',
+  'suma',
+  'fdesde',
+  'fhasta',
+  'tipo',
+  'uso',
+  'puestos',
+] as const;
+
+const missingCalculoFields = (body: Record<string, any>): string[] =>
+  CALCULO_REQUIRED.filter((k) => body?.[k] === undefined || body?.[k] === null || String(body[k]).trim() === '');
+
 const toInt = (v: unknown): number | null => {
   const n = parseInt(String(v), 10);
   return Number.isFinite(n) ? n : null;
@@ -821,6 +839,8 @@ export class EndososCoreService {
   }
 
   async calculatePlanSis(body: Record<string, any>): Promise<CoreResult> {
+    const missing = missingCalculoFields(body);
+    if (missing.length) return fail(`Faltan campos requeridos para calcular: ${missing.join(', ')}.`, 400);
     try {
       const sets = await this.spCalculoAuto(body, toInt(body?.cusuario) ?? 7);
       if (!sets || sets.length === 0) {
@@ -855,6 +875,8 @@ export class EndososCoreService {
   }
 
   async calculatePlanSolicitud(body: Record<string, any>): Promise<CoreResult> {
+    const missing = missingCalculoFields(body);
+    if (missing.length) return fail(`Faltan campos requeridos para calcular: ${missing.join(', ')}.`, 400);
     try {
       const sets = await this.spCalculoAuto(body, toInt(body?.cusuario) ?? 7);
       if (!sets || sets.length === 0) {
