@@ -157,14 +157,14 @@ export function buildCoberturasQuery(planes: PlanKey[]): { sql: string; params: 
     SELECT
       pt.cramo,
       RTRIM(pt.cplan) AS cplan,
-      mc.ccobertura,
+      TRY_CONVERT(int, mc.ccobertura) AS ccobertura, -- en macoberturas es CHAR con relleno ("10  ")
       RTRIM(mc.xdescripcion_l) AS xcobertura,
       MAX(pt.msumamax) AS msumamax
     FROM maplantar pt
     INNER JOIN macoberturas mc ON mc.ccobertura = pt.ccober AND mc.cramo = pt.cramo
     WHERE (${tuplas.join('\n        OR ')})
     GROUP BY pt.cramo, RTRIM(pt.cplan), mc.ccobertura, RTRIM(mc.xdescripcion_l)
-    ORDER BY pt.cramo, RTRIM(pt.cplan), mc.ccobertura`;
+    ORDER BY pt.cramo, RTRIM(pt.cplan), TRY_CONVERT(int, mc.ccobertura)`;
 
   return { sql, params };
 }

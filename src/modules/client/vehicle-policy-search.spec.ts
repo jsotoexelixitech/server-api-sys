@@ -92,6 +92,9 @@ describe('vehicle-policy-search', () => {
       expect(sql).toContain('@c1');
       expect(sql).not.toContain('RCVBAS');
       expect(sql).toContain('maplantar');
+      // macoberturas.ccobertura es CHAR: debe devolverse numérico y ordenarse como número
+      expect(sql).toContain('TRY_CONVERT(int, mc.ccobertura) AS ccobertura');
+      expect(sql.split('ORDER BY')[1]).toContain('TRY_CONVERT(int, mc.ccobertura)');
     });
 
     it('rechaza lista vacía o demasiado grande', () => {
