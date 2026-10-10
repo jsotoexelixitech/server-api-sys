@@ -34,6 +34,24 @@ export class ClientController {
     return { status: true, result };
   }
 
+  @Get('roles')
+  @ApiHeader(APIKEY_HEADER)
+  @ApiOperation({
+    summary: 'Roles activos de SysIP',
+    description:
+      'Lista los roles activos (`serol`) con su departamento. Es un catálogo: no devuelve datos personales. ' +
+      '**Seguridad**: requiere API Key con scope `client:read`.',
+  })
+  @ApiResponse({
+    status: 200,
+    schema: { example: { status: true, result: { roles: [{ crol: 13, xrol: 'Director', cdepartamento: 11, xdepartamento: 'Canales Alternos' }] } } },
+  })
+  @ApiCommonErrors()
+  async listRoles() {
+    const roles = await this.clientService.listRoles();
+    return { status: true, result: { roles } };
+  }
+
   @Get('search/policies/:cci_rif')
   @ApiHeader(APIKEY_HEADER)
   @ApiOperation({

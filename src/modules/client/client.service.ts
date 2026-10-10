@@ -217,4 +217,35 @@ export class ClientService {
       throw new InternalServerErrorException('Error al buscar pólizas por vehículo.');
     }
   }
+
+  // ── GET /api/v1/client/roles ─────────────────────────────────────────────
+
+  /** Roles activos de SysIP (`serol`) con su departamento. Catálogo: no contiene datos personales. */
+  async listRoles(): Promise<
+    { crol: number; xrol: string; cdepartamento: number; xdepartamento: string }[]
+  > {
+    try {
+      const result = await this.db.request().query(`
+        SELECT
+          r.crol,
+          RTRIM(r.xrol)                  AS xrol,
+          r.cdepartamento,
+          RTRIM(d.xdepartamento)         AS xdepartamento
+        FROM serol r
+        LEFT JOIN sedepartamento d ON d.cdepartamento = r.cdepartamento
+        WHERE RTRIM(r.istatus) = 'V'
+        ORDER BY d.xdepartamento, r.cnivel, r.crol
+      `);
+      return (result.recordset ?? []) as {
+        crol: number;
+        xrol: string;
+        cdepartamento: number;
+        xdepartamento: string;
+      }[];
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : String(err);
+      this.logger.error(`listRoles: ${msg}`);
+      throw new InternalServerErrorException('Error al listar los roles.');
+    }
+  }
 }
