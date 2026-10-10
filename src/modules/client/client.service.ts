@@ -1,7 +1,14 @@
-import { Injectable, InternalServerErrorException, Logger } from '@nestjs/common';
+import { BadRequestException, Injectable, InternalServerErrorException, Logger } from '@nestjs/common';
 import { MssqlService } from '../../database/mssql.service';
 import { SP_GET_COVERAGE_CLIENT } from '../../config/sis2000-sp.constants';
 import { SearchCoveragesDto } from './dto/search-coverages.dto';
+import { SearchVehiclePoliciesDto } from './dto/search-vehicle-policies.dto';
+import {
+  buildCoberturasQuery,
+  buildVehiclePolicyQuery,
+  validarCriterios,
+  type SqlParam,
+} from './vehicle-policy-search';
 
 export interface ClientData {
   client: Record<string, unknown>[];
@@ -116,6 +123,98 @@ export class ClientService {
       const msg = err instanceof Error ? err.message : String(err);
       this.logger.error(`searchCoverages: ${msg}`);
       throw new InternalServerErrorException('Error al buscar coberturas de la póliza.');
+    }
+  }
+
+  // ── GET /api/v1/client/search/vehicle-policies ───────────────────────────
+
+  private bindParams(req: ReturnType<MssqlService['request']>, params: SqlParam[]): void {
+    const T = this.db.types;
+    for (const p of params) {
+      if (p.type === 'varchar') req.input(p.name, T.VarChar(p.length), p.value);
+      else if (p.type === 'numeric') req.input(p.name, T.Numeric(18, 0), p.value);
+      else req.input(p.name, T.Int, p.value);
+    }
+  }
+
+  async searchVehiclePolicies(filters: SearchVehiclePoliciesDto) {
+    const error = validarCriterios(filters);
+    if (error) throw new BadRequestException(error);
+
+    try {
+      const built = buildVehiclePolicyQuery(filters);
+      const req = this.db.request();
+      this.bindParams(req, built.params);
+      const result = await req.query(built.sql);
+
+      const filas = (result.recordset ?? []) as Record<string, unknown>[];
+      const hasMore = filas.length > built.limit;
+      const pagina = filas.slice(0, built.limit);
+
+      const coberturasPorPlan = new Map<string, Record<string, unknown>[]>();
+      if (pagina.length > 0) {
+        const planes = new Map<string, { cramo: number; cplan: string }>();
+        for (const f of pagina) {
+          const cplan = String(f.cplan ?? '').trim();
+          if (cplan) planes.set(`${f.cramo}|${cplan}`, { cramo: Number(f.cramo), cplan });
+        }
+        if (planes.size > 0) {
+          const cob = buildCoberturasQuery([...planes.values()]);
+          const cobReq = this.db.request();
+          this.bindParams(cobReq, cob.params);
+          const cobRes = await cobReq.query(cob.sql);
+          for (const c of (cobRes.recordset ?? []) as Record<string, unknown>[]) {
+            const key = `${c.cramo}|${c.cplan}`;
+            const lista = coberturasPorPlan.get(key) ?? [];
+            lista.push({ ccobertura: c.ccobertura, xcobertura: c.xcobertura, msumamax: c.msumamax });
+            coberturasPorPlan.set(key, lista);
+          }
+        }
+      }
+
+      const items = pagina.map((f) => ({
+        poliza: {
+          cpoliza: f.cpoliza,
+          fanopol: f.fanopol,
+          fmespol: f.fmespol,
+          cnpoliza: f.cnpoliza,
+          cramo: f.cramo,
+          xramo: f.xramo,
+          cplan: f.cplan,
+          istatpol: f.istatpol,
+          desde: f.poliza_desde,
+          hasta: f.poliza_hasta,
+          cproductor: f.cproductor,
+          cmoneda: f.cmoneda,
+          ccerti: f.ccerti,
+          istatcer: f.istatcer,
+          cert_desde: f.cert_desde,
+          cert_hasta: f.cert_hasta,
+        },
+        vehiculo: {
+          xplaca: f.xplaca,
+          xsercar: f.xsercar,
+          xsermot: f.xsermot,
+          xcolor: f.xcolor,
+          cano: f.cano,
+          cmarca: f.cmarca,
+          xmarca: f.xmarca,
+          cmodelo: f.cmodelo,
+          cversion: f.cversion,
+          mvalor: f.mvalor,
+          qpuestos: f.qpuestos,
+        },
+        asegurado: { casegurado: f.casegurado, xasegurado: f.xasegurado, cid: f.cid_asegurado },
+        tenedor: { ctenedor: f.ctenedor },
+        coberturas: coberturasPorPlan.get(`${f.cramo}|${String(f.cplan ?? '').trim()}`) ?? [],
+      }));
+
+      return { items, limit: built.limit, offset: built.offset, hasMore };
+    } catch (err) {
+      if (err instanceof RangeError) throw new BadRequestException(err.message);
+      const msg = err instanceof Error ? err.message : String(err);
+      this.logger.error(`searchVehiclePolicies: ${msg}`);
+      throw new InternalServerErrorException('Error al buscar pólizas por vehículo.');
     }
   }
 }

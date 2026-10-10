@@ -1,4 +1,4 @@
-import { BadRequestException, Body, Controller, Get, HttpCode, HttpStatus, Param, Post } from '@nestjs/common';
+import { BadRequestException, Body, Controller, Get, HttpCode, HttpStatus, Param, Post, Query } from '@nestjs/common';
 import { ApiBody, ApiHeader, ApiOperation, ApiParam, ApiResponse, ApiTags } from '@nestjs/swagger';
 import { ClientService } from './client.service';
 import { ApiCommonErrors } from '../../common/swagger/api-error-responses';
@@ -6,12 +6,33 @@ import { APIKEY_HEADER } from '../../common/swagger/api-docs.constants';
 import { NestProtected } from '../auth/decorators/nest-protected.decorator';
 import { NEST_AUTH_SCOPES } from '../auth/scopes/nest-auth-scopes.constants';
 import { SearchCoveragesDto } from './dto/search-coverages.dto';
+import { SearchVehiclePoliciesDto } from './dto/search-vehicle-policies.dto';
 
 @ApiTags('7. Consulta de clientes')
 @Controller('v1/client')
 @NestProtected(NEST_AUTH_SCOPES.CLIENT_READ)
 export class ClientController {
   constructor(private readonly clientService: ClientService) {}
+
+  // Declarada antes de 'search/:cci_rif' para que no la capture ese parámetro.
+  @Get('search/vehicle-policies')
+  @ApiHeader(APIKEY_HEADER)
+  @ApiOperation({
+    summary: 'Pólizas de automóvil por vehículo, asegurado o cartera de productor',
+    description:
+      'Busca certificados de los ramos Automóvil (18) y RCV (26) por **placa** y/o **cci_rif** (asegurado o tomador). ' +
+      'La **marca** solo se acepta junto con **cproductor**. Devuelve póliza, vigencia, estatus, vehículo, asegurado y ' +
+      'coberturas activas contratadas con su suma asegurada. Incluye pólizas no vigentes: quien consume decide si la ' +
+      'póliza cubría la fecha del evento. Si no hay coincidencias devuelve lista vacía. ' +
+      '**El filtro por rol (asegurado = solo lo suyo) lo aplica quien consume**. ' +
+      '**Seguridad**: requiere API Key con scope `client:read`.',
+  })
+  @ApiResponse({ status: 400, description: 'Faltan criterios mínimos o parámetros inválidos' })
+  @ApiCommonErrors()
+  async searchVehiclePolicies(@Query() query: SearchVehiclePoliciesDto) {
+    const result = await this.clientService.searchVehiclePolicies(query);
+    return { status: true, result };
+  }
 
   @Get('search/policies/:cci_rif')
   @ApiHeader(APIKEY_HEADER)

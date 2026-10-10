@@ -9,6 +9,7 @@ Formato basado en [Keep a Changelog](https://keepachangelog.com/es/1.0.0/).
 
 ### Añadido
 
+- **`ClientModule`**: `GET /api/v1/client/search/vehicle-policies` (scope `client:read`) — pólizas de Automóvil (18) y RCV (26) por placa, cédula/RIF (asegurado o tomador) o marca + productor. Consultas parametrizadas, límite 50 con paginación, vacío si no hay coincidencias y coberturas del plan. `cpoliza` se devuelve como texto (numeric(19,0)). Para el módulo de Siniestros (EXE-62).
 - **`EmissionsModule`**: `POST /api/v1/emissions/automobile_new/propietary` — migración desde SysIP Express (`searchNewPropietary`). Busca propietario en `maclient` por `cid` / `cci_rif`.
 
 ### Cambiado
