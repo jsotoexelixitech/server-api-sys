@@ -7,6 +7,7 @@ import { NestProtected } from '../auth/decorators/nest-protected.decorator';
 import { NEST_AUTH_SCOPES } from '../auth/scopes/nest-auth-scopes.constants';
 import { SearchCoveragesDto } from './dto/search-coverages.dto';
 import { SearchVehiclePoliciesDto } from './dto/search-vehicle-policies.dto';
+import { SearchTitularContactoDto } from './dto/search-titular-contacto.dto';
 
 @ApiTags('7. Consulta de clientes')
 @Controller('v1/client')
@@ -31,6 +32,24 @@ export class ClientController {
   @ApiCommonErrors()
   async searchVehiclePolicies(@Query() query: SearchVehiclePoliciesDto) {
     const result = await this.clientService.searchVehiclePolicies(query);
+    return { status: true, result };
+  }
+
+  // Antes de 'search/:cci_rif' para que no la capture ese parámetro.
+  @Get('search/titular-contacto')
+  @ApiHeader(APIKEY_HEADER)
+  @ApiOperation({
+    summary: 'Correo del titular de un vehículo (cédula + placa)',
+    description:
+      'Para el código de un solo uso del portal de siniestros. Solo hay coincidencia si existe una póliza de ' +
+      'Automóvil/RCV con esa placa cuyo asegurado o tomador sea la cédula. **Devuelve el correo completo**: ' +
+      'quien lo consume no debe mostrarlo entero al usuario. **Seguridad**: requiere API Key con scope `client:read`.',
+  })
+  @ApiResponse({ status: 200, schema: { example: { status: true, result: { encontrada: true, correo: 'titular@dominio.com' } } } })
+  @ApiResponse({ status: 400, description: 'Cédula o placa inválidas' })
+  @ApiCommonErrors()
+  async getTitularContacto(@Query() query: SearchTitularContactoDto) {
+    const result = await this.clientService.getTitularContacto(query);
     return { status: true, result };
   }
 

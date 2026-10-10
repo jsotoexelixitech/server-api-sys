@@ -3,6 +3,8 @@ import { MssqlService } from '../../database/mssql.service';
 import { SP_GET_COVERAGE_CLIENT } from '../../config/sis2000-sp.constants';
 import { SearchCoveragesDto } from './dto/search-coverages.dto';
 import { SearchVehiclePoliciesDto } from './dto/search-vehicle-policies.dto';
+import { SearchTitularContactoDto } from './dto/search-titular-contacto.dto';
+import { buildCorreoEmisionQuery, buildPolizaYCorreoMaestroQuery, type TitularContactoSql } from './titular-contacto';
 import {
   buildCoberturasQuery,
   buildVehiclePolicyQuery,
@@ -246,6 +248,41 @@ export class ClientService {
       const msg = err instanceof Error ? err.message : String(err);
       this.logger.error(`listRoles: ${msg}`);
       throw new InternalServerErrorException('Error al listar los roles.');
+    }
+  }
+
+  // ── GET /api/v1/client/search/titular-contacto ───────────────────────────
+
+  private async ejecutarContacto(q: TitularContactoSql): Promise<Record<string, unknown> | undefined> {
+    const req = this.db.request();
+    const T = this.db.types;
+    for (const p of q.params) {
+      if (p.type === 'varchar') req.input(p.name, T.VarChar(p.length ?? 15), p.value);
+      else req.input(p.name, T.Numeric(18, 0), p.value);
+    }
+    const result = await req.query(q.sql);
+    return (result.recordset ?? [])[0] as Record<string, unknown> | undefined;
+  }
+
+  /**
+   * Correo del titular de un vehículo para el código de un solo uso del portal de siniestros.
+   * Solo hay coincidencia si existe una póliza de Auto/RCV con esa placa cuyo asegurado o tomador sea la
+   * cédula: así no se revela el correo de una placa ajena. Devuelve el correo completo al servicio que
+   * consulta (scope `client:read`); quien lo consume debe enmascararlo.
+   */
+  async getTitularContacto(
+    filtros: Pick<SearchTitularContactoDto, 'placa' | 'cci_rif'>,
+  ): Promise<{ encontrada: boolean; correo: string | null }> {
+    try {
+      const emision = await this.ejecutarContacto(buildCorreoEmisionQuery(filtros.placa, filtros.cci_rif));
+      const poliza = await this.ejecutarContacto(buildPolizaYCorreoMaestroQuery(filtros.placa, filtros.cci_rif));
+      if (!poliza) return { encontrada: false, correo: null };
+      const correo = String(emision?.correo ?? poliza.correo ?? '').trim();
+      return { encontrada: true, correo: correo || null };
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : String(err);
+      this.logger.error(`getTitularContacto: ${msg}`);
+      throw new InternalServerErrorException('Error al consultar el contacto del titular.');
     }
   }
 }

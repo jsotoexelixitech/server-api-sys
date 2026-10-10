@@ -9,6 +9,7 @@ Formato basado en [Keep a Changelog](https://keepachangelog.com/es/1.0.0/).
 
 ### Añadido
 
+- **`ClientModule`**: `GET /api/v1/client/search/titular-contacto` (scope `client:read`) — correo del titular de un vehículo por cédula + placa (emisión → `maclient_correo`); solo hay coincidencia si existe la póliza. Para el código de un solo uso del portal de Siniestros (EXE-70). Devuelve el correo completo: el consumidor debe enmascararlo.
 - **`ClientModule`**: `GET /api/v1/client/roles` (scope `client:read`) — roles activos de SysIP (`serol`) con su departamento. Catálogo sin datos personales; lo usa el módulo de Siniestros para elegir qué roles son "Técnico" (EXE-67).
 - **`ClientModule`**: `GET /api/v1/client/search/vehicle-policies` (scope `client:read`) — pólizas de Automóvil (18) y RCV (26) por placa, cédula/RIF (asegurado o tomador) o marca + productor. Consultas parametrizadas, límite 50 con paginación, vacío si no hay coincidencias y coberturas del plan. `cpoliza` se devuelve como texto (numeric(19,0)). Para el módulo de Siniestros (EXE-62).
 - **`EmissionsModule`**: `POST /api/v1/emissions/automobile_new/propietary` — migración desde SysIP Express (`searchNewPropietary`). Busca propietario en `maclient` por `cid` / `cci_rif`.
