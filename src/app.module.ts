@@ -9,6 +9,7 @@ import { EmissionsModule } from './modules/emissions/emissions.module';
 import { ChangesModule } from './modules/changes/changes.module';
 import { PersonasModule } from './modules/personas/personas.module';
 import { CondominioModule } from './modules/condominio/condominio.module';
+import { IntermediariosModule } from './modules/intermediarios/intermediarios.module';
 import { EndososModule } from './modules/endosos/endosos.module';
 import { RmsGatewayModule } from './modules/rms-gateway/rms-gateway.module';
 
@@ -60,6 +61,7 @@ import { ComponentsModule } from './modules/components/components.module';
     ChangesModule,
     PersonasModule,
     CondominioModule,
+    IntermediariosModule,
     EndososModule,
     RmsGatewayModule,
     AppApiModule,
