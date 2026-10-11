@@ -1,8 +1,8 @@
 /* 2026-10-11 — Copia "_nexus" de spGetCoverageClient (los SP existentes no se modifican; mismo criterio que RCV y funerario).
- * Cambio: @cpoliza y la tabla temporal #resultados pasan de numeric(18) a numeric(19,0) (EXE-63: 38 % de las pólizas 2026 tiene 19 dígitos).
+ * Cambio: @cpoliza pasa de numeric(18) a VARCHAR(19) (se compara exacto con adpoliza.cpoliza numeric(19,0)) y la tabla temporal #resultados de NUMERIC a numeric(19,0) (EXE-63: 38 % de las pólizas 2026 tiene 19 dígitos).
  */
 CREATE OR ALTER PROCEDURE [dbo].[sp_get_coverage_client_nexus]
-	@cpoliza numeric(19,0) = 5000000000009806,
+	@cpoliza VARCHAR(19) = '5000000000009806', -- texto: el driver tedious pierde precisión con numeric de 19 dígitos; SQL Server convierte exacto al comparar
 	@fanopol int = 2025,
 	@fmespol int = 1
 

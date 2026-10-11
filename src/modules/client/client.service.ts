@@ -114,7 +114,7 @@ export class ClientService {
     try {
       const req = this.db.request();
       const T = this.db.types;
-      req.input('cpoliza', T.Numeric(19, 0), body.cpoliza); // texto: 19 dígitos no caben en un number de JS
+      req.input('cpoliza', T.VarChar(19), body.cpoliza); // texto: el driver pierde precisión con numeric de 19 dígitos; el SP lo compara exacto
       req.input('fanopol', T.Int, body.fanopol);
       req.input('fmespol', T.Int, body.fmespol);
       const result = await req.execute(SP_GET_COVERAGE_CLIENT_NEXUS);
