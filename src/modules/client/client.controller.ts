@@ -8,6 +8,7 @@ import { NEST_AUTH_SCOPES } from '../auth/scopes/nest-auth-scopes.constants';
 import { SearchCoveragesDto } from './dto/search-coverages.dto';
 import { SearchVehiclePoliciesDto } from './dto/search-vehicle-policies.dto';
 import { SearchTitularContactoDto } from './dto/search-titular-contacto.dto';
+import { ValidateSiniestroDto } from './dto/validate-siniestro.dto';
 
 @ApiTags('7. Consulta de clientes')
 @Controller('v1/client')
@@ -50,6 +51,21 @@ export class ClientController {
   @ApiCommonErrors()
   async getTitularContacto(@Query() query: SearchTitularContactoDto) {
     const result = await this.clientService.getTitularContacto(query);
+    return { status: true, result };
+  }
+
+  @Get('siniestros/validar')
+  @ApiHeader(APIKEY_HEADER)
+  @ApiOperation({
+    summary: 'Validar una declaración de siniestro (solo lectura)',
+    description:
+      'Usa `SpValidaSiniestro` de SIS2000: la póliza debe existir y estar activa, la fecha de ocurrencia dentro de su ' +
+      'vigencia y el recibo de ese período cobrado. **No crea nada.** **Seguridad**: requiere API Key con scope `client:read`.',
+  })
+  @ApiResponse({ status: 200, schema: { example: { status: true, result: { valida: false, motivo: 'RECIBO_PENDIENTE', mensaje: 'La póliza posee recibos pendiente para la fecha de ocurrencia del siniestro' } } } })
+  @ApiCommonErrors()
+  async validarSiniestro(@Query() query: ValidateSiniestroDto) {
+    const result = await this.clientService.validarSiniestro(query);
     return { status: true, result };
   }
 
