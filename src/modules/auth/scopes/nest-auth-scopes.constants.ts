@@ -111,7 +111,7 @@ export const NEST_AUTH_SCOPE_CATALOG: NestAuthScopeMeta[] = [
     id: NEST_AUTH_SCOPES.SINIESTROS_WRITE,
     label: 'Alta de siniestros',
     description: 'Registrar siniestros de Automóvil en Sis2000 (módulo de Siniestros)',
-    routes: ['POST /api/v1/client/siniestros'],
+    routes: ['POST /api/v1/client/siniestros', 'POST /api/v1/client/siniestros/rechazar'],
   },
   {
     id: NEST_AUTH_SCOPES.RENOVATIONS_WRITE,

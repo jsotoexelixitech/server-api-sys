@@ -8,8 +8,10 @@ import {
 import { ConfigService } from '@nestjs/config';
 import { MssqlService } from '../../database/mssql.service';
 import { RegistrarSiniestroDto, TIPOS_PERDIDA } from './dto/registrar-siniestro.dto';
+import { MOTIVOS_RECHAZO, RechazarSiniestroDto } from './dto/rechazar-siniestro.dto';
 
 export const SP_REGISTRA_SINIESTRO_NEXUS = 'sp_registra_siniestro_nexus';
+export const SP_RECHAZA_SINIESTRO_NEXUS = 'sp_rechaza_siniestro_nexus';
 
 export interface SiniestroRegistrado {
   csinies: string;
@@ -94,6 +96,33 @@ export class SiniestrosRegistroService {
       const msg = err instanceof Error ? err.message : String(err);
       this.logger.error(`registrarSiniestro: ${msg}`);
       throw new InternalServerErrorException('Error al registrar el siniestro.');
+    }
+  }
+
+  /**
+   * Rechaza un siniestro pendiente en SIS2000 (`sp_rechaza_siniestro_nexus`): estatus Z con su motivo, fecha y liberación de la
+   * reserva. Idempotente con el mismo motivo; un siniestro que ya no está pendiente se rechaza con 400.
+   */
+  async rechazar(dto: RechazarSiniestroDto): Promise<{ csinies: string; motivo: string; mensaje: string }> {
+    const cusuario = this.cusuario(dto.cusuario);
+    try {
+      const T = this.db.types;
+      const req = this.db.request();
+      req.input('csinies', T.Numeric(19, 0), dto.csinies);
+      req.input('crechazo', T.Int, MOTIVOS_RECHAZO[dto.motivo]);
+      req.input('cusuario', T.Numeric(11, 0), cusuario);
+      req.output('cerror', T.Int);
+      req.output('msj', T.VarChar(255));
+      const r = await req.execute(SP_RECHAZA_SINIESTRO_NEXUS);
+      const cerror = Number(r.output?.cerror ?? 0);
+      const mensaje = String(r.output?.msj ?? '').trim();
+      if (cerror !== 0) throw new BadRequestException(mensaje || 'SIS2000 no pudo rechazar el siniestro.');
+      return { csinies: dto.csinies, motivo: dto.motivo, mensaje };
+    } catch (err) {
+      if (err instanceof BadRequestException) throw err;
+      const msg = err instanceof Error ? err.message : String(err);
+      this.logger.error(`rechazarSiniestro: ${msg}`);
+      throw new InternalServerErrorException('Error al rechazar el siniestro.');
     }
   }
 }

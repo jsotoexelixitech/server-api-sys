@@ -107,3 +107,36 @@ describe('SiniestrosRegistroService (D14: snsinies es el registro)', () => {
     expect(inputs).not.toHaveProperty('__sp');
   });
 });
+
+describe('SiniestrosRegistroService.rechazar', () => {
+  const dtoR = { csinies: '18000000002301', motivo: 'FALTA_DE_RECAUDOS' as const };
+
+  it('rechaza con el motivo de marechazo y el usuario de la sesión', async () => {
+    const { service, inputs } = crear({ cerror: 0, msj: 'Siniestro rechazado.' });
+    await expect(service.rechazar({ ...dtoR, cusuario: 15504158 })).resolves.toEqual({ csinies: '18000000002301', motivo: 'FALTA_DE_RECAUDOS', mensaje: 'Siniestro rechazado.' });
+    expect(inputs).toMatchObject({ __sp: 'sp_rechaza_siniestro_nexus', csinies: '18000000002301', crechazo: 2, cusuario: 15504158 });
+  });
+
+  it.each([['EXTEMPORANEIDAD', 1], ['FALTA_DE_PAGO', 3], ['SIN_RESPONSABILIDAD_DEL_ASEGURADO', 6]] as const)('motivo %s = %i', async (m, n) => {
+    const { service, inputs } = crear({ cerror: 0, msj: 'ok' });
+    await service.rechazar({ ...dtoR, motivo: m });
+    expect(inputs.crechazo).toBe(n);
+  });
+
+  it('un siniestro que ya no está pendiente sale como 400 con el mensaje de SIS2000', async () => {
+    const { service } = crear({ cerror: 1, msj: 'Solo se pueden rechazar siniestros pendientes.' });
+    const err = await service.rechazar(dtoR).catch((e) => e);
+    expect(err).toBeInstanceOf(BadRequestException);
+    expect(err.message).toContain('pendientes');
+  });
+
+  it('error de BD: 500 sin detalles; sin usuario válido: 503 y no llama a SIS2000', async () => {
+    const a = crear(new Error('Login failed for user x'));
+    const err = await a.service.rechazar(dtoR).catch((e) => e);
+    expect(err).toBeInstanceOf(InternalServerErrorException);
+    expect(JSON.stringify(err.getResponse())).not.toContain('Login failed');
+    const b = crear({ cerror: 0, msj: '' }, null);
+    await expect(b.service.rechazar(dtoR)).rejects.toBeInstanceOf(ServiceUnavailableException);
+    expect(b.inputs).not.toHaveProperty('__sp');
+  });
+});

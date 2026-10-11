@@ -5,6 +5,7 @@ import { ApiCommonErrors } from '../../common/swagger/api-error-responses';
 import { NestProtected } from '../auth/decorators/nest-protected.decorator';
 import { NEST_AUTH_SCOPES } from '../auth/scopes/nest-auth-scopes.constants';
 import { RegistrarSiniestroDto } from './dto/registrar-siniestro.dto';
+import { RechazarSiniestroDto } from './dto/rechazar-siniestro.dto';
 import { SiniestrosRegistroService } from './siniestros-registro.service';
 
 @ApiTags('7. Consulta de clientes')
@@ -33,6 +34,24 @@ export class SiniestrosRegistroController {
   @ApiCommonErrors()
   async registrar(@Body() dto: RegistrarSiniestroDto) {
     const result = await this.registro.registrar(dto);
+    return { status: true, result };
+  }
+
+  @Post('rechazar')
+  @HttpCode(HttpStatus.OK)
+  @ApiHeader(APIKEY_HEADER)
+  @ApiOperation({
+    summary: 'Rechazar un siniestro pendiente en SIS2000',
+    description:
+      'Estatus Z con su motivo (' + '`marechazo`' + ') y liberación de la reserva (' + '`sp_rechaza_siniestro_nexus`' + '). Solo siniestros pendientes; ' +
+      'idempotente con el mismo motivo. **Seguridad**: requiere API Key con scope ' + '`siniestros:write`' + '.',
+  })
+  @ApiBody({ type: RechazarSiniestroDto })
+  @ApiResponse({ status: 200, schema: { example: { status: true, result: { csinies: '18000000002301', motivo: 'FALTA_DE_RECAUDOS', mensaje: 'Siniestro rechazado.' } } } })
+  @ApiResponse({ status: 400, description: 'No existe, ya no está pendiente o el motivo no es válido' })
+  @ApiCommonErrors()
+  async rechazar(@Body() dto: RechazarSiniestroDto) {
+    const result = await this.registro.rechazar(dto);
     return { status: true, result };
   }
 }
