@@ -4,7 +4,7 @@ import { ClientService } from './client.service';
 function crear(salida: { cerror: number; msj: string } | Error) {
   const inputs: Record<string, unknown> = {};
   const db: any = {
-    types: { VarChar: (n: number) => ({ n }), Date: 'date', Int: 'int' },
+    types: { VarChar: (n: number) => ({ n }), Date: 'date', Int: 'int', Bit: 'bit' },
     request: () => ({
       input: (n: string, _t: unknown, v: unknown) => { inputs[n] = v; },
       output: jest.fn(),
@@ -25,6 +25,15 @@ describe('ClientService.validarSiniestro', () => {
     await expect(service.validarSiniestro(f)).resolves.toEqual({ valida: true, motivo: 'OK', mensaje: '' });
     expect(inputs.__sp).toBe('sp_valida_siniestro_nexus');
     expect(inputs).toMatchObject({ cnpoliza: f.cnpoliza, focurrencia: f.focurrencia, fnotificacion: f.fnotificacion });
+  });
+
+  it('envía exigir_recibo solo cuando se pide', async () => {
+    const a = crear({ cerror: 0, msj: '' });
+    await a.service.validarSiniestro(f);
+    expect(a.inputs).not.toHaveProperty('exigir_recibo');
+    const b = crear({ cerror: 0, msj: '' });
+    await b.service.validarSiniestro({ ...f, exigirRecibo: true });
+    expect(b.inputs.exigir_recibo).toBe(true);
   });
 
   it.each([

@@ -1,5 +1,7 @@
-/* 2026-10-11 — Copia "_nexus" de SpValidaSiniestro (los SP existentes no se modifican; mismo criterio que RCV y funerario).
- * Copia fiel por ahora. Los ajustes D17 (recibo cobrado) y D18 (fanopol) se harán aquí cuando se decidan.
+/* 2026-10-11 — Copia "_nexus" de SpValidaSiniestro (el original no se modifica).
+ * Cambios: (1) la póliza debe estar EN CURSO (vigencia que contiene HOY) y la ocurrencia dentro de esa vigencia;
+ * (2) @exigir_recibo (por defecto 0): la declaración se acepta con recibos pendientes (decisión 2026-10-11); con 1 se exige el
+ *     recibo del período cobrado (para validar antes de pagar).
  */
 /*******************************************************************
  * Autor: Hamilton Leon
@@ -8,7 +10,7 @@
  * Descripción: Stored Procedure para la validación de siniestro
  ******************************************************************/
 CREATE OR ALTER PROCEDURE [dbo].[sp_valida_siniestro_nexus] -- Datos iniciales
-@cnpoliza VARCHAR (30), @focurrencia DATE, @fnotificacion DATE, -- Auditoría
+@cnpoliza VARCHAR (30), @focurrencia DATE, @fnotificacion DATE, @exigir_recibo BIT = 0, -- Auditoría
 -- Mensajes de salida
 @cerror INT OUTPUT, @msj VARCHAR (255) OUTPUT
 AS
@@ -28,7 +30,7 @@ BEGIN
             SET @msj = 'La póliza no existe o no se encuentra en estado activo.';
             RETURN;
         END /*Paso 2: Obtener datos internos de la póliza según la fecha de ocurrencia*/
-    SELECT @cpoliza = pol.cpoliza,
+    SELECT TOP 1 @cpoliza = pol.cpoliza,
            @fanopol = pol.fanopol,
            @fmespol = pol.fmespol,
            @cramo = pol.cramo
@@ -36,7 +38,9 @@ BEGIN
     WHERE  pol.cnpoliza = @cnpoliza
            AND pol.iestado = 'V'
            AND pol.istatpol = 'V'
-           AND @focurrencia BETWEEN pol.fdesde AND pol.fhasta; 
+           AND CONVERT (DATE, GETDATE()) BETWEEN pol.fdesde AND pol.fhasta
+           AND @focurrencia BETWEEN pol.fdesde AND pol.fhasta
+    ORDER BY pol.fanopol DESC, pol.fmespol DESC; 
     /* Paso 3: Validar si la fecha de ocurrencia está dentro de la vigencia*/
     IF @cpoliza IS NULL
         BEGIN
@@ -45,7 +49,7 @@ BEGIN
             RETURN;
         END 
     /*PAso 3.1: Validamos si la poliza de la vigencia tiene el recibo cobrado*/
-    if not exists (select 1 from adrecibos rec where rec.cpoliza = @cpoliza and rec.fanopol = @fanopol and rec.fmespol = @fmespol and iestadorec = 'C' and @focurrencia BETWEEN rec.fdesde AND rec.fhasta) begin
+    if @exigir_recibo = 1 and not exists (select 1 from adrecibos rec where rec.cpoliza = @cpoliza and rec.fanopol = @fanopol and rec.fmespol = @fmespol and iestadorec = 'C' and @focurrencia BETWEEN rec.fdesde AND rec.fhasta) begin
             SET @cerror = 1;
             SET @msj = 'La póliza posee recibos pendiente para la fecha de ocurrencia del siniestro';
             RETURN;

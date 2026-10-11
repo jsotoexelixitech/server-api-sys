@@ -1,5 +1,9 @@
-/* 2026-10-11 — Copia "_nexus" de spGeneraSiniestro (los SP existentes no se modifican; mismo criterio que RCV y funerario).
- * Copia fiel por ahora (sigue usando spContador_v1). Los ajustes D17/D18/D19/D20 se harán aquí. NO invocar contra datos reales sin autorización: crea un siniestro.
+/* 2026-10-11 — Copia "_nexus" de spGeneraSiniestro (el original no se modifica; mismo criterio que RCV y funerario).
+ * Cambio: en lugar de "fanopol = YEAR(GETDATE())" se exige que la póliza esté EN CURSO (la vigencia contiene HOY) y que la
+ * fecha de ocurrencia caiga en esa misma vigencia. Así una póliza emitida en 2025 con vigencia hasta 2026 sí se acepta,
+ * y los siniestros solo se declaran sobre pólizas en curso (decisión 2026-10-11).
+ * Recibos: la declaración se acepta con recibos pendientes; el recibo cobrado se exige solo al pagar (D17).
+ * NO invocar contra datos reales sin autorización: crea un siniestro.
  */
 /*******************************************************************
  * Autor: Hamilton Leon
@@ -33,7 +37,7 @@ BEGIN
                 GOTO LogAndExit;
             END
         -- Paso 2: Obtener datos internos de la póliza según la fecha de ocurrencia
-        SELECT @cpoliza = pol.cpoliza,
+        SELECT TOP 1 @cpoliza = pol.cpoliza,
                      @fanopol = pol.fanopol,
                      @fmespol = pol.fmespol,
                      @ramo = pol.cramo,
@@ -45,8 +49,9 @@ BEGIN
         WHERE  pol.cnpoliza = @cnpoliza
                AND pol.iestado = 'V'
                AND pol.istatpol = 'V'
-               AND fanopol = YEAR(GETDATE())
-               AND CONVERT (DATE, @focurencia) BETWEEN pol.fdesde AND pol.fhasta;
+               AND CONVERT (DATE, GETDATE()) BETWEEN pol.fdesde AND pol.fhasta
+               AND CONVERT (DATE, @focurencia) BETWEEN pol.fdesde AND pol.fhasta
+        ORDER BY pol.fanopol DESC, pol.fmespol DESC;
             -- Paso 2.1 Validar la existencia de la causa especificada 
             IF NOT EXISTS (SELECT 1
                         FROM   macausasin

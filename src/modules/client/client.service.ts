@@ -303,6 +303,8 @@ export class ClientService {
       req.input('cnpoliza', T.VarChar(30), f.cnpoliza);
       req.input('focurrencia', T.Date, f.focurrencia);
       req.input('fnotificacion', T.Date, f.fnotificacion);
+      // Solo se envía cuando se pide: así funciona también con la versión anterior del SP (sin este parámetro).
+      if (f.exigirRecibo) req.input('exigir_recibo', T.Bit, true);
       req.output('cerror', T.Int);
       req.output('msj', T.VarChar(255));
       const r = await req.execute(SP_VALIDA_SINIESTRO_NEXUS);
