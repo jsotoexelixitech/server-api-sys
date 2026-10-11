@@ -1,14 +1,48 @@
-import { ConflictException, Injectable, InternalServerErrorException, Logger } from '@nestjs/common';
+import {
+  ConflictException,
+  Injectable,
+  InternalServerErrorException,
+  Logger,
+  NotFoundException,
+} from '@nestjs/common';
 import * as bcrypt from 'bcryptjs';
 import { randomBytes } from 'crypto';
 import { MssqlService } from '../../database/mssql.service';
 import { CrearIntermediarioDto } from './dto/crear-intermediario.dto';
+import { CrearCanalDto } from './dto/crear-canal.dto';
+import { CrearGestorDto } from './dto/crear-gestor.dto';
 
 export interface IntermediarioCreado {
   cproductor: number;
   xcorreo: string;
   claveTemporal: string;
 }
+
+export interface CanalCreado {
+  ccanalalt: number;
+  ctipocanal: string;
+  cgestor: string | null;
+}
+
+export interface GestorCreado {
+  cgestor: string | null;
+  cgestor_padre: string;
+  ctipocanal: string | null;
+  ccanalalt: number | null;
+  cscanalalt: number | null;
+}
+
+export interface GestorResumen {
+  cgestor: string;
+  xgestor: string;
+  xcorreo: string;
+  ctipocanal: string | null;
+  ccanalalt: number | null;
+  cscanalalt: number | null;
+}
+
+/** Gestor raíz de La Mundial del que cuelgan los canales Alterno / Directo (igual que la pasarela). */
+const GESTOR_RAIZ_CANALES = '80080';
 
 /** Clave temporal legible (sin caracteres ambiguos). */
 function generarClaveTemporal(): string {
@@ -151,6 +185,157 @@ export class IntermediariosService {
       const mensaje = err instanceof Error ? err.message : String(err);
       this.logger.error(`Fallo alta de intermediario (rif=${cciRif}): ${mensaje}`);
       throw new InternalServerErrorException(`No fue posible crear el intermediario: ${mensaje}`);
+    }
+  }
+
+  /**
+   * Canal Alterno / Directo con su gestor (pasarela: create_agencia_canal_sisip), en una transacción:
+   *   spCreateCanal (macanalalt) -> spCreateGestorWeb (cgestor_anterior 80080, ctipocanal A/D, ccanalalt nuevo)
+   */
+  async crearCanal(dto: CrearCanalDto): Promise<CanalCreado> {
+    const sql = this.mssql.types;
+    const tx = this.mssql.transaction();
+    await tx.begin();
+    const req = () => new sql.Request(tx);
+
+    try {
+      await this.asegurarCorreoLibre(req, dto.xcorreo);
+
+      const siguiente = await req().query(
+        'SELECT ISNULL(MAX(ccanalalt), 0) + 1 AS next_code FROM macanalalt WITH (UPDLOCK, HOLDLOCK)',
+      );
+      const ccanalalt = Number(siguiente.recordset[0].next_code);
+
+      await req()
+        .input('xcanalalt', sql.VarChar(150), dto.xcanalalt)
+        .input('ctipocanal', sql.Char(1), dto.ctipocanal)
+        .input('ccategoriacanal', sql.Int, 0)
+        .input('ccanalalt', sql.Int, ccanalalt)
+        .execute('spCreateCanal');
+
+      await req()
+        .input('cgestor_anterior', sql.VarChar(20), GESTOR_RAIZ_CANALES)
+        .input('cproductor', sql.Int, null)
+        .input('xgestor', sql.VarChar(200), dto.xcanalalt)
+        .input('xcorreo', sql.VarChar(200), dto.xcorreo)
+        .input('ctipocanal', sql.Char(1), dto.ctipocanal)
+        .input('ccanalalt', sql.Int, ccanalalt)
+        .input('cscanalalt', sql.Int, null)
+        .input('id_adviser', sql.Int, null)
+        .input('id_agency', sql.Int, null)
+        .input('edit', sql.Bit, 0)
+        .execute('spCreateGestorWeb');
+
+      const cgestor = await this.cgestorPorCorreo(req, dto.xcorreo);
+      await tx.commit();
+      this.logger.log(`Canal ${dto.ctipocanal} creado ccanalalt=${ccanalalt} cgestor=${cgestor}`);
+      return { ccanalalt, ctipocanal: dto.ctipocanal, cgestor };
+    } catch (err) {
+      await this.deshacer(tx);
+      if (err instanceof ConflictException) throw err;
+      const mensaje = err instanceof Error ? err.message : String(err);
+      this.logger.error(`Fallo alta de canal (${dto.xcanalalt}): ${mensaje}`);
+      throw new InternalServerErrorException(`No fue posible crear el canal: ${mensaje}`);
+    }
+  }
+
+  /**
+   * Agencia (nivel 2) o asesor (nivel 3): gestor hijo de otro gestor (pasarela: agencias / asesores).
+   * Hereda el tipo de canal, el canal y el subcanal del padre.
+   */
+  async crearGestor(dto: CrearGestorDto): Promise<GestorCreado> {
+    const sql = this.mssql.types;
+    const tx = this.mssql.transaction();
+    await tx.begin();
+    const req = () => new sql.Request(tx);
+
+    try {
+      const padre = await req()
+        .input('cgestor', sql.VarChar(50), dto.cgestor_padre)
+        .query<{ cgestor: string; ctipocanal: string | null; ccanalalt: number | null; cscanalalt: number | null }>(
+          'SELECT TOP (1) cgestor, ctipocanal, ccanalalt, cscanalalt FROM magestor WHERE LTRIM(RTRIM(cgestor)) = @cgestor',
+        );
+      const datosPadre = padre.recordset[0];
+      if (!datosPadre) {
+        throw new NotFoundException(`No existe el gestor padre ${dto.cgestor_padre}.`);
+      }
+
+      await this.asegurarCorreoLibre(req, dto.xcorreo);
+
+      const ctipocanal = datosPadre.ctipocanal ? String(datosPadre.ctipocanal).trim() : 'T';
+      await req()
+        .input('cgestor_anterior', sql.VarChar(20), String(datosPadre.cgestor).trim())
+        .input('cproductor', sql.Int, null)
+        .input('xgestor', sql.VarChar(200), dto.xgestor)
+        .input('xcorreo', sql.VarChar(200), dto.xcorreo)
+        .input('ctipocanal', sql.Char(1), ctipocanal)
+        .input('ccanalalt', sql.Int, datosPadre.ccanalalt ?? null)
+        .input('cscanalalt', sql.Int, datosPadre.cscanalalt ?? null)
+        .input('id_adviser', sql.Int, null)
+        .input('id_agency', sql.Int, null)
+        .input('edit', sql.Bit, 0)
+        .execute('spCreateGestorWeb');
+
+      const cgestor = await this.cgestorPorCorreo(req, dto.xcorreo);
+      await tx.commit();
+      this.logger.log(`Gestor creado cgestor=${cgestor} padre=${dto.cgestor_padre}`);
+      return {
+        cgestor,
+        cgestor_padre: String(datosPadre.cgestor).trim(),
+        ctipocanal,
+        ccanalalt: datosPadre.ccanalalt ?? null,
+        cscanalalt: datosPadre.cscanalalt ?? null,
+      };
+    } catch (err) {
+      await this.deshacer(tx);
+      if (err instanceof ConflictException || err instanceof NotFoundException) throw err;
+      const mensaje = err instanceof Error ? err.message : String(err);
+      this.logger.error(`Fallo alta de gestor (padre=${dto.cgestor_padre}): ${mensaje}`);
+      throw new InternalServerErrorException(`No fue posible crear el gestor: ${mensaje}`);
+    }
+  }
+
+  /** Busca gestores (posibles padres) por código, nombre o correo. */
+  async buscarGestores(texto: string): Promise<GestorResumen[]> {
+    const sql = this.mssql.types;
+    const termino = String(texto || '').trim();
+    if (termino.length < 2) return [];
+    const res = await this.mssql
+      .request()
+      .input('q', sql.VarChar(120), `%${termino}%`)
+      .query<GestorResumen>(
+        `SELECT TOP (20) LTRIM(RTRIM(cgestor)) AS cgestor, LTRIM(RTRIM(xgestor)) AS xgestor,
+                LTRIM(RTRIM(xcorreo)) AS xcorreo, ctipocanal, ccanalalt, cscanalalt
+           FROM magestor
+          WHERE cgestor LIKE @q OR xgestor LIKE @q OR xcorreo LIKE @q
+          ORDER BY xgestor`,
+      );
+    return res.recordset;
+  }
+
+  private async asegurarCorreoLibre(req: () => any, xcorreo: string): Promise<void> {
+    const sql = this.mssql.types;
+    const existe = await req()
+      .input('xcorreo', sql.VarChar(200), xcorreo)
+      .query('SELECT COUNT(*) AS existe FROM magestor WHERE LTRIM(RTRIM(xcorreo)) = @xcorreo');
+    if (existe.recordset[0].existe > 0) {
+      throw new ConflictException(`Ya existe un gestor con el correo ${xcorreo}.`);
+    }
+  }
+
+  private async cgestorPorCorreo(req: () => any, xcorreo: string): Promise<string | null> {
+    const sql = this.mssql.types;
+    const res = await req()
+      .input('xcorreo', sql.VarChar(200), xcorreo)
+      .query('SELECT TOP (1) LTRIM(RTRIM(cgestor)) AS cgestor FROM magestor WHERE LTRIM(RTRIM(xcorreo)) = @xcorreo ORDER BY cgestor DESC');
+    return res.recordset[0]?.cgestor ?? null;
+  }
+
+  private async deshacer(tx: { rollback(): Promise<void> }): Promise<void> {
+    try {
+      await tx.rollback();
+    } catch {
+      /* SQL Server ya abortó la transacción */
     }
   }
 }

@@ -137,8 +137,13 @@ export const NEST_AUTH_SCOPE_CATALOG: NestAuthScopeMeta[] = [
   {
     id: NEST_AUTH_SCOPES.INTERMEDIARIOS_WRITE,
     label: 'Alta de intermediarios',
-    description: 'Crear corredores / productores en Sis2000 (cliente, productor, usuario web y gestor)',
-    routes: ['POST /api/v1/intermediarios'],
+    description: 'Crear intermediarios, canales Alterno/Directo y gestores (agencias / asesores) en Sis2000',
+    routes: [
+      'POST /api/v1/intermediarios',
+      'POST /api/v1/intermediarios/canal',
+      'POST /api/v1/intermediarios/gestor',
+      'GET /api/v1/intermediarios/gestores',
+    ],
   },
 ];
 
