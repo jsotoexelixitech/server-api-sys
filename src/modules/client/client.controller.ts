@@ -9,6 +9,7 @@ import { SearchCoveragesDto } from './dto/search-coverages.dto';
 import { SearchVehiclePoliciesDto } from './dto/search-vehicle-policies.dto';
 import { SearchTitularContactoDto } from './dto/search-titular-contacto.dto';
 import { ValidateSiniestroDto } from './dto/validate-siniestro.dto';
+import { SearchCausasDto } from './dto/search-causas.dto';
 
 @ApiTags('7. Consulta de clientes')
 @Controller('v1/client')
@@ -52,6 +53,22 @@ export class ClientController {
   async getTitularContacto(@Query() query: SearchTitularContactoDto) {
     const result = await this.clientService.getTitularContacto(query);
     return { status: true, result };
+  }
+
+  @Get('siniestros/causas')
+  @ApiHeader(APIKEY_HEADER)
+  @ApiOperation({
+    summary: 'Causas de siniestro por coberturas contratadas',
+    description:
+      'Devuelve las causas (`macausasin`) que cubren las coberturas indicadas (`macauscob`), con las coberturas a las que aplican. ' +
+      'Es catálogo: no incluye datos personales. **Seguridad**: requiere API Key con scope `client:read`.',
+  })
+  @ApiResponse({ status: 200, schema: { example: { status: true, result: { causas: [{ ccausa: 18126, xcausa: 'CHOQUE O COLISION ENTRE VEHICULOS', ccoberturas: [1, 2] }] } } } })
+  @ApiResponse({ status: 400, description: 'Ramo o coberturas inválidos' })
+  @ApiCommonErrors()
+  async causasSiniestro(@Query() query: SearchCausasDto) {
+    const causas = await this.clientService.listCausasSiniestro(query);
+    return { status: true, result: { causas } };
   }
 
   @Get('siniestros/validar')

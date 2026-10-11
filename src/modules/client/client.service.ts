@@ -5,6 +5,8 @@ import { SearchCoveragesDto } from './dto/search-coverages.dto';
 import { SearchVehiclePoliciesDto } from './dto/search-vehicle-policies.dto';
 import { SearchTitularContactoDto } from './dto/search-titular-contacto.dto';
 import { ValidateSiniestroDto } from './dto/validate-siniestro.dto';
+import { SearchCausasDto } from './dto/search-causas.dto';
+import { agruparCausas, buildCausasQuery, type CausaSiniestro } from './causas-siniestro';
 import { buildCorreoEmisionQuery, buildPolizaYCorreoMaestroQuery, type TitularContactoSql } from './titular-contacto';
 import {
   buildCoberturasQuery,
@@ -324,6 +326,23 @@ export class ClientService {
       const msg = err instanceof Error ? err.message : String(err);
       this.logger.error(`validarSiniestro: ${msg}`);
       throw new InternalServerErrorException('Error al validar el siniestro.');
+    }
+  }
+
+  // ── GET /api/v1/client/siniestros/causas ─────────────────────────────────
+
+  /** Causas de siniestro que cubren las coberturas contratadas (catálogo de Sis2000; sin datos personales). */
+  async listCausasSiniestro(q: SearchCausasDto): Promise<CausaSiniestro[]> {
+    try {
+      const built = buildCausasQuery(q.cramo, q.ccoberturas);
+      const req = this.db.request();
+      this.bindParams(req, built.params);
+      const r = await req.query(built.sql);
+      return agruparCausas((r.recordset ?? []) as { ccausa: number; xcausa: string; ccobertura: number | null }[]);
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : String(err);
+      this.logger.error(`listCausasSiniestro: ${msg}`);
+      throw new InternalServerErrorException('Error al consultar las causas de siniestro.');
     }
   }
 }

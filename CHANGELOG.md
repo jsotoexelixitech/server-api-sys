@@ -9,6 +9,10 @@ Formato basado en [Keep a Changelog](https://keepachangelog.com/es/1.0.0/).
 
 ### Añadido
 
+- **ClientModule**: POST /api/v1/client/siniestros/rechazar (scope siniestros:write) — rechaza un siniestro pendiente en Sis2000 con su motivo de marechazo y libera la reserva (sp_rechaza_siniestro_nexus, **aplicar docs/sql/sp_rechaza_siniestro_nexus.sql**). Idempotente con el mismo motivo.
+- **`ClientModule`**: `GET /api/v1/client/siniestros/causas?cramo=18&ccoberturas=1,2` (scope `client:read`) — causas de siniestro (`macausasin`/`macauscob`) que cubren las coberturas contratadas. Para el módulo de Siniestros (EXE-47).
+- **Alta de siniestros**: la reserva se carga en UNA sola cobertura (parámetro `ccobertura`; antes se repetía por cada cobertura que cubría la causa) y el usuario de Sis2000 puede venir de la sesión de quien declara (`cusuario`, o la cédula del cliente) con `SINIESTROS_CUSUARIO` como respaldo. Reaplicar `docs/sql/sp_genera_siniestro_nexus.sql` y `sp_registra_siniestro_nexus.sql`.
+- **`ClientModule`**: `POST /api/v1/client/siniestros` (scope nuevo `siniestros:write`) — alta de un siniestro de Automóvil en `snsinies` con `sp_registra_siniestro_nexus` (idempotente, moneda de la póliza, tipo de pérdida de `matipoperdida`). Solo pólizas en curso; se acepta con recibos pendientes. Requiere `SINIESTROS_CUSUARIO` y aplicar `docs/sql/sp_registra_siniestro_nexus.sql` (y `sp_genera_siniestro_nexus.sql`). `GET /client/siniestros/validar` acepta `exigirRecibo`.
 - **SP `_nexus` para siniestros (EXE-63, D14):** `sp_get_coverage_client_nexus` (cpoliza numeric(19,0)), `sp_valida_siniestro_nexus` y `sp_genera_siniestro_nexus` (copias de los SP oficiales, que no se modifican). `POST /client/search/coverages` y `GET /client/siniestros/validar` ahora los usan; `cpoliza` del primero se recibe como texto de 1 a 19 dígitos. **Aplicar antes los scripts de `docs/sql/` en la BD.**
 - **`ClientModule`**: `GET /api/v1/client/siniestros/validar` (scope `client:read`, solo lectura) — validación previa de una declaración con `SpValidaSiniestro` de SIS2000: póliza activa, fecha de ocurrencia dentro de la vigencia y recibo del período cobrado. Devuelve `valida`, `motivo` (`POLIZA_INACTIVA`, `FUERA_DE_VIGENCIA`, `RECIBO_PENDIENTE`) y `mensaje`. Para el módulo de Siniestros (D14: `snsinies` es el registro).
 - **`ClientModule`**: `GET /api/v1/client/search/titular-contacto` (scope `client:read`) — correo del titular de un vehículo por cédula + placa (emisión → `maclient_correo`); solo hay coincidencia si existe la póliza. Para el código de un solo uso del portal de Siniestros (EXE-70). Devuelve el correo completo: el consumidor debe enmascararlo.
@@ -29,6 +33,8 @@ Formato basado en [Keep a Changelog](https://keepachangelog.com/es/1.0.0/).
 
 #### Añadido
 
+- **ClientModule**: POST /api/v1/client/siniestros/rechazar (scope siniestros:write) — rechaza un siniestro pendiente en Sis2000 con su motivo de marechazo y libera la reserva (sp_rechaza_siniestro_nexus, **aplicar docs/sql/sp_rechaza_siniestro_nexus.sql**). Idempotente con el mismo motivo.
+- **Alta de siniestros**: la reserva se carga en UNA sola cobertura (parámetro `ccobertura`; antes se repetía por cada cobertura que cubría la causa) y el usuario de Sis2000 puede venir de la sesión de quien declara (`cusuario`, o la cédula del cliente) con `SINIESTROS_CUSUARIO` como respaldo. Reaplicar `docs/sql/sp_genera_siniestro_nexus.sql` y `sp_registra_siniestro_nexus.sql`.
 - **Proyecto NestJS** desde cero con arquitectura modular y Swagger
 - **`ValrepModule`** (`/api/v1/valrep`)
   - `POST /planes/v2` — replica `spBuscaPlan` con parentescos y coberturas

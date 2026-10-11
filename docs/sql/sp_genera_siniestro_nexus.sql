@@ -3,6 +3,9 @@
  * fecha de ocurrencia caiga en esa misma vigencia. Así una póliza emitida en 2025 con vigencia hasta 2026 sí se acepta,
  * y los siniestros solo se declaran sobre pólizas en curso (decisión 2026-10-11).
  * Recibos: la declaración se acepta con recibos pendientes; el recibo cobrado se exige solo al pagar (D17).
+ * Reserva (2026-10-11): el monto se carga en UNA sola cobertura. Antes se repetía en cada cobertura de la póliza que cubría la
+ * causa (reserva = monto × n.º de coberturas). Con @ccobertura se usa esa cobertura (error si no aplica a la causa/póliza);
+ * sin @ccobertura, la de menor código entre las que cubren la causa.
  * NO invocar contra datos reales sin autorización: crea un siniestro.
  */
 /*******************************************************************
@@ -13,7 +16,7 @@
  ******************************************************************/
 CREATE OR ALTER PROCEDURE [dbo].[sp_genera_siniestro_nexus]
 -- Parámetros de Entrada (Solicitados al usuario/aplicación)
-@cnpoliza CHAR (30), @fnotificacion DATETIME, @focurencia DATETIME, @ccausa INT, @asegurado VARCHAR (50), @cmoneda CHAR (4), @cpais INT, @cestado INT, @cciudad INT, @xobserva VARCHAR (254), @mmontosiniestro NUMERIC (16, 2)=NULL, @mmontosiniestroext NUMERIC (16, 2)=NULL, @itiposiniestro CHAR (1), @cusuario NUMERIC (11, 0), @csinies NUMERIC (19, 0)=NULL OUTPUT, @cnsinies CHAR (30)=NULL OUTPUT, @cerror INT=0 OUTPUT, @msj VARCHAR (255)='' OUTPUT --Auditoria
+@cnpoliza CHAR (30), @fnotificacion DATETIME, @focurencia DATETIME, @ccausa INT, @asegurado VARCHAR (50), @cmoneda CHAR (4), @cpais INT, @cestado INT, @cciudad INT, @xobserva VARCHAR (254), @mmontosiniestro NUMERIC (16, 2)=NULL, @mmontosiniestroext NUMERIC (16, 2)=NULL, @itiposiniestro CHAR (1), @cusuario NUMERIC (11, 0), @ccobertura INT=NULL, @csinies NUMERIC (19, 0)=NULL OUTPUT, @cnsinies CHAR (30)=NULL OUTPUT, @cerror INT=0 OUTPUT, @msj VARCHAR (255)='' OUTPUT --Auditoria
  -- Parámetros de Salida
 AS
 BEGIN
@@ -82,6 +85,31 @@ BEGIN
                 SET @msj = 'La póliza posee recibos pendiente para la fecha de ocurrencia del siniestro';
                 GOTO LogAndExit;
             END*/
+        -- Cobertura sobre la que se carga la reserva (ramos de vehículo)
+        DECLARE @ccober_sel AS INT;
+        IF @ramo IN (SELECT cramo FROM maramos WHERE ctiporamo = 7)
+            BEGIN
+                SELECT @ccober_sel = MIN(tar.ccober)
+                FROM   adpoltar AS tar
+                       INNER JOIN adrecibos AS rec
+                       ON rec.cpoliza = tar.cpoliza AND rec.fanopol = tar.fanopol AND rec.fmespol = tar.fmespol
+                          AND rec.crecibo = tar.crecibo AND rec.iestadorec <> 'A'
+                       INNER JOIN adpolcob AS cob
+                       ON cob.cpoliza = tar.cpoliza AND cob.fanopol = tar.fanopol AND cob.fmespol = tar.fmespol
+                          AND cob.crecibo = tar.crecibo AND cob.cramo = tar.cramo AND cob.ccober = tar.ccober
+                WHERE  tar.cpoliza = @cpoliza
+                       AND tar.fanopol = @fanopol
+                       AND tar.fmespol = @fmespol
+                       AND CONVERT (DATE, @focurencia) BETWEEN tar.fdesde AND tar.fhasta
+                       AND tar.ccober IN (SELECT ccobertura FROM macauscob WHERE ccausa = @ccausa AND cramo = tar.cramo)
+                       AND (@ccobertura IS NULL OR tar.ccober = @ccobertura);
+                IF @ccobertura IS NOT NULL AND @ccober_sel IS NULL
+                    BEGIN
+                        SET @cerror = 1;
+                        SET @msj = 'La cobertura indicada no aplica a la causa para esta póliza.';
+                        GOTO LogAndExit;
+                    END
+            END
         -- Inicia la transacción
         BEGIN TRANSACTION;
         -- 2. Tasa de cambio y montos del siniestro
@@ -499,7 +527,8 @@ BEGIN
                        AND tar.ccober IN (SELECT ccobertura
                                           FROM   macauscob
                                           WHERE  ccausa = @ccausa
-                                                 AND cramo = tar.cramo);
+                                                 AND cramo = tar.cramo)
+                       AND (@ccober_sel IS NULL OR tar.ccober = @ccober_sel);
             END
         -- Insertamos snmovsin 
         INSERT INTO snmovsin (
