@@ -95,6 +95,8 @@ export const NEST_AUTH_SCOPE_CATALOG: NestAuthScopeMeta[] = [
     label: 'Consulta de clientes',
     description: 'Datos del cliente, pólizas del asegurado y coberturas',
     routes: [
+      'GET /api/v1/client/roles',
+      'GET /api/v1/client/search/titular-contacto',
       'GET /api/v1/client/search/vehicle-policies',
       'GET /api/v1/client/search/{cci_rif}',
       'GET /api/v1/client/search/policies/{cci_rif}',
