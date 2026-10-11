@@ -32,6 +32,11 @@ export const SP_CALCULO_VIAJERO_PRORRATA = 'spCalculoViajeroProrrata';
 
 export const SP_GET_MACLIENT_API = 'spGetMaclientApi';
 export const SP_GET_COVERAGE_CLIENT = 'spGetCoverageClient';
+/** Copia de spGetCoverageClient con cpoliza numeric(19,0) (EXE-63). */
+export const SP_GET_COVERAGE_CLIENT_NEXUS = 'sp_get_coverage_client_nexus';
+/** Copias "_nexus" de los SP oficiales de siniestros (los originales no se modifican). */
+export const SP_VALIDA_SINIESTRO_NEXUS = 'sp_valida_siniestro_nexus';
+export const SP_GENERA_SINIESTRO_NEXUS = 'sp_genera_siniestro_nexus';
 export const SP_SYNC_POL_VEH_COUNTER = 'spSyncPolVehCounter';
 export const SP_LOOKUP_EMISSION_RCV_BY_PLACA = 'spLookupEmissionRcvByPlaca';
 export const SP_SEARCH_VEHICLE_RCV = 'spSearchVehicleRcv';

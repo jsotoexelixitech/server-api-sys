@@ -9,6 +9,7 @@ Formato basado en [Keep a Changelog](https://keepachangelog.com/es/1.0.0/).
 
 ### Añadido
 
+- **SP `_nexus` para siniestros (EXE-63, D14):** `sp_get_coverage_client_nexus` (cpoliza numeric(19,0)), `sp_valida_siniestro_nexus` y `sp_genera_siniestro_nexus` (copias de los SP oficiales, que no se modifican). `POST /client/search/coverages` y `GET /client/siniestros/validar` ahora los usan; `cpoliza` del primero se recibe como texto de 1 a 19 dígitos. **Aplicar antes los scripts de `docs/sql/` en la BD.**
 - **`ClientModule`**: `GET /api/v1/client/siniestros/validar` (scope `client:read`, solo lectura) — validación previa de una declaración con `SpValidaSiniestro` de SIS2000: póliza activa, fecha de ocurrencia dentro de la vigencia y recibo del período cobrado. Devuelve `valida`, `motivo` (`POLIZA_INACTIVA`, `FUERA_DE_VIGENCIA`, `RECIBO_PENDIENTE`) y `mensaje`. Para el módulo de Siniestros (D14: `snsinies` es el registro).
 - **`ClientModule`**: `GET /api/v1/client/search/titular-contacto` (scope `client:read`) — correo del titular de un vehículo por cédula + placa (emisión → `maclient_correo`); solo hay coincidencia si existe la póliza. Para el código de un solo uso del portal de Siniestros (EXE-70). Devuelve el correo completo: el consumidor debe enmascararlo.
 - **`ClientModule`**: `GET /api/v1/client/roles` (scope `client:read`) — roles activos de SysIP (`serol`) con su departamento. Catálogo sin datos personales; lo usa el módulo de Siniestros para elegir qué roles son "Técnico" (EXE-67).

@@ -1,6 +1,6 @@
 import { BadRequestException, Injectable, InternalServerErrorException, Logger } from '@nestjs/common';
 import { MssqlService } from '../../database/mssql.service';
-import { SP_GET_COVERAGE_CLIENT } from '../../config/sis2000-sp.constants';
+import { SP_GET_COVERAGE_CLIENT_NEXUS, SP_VALIDA_SINIESTRO_NEXUS } from '../../config/sis2000-sp.constants';
 import { SearchCoveragesDto } from './dto/search-coverages.dto';
 import { SearchVehiclePoliciesDto } from './dto/search-vehicle-policies.dto';
 import { SearchTitularContactoDto } from './dto/search-titular-contacto.dto';
@@ -114,10 +114,10 @@ export class ClientService {
     try {
       const req = this.db.request();
       const T = this.db.types;
-      req.input('cpoliza', T.Numeric(18, 0), body.cpoliza);
+      req.input('cpoliza', T.VarChar(19), body.cpoliza); // texto: el driver pierde precisión con numeric de 19 dígitos; el SP lo compara exacto
       req.input('fanopol', T.Int, body.fanopol);
       req.input('fmespol', T.Int, body.fmespol);
-      const result = await req.execute(SP_GET_COVERAGE_CLIENT);
+      const result = await req.execute(SP_GET_COVERAGE_CLIENT_NEXUS);
       return {
         poliza: (result.recordsets?.[0] as Record<string, unknown>[]) ?? [],
         coberturas: (result.recordsets?.[1] as Record<string, unknown>[]) ?? [],
@@ -290,7 +290,7 @@ export class ClientService {
   // ── GET /api/v1/client/siniestros/validar ────────────────────────────────
 
   /**
-   * Validación previa de una declaración con el procedimiento oficial de SIS2000 (`SpValidaSiniestro`,
+   * Validación previa de una declaración con el procedimiento oficial de SIS2000 (`sp_valida_siniestro_nexus`, copia de `SpValidaSiniestro`,
    * solo lectura): póliza existente y activa, fecha de ocurrencia dentro de la vigencia y recibo del período
    * cobrado. Devuelve el motivo para que el portal explique el rechazo.
    */
@@ -305,7 +305,7 @@ export class ClientService {
       req.input('fnotificacion', T.Date, f.fnotificacion);
       req.output('cerror', T.Int);
       req.output('msj', T.VarChar(255));
-      const r = await req.execute('SpValidaSiniestro');
+      const r = await req.execute(SP_VALIDA_SINIESTRO_NEXUS);
       const cerror = Number(r.output?.cerror ?? 0);
       const mensaje = String(r.output?.msj ?? '').trim();
       if (cerror === 0) return { valida: true, motivo: 'OK', mensaje: '' };
