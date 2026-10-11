@@ -21,6 +21,7 @@ CREATE OR ALTER PROCEDURE [dbo].[sp_registra_siniestro_nexus]
     @cusuario NUMERIC(11, 0),
     @mmonto NUMERIC(16, 2) = NULL,          -- en la moneda de la póliza
     @ctipoperdida INT = NULL,               -- matipoperdida: 1 total, 2 parcial, 3 daños a cosas
+    @ccobertura INT = NULL,                 -- cobertura afectada (la reserva se carga solo en ella)
     @cpais INT = 58,
     @cestado INT = 0,
     @cciudad INT = 0,
@@ -108,7 +109,7 @@ BEGIN
             @cnpoliza = @cnpoliza, @fnotificacion = @fnotificacion, @focurencia = @focurencia, @ccausa = @ccausa,
             @asegurado = @placa, @cmoneda = @cmoneda, @cpais = @cpais, @cestado = @cestado, @cciudad = @cciudad,
             @xobserva = @xobserva, @mmontosiniestro = @mbs, @mmontosiniestroext = @mext,
-            @itiposiniestro = @itiposiniestro, @cusuario = @cusuario,
+            @itiposiniestro = @itiposiniestro, @cusuario = @cusuario, @ccobertura = @ccobertura,
             @csinies = @csin OUTPUT, @cnsinies = @cns OUTPUT, @cerror = @errgen OUTPUT, @msj = @msjgen OUTPUT;
 
         SET @cerror = ISNULL(@errgen, 0);

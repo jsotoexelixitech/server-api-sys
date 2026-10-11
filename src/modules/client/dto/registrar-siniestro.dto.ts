@@ -1,5 +1,5 @@
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
-import { IsIn, IsInt, IsNumber, IsOptional, IsString, Matches, Max, MaxLength, Min } from 'class-validator';
+import { IsIn, IsInt, IsNumber, IsOptional, IsString, Matches, Max, MaxLength, Min, NotEquals } from 'class-validator';
 
 const FECHA = /^\d{4}-\d{2}-\d{2}$/;
 
@@ -45,6 +45,24 @@ export class RegistrarSiniestroDto {
   @IsOptional()
   @IsIn(Object.keys(TIPOS_PERDIDA))
   tipoPerdida?: keyof typeof TIPOS_PERDIDA;
+
+  @ApiPropertyOptional({ example: 10, description: 'Cobertura afectada (ccobertura). La reserva se carga solo en ella; si falta, en la de menor código que cubra la causa.' })
+  @IsOptional()
+  @IsInt()
+  @Min(1)
+  ccobertura?: number;
+
+  @ApiPropertyOptional({
+    example: 15504158,
+    description:
+      'Usuario de Sis2000 que registra: el de la sesión (personal/productor) o la cédula del cliente que declara. ' +
+      'Si falta se usa SINIESTROS_CUSUARIO. Nunca 999 (reservado a RMS).',
+  })
+  @IsOptional()
+  @IsInt()
+  @Min(1)
+  @NotEquals(999, { message: 'cusuario 999 está reservado a RMS' })
+  cusuario?: number;
 
   @ApiPropertyOptional({ example: 58 })
   @IsOptional()

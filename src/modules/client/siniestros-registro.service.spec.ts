@@ -50,6 +50,31 @@ describe('SiniestrosRegistroService (D14: snsinies es el registro)', () => {
     for (const k of ['mmonto', 'ctipoperdida', 'cpais', 'cestado', 'cciudad', 'xobserva']) expect(inputs).not.toHaveProperty(k);
   });
 
+  it('el usuario de la sesión (o la cédula del cliente) tiene prioridad sobre el de servicio', async () => {
+    const a = crear(ok, 4321);
+    await a.service.registrar(dto({ cusuario: 15504158 }));
+    expect(a.inputs.cusuario).toBe(15504158);
+    const b = crear(ok, 4321);
+    await b.service.registrar(dto());
+    expect(b.inputs.cusuario).toBe(4321);
+  });
+
+  it('sin cusuario del solicitante ni de servicio no registra; el 999 tampoco', async () => {
+    const a = crear(ok, null);
+    await a.service.registrar(dto({ cusuario: 777 })); // el de la sesión basta aunque no haya usuario de servicio
+    expect(a.inputs.cusuario).toBe(777);
+    const b = crear(ok, null);
+    await expect(b.service.registrar(dto())).rejects.toBeInstanceOf(ServiceUnavailableException);
+    const c = crear(ok, 4321);
+    await expect(c.service.registrar(dto({ cusuario: 999 }))).rejects.toBeInstanceOf(ServiceUnavailableException);
+  });
+
+  it('la cobertura declarada se envía al SP (la reserva va solo en ella)', async () => {
+    const { service, inputs } = crear(ok);
+    await service.registrar(dto({ ccobertura: 10 }));
+    expect(inputs.ccobertura).toBe(10);
+  });
+
   it('una llamada repetida devuelve el existente', async () => {
     const { service } = crear({ ...ok, bexistia: true, msj: 'El siniestro ya estaba registrado.' });
     await expect(service.registrar(dto())).resolves.toMatchObject({ yaExistia: true, cnsinies: '18-00000002288' });
