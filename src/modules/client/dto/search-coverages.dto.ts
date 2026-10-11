@@ -5,7 +5,7 @@ import { IsInt, Matches, Min } from 'class-validator';
 export class SearchCoveragesDto {
   @ApiProperty({ example: '900000000065412', description: 'Número de póliza' })
   @Transform(({ value }) => (typeof value === 'number' ? String(value) : value))
-  @Matches(/^d{1,19}$/, { message: 'cpoliza debe tener entre 1 y 19 dígitos' })
+  @Matches(/^\d{1,19}$/, { message: 'cpoliza debe tener entre 1 y 19 dígitos' })
   cpoliza: string;
 
   @ApiProperty({ example: 2025, description: 'Año de la póliza' })
