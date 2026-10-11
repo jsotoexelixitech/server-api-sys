@@ -106,6 +106,7 @@ const ROUTE_LABELS: Record<string, string> = {
   'POST /api/rms-sync/siniestros': 'Avisar a RMS un siniestro ya emitido',
   'POST /api/v1/siniestros/validar': 'Prevalidar siniestro Sis2000 (póliza, vigencia, recibo)',
   'POST /api/v1/siniestros/emitir': 'Alta de siniestro en Sis2000 (spGeneraSiniestro)',
+  'POST /api/v1/client/siniestros': 'Registrar un siniestro de Automóvil en Sis2000 (módulo de Siniestros)',
   // partner
   'GET /api/v1/partner/starter/health': 'Health check módulo partner',
   'GET /api/v1/partner/starter/ping': 'Ping módulo partner',

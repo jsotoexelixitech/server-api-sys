@@ -10,6 +10,8 @@ export const NEST_AUTH_SCOPES = {
   ADMIN_KEYS: 'admin:keys',
   PRODUCT_EMISSION_WRITE: 'product-emission:write',
   CLIENT_READ: 'client:read',
+  /** Alta de siniestros de Automóvil en Sis2000 (módulo de Siniestros). */
+  SINIESTROS_WRITE: 'siniestros:write',
   /** Rutas bajo /api/v1/renovations/* (paquetes partner de renovación). */
   RENOVATIONS_WRITE: 'renovations:write',
   /** Catálogos INMA / valrep (consultas auxiliares de emisión). */
@@ -103,6 +105,12 @@ export const NEST_AUTH_SCOPE_CATALOG: NestAuthScopeMeta[] = [
       'GET /api/v1/client/search/policies/{cci_rif}',
       'POST /api/v1/client/search/coverages',
     ],
+  },
+  {
+    id: NEST_AUTH_SCOPES.SINIESTROS_WRITE,
+    label: 'Alta de siniestros',
+    description: 'Registrar siniestros de Automóvil en Sis2000 (módulo de Siniestros)',
+    routes: ['POST /api/v1/client/siniestros'],
   },
   {
     id: NEST_AUTH_SCOPES.RENOVATIONS_WRITE,

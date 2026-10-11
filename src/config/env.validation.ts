@@ -177,6 +177,8 @@ export const envValidationSchema = Joi.object({
   GEMINI_MODEL: Joi.string().default('gemini-2.5-flash-lite'),
 
   /** Aviso HTTP a RMS Gateway tras cambio de póliza en endosos (no toca Sis2000). */
+  /** Usuario de Sis2000 que queda en los siniestros del módulo de Siniestros (nunca 999, reservado a RMS). */
+  SINIESTROS_CUSUARIO: Joi.number().integer().positive().invalid(999).optional(),
   RMS_GATEWAY_ENABLED: Joi.boolean().default(true),
   RMS_GATEWAY_BASE_URL: Joi.string().allow('').optional(),
   RMS_GATEWAY_WEBHOOK_SECRET: Joi.string().allow('').optional(),
