@@ -23,7 +23,7 @@ describe('ClientService.validarSiniestro', () => {
   it('ejecuta SpValidaSiniestro con los datos como parámetros y devuelve válida', async () => {
     const { service, inputs } = crear({ cerror: 0, msj: '' });
     await expect(service.validarSiniestro(f)).resolves.toEqual({ valida: true, motivo: 'OK', mensaje: '' });
-    expect(inputs.__sp).toBe('SpValidaSiniestro');
+    expect(inputs.__sp).toBe('sp_valida_siniestro_nexus');
     expect(inputs).toMatchObject({ cnpoliza: f.cnpoliza, focurrencia: f.focurrencia, fnotificacion: f.fnotificacion });
   });
 

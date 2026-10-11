@@ -59,7 +59,7 @@ export class ClientController {
   @ApiOperation({
     summary: 'Validar una declaración de siniestro (solo lectura)',
     description:
-      'Usa `SpValidaSiniestro` de SIS2000: la póliza debe existir y estar activa, la fecha de ocurrencia dentro de su ' +
+      'Usa `sp_valida_siniestro_nexus` (copia de `SpValidaSiniestro` de SIS2000): la póliza debe existir y estar activa, la fecha de ocurrencia dentro de su ' +
       'vigencia y el recibo de ese período cobrado. **No crea nada.** **Seguridad**: requiere API Key con scope `client:read`.',
   })
   @ApiResponse({ status: 200, schema: { example: { status: true, result: { valida: false, motivo: 'RECIBO_PENDIENTE', mensaje: 'La póliza posee recibos pendiente para la fecha de ocurrencia del siniestro' } } } })
