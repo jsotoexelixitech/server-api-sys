@@ -4,6 +4,7 @@ import { SP_GET_COVERAGE_CLIENT } from '../../config/sis2000-sp.constants';
 import { SearchCoveragesDto } from './dto/search-coverages.dto';
 import { SearchVehiclePoliciesDto } from './dto/search-vehicle-policies.dto';
 import { SearchTitularContactoDto } from './dto/search-titular-contacto.dto';
+import { ValidateSiniestroDto } from './dto/validate-siniestro.dto';
 import { buildCorreoEmisionQuery, buildPolizaYCorreoMaestroQuery, type TitularContactoSql } from './titular-contacto';
 import {
   buildCoberturasQuery,
@@ -283,6 +284,44 @@ export class ClientService {
       const msg = err instanceof Error ? err.message : String(err);
       this.logger.error(`getTitularContacto: ${msg}`);
       throw new InternalServerErrorException('Error al consultar el contacto del titular.');
+    }
+  }
+
+  // ── GET /api/v1/client/siniestros/validar ────────────────────────────────
+
+  /**
+   * Validación previa de una declaración con el procedimiento oficial de SIS2000 (`SpValidaSiniestro`,
+   * solo lectura): póliza existente y activa, fecha de ocurrencia dentro de la vigencia y recibo del período
+   * cobrado. Devuelve el motivo para que el portal explique el rechazo.
+   */
+  async validarSiniestro(
+    f: ValidateSiniestroDto,
+  ): Promise<{ valida: boolean; motivo: 'OK' | 'POLIZA_INACTIVA' | 'FUERA_DE_VIGENCIA' | 'RECIBO_PENDIENTE' | 'OTRO'; mensaje: string }> {
+    try {
+      const T = this.db.types;
+      const req = this.db.request();
+      req.input('cnpoliza', T.VarChar(30), f.cnpoliza);
+      req.input('focurrencia', T.Date, f.focurrencia);
+      req.input('fnotificacion', T.Date, f.fnotificacion);
+      req.output('cerror', T.Int);
+      req.output('msj', T.VarChar(255));
+      const r = await req.execute('SpValidaSiniestro');
+      const cerror = Number(r.output?.cerror ?? 0);
+      const mensaje = String(r.output?.msj ?? '').trim();
+      if (cerror === 0) return { valida: true, motivo: 'OK', mensaje: '' };
+      const m = mensaje.toLowerCase();
+      const motivo = m.includes('recibo')
+        ? 'RECIBO_PENDIENTE'
+        : m.includes('vigencia')
+          ? 'FUERA_DE_VIGENCIA'
+          : m.includes('no existe') || m.includes('estado activo')
+            ? 'POLIZA_INACTIVA'
+            : 'OTRO';
+      return { valida: false, motivo, mensaje };
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : String(err);
+      this.logger.error(`validarSiniestro: ${msg}`);
+      throw new InternalServerErrorException('Error al validar el siniestro.');
     }
   }
 }
