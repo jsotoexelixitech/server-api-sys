@@ -6,6 +6,7 @@ import { SearchVehiclePoliciesDto } from './dto/search-vehicle-policies.dto';
 import { SearchTitularContactoDto } from './dto/search-titular-contacto.dto';
 import { ValidateSiniestroDto } from './dto/validate-siniestro.dto';
 import { SearchCausasDto } from './dto/search-causas.dto';
+import { buildCiudadesQuery, buildEstadosQuery, limpiarGeo, type GeoItem } from './geo-catalogo';
 import { agruparCausas, buildCausasQuery, type CausaSiniestro } from './causas-siniestro';
 import { buildCorreoEmisionQuery, buildPolizaYCorreoMaestroQuery, type TitularContactoSql } from './titular-contacto';
 import {
@@ -343,6 +344,36 @@ export class ClientService {
       const msg = err instanceof Error ? err.message : String(err);
       this.logger.error(`listCausasSiniestro: ${msg}`);
       throw new InternalServerErrorException('Error al consultar las causas de siniestro.');
+    }
+  }
+
+  // ── GET /api/v1/client/geo/estados y /ciudades ───────────────────────────
+
+  /** Estados de Venezuela (catálogo de Sis2000, sin datos personales). */
+  async listEstados(): Promise<GeoItem[]> {
+    try {
+      const built = buildEstadosQuery();
+      const req = this.db.request();
+      this.bindParams(req, built.params);
+      const r = await req.query(built.sql);
+      return limpiarGeo((r.recordset ?? []) as { codigo: unknown; nombre: unknown }[]);
+    } catch (err) {
+      this.logger.error(`listEstados: ${err instanceof Error ? err.message : String(err)}`);
+      throw new InternalServerErrorException('Error al consultar los estados.');
+    }
+  }
+
+  /** Ciudades de un estado. */
+  async listCiudades(cestado: number): Promise<GeoItem[]> {
+    try {
+      const built = buildCiudadesQuery(cestado);
+      const req = this.db.request();
+      this.bindParams(req, built.params);
+      const r = await req.query(built.sql);
+      return limpiarGeo((r.recordset ?? []) as { codigo: unknown; nombre: unknown }[]);
+    } catch (err) {
+      this.logger.error(`listCiudades: ${err instanceof Error ? err.message : String(err)}`);
+      throw new InternalServerErrorException('Error al consultar las ciudades.');
     }
   }
 }

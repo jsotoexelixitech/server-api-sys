@@ -100,6 +100,8 @@ export const NEST_AUTH_SCOPE_CATALOG: NestAuthScopeMeta[] = [
       'GET /api/v1/client/roles',
       'GET /api/v1/client/siniestros/validar',
       'GET /api/v1/client/siniestros/causas',
+      'GET /api/v1/client/geo/estados',
+      'GET /api/v1/client/geo/ciudades',
       'GET /api/v1/client/search/titular-contacto',
       'GET /api/v1/client/search/vehicle-policies',
       'GET /api/v1/client/search/{cci_rif}',

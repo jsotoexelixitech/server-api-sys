@@ -10,6 +10,7 @@ import { SearchVehiclePoliciesDto } from './dto/search-vehicle-policies.dto';
 import { SearchTitularContactoDto } from './dto/search-titular-contacto.dto';
 import { ValidateSiniestroDto } from './dto/validate-siniestro.dto';
 import { SearchCausasDto } from './dto/search-causas.dto';
+import { SearchCiudadesDto } from './dto/search-ciudades.dto';
 
 @ApiTags('7. Consulta de clientes')
 @Controller('v1/client')
@@ -53,6 +54,30 @@ export class ClientController {
   async getTitularContacto(@Query() query: SearchTitularContactoDto) {
     const result = await this.clientService.getTitularContacto(query);
     return { status: true, result };
+  }
+
+  @Get('geo/estados')
+  @ApiHeader(APIKEY_HEADER)
+  @ApiOperation({
+    summary: 'Estados de Venezuela',
+    description: 'Catálogo de estados (`maestados`) con su código de Sis2000. Sin datos personales. **Seguridad**: requiere API Key con scope `client:read`.',
+  })
+  @ApiResponse({ status: 200, schema: { example: { status: true, result: { estados: [{ codigo: 24, nombre: 'Miranda' }] } } } })
+  @ApiCommonErrors()
+  async estados() {
+    return { status: true, result: { estados: await this.clientService.listEstados() } };
+  }
+
+  @Get('geo/ciudades')
+  @ApiHeader(APIKEY_HEADER)
+  @ApiOperation({
+    summary: 'Ciudades de un estado',
+    description: 'Catálogo de ciudades (`maciudades`) del estado indicado. Sin datos personales. **Seguridad**: requiere API Key con scope `client:read`.',
+  })
+  @ApiResponse({ status: 200, schema: { example: { status: true, result: { ciudades: [{ codigo: 28, nombre: 'Caracas' }] } } } })
+  @ApiCommonErrors()
+  async ciudades(@Query() query: SearchCiudadesDto) {
+    return { status: true, result: { ciudades: await this.clientService.listCiudades(query.cestado) } };
   }
 
   @Get('siniestros/causas')

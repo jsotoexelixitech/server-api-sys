@@ -9,6 +9,7 @@ Formato basado en [Keep a Changelog](https://keepachangelog.com/es/1.0.0/).
 
 ### Añadido
 
+- **`ClientModule`**: `GET /api/v1/client/geo/estados` y `GET /api/v1/client/geo/ciudades?cestado=` (scope `client:read`) — catálogos de ubicación de Sis2000 (`maestados`, `maciudades`) para que el portal de Siniestros elija estado y ciudad con sus códigos.
 - **ClientModule**: POST /api/v1/client/siniestros/rechazar (scope siniestros:write) — rechaza un siniestro pendiente en Sis2000 con su motivo de marechazo y libera la reserva (sp_rechaza_siniestro_nexus, **aplicar docs/sql/sp_rechaza_siniestro_nexus.sql**). Idempotente con el mismo motivo.
 - **`ClientModule`**: `GET /api/v1/client/siniestros/causas?cramo=18&ccoberturas=1,2` (scope `client:read`) — causas de siniestro (`macausasin`/`macauscob`) que cubren las coberturas contratadas. Para el módulo de Siniestros (EXE-47).
 - **Alta de siniestros**: la reserva se carga en UNA sola cobertura (parámetro `ccobertura`; antes se repetía por cada cobertura que cubría la causa) y el usuario de Sis2000 puede venir de la sesión de quien declara (`cusuario`, o la cédula del cliente) con `SINIESTROS_CUSUARIO` como respaldo. Reaplicar `docs/sql/sp_genera_siniestro_nexus.sql` y `sp_registra_siniestro_nexus.sql`.
