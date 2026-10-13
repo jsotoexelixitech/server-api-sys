@@ -5,7 +5,6 @@ import {
   Logger,
   NotFoundException,
 } from '@nestjs/common';
-import * as bcrypt from 'bcryptjs';
 import { randomBytes } from 'crypto';
 import { MssqlService } from '../../database/mssql.service';
 import { CrearIntermediarioDto } from './dto/crear-intermediario.dto';
@@ -15,6 +14,7 @@ import { CrearGestorDto } from './dto/crear-gestor.dto';
 export interface IntermediarioCreado {
   cproductor: number;
   xcorreo: string;
+  xlogin: string;
   claveTemporal: string;
 }
 
@@ -44,9 +44,12 @@ export interface GestorResumen {
 /** Gestor raíz de La Mundial del que cuelgan los canales Alterno / Directo (igual que la pasarela). */
 const GESTOR_RAIZ_CANALES = '80080';
 
-/** Clave temporal legible (sin caracteres ambiguos). */
+/**
+ * Clave temporal en MAYÚSCULAS y números, sin caracteres ambiguos (0/O, 1/I/L): el login de Sis2000
+ * muestra los campos en mayúsculas y compara xcontrasena tal cual (auth/signIn y portal-auth).
+ */
 function generarClaveTemporal(): string {
-  const alfabeto = 'ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnpqrstuvwxyz23456789';
+  const alfabeto = 'ABCDEFGHJKMNPQRSTUVWXYZ23456789';
   return Array.from(randomBytes(10), (b) => alfabeto[b % alfabeto.length]).join('');
 }
 
@@ -144,14 +147,14 @@ export class IntermediariosService {
         .execute('spCreateMaproduc');
       cproductor = Number(maproduc.recordset?.[0]?.cproductor) || cproductor;
 
-      // 3. Usuario web (bcrypt: el formato que valida el login de Sis2000)
+      // 3. Usuario web. xlogin en mayúsculas como el resto de usuarios de Sis2000 y la clave como la
+      //    compara el login (seusuariosweb.xcontrasena = @xcontrasena, sin hash).
       const claveTemporal = generarClaveTemporal();
-      const claveCifrada = await bcrypt.hash(claveTemporal, 10);
       await req()
         .input('xcliente', sql.VarChar(200), razonSocial)
-        .input('xlogin', sql.VarChar(200), dto.xcorreo)
+        .input('xlogin', sql.VarChar(200), dto.xcorreo.toUpperCase())
         .input('xcorreo', sql.VarChar(200), dto.xcorreo)
-        .input('xcontrasena', sql.VarChar(200), claveCifrada)
+        .input('xcontrasena', sql.VarChar(200), claveTemporal)
         .input('ccorredor', sql.VarChar(50), String(cproductor))
         .input('edit', sql.Int, 0)
         .input('id_agency', sql.Int, null)
@@ -174,7 +177,7 @@ export class IntermediariosService {
 
       await tx.commit();
       this.logger.log(`Intermediario creado cproductor=${cproductor} correo=${dto.xcorreo}`);
-      return { cproductor, xcorreo: dto.xcorreo, claveTemporal };
+      return { cproductor, xcorreo: dto.xcorreo, xlogin: dto.xcorreo.toUpperCase(), claveTemporal };
     } catch (err) {
       try {
         await tx.rollback();
