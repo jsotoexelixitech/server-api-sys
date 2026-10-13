@@ -8,7 +8,9 @@ import {
   IsOptional,
   IsString,
   Min,
+  ValidateIf,
 } from 'class-validator';
+import { esTipoCedulaJuridica } from '../constants/persona-juridica.constants';
 import { AUTO_IFRECUENCIA_VALUES } from '../../valrep/constants/auto-ifrecuencia.constants';
 
 export class CreateEmissionAutoDto {
@@ -75,9 +77,14 @@ export class CreateEmissionAutoDto {
   @IsString()
   iestado_civil_tomador?: string;
 
-  @ApiProperty({ example: '1996-10-13', description: 'Fecha de nacimiento del tomador (YYYY-MM-DD)' })
+  @ApiPropertyOptional({
+    example: '1996-10-13',
+    description:
+      'Fecha de nacimiento del tomador (YYYY-MM-DD). Obligatoria para persona natural; opcional si tipo_cedula_tomador es J, G o C (jurídico).',
+  })
+  @ValidateIf((o: CreateEmissionAutoDto) => !esTipoCedulaJuridica(o.tipo_cedula_tomador) || o.fnac_tomador != null && o.fnac_tomador !== '')
   @IsDateString()
-  fnac_tomador: string;
+  fnac_tomador?: string;
 
   @ApiProperty({ example: 1, description: 'Código de estado del tomador (de /valrep/states)' })
   @IsInt()
@@ -164,13 +171,13 @@ export class CreateEmissionAutoDto {
   direccion_titular: string;
 
   @ApiPropertyOptional({
-    description: 'Conductor habitual (anexo). Omitir si no aplica.',
+    description: 'Conductor habitual (anexo). Opcional; omitir si no aplica (p. ej. tomador jurídico).',
   })
   @IsOptional()
   conductor?: unknown;
 
   @ApiPropertyOptional({
-    description: 'Beneficiario preferencial. Omitir si no aplica.',
+    description: 'Beneficiario preferencial. Opcional; omitir si no aplica (p. ej. tomador jurídico).',
   })
   @IsOptional()
   beneficiario?: unknown;
