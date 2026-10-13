@@ -37,10 +37,10 @@ export class CrearIntermediarioDto {
   @MaxLength(120)
   xapellido?: string;
 
-  @ApiProperty({ example: 'contacto@corretaje.com', description: 'Correo; también es el usuario web' })
+  @ApiProperty({ example: 'contacto@corretaje.com', description: 'Correo; también es el usuario web (seusuariosweb.xlogin, máx. 50)' })
   @Transform(({ value }) => (typeof value === 'string' ? value.trim().toLowerCase() : value))
   @IsEmail()
-  @MaxLength(60)
+  @MaxLength(50, { message: 'xcorreo admite hasta 50 caracteres (es el usuario de login)' })
   xcorreo!: string;
 
   @ApiProperty({ example: '04141234567' })
