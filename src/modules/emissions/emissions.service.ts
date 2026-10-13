@@ -16,6 +16,7 @@ import {
   SP_SEARCH_AUTOMOBILE_PROPIETARY,
   SP_VALIDATE_AUTOMOVIL_LEGACY,
 } from '../../config/sis2000-sp.constants';
+import { esTipoCedulaJuridica } from './constants/persona-juridica.constants';
 import { SearchProprietaryDto } from './dto/search-proprietary.dto';
 import { SearchVehicleByPlateDto, SearchVehicleBySerialDto } from './dto/search-vehicle.dto';
 import { ArysService } from '../arys/arys.service';
@@ -926,13 +927,24 @@ export class EmissionsService {
       if (!b['xsercar'] && b['serial_carroceria']) b['xsercar'] = b['serial_carroceria'];
       if (!b['xsermot'] && b['serial_motor']) b['xsermot'] = b['serial_motor'];
 
+      // Persona jurídica (J/G/C): no tiene fecha de nacimiento; fnac_* pasa a ser opcional.
+      const tomadorJuridico = esTipoCedulaJuridica(
+        this.pick(b, 'icedula_tomador', 'tipo_cedula_tomador', 'cedula_tomador'),
+      );
+      const titularJuridico = esTipoCedulaJuridica(
+        this.pick(b, 'icedula_titular', 'tipo_cedula_titular', 'cedula_titular'),
+      );
+      const fnacRequeridas: Array<[string, unknown]> = [
+        ...(tomadorJuridico ? [] : ([['fnac_tomador', b['fnac_tomador']]] as Array<[string, unknown]>)),
+        ...(titularJuridico ? [] : ([['fnac_titular', b['fnac_titular']]] as Array<[string, unknown]>)),
+      ];
+
       const requiredFields: Array<[string, unknown]> = [
         ['plan', b['cplan'] ?? b['plan']],
         ['fecha_emision', b['fecha_emision'] ?? b['femision']],
         ['fdesde', b['fdesde']],
         ['fhasta', b['fhasta']],
-        ['fnac_tomador', b['fnac_tomador']],
-        ['fnac_titular', b['fnac_titular']],
+        ...fnacRequeridas,
         ['cestado_tomador', b['estado_tomador'] ?? b['cestado_tomador']],
         ['cciudad_tomador', b['ciudad_tomador'] ?? b['cciudad_tomador']],
         ['xplaca', b['xplaca'] ?? b['placa']],
@@ -952,8 +964,10 @@ export class EmissionsService {
         ['fecha_emision', b['fecha_emision'] ?? b['femision']],
         ['fdesde', b['fdesde']],
         ['fhasta', b['fhasta']],
-        ['fnac_tomador', b['fnac_tomador']],
-        ['fnac_titular', b['fnac_titular']],
+        ...fnacRequeridas,
+        // Opcionales para jurídico: solo se validan si vienen informadas.
+        ...(tomadorJuridico && b['fnac_tomador'] != null ? ([['fnac_tomador', b['fnac_tomador']]] as Array<[string, unknown]>) : []),
+        ...(titularJuridico && b['fnac_titular'] != null ? ([['fnac_titular', b['fnac_titular']]] as Array<[string, unknown]>) : []),
       ]
         .filter(([, value]) => typeof value !== 'string' || !isoDate.test(value))
         .map(([name]) => name);
