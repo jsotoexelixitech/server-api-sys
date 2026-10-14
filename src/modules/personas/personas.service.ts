@@ -19,7 +19,6 @@ import {
   SP_BUSCA_DETALLE_PLAN,
   SP_CALCULO_PER,
   SP_CALCULO_VIAJERO_PRORRATA,
-  SP_CONTADOR_NEXUS,
   SP_GET_MACLIENT_API,
   SP_GET_POLIZA_RECIENTE_TITULAR,
   SP_PRE_EMISION_PERSONAS,
@@ -30,7 +29,6 @@ import {
   assertViajeroCotizacion,
   assertViajeroEmission,
   assertViajeroProrrataCotizacion,
-  isViajeDiasPlan,
   isViajeLocalPlan,
   isViajeroPlan,
   isViajeroProrrataPlan,
@@ -73,10 +71,21 @@ export interface PlanPerItem {
   parentescos?: Array<{ cparen: number; xparentesco: string; min_edad: number; max_edad: number }>;
 }
 
+/** Cobertura del plan cotizado (detalle de spCalculoPer o, en prorrata, solo el nombre). */
+export interface CotizacionPerCobertura {
+  ccobertura: string;
+  xcobertura: string;
+  msumaasegext: number;
+  mprima: number;
+  mprimaext: number;
+}
+
 export interface CotizacionPerResult {
   mprima: number;
   mprimaext: number;
   ptasa: number;
+  /** Coberturas del plan, sumadas entre asegurados. Vacío si el SP no trae detalle. */
+  coberturas: CotizacionPerCobertura[];
 }
 
 /** Formato legacy SysIP (`/app/getCotizacionPer`, `/external/getCotizacionPer`). */
@@ -131,80 +140,6 @@ export class PersonasService {
     return Number.isNaN(n) ? null : n;
   }
 
-  /**
-   * Sucursal que usa el pre-SP de personas (macanalalt / maproduc).
-   * Solo lectura; VIAJE3/VIAJE4 necesitan el mismo csucur que Sis2000.
-   */
-  private async resolvePersonasSucursal(
-    ccanalalt: number | null,
-    cproductor: number,
-  ): Promise<number> {
-    const T = this.db.types;
-    const req = this.db.request();
-    if (ccanalalt != null) {
-      req.input('ccanalalt', T.Int, ccanalalt);
-      const result = await req.query(`
-        SELECT TOP 1 COALESCE(csucur, 1) AS csucur
-        FROM macanalalt
-        WHERE ccanalalt = @ccanalalt
-      `);
-      return Number(result.recordset?.[0]?.['csucur'] ?? 1) || 1;
-    }
-    req.input('cproductor', T.Int, cproductor);
-    const result = await req.query(`
-      SELECT TOP 1 COALESCE(csucur, 1) AS csucur
-      FROM maproduc
-      WHERE cproductor = @cproductor
-    `);
-    return Number(result.recordset?.[0]?.['csucur'] ?? 1) || 1;
-  }
-
-  /** Numeración VIAJE3/VIAJE4 (ramo 25 → POLIZA). */
-  private async allocViajeDiasCounter(opts: {
-    cramo: number;
-    csucur: number;
-    fdesde: string;
-  }): Promise<{ cpoliza: number; cnpoliza: string; cproces: number }> {
-    const T = this.db.types;
-    const req = this.db.request();
-    req.input('cramo', T.Int, opts.cramo);
-    req.input('csucur', T.Numeric(4, 0), opts.csucur);
-    req.input('fdesde', T.Date, new Date(String(opts.fdesde).slice(0, 10)));
-    const result = await req.query(`
-      DECLARE @cpoliza NUMERIC(19);
-      DECLARE @cnpoliza NVARCHAR(17);
-      DECLARE @crecibo NUMERIC(19);
-      DECLARE @cnrecibo NVARCHAR(17);
-      DECLARE @cproces NUMERIC(13);
-
-      EXEC ${SP_CONTADOR_NEXUS}
-        @cpoliza OUTPUT,
-        @cnpoliza OUTPUT,
-        @crecibo OUTPUT,
-        @cnrecibo OUTPUT,
-        @cproces OUTPUT,
-        @csucur,
-        @fdesde,
-        @cramo,
-        'POLIZA';
-
-      SELECT @cpoliza AS cpoliza, @cnpoliza AS cnpoliza, @cproces AS cproces;
-    `);
-    const row = result.recordset?.[0];
-    const cnpoliza = String(row?.['cnpoliza'] ?? '').trim();
-    const cpoliza = Number(row?.['cpoliza']);
-    const cproces = Number(row?.['cproces']);
-    if (!cnpoliza || !Number.isFinite(cpoliza) || !Number.isFinite(cproces)) {
-      throw new InternalServerErrorException(
-        `Viajero 3/7 días: ${SP_CONTADOR_NEXUS} no devolvió cpoliza/cnpoliza/cproces.`,
-      );
-    }
-    this.logger.log(
-      `allocViajeDiasCounter: EXEC ${SP_CONTADOR_NEXUS} POLIZA cramo=${opts.cramo} csucur=${opts.csucur} cnpoliza=${cnpoliza}`,
-    );
-    return { cpoliza, cnpoliza, cproces };
-  }
-
   /** Flags char(1) que espera el SP de pre-emisión personas. */
   private spCharFlag(value: unknown, defaultVal = '0'): string {
     if (value == null || String(value).trim() === '') return defaultVal;
@@ -232,6 +167,16 @@ export class PersonasService {
     if (value == null || String(value).trim() === '') return null;
     const n = Number(String(value).replace(',', '.'));
     return Number.isFinite(n) ? n : null;
+  }
+
+  /** precargo / pdescuento (%) del asegurado solo si vienen con valor > 0. */
+  private pctFields(a: Record<string, unknown>): { precargo?: number; pdescuento?: number } {
+    const precargo = this.decimalField(a.precargo);
+    const pdescuento = this.decimalField(a.pdescuento);
+    return {
+      ...(precargo && precargo > 0 ? { precargo } : {}),
+      ...(pdescuento && pdescuento > 0 ? { pdescuento } : {}),
+    };
   }
 
   /** JSON de asegurados al formato OPENJSON del pre-SP personas. */
@@ -266,6 +211,8 @@ export class PersonasService {
         correo_asegurado: a.xcorreo_asegurado ?? a.correo_asegurado ?? a.email ?? null,
         npeso_asegurado: this.decimalField(a.npeso_asegurado ?? a.peso),
         nestatura_asegurado: this.decimalField(a.nestatura_asegurado ?? a.estatura),
+        // % del cuestionario (pre-SP v3 los guarda en _ASEG; v2 ignora estas claves).
+        ...this.pctFields(a),
       };
     });
     return JSON.stringify(mapped);
@@ -713,17 +660,20 @@ export class PersonasService {
     return /too many arguments specified|too few arguments specified/i.test(msg);
   }
 
-  /** fdesde/fhasta obligatorios en spCalculoViajeroProrrata (BDA). */
+  /** fdesde/fhasta para spCalculoViajeroProrrata. Si solo viene ndias → hoy + (ndias-1). */
   private resolveProrrataDates(body: CotizacionPerDto): { fdesde: string; fhasta: string } {
-    const fdesde = body.fdesde?.trim();
-    const fhasta = body.fhasta?.trim();
-    if (fdesde && fhasta) {
-      return { fdesde, fhasta };
+    const fdesdeIn = body.fdesde?.trim();
+    const fhastaIn = body.fhasta?.trim();
+    if (fdesdeIn && fhastaIn) {
+      return { fdesde: fdesdeIn, fhasta: fhastaIn };
     }
-    if (fdesde && typeof body.ndias === 'number' && body.ndias > 0) {
+    const ndias =
+      typeof body.ndias === 'number' && body.ndias > 0 ? body.ndias : null;
+    const fdesde = fdesdeIn || new Date().toISOString().slice(0, 10);
+    if (ndias != null) {
       const desde = new Date(`${fdesde}T00:00:00Z`);
       const hasta = new Date(desde);
-      hasta.setUTCDate(hasta.getUTCDate() + body.ndias - 1);
+      hasta.setUTCDate(hasta.getUTCDate() + ndias - 1);
       return { fdesde, fhasta: hasta.toISOString().slice(0, 10) };
     }
     throw new BadRequestException('Viajero prorrata: fdesde y fhasta son obligatorios.');
@@ -859,6 +809,7 @@ export class PersonasService {
 
       let mprimatotal = 0;
       let mprimatotalext = 0;
+      const coberturas = new Map<string, CotizacionPerCobertura>();
 
       for (const asegurado of body.asegurados) {
         if (useProrrata) {
@@ -884,6 +835,12 @@ export class PersonasService {
           mprimatotal += Number(totals[0]['mprima']) || 0;
           mprimatotalext += Number(totals[0]['mprimaext']) || 0;
         }
+        // Primer resultado del SP: una fila por cobertura del asegurado (#temp_calculo_per).
+        this.addCoberturas(coberturas, (result.recordsets?.[0] ?? []) as Record<string, unknown>[]);
+      }
+
+      if (useProrrata && coberturas.size === 0) {
+        this.addCoberturas(coberturas, await this.getCoberturasPlanPer(ramo, body.cplan));
       }
 
       if (mprimatotalext === 0 && mprimatotal === 0) {
@@ -902,12 +859,50 @@ export class PersonasService {
         `getCotizacionPer: plan=${body.cplan} asegurados=${body.asegurados.length} mprimaext=$${mprimaext} mprima=Bs${mprima}`,
       );
 
-      return { mprima, mprimaext, ptasa };
+      return { mprima, mprimaext, ptasa, coberturas: [...coberturas.values()] };
     } catch (err) {
       if (err instanceof BadRequestException) throw err;
       const msg = err instanceof Error ? err.message : String(err);
       this.logger.error(`getCotizacionPer: ${msg}`);
       throw new BadRequestException(msg);
+    }
+  }
+
+  /** Suma por cobertura las filas de detalle (suma asegurada: la mayor; primas: se suman). */
+  private addCoberturas(
+    acc: Map<string, CotizacionPerCobertura>,
+    rows: Record<string, unknown>[],
+  ): void {
+    for (const row of rows) {
+      const ccobertura = this.optionalText(row['ccobertura']);
+      if (!ccobertura) continue;
+      const xcobertura = this.optionalText(row['xcobertura'] ?? row['xdescripcion_l']) ?? `Cobertura ${ccobertura}`;
+      const prev = acc.get(ccobertura) ?? { ccobertura, xcobertura, msumaasegext: 0, mprima: 0, mprimaext: 0 };
+      prev.msumaasegext = Math.max(prev.msumaasegext, Number(row['msumaasegext']) || 0);
+      prev.mprima = parseFloat((prev.mprima + (Number(row['mprima']) || 0)).toFixed(2));
+      prev.mprimaext = parseFloat((prev.mprimaext + (Number(row['mprimaext']) || 0)).toFixed(2));
+      acc.set(ccobertura, prev);
+    }
+  }
+
+  /** Coberturas del plan (nombre) para cotizaciones sin detalle por cobertura (viajero prorrata). */
+  private async getCoberturasPlanPer(cramo: number, cplan: string): Promise<Record<string, unknown>[]> {
+    try {
+      const req = this.db.request();
+      req.input('cramo', this.db.types.Int, cramo);
+      req.input('cplan', this.db.types.VarChar(10), cplan);
+      const result = await req.query(`
+        SELECT DISTINCT LTRIM(RTRIM(CAST(c.ccobertura AS nvarchar(10)))) AS ccobertura,
+               LTRIM(RTRIM(m.xdescripcion_l)) AS xcobertura
+        FROM maplcober_per c
+        INNER JOIN macoberturas m ON m.ccobertura = c.ccobertura AND m.cramo = c.cramo
+        WHERE c.cramo = @cramo AND LTRIM(RTRIM(c.cplan)) = LTRIM(RTRIM(@cplan))
+      `);
+      return (result.recordset ?? []) as Record<string, unknown>[];
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : String(err);
+      this.logger.warn(`getCoberturasPlanPer cramo=${cramo} cplan=${cplan}: ${msg}`);
+      return [];
     }
   }
 
@@ -1326,26 +1321,6 @@ export class PersonasService {
         const preEmisionSp = SP_PRE_EMISION_PERSONAS;
         this.logger.log(`=== INICIO EMISION LOCAL SP ${preEmisionSp} ===`);
 
-        let cpolizaVal: number | null = null;
-        let cnpolizaVal: string | null = null;
-        let cprocesVal: number | null = null;
-        if (isViajeDiasPlan(cramoEmision, planEmision)) {
-          const cproductorVal =
-            this.intField(b['productor'] ?? canal['cproductor']) ?? 80080;
-          const csucur = await this.resolvePersonasSucursal(
-            this.intField(ccanalalt),
-            cproductorVal,
-          );
-          const nums = await this.allocViajeDiasCounter({
-            cramo: cramoEmision,
-            csucur,
-            fdesde,
-          });
-          cpolizaVal = nums.cpoliza;
-          cnpolizaVal = nums.cnpoliza;
-          cprocesVal = nums.cproces;
-        }
-
         const req = this.db.request();
         const params: Record<string, { type: unknown; value: unknown }> = {
           cnpoliza_rel: { type: T.NVarChar(30), value: b['poliza'] ? String(b['poliza']) : null },
@@ -1413,9 +1388,8 @@ export class PersonasService {
             value: String(canal['ifuente_api'] ?? canal['ifuente'] ?? 'API').slice(0, 10),
           },
           fingreso: { type: T.DateTime, value: new Date() },
-          cpoliza: { type: T.Numeric(19, 0), value: cpolizaVal },
-          cnpoliza: { type: T.VarChar(30), value: cnpolizaVal },
-          cproces: { type: T.Numeric(13, 0), value: cprocesVal },
+          // Usuario Sis2000 del canal; sin valor el SP de emisión deja 7.
+          cusuario: { type: T.Int, value: this.intField(b['cusuario']) },
           asegurados: {
             type: T.NVarChar(5000),
             value: this.mapAseguradosForSp(asegurados as Record<string, unknown>[], getPar),
@@ -1426,12 +1400,20 @@ export class PersonasService {
           },
         };
 
+        // % del titular (cuestionario): solo si viene, para no romper el pre-SP v2 que no tiene estos parámetros.
+        const titularPct = this.pctFields({
+          precargo: b['precargo_titular'],
+          pdescuento: b['pdescuento_titular'],
+        });
+        if (titularPct.precargo) params.precargo_titular = { type: T.Numeric(13, 2), value: titularPct.precargo };
+        if (titularPct.pdescuento) params.pdescuento_titular = { type: T.Numeric(13, 2), value: titularPct.pdescuento };
+
         Object.entries(params).forEach(([key, field]) =>
           req.input(key, (field as { type: unknown }).type, (field as { value: unknown }).value),
         );
 
         this.logger.log(
-          `createEmissionPerson: EXEC ${preEmisionSp} plan=${b['plan']} rif=${b['rif_titular']}${cnpolizaVal ? ` cnpoliza=${cnpolizaVal}` : ''}`,
+          `createEmissionPerson: EXEC ${preEmisionSp} plan=${b['plan']} rif=${b['rif_titular']}`,
         );
 
         let spResult: {

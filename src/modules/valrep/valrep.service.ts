@@ -442,6 +442,31 @@ export class ValrepService {
     return 'Error SQL sin mensaje (revisar sp_calculo_auto_nexus en Sis2000).';
   }
 
+  /** Tasa de maplanes.cmoneda si el plan no está en $/Bs (ej. EUR); null = usar la del dólar. */
+  private async resolvePlanMonedaTasa(cplan: string | undefined, cramo: number): Promise<number | null> {
+    const plan = String(cplan ?? '').trim();
+    if (!plan) return null;
+    const T = this.db.types;
+    const req = this.db.request();
+    req.input('cplan', T.VarChar(10), plan);
+    req.input('cramo', T.Int, cramo);
+    const res = await req.query<{ cmoneda: string; ptasamon: number }>(
+      `SELECT TOP 1 RTRIM(p.cmoneda) AS cmoneda, m.ptasamon
+       FROM maplanes p
+       LEFT JOIN mamonedas m ON TRIM(m.cmoneda) = TRIM(p.cmoneda)
+       WHERE RTRIM(p.cplan) = @cplan AND p.cramo = @cramo AND p.iestado = 'V'`,
+    );
+    const row = res.recordset?.[0];
+    const cmoneda = String(row?.cmoneda ?? '').trim().toUpperCase();
+    if (!cmoneda || cmoneda === '$' || cmoneda === 'USD' || cmoneda === 'BS') return null;
+    const tasa = Number(row?.ptasamon ?? 0);
+    if (!(tasa > 0)) {
+      this.logger.warn(`getCotizacionAuto: plan=${plan} moneda=${cmoneda} sin tasa en mamonedas, se usa la del dólar`);
+      return null;
+    }
+    return tasa;
+  }
+
   /** POST /valrep/cotizacion — usa sp_calculo_auto_nexus (flujo Nexus), no spCalculoAuto legacy. */
   async getCotizacionAuto(body: GetCotizacionAutoDto): Promise<CotizacionResult> {
     try {
@@ -449,7 +474,7 @@ export class ValrepService {
       const rateResult = await rateReq.query<{ ptasamon: number }>(
         `SELECT ptasamon FROM mamonedas WHERE TRIM(cmoneda) = '$'`,
       );
-      const ptasa: number = rateResult.recordset[0]?.ptasamon ?? 0;
+      let ptasa: number = rateResult.recordset[0]?.ptasamon ?? 0;
       if (!ptasa) this.logger.warn('getCotizacionAuto: ptasa = 0 (verificar mamonedas)');
 
       const vinma = await this.resolveVinmaMeta(
@@ -471,6 +496,11 @@ export class ValrepService {
       if (iplaca === 'B' && cramo !== ramoBinac) {
         cramo = ramoBinac;
       }
+
+      // Planes con prima fija en otra moneda (ej. FARMPA en EUR/TCR): la prima del SP
+      // viene en esa moneda; el recibo se emite con su tasa, no con la del dólar.
+      const tasaPlan = await this.resolvePlanMonedaTasa(body.cplan, cramo);
+      if (tasaPlan) ptasa = tasaPlan;
 
       const sumaRef = body.sumaAsegurada ?? mvalor;
       const calc = await this.calculatePlanCoberturas({

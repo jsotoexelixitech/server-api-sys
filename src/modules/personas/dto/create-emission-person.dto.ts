@@ -109,6 +109,15 @@ export class CreateEmissionPersonDto {
   @ApiPropertyOptional({ example: null }) @IsOptional() @IsInt() ccanalalt?: number | null;
   @ApiPropertyOptional({ example: null }) @IsOptional() @IsInt() cscanalalt?: number | null;
 
+  // ── Recargo / descuento del cuestionario (sp_pre_emision_personas_general_nexus v3) ──
+  @ApiPropertyOptional({ example: 20, description: '% de recargo del titular por respuestas del cuestionario. Sin valor: 0.' })
+  @IsOptional() @IsNumber()
+  precargo_titular?: number;
+
+  @ApiPropertyOptional({ example: 5, description: '% de descuento del titular por respuestas del cuestionario. Sin valor: 0.' })
+  @IsOptional() @IsNumber()
+  pdescuento_titular?: number;
+
   // ── Asegurados (para trazabilidad; el cálculo de prima ya viene en `prima`) ──
   @ApiPropertyOptional({ type: [Object], description: 'Lista de asegurados (opcional, informativa).' })
   @IsOptional() @IsArray()

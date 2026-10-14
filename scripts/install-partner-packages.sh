@@ -68,12 +68,14 @@ declare -A PKG_TOKEN_VAR=(
   ["@quand-mind/api_planes_v2"]="TOKEN_QUAND_MIND"
   ["@esanchez-exelixitech/partner-api-test"]="TOKEN_ESANCHEZ"
   ["@gestacio/sysip-nest-api"]="TOKEN_GESTACIO"
+  ["@ngonzalez-exe/rpt-comisiones"]="TOKEN_NGONZALEZ"
 )
 
 DEFAULT_PACKAGES=(
   "@quand-mind/api_planes_v2"
   "@esanchez-exelixitech/partner-api-test"
   "@gestacio/sysip-nest-api"
+  "@ngonzalez-exe/rpt-comisiones"
 )
 
 packages=()
@@ -112,14 +114,20 @@ resolve_token() {
   echo ""
 }
 
+# Registry de GitHub para el scope del paquete (sirve para proveedores nuevos sin tocar el script).
 write_npmrc() {
   local token="$1"
-  cat > "$TMP_NPMRC" <<EOF
-@quand-mind:registry=https://npm.pkg.github.com
-@esanchez-exelixitech:registry=https://npm.pkg.github.com
-@gestacio:registry=https://npm.pkg.github.com
-//npm.pkg.github.com/:_authToken=${token}
-EOF
+  local scope
+  scope="$(pkg_name_only "$2")"
+  scope="${scope%%/*}"
+  {
+    # Todos los scopes conocidos + el del paquete, para que npm resuelva el árbol completo.
+    local k
+    for k in "${!PKG_TOKEN_VAR[@]}" "$scope/x"; do
+      echo "${k%%/*}:registry=https://npm.pkg.github.com"
+    done | sort -u
+    echo "//npm.pkg.github.com/:_authToken=${token}"
+  } > "$TMP_NPMRC"
 }
 
 echo "==> Tokens: $TOKENS_FILE"
@@ -133,13 +141,13 @@ for pkg in "${packages[@]}"; do
   fi
   echo ""
   echo "==> npm install $pkg"
-  write_npmrc "$token"
+  write_npmrc "$token" "$pkg"
   npm install "$pkg" --save --userconfig "$TMP_NPMRC"
 done
 
 echo ""
 echo "==> Instalados:"
-npm ls --depth=0 2>/dev/null | grep -E 'quand-mind|esanchez|gestacio|partner-api-starter' || true
+npm ls --depth=0 2>/dev/null | grep -E 'quand-mind|esanchez|gestacio|ngonzalez|partner-api-starter' || true
 
 if [[ "$DO_BUILD" -eq 1 ]]; then
   echo ""
