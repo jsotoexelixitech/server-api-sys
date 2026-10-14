@@ -129,19 +129,20 @@ function buildNamedQuery(
   query: string,
   params: Record<string, unknown> = {},
 ): { text: string; values: unknown[] } {
-  const entries = normalizeParams(params);
+  // Búsqueda por nombre en O(1): con lotes grandes (decenas de miles de parámetros) recorrer
+  // la lista por cada nombre era cuadrático y tardaba más que el propio INSERT.
+  const entries = new Map<string, unknown>(normalizeParams(params));
   const indexByName = new Map<string, number>();
   const values: unknown[] = [];
   let nextIndex = 1;
 
   const text = query.replace(/@([A-Za-z_][A-Za-z0-9_]*)/g, (_, name: string) => {
     if (!indexByName.has(name)) {
-      const entry = entries.find(([entryName]) => entryName === name);
-      if (!entry) {
+      if (!entries.has(name)) {
         throw new Error(`Missing value for SQL parameter "${name}"`);
       }
       indexByName.set(name, nextIndex++);
-      values.push(entry[1]);
+      values.push(entries.get(name));
     }
     return `$${indexByName.get(name)}`;
   });

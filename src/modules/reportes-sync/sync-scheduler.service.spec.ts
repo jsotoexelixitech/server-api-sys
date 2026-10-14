@@ -13,7 +13,7 @@ function build(env: Record<string, unknown> = {}) {
 describe('SyncSchedulerService', () => {
   const ahora = new Date('2026-10-05T15:30:00Z');
 
-  it('lanza una pasada general y una por cobrados y anulados con ventana de 7 días', async () => {
+  it('lanza 3 pasadas de recibos (vigencia, cobrados, anulados) con ventana de 7 días y 1 de siniestros', async () => {
     const { service, orchestrator } = build();
     await service.runOnce(ahora);
 
@@ -22,9 +22,13 @@ describe('SyncSchedulerService', () => {
       Record<string, unknown>,
       Record<string, unknown>,
     ][];
-    expect(calls).toHaveLength(3);
-    expect(calls.map((c) => c[1].estado)).toEqual([undefined, 'C', 'A']);
-    for (const [entidad, filtros, options] of calls) {
+    expect(calls).toHaveLength(4);
+    expect(calls.map((c) => c[0])).toEqual(['recibos', 'recibos', 'recibos', 'siniestros']);
+    expect(calls.slice(0, 3).map((c) => c[1].estado)).toEqual([undefined, 'C', 'A']);
+    // siniestros: reemplazo completo, sin rango de fechas
+    expect(calls[3][1]).toEqual({});
+    expect(calls[3][2]).toEqual({ ignoreTtl: true });
+    for (const [entidad, filtros, options] of calls.slice(0, 3)) {
       expect(entidad).toBe('recibos');
       expect(filtros.refreshScope).toBe(true);
       expect((filtros.hasta as Date).toISOString()).toBe('2026-10-05T00:00:00.000Z');
@@ -45,6 +49,23 @@ describe('SyncSchedulerService', () => {
   it('una pasada fallida no impide las siguientes', async () => {
     const { service, orchestrator } = build();
     orchestrator.syncEntidadForAllActive.mockRejectedValueOnce(new Error('origen caído'));
+    await service.runOnce(ahora);
+    expect(orchestrator.syncEntidadForAllActive).toHaveBeenCalledTimes(4);
+  });
+
+  it('REPORTES_SYNC_SCHEDULE_ENTIDADES limita qué entidades refresca', async () => {
+    const soloRecibos = build({ REPORTES_SYNC_SCHEDULE_ENTIDADES: 'recibos' });
+    await soloRecibos.service.runOnce(ahora);
+    expect(soloRecibos.orchestrator.syncEntidadForAllActive).toHaveBeenCalledTimes(3);
+
+    const soloSiniestros = build({ REPORTES_SYNC_SCHEDULE_ENTIDADES: 'siniestros' });
+    await soloSiniestros.service.runOnce(ahora);
+    const calls = soloSiniestros.orchestrator.syncEntidadForAllActive.mock.calls as unknown as [string][];
+    expect(calls.map((c) => c[0])).toEqual(['siniestros']);
+  });
+
+  it('un valor inválido en ENTIDADES vuelve a recibos (no deja el refresco vacío)', async () => {
+    const { service, orchestrator } = build({ REPORTES_SYNC_SCHEDULE_ENTIDADES: 'polizas, xx' });
     await service.runOnce(ahora);
     expect(orchestrator.syncEntidadForAllActive).toHaveBeenCalledTimes(3);
   });

@@ -4,7 +4,14 @@ import { InsurerConnectionService } from './insurers/insurer-connection.service'
 import { shouldRefreshScope } from './utils/sync-query.utils';
 import { AseguradoraResolverService } from './aseguradora-resolver.service';
 import { CATALOG_ENTIDADES } from './utils/sync-catalog.constants';
+import { buildScopeKey } from './utils/sync-scope-cache';
 import { SyncService, type SyncResult } from './sync.service';
+
+/** Entidades que un refresco programado mantiene al día, con la variable que desactiva el sync al consultar. */
+const SYNC_ON_EXECUTE_VAR: Record<string, string> = {
+  recibos: 'REPORTES_SYNC_RECIBOS_ON_EXECUTE',
+  siniestros: 'REPORTES_SYNC_SINIESTROS_ON_EXECUTE',
+};
 
 export type SyncFiltrosBuilt = Record<string, unknown> & {
   aseguradoraId: number | null;
@@ -27,6 +34,17 @@ export class SyncContextService {
 
   isSyncEnabled(): boolean {
     return this.config.get<boolean>('REPORTES_SYNC_ENABLED', false) === true;
+  }
+
+  /**
+   * ¿Debe la consulta/exportación de recibos sincronizar por su cuenta? Con
+   * REPORTES_SYNC_RECIBOS_ON_EXECUTE=false lo hace solo el refresco programado, y la
+   * consulta lee de PG (1-2 s en vez de esperar la extracción desde el origen).
+   */
+  isSyncOnExecuteEnabled(entidad: string): boolean {
+    const variable = SYNC_ON_EXECUTE_VAR[entidad];
+    if (!variable) return true;
+    return this.config.get<boolean>(variable, true) !== false;
   }
 
   private parseDate(value: unknown): Date | undefined {
@@ -114,6 +132,19 @@ export class SyncContextService {
         return result;
       }
 
+      const forced = Boolean(
+        body?.forceSync || (body?.sync as Record<string, unknown>)?.force,
+      );
+      if (!forced && !this.isSyncOnExecuteEnabled(entidad)) {
+        const result = {
+          skipped: true,
+          reason:
+            'sync al consultar desactivado (REPORTES_SYNC_RECIBOS_ON_EXECUTE=false): lo hace el refresco programado',
+        };
+        this.syncLog(`${entidad}: omitido (${result.reason})`);
+        return result;
+      }
+
       const filtros = await this.buildSyncFilters(body, headers);
       if (!filtros.aseguradoraId) {
         const active =
@@ -142,6 +173,8 @@ export class SyncContextService {
         force: Boolean(
           body?.forceSync || (body?.sync as Record<string, unknown>)?.force,
         ),
+        // Vigencia y espera por los filtros que eligió el usuario (no por entidad).
+        scopeKey: buildScopeKey(entidad, filtros),
         ...options,
       });
     } catch (error) {

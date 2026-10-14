@@ -9,6 +9,7 @@ const PASADAS: ReadonlyArray<{ nombre: string; estado?: string }> = [
   { nombre: 'anulados (fecha de anulación)', estado: 'A' },
 ];
 
+const ENTIDADES_PROGRAMABLES = ['recibos', 'siniestros'];
 const MIN_INTERVALO_MIN = 5;
 const MAX_VENTANA_DIAS = 60;
 
@@ -40,6 +41,24 @@ export class SyncSchedulerService implements OnModuleInit, OnModuleDestroy {
     private readonly orchestrator: SyncOrchestratorService,
   ) {}
 
+  private async ejecutar(
+    nombre: string,
+    entidad: string,
+    filtros: Record<string, unknown>,
+  ): Promise<void> {
+    try {
+      const result = await this.orchestrator.syncEntidadForAllActive(entidad, filtros, {
+        ignoreTtl: true,
+      });
+      this.logger.log(
+        `${nombre}: ${JSON.stringify({ filas: result.rowsSynced, fallidas: result.failed })}`,
+      );
+    } catch (error) {
+      const message = error instanceof Error ? error.message : String(error);
+      this.logger.error(`${nombre} falló: ${message}`);
+    }
+  }
+
   onModuleInit(): void {
     if (
       !isTrue(this.config.get('REPORTES_SYNC_ENABLED')) ||
@@ -53,9 +72,21 @@ export class SyncSchedulerService implements OnModuleInit, OnModuleDestroy {
       MIN_INTERVALO_MIN,
       24 * 60,
     );
-    this.logger.log(`sync programado de recibos cada ${minutos} min`);
+    this.logger.log(`sync programado (${this.entidadesActivas().join(', ')}) cada ${minutos} min`);
     this.timer = setInterval(() => void this.runOnce(), minutos * 60_000);
     this.timer.unref();
+  }
+
+  /** Entidades que refresca el proceso (REPORTES_SYNC_SCHEDULE_ENTIDADES, defecto: recibos,siniestros). */
+  private entidadesActivas(): string[] {
+    const crudo = String(
+      this.config.get('REPORTES_SYNC_SCHEDULE_ENTIDADES') ?? 'recibos,siniestros',
+    );
+    const pedidas = crudo
+      .split(',')
+      .map((e) => e.trim().toLowerCase())
+      .filter((e) => ENTIDADES_PROGRAMABLES.includes(e));
+    return pedidas.length > 0 ? pedidas : ['recibos'];
   }
 
   onModuleDestroy(): void {
@@ -82,28 +113,23 @@ export class SyncSchedulerService implements OnModuleInit, OnModuleDestroy {
       );
       const desde = new Date(hasta.getTime() - dias * 24 * 60 * 60 * 1000);
 
-      for (const pasada of PASADAS) {
-        try {
-          const result = await this.orchestrator.syncEntidadForAllActive(
-            'recibos',
-            {
-              desde,
-              hasta,
-              refreshScope: true,
-              ...(pasada.estado ? { estado: pasada.estado } : {}),
-            },
-            { ignoreTtl: true },
-          );
-          this.logger.log(
-            `recibos ${pasada.nombre}: ${JSON.stringify({
-              filas: result.rowsSynced,
-              fallidas: result.failed,
-            })}`,
-          );
-        } catch (error) {
-          const message = error instanceof Error ? error.message : String(error);
-          this.logger.error(`recibos ${pasada.nombre} falló: ${message}`);
+      const entidades = this.entidadesActivas();
+
+      if (entidades.includes('recibos')) {
+        for (const pasada of PASADAS) {
+          await this.ejecutar(`recibos ${pasada.nombre}`, 'recibos', {
+            desde,
+            hasta,
+            refreshScope: true,
+            ...(pasada.estado ? { estado: pasada.estado } : {}),
+          });
         }
+      }
+
+      // Siniestros: reemplazo completo (~3.000 filas, extracción 1-2 s). Sin rango de fechas,
+      // así también llegan los pagos, anulaciones y rechazos de siniestros antiguos.
+      if (entidades.includes('siniestros')) {
+        await this.ejecutar('siniestros (reemplazo completo)', 'siniestros', {});
       }
     } finally {
       this.running = false;

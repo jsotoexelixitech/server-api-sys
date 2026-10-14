@@ -146,7 +146,7 @@ export function resolveEstadoLetter(
  * Columna de fecha del origen con la que se extrae el rango. Prioridad:
  * tipoFecha explícito > estado (dateColByEstado) > defaultTipoFecha > dateCol.
  * Debe coincidir con la fecha que usa el SP del reporte para ese estado
- * (Cobrado → fecha de pago, Anulado → anulación, Pendiente → vencimiento).
+ * (Cobrado → fecha de pago, Anulado → anulación, Pendiente → vigencia (fdesde)).
  */
 export function resolveDateColumn(
   filtros: Record<string, unknown>,

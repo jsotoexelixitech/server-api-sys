@@ -1,14 +1,26 @@
+/**
+ * Mapa de columnas en minúsculas por fila. Se construye solo si alguna clave no aparece tal cual y una sola
+ * vez por fila: antes se reconstruía en CADA llamada (≈30 por fila), lo que costaba ~2 s por cada 16.000 filas.
+ */
+const lookupPorFila = new WeakMap<object, Map<string, unknown>>();
+
+function lookupDe(row: Record<string, unknown>): Map<string, unknown> {
+  let lookup = lookupPorFila.get(row);
+  if (!lookup) {
+    lookup = new Map(Object.entries(row).map(([k, v]) => [k.toLowerCase(), v]));
+    lookupPorFila.set(row, lookup);
+  }
+  return lookup;
+}
+
 export function pick(
   row: Record<string, unknown> | null | undefined,
   ...keys: string[]
 ): unknown {
   if (!row || typeof row !== 'object') return undefined;
-  const lookup = new Map(
-    Object.entries(row).map(([k, v]) => [k.toLowerCase(), v]),
-  );
   for (const key of keys) {
     if (key in row) return row[key];
-    const found = lookup.get(String(key).toLowerCase());
+    const found = lookupDe(row).get(String(key).toLowerCase());
     if (found !== undefined) return found;
   }
   return undefined;

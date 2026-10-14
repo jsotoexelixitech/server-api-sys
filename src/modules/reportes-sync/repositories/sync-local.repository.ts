@@ -85,25 +85,21 @@ export class SyncLocalRepository {
     return Number(row?.total ?? 0);
   }
 
-  async deleteLocalRows(
-    aseguradoraId: number,
+  /**
+   * Condiciones del alcance de un sync (aseguradora, rango en la columna local equivalente a la fecha del
+   * extract y estado). Compartido por el DELETE completo y por el borrado de lo que ya no existe en el origen.
+   */
+  private buildScopeClauses(
     entidad: string,
     desde?: Date | null,
     hasta?: Date | null,
     scope?: LocalDeleteScope,
-    tx?: PgTransaction,
-  ): Promise<number> {
-    if (CATALOG_TABLES[entidad as CatalogEntidad]) return 0;
-
-    const table = LOCAL_TABLES[entidad];
-    if (!table) return 0;
-    if (scope?.skipRangeDelete) return 0;
-
+  ): { clauses: string[]; params: Record<string, unknown> } {
     // El DELETE debe cubrir exactamente lo que el extract vuelve a insertar: misma
     // columna de fecha y mismo estado. Si no, se pierden filas que el extract no trae.
     const scopedCol = resolveLocalDateColumn(entidad, scope?.originDateExpr);
     const dateCol = scopedCol || LOCAL_DATE_COLUMNS[entidad];
-    const params: Record<string, unknown> = { aseguradoraId };
+    const params: Record<string, unknown> = {};
     const clauses = ['id_aseguradora = @aseguradoraId'];
 
     if (dateCol && desde) {
@@ -127,8 +123,62 @@ export class SyncLocalRepository {
       }
     }
 
+    return { clauses, params };
+  }
+
+  async deleteLocalRows(
+    aseguradoraId: number,
+    entidad: string,
+    desde?: Date | null,
+    hasta?: Date | null,
+    scope?: LocalDeleteScope,
+    tx?: PgTransaction,
+  ): Promise<number> {
+    if (CATALOG_TABLES[entidad as CatalogEntidad]) return 0;
+
+    const table = LOCAL_TABLES[entidad];
+    if (!table) return 0;
+    if (scope?.skipRangeDelete) return 0;
+
+    const { clauses, params } = this.buildScopeClauses(entidad, desde, hasta, scope);
     const query = `DELETE FROM ${table} WHERE ${clauses.join(' AND ')}`;
-    const result = await (tx ?? this.reportesPg).executeQuery(query, params);
+    const result = await (tx ?? this.reportesPg).executeQuery(query, { ...params, aseguradoraId });
+    if ('error' in result && result.error) {
+      throw new Error(result.message);
+    }
+    return result.rowsAffected || 0;
+  }
+
+  /**
+   * Borra, dentro del alcance del sync, las filas cuya clave de origen ya no vino en el extract
+   * (recibos eliminados o que salieron del rango en el origen). Las que sí vinieron no se tocan.
+   * Anti-join contra el arreglo de claves (hash), no `<> ALL(array)`, para que escale a cientos de miles.
+   */
+  async deleteScopeNotIn(
+    aseguradoraId: number,
+    entidad: string,
+    origenClaves: string[],
+    desde?: Date | null,
+    hasta?: Date | null,
+    scope?: LocalDeleteScope,
+    tx?: PgTransaction,
+  ): Promise<number> {
+    if (CATALOG_TABLES[entidad as CatalogEntidad]) return 0;
+    const table = LOCAL_TABLES[entidad];
+    if (!table) return 0;
+    if (scope?.skipRangeDelete) return 0;
+
+    const { clauses, params } = this.buildScopeClauses(entidad, desde, hasta, scope);
+    const query = `DELETE FROM ${table} AS t
+       WHERE ${clauses.join(' AND ')}
+         AND NOT EXISTS (
+           SELECT 1 FROM unnest(@origenClaves::text[]) AS k(v) WHERE k.v = t.origen_clave
+         )`;
+    const result = await (tx ?? this.reportesPg).executeQuery(query, {
+      ...params,
+      aseguradoraId,
+      origenClaves,
+    });
     if ('error' in result && result.error) {
       throw new Error(result.message);
     }

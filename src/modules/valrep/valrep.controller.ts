@@ -569,4 +569,63 @@ export class ValrepController {
     const data = await this.valrepService.getMatipopagoEntidades(dto);
     return { status: true, data };
   }
+
+  // ── POST /api/v1/valrep/brokers ─────────────────────────────────────────
+
+  @Post('brokers')
+  @HttpCode(HttpStatus.OK)
+  @ApiOperation({
+    summary: 'Catálogo de productores / brokers',
+    description:
+      'Consulta la lista de productores en la tabla `maproduc` mediante SP `dbo.sp_ma_obtener_productores_nexus`. Paridad con SysIP-backend `POST /api/v1/valrep/brokers`.',
+    operationId: 'valrepBrokers',
+  })
+  @ApiResponse({
+    status: 200,
+    schema: {
+      example: {
+        status: true,
+        data: {
+          broker: [
+            { cproductor: 1, xproductor: 'IDLER MEDINA, GRACIELA E EDELVAIS' },
+          ],
+        },
+      },
+    },
+  })
+  @ApiCommonErrors()
+  async getBrokersPost() {
+    const broker = await this.valrepService.getBrokers();
+    return { status: true, data: { broker } };
+  }
+
+  // ── GET /api/v1/valrep/brokers ──────────────────────────────────────────
+
+  @Get('brokers')
+  @HttpCode(HttpStatus.OK)
+  @ApiOperation({
+    summary: 'Catálogo de productores / brokers (GET)',
+    description:
+      'Versión GET para consulta directa de productores.',
+    operationId: 'valrepBrokersGet',
+  })
+  @ApiResponse({
+    status: 200,
+    schema: {
+      example: {
+        status: true,
+        data: {
+          broker: [
+            { cproductor: 1, xproductor: 'IDLER MEDINA, GRACIELA E EDELVAIS' },
+          ],
+        },
+      },
+    },
+  })
+  @ApiCommonErrors()
+  async getBrokersGet() {
+    const broker = await this.valrepService.getBrokers();
+    return { status: true, data: { broker } };
+  }
 }
+

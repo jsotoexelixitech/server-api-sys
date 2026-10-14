@@ -149,6 +149,29 @@ export const envValidationSchema = Joi.object({
   REPORTES_SYNC_TTL_SECONDS: Joi.number().default(120),
   REPORTES_SYNC_CATALOG_TTL_SECONDS: Joi.number().default(3600),
   REPORTES_SYNC_TIMEOUT_MS: Joi.number().default(30000),
+  /** false = la consulta de recibos no sincroniza; lo hace el refresco programado (REPORTES_SYNC_SCHEDULE_*). */
+  REPORTES_SYNC_RECIBOS_ON_EXECUTE: Joi.boolean().default(true),
+  /** Igual que la de recibos, para siniestros. */
+  REPORTES_SYNC_SINIESTROS_ON_EXECUTE: Joi.boolean().default(true),
+  /** Recibos: escribir solo lo nuevo o modificado (false = borrar el rango e insertar todo, como antes). */
+  REPORTES_SYNC_RECIBOS_DELTA: Joi.boolean().default(true),
+  /** Segundos que un alcance (filtros del usuario) se considera sincronizado antes de volver al origen. */
+  REPORTES_SYNC_SCOPE_TTL_SECONDS: Joi.number().integer().min(0).default(30),
+  /** Segundos máximos que una consulta espera el sync en curso antes de responder con datos locales. */
+  REPORTES_SYNC_LOCK_WAIT_SECONDS: Joi.number().integer().min(0).default(45),
+  /** Conexiones en paralelo para leer rangos anchos de recibos (1 = sin paralelismo; máximo 5). */
+  REPORTES_SYNC_EXTRACT_PARALLEL: Joi.number().integer().min(1).max(5).default(4),
+  /** Tamaño de paquete TDS de la conexión de origen (bytes). */
+  REPORTES_SYNC_ORIGIN_PACKET_SIZE: Joi.number().integer().min(512).max(32767).default(16384),
+  /** Entidades que refresca el proceso programado (separadas por coma). */
+  REPORTES_SYNC_SCHEDULE_ENTIDADES: Joi.string().default('recibos,siniestros'),
+  /**
+   * Conexión a la BD de ORIGEN de cada aseguradora (sync de reportes). Se convierten a boolean:
+   * el driver mssql rechaza el texto "false"/"true" en `encrypt` y el sync falla con
+   * 'The "encrypt" property must be set to "strict", or of type boolean.'
+   */
+  DB_ENCRYPT: Joi.boolean().default(false),
+  DB_TRUST_SERVER_CERTIFICATE: Joi.boolean().default(true),
   REPORTES_SYNC_BATCH_SIZE: Joi.number().default(1000),
   GEMINI_API_KEY: Joi.string().allow('').optional(),
   GEMINI_MODEL: Joi.string().default('gemini-2.5-flash-lite'),
