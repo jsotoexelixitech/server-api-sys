@@ -37,6 +37,7 @@ const ROUTE_LABELS: Record<string, string> = {
   'POST /api/v1/client/search/coverages': 'Coberturas de pólizas del cliente',
   // documents:write
   'POST /api/v1/documents/conductor-habitual': 'Generar PDF conductor habitual',
+  'POST /api/v1/documents/anexo-arys-plan-basico': 'URL del anexo Arys Club Plan Básico (tarjetas)',
   'GET /api/v1/documents/pdf/:param': 'Descargar PDF generado',
   // emissions:auto
   'POST /api/v1/emissions/automobile_new/propietary': 'Emisión RCV — datos propietario',
