@@ -57,6 +57,8 @@ Thumbs.db
 # Cliente Prisma generado del ambiente separado product-emission
 /generated/
 /temp-product-emission-docs/
+# Anexos de conductor habitual generados en runtime (deploy.sh no los borra)
+/temp-pdfs/
 
 # Artefactos debug en raíz (SQL oficial va en docs/sql/)
 /trigger*.txt
