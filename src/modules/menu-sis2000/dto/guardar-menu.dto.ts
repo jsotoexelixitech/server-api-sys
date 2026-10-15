@@ -122,3 +122,12 @@ export class GuardarPlantillaDto {
   @IsBoolean()
   aplicarAExistentes?: boolean;
 }
+
+/** Ícono SVG propio (texto del archivo). */
+export class SubirIconoDto {
+  @ApiProperty({ example: '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24">…</svg>' })
+  @IsString()
+  @IsNotEmpty()
+  @MaxLength(81920)
+  svg!: string;
+}

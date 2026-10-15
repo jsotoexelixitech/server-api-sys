@@ -147,6 +147,7 @@ export const NEST_AUTH_SCOPE_CATALOG: NestAuthScopeMeta[] = [
       'PATCH /api/v1/menu-sis2000/principal/:cmenuPrincipal',
       'POST /api/v1/menu-sis2000/opcion',
       'PATCH /api/v1/menu-sis2000/opcion/:cmenu',
+      'POST /api/v1/menu-sis2000/iconos',
       'GET /api/v1/menu-sis2000/usuarios',
       'GET /api/v1/menu-sis2000/usuarios/:cusuario/menu',
       'POST /api/v1/menu-sis2000/usuarios/:cusuario/sincronizar',
