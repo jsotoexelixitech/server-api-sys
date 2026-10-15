@@ -188,6 +188,7 @@ export class MenuSis2000Service {
         .input('cusuario', sql.Int, dto.cusuario ?? null)
         .input('menus', sql.NVarChar(sql.MAX), JSON.stringify(menus))
         .input('cusuario1', sql.Numeric(9, 0), operador)
+        .input('aplicar_existentes', sql.Bit, dto.aplicarAExistentes === true)
         .execute('spMenuGuardarPlantilla'),
     );
     const fila = res.recordset?.[0] ?? {};
