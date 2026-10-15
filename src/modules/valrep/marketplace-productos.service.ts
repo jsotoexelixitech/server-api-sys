@@ -12,6 +12,12 @@ const MARKETPLACE_PRODUCTOS_SQL = `
 SET NOCOUNT ON;
 SET TRANSACTION ISOLATION LEVEL READ UNCOMMITTED;
 
+DECLARE @itipocanal CHAR(1) = NULL;
+IF @centidad = 'G'
+BEGIN
+  SELECT @itipocanal = ctipocanal FROM magestor WITH (NOLOCK) WHERE cgestor = @citem;
+END;
+
 WITH ValidPlans AS (
   SELECT DISTINCT cramo, cplan
   FROM mausuplan WITH (NOLOCK)
@@ -51,13 +57,59 @@ SELECT m.*
 FROM maproductos m WITH (NOLOCK)
 INNER JOIN AllowedProducts a ON TRIM(m.cproducto) = a.cproducto
 WHERE (
-  (@centidad = 'P' AND m.iproductor = 1)
-  OR (@centidad <> 'P' AND m.icanal = 1)
+  ((@centidad = 'P' OR (@centidad = 'G' AND @itipocanal = 'T')) AND m.iproductor = 1)
+  OR (@centidad <> 'P' AND ISNULL(@itipocanal, '') <> 'T' AND m.icanal = 1)
 );
 
 SELECT COUNT(*) AS cantidad
 FROM mausuplan WITH (NOLOCK)
 WHERE citem = @citem AND centidad = @centidad;
+`;
+
+/** SysIP `Product.obtener` (products/obtener): planes del productor base menos exclusiones del gestor. */
+const MARKETPLACE_GESTOR_PRODUCTOS_SQL = `
+SET NOCOUNT ON;
+SET TRANSACTION ISOLATION LEVEL READ UNCOMMITTED;
+
+DECLARE @ValidPlans TABLE (cramo INT, cplan VARCHAR(10), PRIMARY KEY (cramo, cplan));
+
+INSERT INTO @ValidPlans (cramo, cplan)
+SELECT DISTINCT cramo, cplan
+FROM mausuplan WITH (NOLOCK)
+WHERE centidad = 'P' AND itipouso = 'A' AND (citem = @cproductor OR citem IS NULL)
+EXCEPT
+SELECT DISTINCT cramo, cplan
+FROM mausuplan WITH (NOLOCK)
+WHERE (
+  (centidad = 'P' AND itipouso = 'E' AND (citem = @cproductor OR citem IS NULL))
+  OR (centidad = @centidad AND itipouso = 'E' AND citem = @citem)
+);
+
+DECLARE @AllowedProducts TABLE (cproducto VARCHAR(10) PRIMARY KEY);
+
+INSERT INTO @AllowedProducts (cproducto)
+SELECT DISTINCT TRIM(p.cproducto)
+FROM maplanes_per p WITH (NOLOCK)
+INNER JOIN @ValidPlans v ON p.cramo = v.cramo AND p.cplan = v.cplan
+WHERE p.cproducto IS NOT NULL AND p.iestado = 'V'
+UNION
+SELECT DISTINCT TRIM(pl.cproducto)
+FROM maplanes pl WITH (NOLOCK)
+INNER JOIN @ValidPlans v ON pl.cramo = v.cramo AND pl.cplan = v.cplan
+WHERE pl.cproducto IS NOT NULL AND pl.iestado = 'V'
+UNION
+SELECT '24'
+WHERE EXISTS (
+  SELECT 1
+  FROM maplanes pl WITH (NOLOCK)
+  INNER JOIN @ValidPlans v ON pl.cramo = v.cramo AND pl.cplan = v.cplan
+  WHERE pl.cramo = 18 AND pl.iestado = 'V'
+);
+
+SELECT DISTINCT TRIM(m.cproducto) AS cproducto
+FROM maproductos m WITH (NOLOCK)
+INNER JOIN @AllowedProducts a ON TRIM(m.cproducto) = a.cproducto
+WHERE (@centidad NOT IN ('G', 'R') OR m.igestor = 1);
 `;
 
 @Injectable()
@@ -90,9 +142,20 @@ export class MarketplaceProductosService {
 
       const urlPrefix = String(body.url ?? '').trim();
       const csub = String(body.csub ?? '').trim();
+      const cgestor = String(body.cgestor ?? '').trim();
+      const allowedGestor =
+        body.filtrar_gestor && cgestor
+          ? await this.getProductosGestor(cgestor)
+          : null;
 
       const productos: Record<string, unknown>[] = [];
       for (const row of rawProducts) {
+        if (
+          allowedGestor &&
+          !allowedGestor.has(String(row['cproducto'] ?? '').trim())
+        ) {
+          continue;
+        }
         const normalized = this.normalizeMaproductoRow(row);
         if (urlPrefix) {
           normalized.url = this.buildEmissionUrl(urlPrefix, {
@@ -117,6 +180,21 @@ export class MarketplaceProductosService {
         'Error al obtener productos marketplace.',
       );
     }
+  }
+
+  /** Equivalente SysIP `Product.obtener` con centidad G: productos habilitados del gestor. */
+  private async getProductosGestor(cgestor: string): Promise<Set<string>> {
+    const T = this.db.types;
+    const req = this.db.request();
+    req.input('citem', T.VarChar(50), cgestor);
+    req.input('centidad', T.VarChar(10), 'G');
+    req.input('cproductor', T.VarChar(50), cgestor.split('-')[0].trim());
+    const result = await req.query(MARKETPLACE_GESTOR_PRODUCTOS_SQL);
+    return new Set(
+      (result.recordset ?? [])
+        .map((r: Record<string, unknown>) => String(r['cproducto'] ?? '').trim())
+        .filter(Boolean),
+    );
   }
 
   private normalizeMaproductoRow(
