@@ -20,6 +20,7 @@ import { CollectionModule } from './modules/collection/collection.module';
 import { PartnerHostModule } from './partner/partner-host.module';
 import { PartnerIntegrationModule } from './partner/partner-integration.module';
 import { AuthModule } from './modules/auth/auth.module';
+import { MenuSis2000Module } from './modules/menu-sis2000/menu-sis2000.module';
 import { AdminModule } from './modules/admin/admin.module';
 import { DocsModule } from './modules/docs/docs.module';
 import { PrismaModule } from './database/prisma/prisma.module';
@@ -76,6 +77,7 @@ import { ComponentsModule } from './modules/components/components.module';
     MailModule,
     CanalModule,
     PortalAuthModule,
+    MenuSis2000Module,
     MonedaModule,
     ArysModule,
     MonitoringModule,
