@@ -20,6 +20,8 @@ export const NEST_AUTH_SCOPES = {
   REPORT_WRITE: 'report:write',
   /** Login de usuarios Sis2000 (seusuariosweb) para el portal La Mundial. */
   PORTAL_LOGIN: 'portal:login',
+  /** Administración del menú lateral de Sis2000 (desplegables, opciones y permisos por rol). */
+  MENU_SIS2000_ADMIN: 'menu-sis2000:admin',
 } as const;
 
 export type NestAuthScopeId =
@@ -131,6 +133,23 @@ export const NEST_AUTH_SCOPE_CATALOG: NestAuthScopeMeta[] = [
     description:
       'Validar usuario/clave Sis2000 (seusuariosweb) y resolver entidad del marketplace',
     routes: [],
+  },
+  {
+    id: NEST_AUTH_SCOPES.MENU_SIS2000_ADMIN,
+    label: 'Menú lateral Sis2000',
+    description: 'Crear desplegables y opciones del menú y asignar permisos por rol (solo departamento de Desarrollo)',
+    routes: [
+      'GET /api/v1/menu-sis2000/arbol',
+      'GET /api/v1/menu-sis2000/roles',
+      'GET /api/v1/menu-sis2000/plantilla',
+      'PUT /api/v1/menu-sis2000/plantilla',
+      'POST /api/v1/menu-sis2000/principal',
+      'PATCH /api/v1/menu-sis2000/principal/:cmenuPrincipal',
+      'POST /api/v1/menu-sis2000/opcion',
+      'PATCH /api/v1/menu-sis2000/opcion/:cmenu',
+      'GET /api/v1/menu-sis2000/usuarios/:cusuario/menu',
+      'POST /api/v1/menu-sis2000/usuarios/:cusuario/sincronizar',
+    ],
   },
 ];
 
