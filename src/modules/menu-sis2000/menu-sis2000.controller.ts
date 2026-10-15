@@ -118,6 +118,14 @@ export class MenuSis2000Controller {
     return { status: true, message: 'Opción actualizada.', data: await this.menu.guardarOpcion(dto, Number(operador), cmenu) };
   }
 
+  @Get('usuarios')
+  @ApiOperation({ summary: 'Buscar usuarios de Sis2000 (login, nombre, cusuario o ccorredor)' })
+  @ApiQuery({ name: 'q', required: true, description: 'Mínimo 2 caracteres' })
+  async buscarUsuarios(@Headers('x-sis2000-cusuario') operador: string, @Query('q') q: string) {
+    await this.menu.asegurarRoot(Number(operador));
+    return { status: true, data: await this.menu.buscarUsuarios(q) };
+  }
+
   @Get('usuarios/:cusuario/menu')
   @ApiOperation({ summary: 'Menú efectivo de un usuario (sedistribucionmenu)' })
   async menuDeUsuario(

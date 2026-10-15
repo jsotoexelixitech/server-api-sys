@@ -38,6 +38,20 @@ export interface RolSis2000 {
   usuarios: number;
 }
 
+export interface UsuarioSis2000 {
+  cusuario: number;
+  xlogin: string;
+  xusuario: string;
+  cdepartamento: number | null;
+  xdepartamento: string | null;
+  crol: number | null;
+  xrol: string | null;
+  istatus: string | null;
+  ccorredor: number | null;
+  plantillaPropia: boolean;
+  opciones: number;
+}
+
 export interface ItemPlantilla {
   cmenuprincipal: number;
   cmenu: number | null;
@@ -124,6 +138,33 @@ export class MenuSis2000Service {
         WHERE cdepartamento = @cdepartamento AND crol = @crol AND istatus = 'V' ${filtroUsuario}
         ORDER BY cmenuprincipal, cmenu`,
     );
+    return res.recordset;
+  }
+
+  /** Usuarios de Sis2000 por login, nombre, código de usuario o de corredor (máx. 30). */
+  async buscarUsuarios(texto: string): Promise<UsuarioSis2000[]> {
+    const sql = this.mssql.types;
+    const termino = String(texto || '').trim();
+    if (termino.length < 2) return [];
+    const numero = /^\d+$/.test(termino) ? Number(termino) : null;
+    const res = await this.mssql
+      .request()
+      .input('q', sql.VarChar(120), `%${termino}%`)
+      .input('n', sql.BigInt, numero)
+      .query<UsuarioSis2000>(
+        `SELECT TOP (30) u.cusuario, LTRIM(RTRIM(u.xlogin)) AS xlogin, LTRIM(RTRIM(u.xusuario)) AS xusuario,
+                u.cdepartamento, LTRIM(RTRIM(d.xdepartamento)) AS xdepartamento,
+                u.crol, LTRIM(RTRIM(r.xrol)) AS xrol, u.istatus, u.ccorredor,
+                CAST(CASE WHEN EXISTS (SELECT 1 FROM semenuparam p WHERE p.cusuario = u.cusuario AND p.istatus = 'V')
+                          THEN 1 ELSE 0 END AS BIT) AS plantillaPropia,
+                (SELECT COUNT(*) FROM sedistribucionmenu m WHERE m.cusuario = u.cusuario AND m.cmenu IS NOT NULL) AS opciones
+           FROM seusuariosweb u
+           LEFT JOIN sedepartamento d ON d.cdepartamento = u.cdepartamento
+           LEFT JOIN serol r ON r.cdepartamento = u.cdepartamento AND r.crol = u.crol
+          WHERE u.xlogin LIKE @q OR u.xusuario LIKE @q
+             OR (@n IS NOT NULL AND (u.cusuario = @n OR u.ccorredor = @n))
+          ORDER BY u.xusuario`,
+      );
     return res.recordset;
   }
 
