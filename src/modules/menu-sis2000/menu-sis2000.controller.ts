@@ -11,12 +11,16 @@ import {
   Post,
   Put,
   Query,
+  Res,
 } from '@nestjs/common';
+import { Response } from 'express';
+import { Public } from '../auth/decorators/public.decorator';
 import { ApiHeader, ApiOperation, ApiQuery, ApiResponse, ApiTags } from '@nestjs/swagger';
 import { NestProtected } from '../auth/decorators/nest-protected.decorator';
 import { NEST_AUTH_SCOPES } from '../auth/scopes/nest-auth-scopes.constants';
 import { APIKEY_HEADER } from '../../common/swagger/api-docs.constants';
-import { GuardarOpcionDto, GuardarPlantillaDto, GuardarPrincipalDto } from './dto/guardar-menu.dto';
+import { GuardarOpcionDto, GuardarPlantillaDto, GuardarPrincipalDto, SubirIconoDto } from './dto/guardar-menu.dto';
+import { MenuIconosService } from './menu-iconos.service';
 import { MenuSis2000Service } from './menu-sis2000.service';
 
 const OPERADOR_HEADER = {
@@ -32,7 +36,39 @@ const OPERADOR_HEADER = {
 @NestProtected(NEST_AUTH_SCOPES.MENU_SIS2000_ADMIN)
 @Controller('v1/menu-sis2000')
 export class MenuSis2000Controller {
-  constructor(private readonly menu: MenuSis2000Service) {}
+  constructor(
+    private readonly menu: MenuSis2000Service,
+    private readonly iconos: MenuIconosService,
+  ) {}
+
+  @Post('iconos')
+  @HttpCode(HttpStatus.CREATED)
+  @ApiOperation({
+    summary: 'Subir un ícono SVG propio para un grupo del menú',
+    description: 'Devuelve la referencia corta (svg:<id>) para guardar en xicono. Rechaza scripts, eventos y enlaces externos.',
+  })
+  async subirIcono(@Headers('x-sis2000-cusuario') operador: string, @Body() dto: SubirIconoDto) {
+    await this.menu.asegurarRoot(Number(operador));
+    return { status: true, message: 'Ícono guardado.', data: await this.iconos.guardar(dto.svg) };
+  }
+
+  /** Público: el menú lateral lo carga como imagen (mask-image), sin apikey. */
+  @Get('iconos/:id')
+  @Public()
+  @ApiOperation({ summary: 'Ícono SVG del menú (público, como imagen)' })
+  async verIcono(@Param('id') id: string, @Res() res: Response) {
+    const svg = await this.iconos.leer(id);
+    res
+      .set({
+        'Content-Type': 'image/svg+xml; charset=utf-8',
+        'Cache-Control': 'public, max-age=86400',
+        'X-Content-Type-Options': 'nosniff',
+        // Si se abre el SVG directo en el navegador no puede ejecutar nada
+        'Content-Security-Policy': "default-src 'none'; style-src 'unsafe-inline'; sandbox",
+        'Cross-Origin-Resource-Policy': 'cross-origin',
+      })
+      .send(svg);
+  }
 
   @Get('arbol')
   @ApiOperation({ summary: 'Desplegables y opciones del menú (activos e inactivos)' })
