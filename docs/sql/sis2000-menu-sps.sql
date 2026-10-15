@@ -14,6 +14,12 @@
     - Si no -> recibe la plantilla de su departamento + rol (cusuario NULL).
     - Si no hay ninguna de las dos -> su menú no se toca.
 
+  Usuarios existentes: NO se tocan salvo pedido explícito.
+    - Guardar la plantilla de un rol solo la guarda (la toman los usuarios nuevos);
+      aplicarla a los existentes del rol requiere @aplicar_existentes = 1.
+    - Al crear un corredor solo recibe menú el usuario nuevo (sin filas en sedistribucionmenu).
+    - spMenuSincronizarUsuario rehace el menú solo del usuario indicado.
+
   Ejecutar primero en sis2000_qa. Requiere SQL Server 2016+ (OPENJSON).
 */
 
@@ -203,8 +209,9 @@ END
 GO
 
 ------------------------------------------------------------------------------
--- 5. Guarda la plantilla de permisos de un departamento + rol (o de un usuario)
---    y sincroniza el menú de los usuarios afectados.
+-- 5. Guarda la plantilla de permisos de un departamento + rol (o de un usuario).
+--    Plantilla de un usuario: se aplica a ese usuario.
+--    Plantilla de un rol: la toman los usuarios nuevos; a los existentes solo con @aplicar_existentes = 1.
 --    @menus: JSON [{"cmenuprincipal": 2, "cmenu": 89}, ...]  (cmenu null = solo el desplegable)
 ------------------------------------------------------------------------------
 CREATE OR ALTER PROCEDURE [dbo].[spMenuGuardarPlantilla]
@@ -212,7 +219,8 @@ CREATE OR ALTER PROCEDURE [dbo].[spMenuGuardarPlantilla]
     @crol INT,
     @cusuario INT = NULL,
     @menus NVARCHAR(MAX),
-    @cusuario1 NUMERIC(9, 0) = NULL
+    @cusuario1 NUMERIC(9, 0) = NULL,
+    @aplicar_existentes BIT = 0
 AS
 BEGIN
     SET NOCOUNT ON;
@@ -257,10 +265,10 @@ BEGIN
            'V', GETDATE(), @cusuario1
     FROM @items i;
 
-    -- Usuarios afectados: el indicado, o los activos del departamento + rol
+    -- Usuarios afectados: el indicado, o (solo si se pide) los activos del departamento + rol
     IF @cusuario IS NOT NULL
         INSERT INTO #menu_usuarios (cusuario) VALUES (@cusuario);
-    ELSE
+    ELSE IF @aplicar_existentes = 1
         INSERT INTO #menu_usuarios (cusuario)
         SELECT DISTINCT cusuario FROM seusuariosweb
         WHERE cdepartamento = @cdepartamento AND crol = @crol AND istatus = 'V';
@@ -275,7 +283,7 @@ END
 GO
 
 ------------------------------------------------------------------------------
--- 6. (Ajuste ya aplicado en QA, alineado a la misma regla) menú del corredor al crearlo
+-- 6. Menú del corredor al crearlo (plantilla de su rol en lugar de opciones fijas)
 ------------------------------------------------------------------------------
 CREATE OR ALTER PROCEDURE [dbo].[spCreateMenuCorredorWeb]
     @ccorredor VARCHAR(200)
@@ -283,9 +291,12 @@ AS
 BEGIN
     SET NOCOUNT ON;
 
+    -- Solo el usuario recién creado (aún sin menú); los existentes del corredor no se tocan
     CREATE TABLE #menu_usuarios (cusuario INT PRIMARY KEY);
     INSERT INTO #menu_usuarios (cusuario)
-    SELECT DISTINCT cusuario FROM seusuariosweb WHERE ccorredor = @ccorredor;
+    SELECT DISTINCT s.cusuario FROM seusuariosweb s
+    WHERE s.ccorredor = @ccorredor
+      AND NOT EXISTS (SELECT 1 FROM sedistribucionmenu d WHERE d.cusuario = s.cusuario);
 
     IF NOT EXISTS (SELECT 1 FROM #menu_usuarios)
         RETURN;

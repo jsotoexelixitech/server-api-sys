@@ -3,6 +3,7 @@ import { Transform, Type } from 'class-transformer';
 import {
   ArrayMaxSize,
   IsArray,
+  IsBoolean,
   IsIn,
   IsInt,
   IsNotEmpty,
@@ -111,4 +112,13 @@ export class GuardarPlantillaDto {
   @ValidateNested({ each: true })
   @Type(() => ItemPlantillaDto)
   menus!: ItemPlantillaDto[];
+
+  @ApiPropertyOptional({
+    default: false,
+    description:
+      'Plantilla de rol: false (por defecto) solo la toman los usuarios nuevos; true rehace también el menú de los usuarios existentes del rol',
+  })
+  @IsOptional()
+  @IsBoolean()
+  aplicarAExistentes?: boolean;
 }

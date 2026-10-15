@@ -66,8 +66,10 @@ export class MenuSis2000Controller {
 
   @Put('plantilla')
   @ApiOperation({
-    summary: 'Guardar permisos de menú de un rol y aplicarlos a sus usuarios',
-    description: 'spMenuGuardarPlantilla: reescribe semenuparam y sincroniza sedistribucionmenu.',
+    summary: 'Guardar permisos de menú de un rol (o de un usuario)',
+    description:
+      'spMenuGuardarPlantilla: reescribe semenuparam. La plantilla de rol la toman los usuarios nuevos; ' +
+      'a los existentes solo con aplicarAExistentes=true. La de un usuario se aplica a ese usuario.',
   })
   async guardarPlantilla(@Headers('x-sis2000-cusuario') operador: string, @Body() dto: GuardarPlantillaDto) {
     await this.menu.asegurarRoot(Number(operador));
