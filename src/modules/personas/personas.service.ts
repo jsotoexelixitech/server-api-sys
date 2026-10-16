@@ -550,8 +550,11 @@ export class PersonasService {
         });
         for (const row of raw ?? []) {
           const mapped = this.mapCanalPlanToPer(row as Record<string, unknown>, null);
-          if (!mapped || seen.has(mapped.cplan)) continue;
-          seen.add(mapped.cplan);
+          // Ramo + plan, como spBuscaPlanProducto: el mismo código existe en varios ramos
+          // (producto 76: plan 1 de Vida Individual y plan 1 de Masivo Vida Temporal).
+          const planKey = mapped ? `${mapped.cramo}|${mapped.cplan}` : '';
+          if (!mapped || seen.has(planKey)) continue;
+          seen.add(planKey);
           planes.push(mapped);
         }
       } catch (err) {
@@ -572,10 +575,11 @@ export class PersonasService {
     const ramos = [...new Set(planes.map((p) => p.cramo).filter((n) => Number.isFinite(n)))];
     for (const ramo of ramos) {
       const byRamo = await this.loadNmaxDepByPlan(ramo);
-      byRamo.forEach((value, key) => limits.set(key, value));
+      byRamo.forEach((value, key) => limits.set(`${ramo}|${key}`, value));
     }
     return planes.map((p) => {
-      const nmax = limits.has(p.cplan) ? limits.get(p.cplan) ?? null : (p.nmax_dep ?? null);
+      const key = `${p.cramo}|${p.cplan}`;
+      const nmax = limits.has(key) ? limits.get(key) ?? null : (p.nmax_dep ?? null);
       const maxAsegurados = nmax == null ? undefined : Math.max(1, 1 + nmax);
       return { ...p, nmax_dep: nmax, maxAsegurados };
     });
@@ -660,17 +664,20 @@ export class PersonasService {
     return /too many arguments specified|too few arguments specified/i.test(msg);
   }
 
-  /** fdesde/fhasta obligatorios en spCalculoViajeroProrrata (BDA). */
+  /** fdesde/fhasta para spCalculoViajeroProrrata. Si solo viene ndias → hoy + (ndias-1). */
   private resolveProrrataDates(body: CotizacionPerDto): { fdesde: string; fhasta: string } {
-    const fdesde = body.fdesde?.trim();
-    const fhasta = body.fhasta?.trim();
-    if (fdesde && fhasta) {
-      return { fdesde, fhasta };
+    const fdesdeIn = body.fdesde?.trim();
+    const fhastaIn = body.fhasta?.trim();
+    if (fdesdeIn && fhastaIn) {
+      return { fdesde: fdesdeIn, fhasta: fhastaIn };
     }
-    if (fdesde && typeof body.ndias === 'number' && body.ndias > 0) {
+    const ndias =
+      typeof body.ndias === 'number' && body.ndias > 0 ? body.ndias : null;
+    const fdesde = fdesdeIn || new Date().toISOString().slice(0, 10);
+    if (ndias != null) {
       const desde = new Date(`${fdesde}T00:00:00Z`);
       const hasta = new Date(desde);
-      hasta.setUTCDate(hasta.getUTCDate() + body.ndias - 1);
+      hasta.setUTCDate(hasta.getUTCDate() + ndias - 1);
       return { fdesde, fhasta: hasta.toISOString().slice(0, 10) };
     }
     throw new BadRequestException('Viajero prorrata: fdesde y fhasta son obligatorios.');

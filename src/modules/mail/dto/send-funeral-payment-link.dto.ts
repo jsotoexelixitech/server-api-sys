@@ -18,6 +18,12 @@ export class SendFuneralPaymentLinkDto {
   @MaxLength(250)
   planName?: string;
 
+  @ApiPropertyOptional({ example: 'Vida', description: 'Producto real (Vida, Accidentes Personales…). Default: Funerario' })
+  @IsOptional()
+  @IsString()
+  @MaxLength(80)
+  productLabel?: string;
+
   @ApiProperty({ description: 'URL de pago precargada (Pagos + sid)' })
   @IsUrl({ require_tld: false })
   paymentUrl!: string;
