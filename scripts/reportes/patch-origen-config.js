@@ -5,7 +5,7 @@
  * Uso:
  *   node scripts/reportes/patch-origen-config.js [CODIGO] [entidad] [--apply]
  *     CODIGO   código de aseguradora (defecto MUNDIAL)
- *     entidad  recibos | siniestros (defecto recibos)
+ *     entidad  recibos | siniestros | polizas (defecto recibos)
  *     --apply  escribe en la base; sin él solo muestra qué cambiaría (simulación)
  *
  * Antes de escribir guarda el origen_config actual en origen_config_backup_<codigo>_<entidad>_<fecha>.json
@@ -21,8 +21,8 @@ const APPLY = process.argv.includes('--apply');
 const CODIGO = (args[0] || 'MUNDIAL').toUpperCase();
 const ENTIDAD = (args[1] || 'recibos').toLowerCase();
 
-if (!['recibos', 'siniestros'].includes(ENTIDAD)) {
-  console.error(`Entidad no soportada: ${ENTIDAD} (use recibos o siniestros)`);
+if (!['recibos', 'siniestros', 'polizas'].includes(ENTIDAD)) {
+  console.error(`Entidad no soportada: ${ENTIDAD} (use recibos, siniestros o polizas)`);
   process.exit(1);
 }
 
