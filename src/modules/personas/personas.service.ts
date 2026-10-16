@@ -550,8 +550,11 @@ export class PersonasService {
         });
         for (const row of raw ?? []) {
           const mapped = this.mapCanalPlanToPer(row as Record<string, unknown>, null);
-          if (!mapped || seen.has(mapped.cplan)) continue;
-          seen.add(mapped.cplan);
+          // Ramo + plan, como spBuscaPlanProducto: el mismo código existe en varios ramos
+          // (producto 76: plan 1 de Vida Individual y plan 1 de Masivo Vida Temporal).
+          const planKey = mapped ? `${mapped.cramo}|${mapped.cplan}` : '';
+          if (!mapped || seen.has(planKey)) continue;
+          seen.add(planKey);
           planes.push(mapped);
         }
       } catch (err) {
@@ -572,10 +575,11 @@ export class PersonasService {
     const ramos = [...new Set(planes.map((p) => p.cramo).filter((n) => Number.isFinite(n)))];
     for (const ramo of ramos) {
       const byRamo = await this.loadNmaxDepByPlan(ramo);
-      byRamo.forEach((value, key) => limits.set(key, value));
+      byRamo.forEach((value, key) => limits.set(`${ramo}|${key}`, value));
     }
     return planes.map((p) => {
-      const nmax = limits.has(p.cplan) ? limits.get(p.cplan) ?? null : (p.nmax_dep ?? null);
+      const key = `${p.cramo}|${p.cplan}`;
+      const nmax = limits.has(key) ? limits.get(key) ?? null : (p.nmax_dep ?? null);
       const maxAsegurados = nmax == null ? undefined : Math.max(1, 1 + nmax);
       return { ...p, nmax_dep: nmax, maxAsegurados };
     });
