@@ -347,7 +347,7 @@ export class SyncUpsertRepository {
        estatus_poliza, moneda, prima_total, nombre_tomador, cedula_tomador,
        nombre_asegurado, cedula_asegurado, nombre_beneficiario_preferencial,
        cedula_beneficiario_preferencial, marca_vehiculo, modelo_vehiculo, version_vehiculo,
-       anio_vehiculo, placa, color_vehiculo, serial_carroceria, serial_motor,
+       anio_vehiculo, placa, color_vehiculo, serial_carroceria, serial_motor, coberturas,
        id_ramo, id_productor, id_canal, origen_modified_at, synced_at
      ) VALUES (
        @aseguradoraId, @origenClave, @numeroPoliza, @numeroPolizaRelacionada,
@@ -356,7 +356,7 @@ export class SyncUpsertRepository {
        @estatusPoliza, @moneda, @primaTotal, @nombreTomador, @cedulaTomador,
        @nombreAsegurado, @cedulaAsegurado, @nombreBeneficiarioPreferencial,
        @cedulaBeneficiarioPreferencial, @marcaVehiculo, @modeloVehiculo, @versionVehiculo,
-       @anioVehiculo, @placa, @colorVehiculo, @serialCarroceria, @serialMotor,
+       @anioVehiculo, @placa, @colorVehiculo, @serialCarroceria, @serialMotor, @coberturas,
        @idRamo, @idProductor, @idCanal, @origenModifiedAt, NOW()
      )
      ON CONFLICT (id_aseguradora, origen_clave) WHERE origen_clave IS NOT NULL
@@ -393,6 +393,7 @@ export class SyncUpsertRepository {
        color_vehiculo = EXCLUDED.color_vehiculo,
        serial_carroceria = EXCLUDED.serial_carroceria,
        serial_motor = EXCLUDED.serial_motor,
+       coberturas = EXCLUDED.coberturas,
        id_ramo = EXCLUDED.id_ramo,
        id_productor = EXCLUDED.id_productor,
        id_canal = EXCLUDED.id_canal,
@@ -433,6 +434,7 @@ export class SyncUpsertRepository {
         colorVehiculo: row.colorVehiculo,
         serialCarroceria: row.serialCarroceria,
         serialMotor: row.serialMotor,
+        coberturas: row.coberturas ?? '',
         idRamo: row.idRamo,
         idProductor: row.idProductor,
         idCanal: row.idCanal,
