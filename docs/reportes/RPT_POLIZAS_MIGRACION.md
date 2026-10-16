@@ -32,3 +32,22 @@ El filtro por estatus del reporte (`@iestatopol`) usa la misma expresión que la
 node scripts/reportes/patch-origen-config.js MUNDIAL polizas          # simula
 node scripts/reportes/patch-origen-config.js MUNDIAL polizas --apply  # aplica con respaldo
 ```
+
+## Coberturas en pólizas y comisiones (2026-10-16)
+Mismo patrón que `recibo.coberturas`: descripciones distintas de `adpolcob` + `macoberturas`, separadas por " / ", en una columna `varchar(1000)`.
+
+| Reporte | Columna | Cómo se obtiene | Aplicado en |
+|---|---|---|---|
+| Pólizas | `poliza.coberturas` | coberturas de todas las filas de `adpolcob` de la póliza (cpoliza, fanopol, fmespol) | QA 121 y Producción |
+| Comisiones | `comision.coberturas` | coberturas del recibo (`adpolcob.crecibo` = `adrecibos.crecibo`) | QA 121 (en Producción y 120 no existe el reporte) |
+
+Archivos: `ddl_coberturas_poliza.sql`, `ddl_coberturas_comision.sql`, `sp_rpt_polizas_qa.sql`, `sp_rpt_polizas_produccion.sql`, `sp_rpt_comisiones_qa.sql`
+y los seeds `mundial_polizas_origen.json` y `mundial_comisiones_origen.json`. Backend: el adaptador, el upsert de pólizas y las columnas del reporte
+(`Coberturas` después de `Prima Total`).
+
+**No se recargó ninguna tabla.** Las columnas quedan vacías en las filas ya cargadas y se llenan cuando cada póliza o comisión vuelve a sincronizarse
+(sync de pólizas con `forceSync` sobre el rango deseado; comisiones, en su siguiente sync). En QA, la configuración de pólizas y de comisiones usa
+`columnMap`; se agregó `coberturas` ahí.
+
+Nota: el SP de pólizas también se corrigió: el cruce con el canal ya no falla con canales no numéricos (como `OS_LMDS`).
+

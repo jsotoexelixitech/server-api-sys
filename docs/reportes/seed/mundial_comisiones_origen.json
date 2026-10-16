@@ -1,0 +1,217 @@
+{
+  "comisiones": {
+    "mode": "query",
+    "dateCol": "A.fcobro",
+    "querySql": "SELECT CAST(TRIM(A.cnpoliza) AS varchar(30)) AS numero_poliza, CAST(A.cramo AS int) AS id_ramo, CAST(TRIM(B.xdescripcion_l) AS varchar(100)) AS ramo, CAST(ISNULL(TRIM(E.cid), '') AS varchar(30)) AS cedula_tomador, CAST(ISNULL(TRIM(E.xcliente), '') AS varchar(240)) AS nombre_tomador, CAST(ISNULL(TRIM(C.cid), '') AS varchar(30)) AS cedula_asegurado, CAST(ISNULL(TRIM(C.xcliente), '') AS varchar(240)) AS nombre_asegurado, CAST(TRIM(A.cnrecibo) AS varchar(30)) AS numero_recibo, CAST(A.femision AS datetime) AS fecha_emision_recibo, CAST(A.fdesde AS datetime) AS fecha_desde_recibo, CAST(A.fhasta AS datetime) AS fecha_hasta_recibo, CAST(ISNULL(A.iestadorec, '') AS varchar(10)) AS estado_recibo, CAST(CASE WHEN A.iestadorec = 'P' THEN 'Pendiente' WHEN A.iestadorec = 'C' THEN 'Cobrado' WHEN A.iestadorec = 'A' THEN 'Anulado' WHEN A.iestadorec = 'N' THEN 'Notificado' WHEN A.iestadorec = 'S' THEN 'Suspendido' ELSE A.iestadorec END AS varchar(30)) AS estado_recibo_desc, CAST(ISNULL(DATEDIFF(DAY, A.fdesde, A.fhasta), 0) AS int) AS dias_vigencia, CAST(A.fcobro AS datetime) AS fecha_cobro_recibo, CAST(ISNULL(A.cdoccob, 0) AS int) AS numero_ingreso, CAST(TRIM(F.cmoneda) AS varchar(10)) AS moneda_recibo, CAST(ISNULL(A.msumabruta, 0) AS numeric(17, 4)) AS suma_asegurada, CAST(ISNULL(A.msumabrutaext, 0) AS numeric(17, 4)) AS suma_asegurada_ext, CAST(ISNULL(A.mprimabruta, 0) AS numeric(17, 4)) AS monto_recibo_bruto, CAST(ISNULL(A.mprimabrutaext, 0) AS numeric(17, 4)) AS monto_recibo_bruto_ext, CAST(ISNULL(A.mpagado, 0) AS numeric(17, 4)) AS monto_recibo_pagado, CAST(ISNULL(A.mpagadoext, 0) AS numeric(17, 4)) AS monto_recibo_pagado_ext, CAST(ISNULL(G.csucur, 0) AS int) AS id_sucursal, CAST(TRIM(G.xdescripcion_l) AS varchar(100)) AS sucursal, CAST(ISNULL(A.cproductor, 0) AS int) AS id_productor, CAST(TRIM(H.xproductor) AS varchar(150)) AS productor, CAST(ISNULL(TRIM(prod_cli.cid), '') AS varchar(30)) AS cedula_productor, CAST(ISNULL(prod_cli.ipersona, '') AS varchar(10)) AS tipo_persona_productor, CAST(ISNULL(M.imovcom, '') AS varchar(10)) AS tipo_movimiento_codigo, CAST(CASE WHEN M.imovcom = 'BO' THEN TRIM(O.xbono) WHEN M.imovcom = 'CO' THEN 'Comision' WHEN M.imovcom = 'GR' THEN 'Gastos Ramo' ELSE M.imovcom END AS varchar(50)) AS tipo_movimiento, CAST(ISNULL(CASE WHEN W.cmoneda = 'Bs  ' THEN M.mmovcom ELSE M.mmovcomext END, 0) AS numeric(17, 4)) AS monto_movimiento, CAST(ISNULL(M.mmovcom, 0) AS numeric(17, 4)) AS monto_movimiento_bs, CAST(ISNULL(M.mmovcomext, 0) AS numeric(17, 4)) AS monto_movimiento_ext, CAST(ISNULL(CASE WHEN M.imovcom = 'CO' THEN A.pcomision WHEN M.imovcom = 'BO' THEN O.pbono WHEN M.imovcom = 'GR' THEN M.pmovim END, 0) AS numeric(7, 4)) AS porcentaje_comision, CAST(ISNULL(W.pislr, 0) AS numeric(7, 4)) AS porcentaje_islr, CAST(ISNULL(CASE WHEN W.pislr > 0 THEN (CASE WHEN W.cmoneda = 'Bs  ' THEN M.mmovcom ELSE M.mmovcomext END) * W.pislr / 100 ELSE 0 END, 0) AS numeric(17, 4)) AS monto_islr, CAST(TRIM(M.cmoneda) AS varchar(10)) AS moneda_cobro, CAST(TRIM(W.cmoneda) AS varchar(10)) AS moneda_pago, CAST(ISNULL(M.ptasamon, 1) AS numeric(17, 4)) AS tasa_cobro, CAST(ISNULL(M.csolpag, 0) AS int) AS numero_orden_pago, CAST(ISNULL(BR.xbanco, '') AS varchar(100)) AS banco, CAST(ISNULL(Q.xreferencia_1, '') AS varchar(100)) AS referencia_bancaria, CAST(W.fmovim AS datetime) AS fecha_pago_comision, CAST(ISNULL(W.mmonto_4, 0) AS numeric(17, 4)) AS monto_sustraendo, CAST(ISNULL(W.mpagosol, 0) AS numeric(17, 4)) AS monto_neto_orden, CAST(ISNULL(W.mpago - W.mpagosol, 0) AS numeric(17, 4)) AS monto_islr_orden, CAST(ISNULL(W.mpago, 0) AS numeric(17, 4)) AS monto_bruto_orden, CAST(ISNULL(cob.coberturas, '') AS varchar(1000)) AS coberturas, COALESCE(M.fultmod, W.fmovim, A.fcobro, A.femision) AS modified_at FROM adrecibos A WITH (NOLOCK) LEFT JOIN maramos B WITH (NOLOCK) ON A.cramo = B.cramo LEFT JOIN maclient C WITH (NOLOCK) ON A.casegurado = C.cci_rif LEFT JOIN maclient E WITH (NOLOCK) ON A.ctenedor = E.cci_rif LEFT JOIN mamonedas F WITH (NOLOCK) ON A.cmoneda = F.cmoneda LEFT JOIN masucur G WITH (NOLOCK) ON A.csucur = G.csucur LEFT JOIN maproduc H WITH (NOLOCK) ON A.cproductor = H.cproductor LEFT JOIN maclient prod_cli WITH (NOLOCK) ON prod_cli.cci_rif = H.cci_rif INNER JOIN admovcom M WITH (NOLOCK) ON A.crecibo = M.ccodigo AND M.istatcon != 'N' LEFT JOIN adsolpg W WITH (NOLOCK) ON M.csolpag = W.csolpag OUTER APPLY (SELECT TOP 1 xbanco_1, xreferencia_1 FROM adsolpg_d WITH (NOLOCK) WHERE csolpag = M.csolpag ORDER BY id ASC) Q LEFT JOIN mabanco BR WITH (NOLOCK) ON BR.cbanco = Q.xbanco_1 OUTER APPLY (SELECT STRING_AGG(x.xdesc, ' / ') WITHIN GROUP (ORDER BY x.xdesc) AS coberturas FROM (SELECT DISTINCT LTRIM(RTRIM(MCO.xdescripcion_l)) AS xdesc FROM adpolcob CO WITH (NOLOCK) INNER JOIN macoberturas MCO WITH (NOLOCK) ON CO.ccober = MCO.ccobertura AND CO.cramo = MCO.cramo WHERE CO.crecibo = A.crecibo AND MCO.xdescripcion_l IS NOT NULL AND LTRIM(RTRIM(MCO.xdescripcion_l)) <> '') x) cob LEFT JOIN mabonos O WITH (NOLOCK) ON M.imovcom = 'BO' AND M.ccodmov = O.cbono AND O.iestado = 'v' AND A.cramo = O.cramo AND (M.cproductor = O.cproductor OR O.cproductor = 0) WHERE A.cproductor != 80080 AND ((A.iestadorec = 'C' AND A.cdoccob > 0) OR A.iestadorec IN ('A', 'P')) AND (@istatcom IS NULL OR M.istatcom = @istatcom) AND (@desde IS NULL OR /*SYNC_DATE_COL*/ >= CAST(@desde AS datetime)) AND (@hasta IS NULL OR /*SYNC_DATE_COL*/ <= CAST(@hasta AS datetime)) AND (@cproductor IS NULL OR A.cproductor = @cproductor) AND (@cmoneda IS NULL OR W.cmoneda = @cmoneda OR A.cmoneda = @cmoneda) AND (@poliza IS NULL OR A.cnpoliza = @poliza) AND (@recibo IS NULL OR A.cnrecibo = @recibo) /*SYNC_WHERE*/ /*SYNC_ORDER BY*/",
+    "columnMap": {
+      "ramo": "ramo",
+      "banco": "banco",
+      "idRamo": {
+        "type": "number",
+        "field": "id_ramo"
+      },
+      "sucursal": "sucursal",
+      "montoIslr": {
+        "type": "decimal",
+        "field": "monto_islr"
+      },
+      "productor": "productor",
+      "tasaCobro": {
+        "type": "decimal",
+        "field": "tasa_cobro"
+      },
+      "idSucursal": {
+        "type": "number",
+        "field": "id_sucursal"
+      },
+      "monedaPago": "moneda_pago",
+      "idProductor": {
+        "type": "number",
+        "field": "id_productor"
+      },
+      "monedaCobro": "moneda_cobro",
+      "diasVigencia": {
+        "type": "number",
+        "field": "dias_vigencia"
+      },
+      "estadoRecibo": "estado_recibo",
+      "monedaRecibo": "moneda_recibo",
+      "numeroPoliza": "numero_poliza",
+      "numeroRecibo": "numero_recibo",
+      "cedulaTomador": "cedula_tomador",
+      "nombreTomador": "nombre_tomador",
+      "numeroIngreso": {
+        "type": "number",
+        "field": "numero_ingreso"
+      },
+      "sumaAsegurada": {
+        "type": "decimal",
+        "field": "suma_asegurada"
+      },
+      "montoIslrOrden": {
+        "type": "decimal",
+        "field": "monto_islr_orden"
+      },
+      "montoNetoOrden": {
+        "type": "decimal",
+        "field": "monto_neto_orden"
+      },
+      "porcentajeIslr": {
+        "type": "decimal",
+        "field": "porcentaje_islr"
+      },
+      "tipoMovimiento": "tipo_movimiento",
+      "cedulaAsegurado": "cedula_asegurado",
+      "cedulaProductor": "cedula_productor",
+      "montoBrutoOrden": {
+        "type": "decimal",
+        "field": "monto_bruto_orden"
+      },
+      "montoMovimiento": {
+        "type": "decimal",
+        "field": "monto_movimiento"
+      },
+      "montoSustraendo": {
+        "type": "decimal",
+        "field": "monto_sustraendo"
+      },
+      "nombreAsegurado": "nombre_asegurado",
+      "numeroOrdenPago": {
+        "type": "number",
+        "field": "numero_orden_pago"
+      },
+      "estadoReciboDesc": "estado_recibo_desc",
+      "fechaCobroRecibo": {
+        "type": "date",
+        "field": "fecha_cobro_recibo"
+      },
+      "fechaDesdeRecibo": {
+        "type": "date",
+        "field": "fecha_desde_recibo"
+      },
+      "fechaHastaRecibo": {
+        "type": "date",
+        "field": "fecha_hasta_recibo"
+      },
+      "montoReciboBruto": {
+        "type": "decimal",
+        "field": "monto_recibo_bruto"
+      },
+      "origenModifiedAt": {
+        "type": "datetime",
+        "field": "modified_at"
+      },
+      "sumaAseguradaExt": {
+        "type": "decimal",
+        "field": "suma_asegurada_ext"
+      },
+      "fechaPagoComision": {
+        "type": "date",
+        "field": "fecha_pago_comision"
+      },
+      "montoMovimientoBs": {
+        "type": "decimal",
+        "field": "monto_movimiento_bs"
+      },
+      "montoReciboPagado": {
+        "type": "decimal",
+        "field": "monto_recibo_pagado"
+      },
+      "fechaEmisionRecibo": {
+        "type": "date",
+        "field": "fecha_emision_recibo"
+      },
+      "montoMovimientoExt": {
+        "type": "decimal",
+        "field": "monto_movimiento_ext"
+      },
+      "porcentajeComision": {
+        "type": "decimal",
+        "field": "porcentaje_comision"
+      },
+      "referenciaBancaria": "referencia_bancaria",
+      "montoReciboBrutoExt": {
+        "type": "decimal",
+        "field": "monto_recibo_bruto_ext"
+      },
+      "montoReciboPagadoExt": {
+        "type": "decimal",
+        "field": "monto_recibo_pagado_ext"
+      },
+      "tipoMovimientoCodigo": "tipo_movimiento_codigo",
+      "tipoPersonaProductor": "tipo_persona_productor",
+      "coberturas": "coberturas"
+    },
+    "origenClave": {
+      "sep": "|",
+      "concat": [
+        "numero_recibo",
+        "id_productor",
+        "tipo_movimiento_codigo",
+        "numero_orden_pago"
+      ]
+    },
+    "filterParams": {
+      "desde": {
+        "type": "date",
+        "sources": [
+          "desde",
+          "finicio_cobro",
+          "fdesde"
+        ]
+      },
+      "hasta": {
+        "type": "date",
+        "sources": [
+          "hasta",
+          "ffin_cobro",
+          "fhasta"
+        ]
+      },
+      "poliza": {
+        "type": "string",
+        "sources": [
+          "poliza",
+          "cnpoliza"
+        ]
+      },
+      "recibo": {
+        "type": "string",
+        "sources": [
+          "recibo",
+          "cnrecibo"
+        ]
+      },
+      "cmoneda": {
+        "type": "string",
+        "sources": [
+          "cmoneda",
+          "moneda"
+        ]
+      },
+      "istatcom": {
+        "type": "string",
+        "sources": [
+          "istatcom",
+          "estatus_comision"
+        ]
+      },
+      "cproductor": {
+        "type": "int",
+        "sources": [
+          "cproductor",
+          "productor"
+        ]
+      }
+    },
+    "watermarkCol": "modified_at",
+    "watermarkExpr": "COALESCE(M.fultmod, W.fmovim, A.fcobro, A.femision)",
+    "defaultTipoFecha": "fecha_cobro",
+    "dateColByTipoFecha": {
+      "default": "A.fcobro",
+      "fecha_pago": "W.fmovim",
+      "fecha_cobro": "A.fcobro",
+      "fecha_emision": "A.femision"
+    }
+  }
+}

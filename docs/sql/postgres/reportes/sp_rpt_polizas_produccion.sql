@@ -1,8 +1,10 @@
 -- sp_rpt_polizas para PRODUCCIÓN (PG reportes 172.30.149.75).
--- Igual al de QA (192.168.8.121) salvo que los cruces con ramos, productor y canal también filtran por id_aseguradora
--- (en Producción esos catálogos llevan id_aseguradora). Aplicado el 2026-10-15.
--- Requiere la tabla public.poliza (ya existe). La firma no cambia: CREATE OR REPLACE.
--- Rollback: DROP FUNCTION public.sp_rpt_polizas(jsonb, numeric);
+-- Igual al de QA (sp_rpt_polizas_qa.sql) salvo que los cruces con ramos, productor y canal también filtran por id_aseguradora
+-- (en Producción esos catálogos llevan id_aseguradora).
+-- Cambios 2026-10-15/16: el cruce con canal ya no puede fallar con canales no numéricos (el ::integer va dentro de un CASE;
+-- PostgreSQL no garantiza el orden de evaluación de los AND) y se agrega la columna coberturas.
+-- Requiere antes ddl_coberturas_poliza.sql. La firma no cambia: CREATE OR REPLACE.
+-- Rollback: volver a crear el SP sin la columna coberturas (no hace falta borrar la columna).
 
 CREATE OR REPLACE FUNCTION public.sp_rpt_polizas(p_payload_json jsonb DEFAULT '{}'::jsonb, p_usuario numeric DEFAULT NULL::numeric)
  RETURNS SETOF jsonb
@@ -64,6 +66,7 @@ BEGIN
             TRIM(p.estado) AS estado,
             TRIM(p.estatus_poliza) AS estatus_poliza,
             p.prima_total,
+            COALESCE(TRIM(p.coberturas), '') AS coberturas,
             TRIM(p.marca_vehiculo) AS marca_vehiculo,
             TRIM(p.modelo_vehiculo) AS modelo_vehiculo,
             TRIM(p.version_vehiculo) AS version_vehiculo,
@@ -86,8 +89,7 @@ BEGIN
             ON pr.id = p.id_productor
            AND pr.id_aseguradora = p.id_aseguradora
         LEFT JOIN public.canal ca
-            ON NULLIF(TRIM(p.canal_alterno), '') ~ '^[0-9]+$'
-           AND ca.id = NULLIF(TRIM(p.canal_alterno), '')::integer
+            ON ca.id = (CASE WHEN NULLIF(TRIM(p.canal_alterno), '') ~ '^[0-9]+$' THEN NULLIF(TRIM(p.canal_alterno), '')::integer END)
            AND ca.id_aseguradora = p.id_aseguradora
         WHERE
             (v_polzia IS NULL OR p.numero_poliza = v_polzia)
