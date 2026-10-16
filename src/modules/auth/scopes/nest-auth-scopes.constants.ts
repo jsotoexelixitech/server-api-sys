@@ -24,6 +24,8 @@ export const NEST_AUTH_SCOPES = {
   PORTAL_LOGIN: 'portal:login',
   /** Alta de intermediarios (corredor / productor) en Sis2000. */
   INTERMEDIARIOS_WRITE: 'intermediarios:write',
+  /** Administración del menú lateral de Sis2000 (desplegables, opciones y permisos por rol). */
+  MENU_SIS2000_ADMIN: 'menu-sis2000:admin',
 } as const;
 
 export type NestAuthScopeId =
@@ -156,6 +158,25 @@ export const NEST_AUTH_SCOPE_CATALOG: NestAuthScopeMeta[] = [
       'POST /api/v1/intermediarios/canal',
       'POST /api/v1/intermediarios/gestor',
       'GET /api/v1/intermediarios/gestores',
+    ],
+  },
+  {
+    id: NEST_AUTH_SCOPES.MENU_SIS2000_ADMIN,
+    label: 'Menú lateral Sis2000',
+    description: 'Crear desplegables y opciones del menú y asignar permisos por rol (solo departamento de Desarrollo)',
+    routes: [
+      'GET /api/v1/menu-sis2000/arbol',
+      'GET /api/v1/menu-sis2000/roles',
+      'GET /api/v1/menu-sis2000/plantilla',
+      'PUT /api/v1/menu-sis2000/plantilla',
+      'POST /api/v1/menu-sis2000/principal',
+      'PATCH /api/v1/menu-sis2000/principal/:cmenuPrincipal',
+      'POST /api/v1/menu-sis2000/opcion',
+      'PATCH /api/v1/menu-sis2000/opcion/:cmenu',
+      'POST /api/v1/menu-sis2000/iconos',
+      'GET /api/v1/menu-sis2000/usuarios',
+      'GET /api/v1/menu-sis2000/usuarios/:cusuario/menu',
+      'POST /api/v1/menu-sis2000/usuarios/:cusuario/sincronizar',
     ],
   },
 ];
