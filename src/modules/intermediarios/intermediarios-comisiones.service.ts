@@ -83,8 +83,8 @@ export class IntermediariosComisionesService {
       `SELECT r.cramo, LTRIM(RTRIM(r.xdescripcion_l)) AS xramo, g.pcomision, g.ppormax
          FROM maramos r
          OUTER APPLY (SELECT TOP (1) a.pcomision, a.ppormax FROM maarancel a
-                       WHERE a.cramo = r.cramo AND a.cproductor = 0 AND ISNULL(a.iestado, 'V') <> 'N'
-                       ORDER BY a.fdesde DESC) g
+                       WHERE a.cramo = r.cramo AND a.cproductor = 0 AND a.ppormax IS NOT NULL
+                       ORDER BY CASE WHEN ISNULL(a.iestado, 'V') <> 'N' THEN 0 ELSE 1 END, a.fdesde DESC) g
         ORDER BY LTRIM(RTRIM(r.xdescripcion_l))`,
     );
     return res.recordset;

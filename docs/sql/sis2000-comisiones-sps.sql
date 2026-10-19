@@ -46,9 +46,12 @@ BEGIN
        AND ISNULL(iestado, 'V') <> 'N'
        AND CONVERT(DATE, fdesde) <= @fdesde AND CONVERT(DATE, fhasta) >= @fhasta;
 
-    SELECT TOP (1) @pmax = ppormax FROM maarancel WHERE cramo = @cramo AND cproductor = 0 ORDER BY fdesde DESC;
+    -- Máximo del ramo: el de la fila general (cproductor = 0) vigente más reciente que lo tenga cargado
+    SET @pmax = (SELECT TOP (1) ppormax FROM maarancel
+                                     WHERE cramo = @cramo AND cproductor = 0 AND ppormax IS NOT NULL
+                                     ORDER BY CASE WHEN ISNULL(iestado, 'V') <> 'N' THEN 0 ELSE 1 END, fdesde DESC);
     IF @pmax IS NULL
-        SELECT TOP (1) @pmax = ppormax FROM maarancel WHERE cramo = @cramo ORDER BY fdesde DESC;
+        SET @pmax = (SELECT TOP (1) ppormax FROM maarancel WHERE cramo = @cramo AND ppormax IS NOT NULL ORDER BY fdesde DESC);
 END
 GO
 
@@ -113,7 +116,9 @@ BEGIN
         END
     END
 
-    DECLARE @ppormax NUMERIC(19, 2) = (SELECT TOP (1) ppormax FROM maarancel WHERE cramo = @cramo AND cproductor = 0 ORDER BY fdesde DESC);
+    DECLARE @ppormax NUMERIC(19, 2) = (SELECT TOP (1) ppormax FROM maarancel
+                                     WHERE cramo = @cramo AND cproductor = 0 AND ppormax IS NOT NULL
+                                     ORDER BY CASE WHEN ISNULL(iestado, 'V') <> 'N' THEN 0 ELSE 1 END, fdesde DESC);
 
     IF EXISTS (SELECT 1 FROM maarancel
                 WHERE cplan = @cplan AND cramo = @cramo AND ctipoprod = @ctipoprod AND cproductor = @cproductor
@@ -130,7 +135,7 @@ BEGIN
         INSERT INTO maarancel (cplan, cramo, ctipoprod, cproductor, ccober, ctarifa, fdesde, u_version, fhasta,
                                pcomision, ppormax, iestado, cprog, ifuente, fingreso, cusuario)
         VALUES (@cplan, @cramo, @ctipoprod, @cproductor, @ccober, '0', @fdesde, '-', @fhasta,
-                @pcomision, @ppormax, @iestado, @cprog, 'SpActCreCom', GETDATE(), @cusuario);
+                @pcomision, @ppormax, @iestado, @cprog, 'SpComProd', GETDATE(), @cusuario);
     END
 
     SELECT @cproductor AS cproductor, @cramo AS cramo, @cplan AS cplan, @fdesde AS fdesde, @pcomision AS pcomision, @iestado AS iestado;
@@ -213,7 +218,7 @@ BEGIN
         INSERT INTO mabonos (cplan, cramo, ctipoprod, cproductor, ccober, ctarifa, iformcal, cbono, fdesde,
                              u_version, xbono, fhasta, qdias, pbono, iestado, cprog, ifuente, fingreso, cusuario)
         VALUES (@cplan, @cramo, @ctipoprod, @cproductor, @ccober, '0', @iformcal, @cbono, @fdesde,
-                '-', @xbono, @fhasta, 1, @pbono, @iestado, @cprog, 'SpActCreBono', GETDATE(), @cusuario);
+                '-', @xbono, @fhasta, 1, @pbono, @iestado, @cprog, 'SpBonoProd', GETDATE(), @cusuario);
     END
     ELSE
     BEGIN
