@@ -9,6 +9,7 @@ import {
   Param,
   ParseIntPipe,
   Post,
+  Put,
   Query,
 } from '@nestjs/common';
 import { ApiHeader, ApiOperation, ApiQuery, ApiResponse, ApiTags } from '@nestjs/swagger';
@@ -18,9 +19,11 @@ import { APIKEY_HEADER } from '../../common/swagger/api-docs.constants';
 import { CrearIntermediarioDto } from './dto/crear-intermediario.dto';
 import { CrearCanalDto } from './dto/crear-canal.dto';
 import { CrearGestorDto } from './dto/crear-gestor.dto';
+import { ConfigurarProductosDto } from './dto/configurar-productos.dto';
 import { GuardarComisionDto } from './dto/guardar-comision.dto';
 import { IntermediariosService } from './intermediarios.service';
 import { IntermediariosComisionesService } from './intermediarios-comisiones.service';
+import { IntermediariosProductosService } from './intermediarios-productos.service';
 
 @ApiTags('Intermediarios (Sis2000)')
 @Controller('v1/intermediarios')
@@ -28,6 +31,7 @@ export class IntermediariosController {
   constructor(
     private readonly intermediarios: IntermediariosService,
     private readonly comisiones: IntermediariosComisionesService,
+    private readonly productos: IntermediariosProductosService,
   ) {}
 
   @Post()
@@ -86,6 +90,45 @@ export class IntermediariosController {
   async buscarGestores(@Query('q') q: string) {
     const data = await this.intermediarios.buscarGestores(q);
     return { status: true, data };
+  }
+
+  @Get('productos')
+  @NestProtected(NEST_AUTH_SCOPES.INTERMEDIARIOS_WRITE)
+  @ApiHeader(APIKEY_HEADER)
+  @ApiOperation({
+    summary: 'Productos para productores con sus planes vigentes',
+    description: 'maproductos (iproductor = 1) y planes de maplanes_per / maplanes; porDefecto = plan general de mausuplan.',
+  })
+  async catalogoProductos() {
+    return { status: true, data: await this.productos.catalogo() };
+  }
+
+  @Get(':cproductor/productos')
+  @NestProtected(NEST_AUTH_SCOPES.INTERMEDIARIOS_WRITE)
+  @ApiHeader(APIKEY_HEADER)
+  @ApiOperation({
+    summary: 'Productos y planes del intermediario',
+    description: 'Mismo catálogo con asignado = (plan por defecto o incluido) y no excluido en mausuplan (centidad P).',
+  })
+  @ApiResponse({ status: 404, description: 'Intermediario inexistente.' })
+  async productosIntermediario(@Param('cproductor', ParseIntPipe) cproductor: number) {
+    return { status: true, data: await this.productos.catalogo(cproductor) };
+  }
+
+  @Put(':cproductor/productos')
+  @NestProtected(NEST_AUTH_SCOPES.INTERMEDIARIOS_WRITE)
+  @ApiHeader(APIKEY_HEADER)
+  @ApiOperation({
+    summary: 'Configurar productos y planes del intermediario',
+    description:
+      'Como products/configureProducts de SysIP: spConfigurePlansProduct por producto y luego spConfigureProducts ' +
+      '(mausuplan, centidad P), en una transacción. Los productos que no vienen quedan sin planes.',
+  })
+  @ApiResponse({ status: 400, description: 'Producto o plan no válido para productores.' })
+  @ApiResponse({ status: 404, description: 'Intermediario inexistente.' })
+  async configurarProductos(@Param('cproductor', ParseIntPipe) cproductor: number, @Body() dto: ConfigurarProductosDto) {
+    const data = await this.productos.configurar(cproductor, dto);
+    return { status: true, message: 'Productos configurados.', data };
   }
 
   @Get('comisiones/ramos')
