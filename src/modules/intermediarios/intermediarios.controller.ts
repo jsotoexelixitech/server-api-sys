@@ -1,4 +1,16 @@
-import { Body, Controller, Get, HttpCode, HttpStatus, Post, Query } from '@nestjs/common';
+import {
+  BadRequestException,
+  Body,
+  Controller,
+  Get,
+  Headers,
+  HttpCode,
+  HttpStatus,
+  Param,
+  ParseIntPipe,
+  Post,
+  Query,
+} from '@nestjs/common';
 import { ApiHeader, ApiOperation, ApiQuery, ApiResponse, ApiTags } from '@nestjs/swagger';
 import { NestProtected } from '../auth/decorators/nest-protected.decorator';
 import { NEST_AUTH_SCOPES } from '../auth/scopes/nest-auth-scopes.constants';
@@ -6,12 +18,17 @@ import { APIKEY_HEADER } from '../../common/swagger/api-docs.constants';
 import { CrearIntermediarioDto } from './dto/crear-intermediario.dto';
 import { CrearCanalDto } from './dto/crear-canal.dto';
 import { CrearGestorDto } from './dto/crear-gestor.dto';
+import { GuardarComisionDto } from './dto/guardar-comision.dto';
 import { IntermediariosService } from './intermediarios.service';
+import { IntermediariosComisionesService } from './intermediarios-comisiones.service';
 
 @ApiTags('Intermediarios (Sis2000)')
 @Controller('v1/intermediarios')
 export class IntermediariosController {
-  constructor(private readonly intermediarios: IntermediariosService) {}
+  constructor(
+    private readonly intermediarios: IntermediariosService,
+    private readonly comisiones: IntermediariosComisionesService,
+  ) {}
 
   @Post()
   @HttpCode(HttpStatus.CREATED)
@@ -69,5 +86,73 @@ export class IntermediariosController {
   async buscarGestores(@Query('q') q: string) {
     const data = await this.intermediarios.buscarGestores(q);
     return { status: true, data };
+  }
+
+  @Get('comisiones/ramos')
+  @NestProtected(NEST_AUTH_SCOPES.INTERMEDIARIOS_WRITE)
+  @ApiHeader(APIKEY_HEADER)
+  @ApiOperation({ summary: 'Ramos con su comisión general y su máximo (maramos + maarancel general)' })
+  async ramosComision() {
+    return { status: true, data: await this.comisiones.ramos() };
+  }
+
+  @Get('comisiones/planes')
+  @NestProtected(NEST_AUTH_SCOPES.INTERMEDIARIOS_WRITE)
+  @ApiHeader(APIKEY_HEADER)
+  @ApiOperation({ summary: 'Planes vigentes de un ramo (maplanes / maplanes_per)' })
+  @ApiQuery({ name: 'cramo', required: true })
+  async planesComision(@Query('cramo', ParseIntPipe) cramo: number) {
+    return { status: true, data: await this.comisiones.planes(cramo) };
+  }
+
+  @Get(':cproductor/comisiones')
+  @NestProtected(NEST_AUTH_SCOPES.INTERMEDIARIOS_WRITE)
+  @ApiHeader(APIKEY_HEADER)
+  @ApiOperation({
+    summary: 'Comisiones (maarancel), bonos (mabonos) y gastos de ramo (magastosramo) del intermediario',
+  })
+  @ApiResponse({ status: 404, description: 'Intermediario inexistente.' })
+  async listarComisiones(@Param('cproductor', ParseIntPipe) cproductor: number) {
+    return { status: true, data: await this.comisiones.listar(cproductor) };
+  }
+
+  @Get(':cproductor/comisiones/tope')
+  @NestProtected(NEST_AUTH_SCOPES.INTERMEDIARIOS_WRITE)
+  @ApiHeader(APIKEY_HEADER)
+  @ApiOperation({
+    summary: 'Tope del ramo para el intermediario',
+    description: 'Comisión máxima + bonos + gastos vigentes en el período frente al máximo del ramo (spComisionTopeProductor).',
+  })
+  @ApiQuery({ name: 'cramo', required: true })
+  @ApiQuery({ name: 'fdesde', required: true, example: '2026-10-19' })
+  @ApiQuery({ name: 'fhasta', required: false })
+  async topeComision(
+    @Param('cproductor', ParseIntPipe) cproductor: number,
+    @Query('cramo', ParseIntPipe) cramo: number,
+    @Query('fdesde') fdesde: string,
+    @Query('fhasta') fhasta?: string,
+  ) {
+    if (!/^d{4}-d{2}-d{2}/.test(fdesde || '')) throw new BadRequestException('fdesde debe ser AAAA-MM-DD.');
+    return { status: true, data: await this.comisiones.tope(cproductor, cramo, fdesde, fhasta || undefined) };
+  }
+
+  @Post(':cproductor/comisiones')
+  @HttpCode(HttpStatus.OK)
+  @NestProtected(NEST_AUTH_SCOPES.INTERMEDIARIOS_WRITE)
+  @ApiHeader(APIKEY_HEADER)
+  @ApiOperation({
+    summary: 'Crear o actualizar comisión, bono o gasto de ramo del intermediario',
+    description:
+      'comision -> spActCreComisionProductor (maarancel); bono -> spActCreBonoProductor (mabonos); ' +
+      'gasto -> SpActCreGastosRamo (magastosramo). Valida el tope del ramo. iestado N la desactiva.',
+  })
+  @ApiResponse({ status: 400, description: 'Datos inválidos o supera el máximo del ramo.' })
+  async guardarComision(
+    @Param('cproductor', ParseIntPipe) cproductor: number,
+    @Body() dto: GuardarComisionDto,
+    @Headers('x-sis2000-cusuario') operador?: string,
+  ) {
+    const data = await this.comisiones.guardar(cproductor, dto, Number(operador) || undefined);
+    return { status: true, message: 'Guardado.', data };
   }
 }
