@@ -369,6 +369,32 @@ export class PersonasService {
     return (result.recordset?.[0] ?? {}) as Record<string, unknown>;
   }
 
+  /** cpoliza de la póliza recién emitida: la del SP si viene; si no, la de adpoliza por cnpoliza. */
+  private async resolveCpolizaEmitida(
+    row: Record<string, unknown>,
+    cnpoliza: string,
+  ): Promise<number | undefined> {
+    const fromSp = Number(row['cpoliza']);
+    if (Number.isFinite(fromSp) && fromSp > 0) return fromSp;
+    try {
+      const T = this.db.types;
+      const req = this.db.request();
+      req.input('cnpoliza', T.NVarChar(30), cnpoliza);
+      const result = await req.query(`
+        SELECT TOP 1 cpoliza
+        FROM adpoliza
+        WHERE cnpoliza = @cnpoliza
+        ORDER BY fingreso DESC
+      `);
+      const value = Number(result.recordset?.[0]?.['cpoliza']);
+      return Number.isFinite(value) && value > 0 ? value : undefined;
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : String(err);
+      this.logger.warn(`resolveCpolizaEmitida cnpoliza=${cnpoliza}: ${msg}`);
+      return undefined;
+    }
+  }
+
   private get defaultRamo(): number {
     return this.config.get<number>('LAMUNDIAL_RAMO_PERSON', 9);
   }
@@ -1474,8 +1500,15 @@ export class PersonasService {
           this.logger.error(`syncBeneficiarioDir falló cnpoliza=${cnpoliza}: ${msg}`);
         }
 
+        // cpoliza/casegurado: los pide la activación de tarjetas (cards/activate) tras emitir.
+        const cpoliza = await this.resolveCpolizaEmitida(row, cnpoliza);
+        const casegurado = rifTitular || undefined;
+
         this.logger.log(`createEmissionPerson: emitida OK cnpoliza=${cnpoliza}`);
-        return { message: 'Emisión registrada exitosamente.', cnpoliza, cnrecibo, urlpoliza, ncuota, fanopol, fmespol };
+        return {
+          message: 'Emisión registrada exitosamente.',
+          cnpoliza, cnrecibo, urlpoliza, ncuota, fanopol, fmespol, cpoliza, casegurado,
+        };
 
     } catch (err) {
       if (err instanceof BadRequestException || err instanceof UnauthorizedException) throw err;
