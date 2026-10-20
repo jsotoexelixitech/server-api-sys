@@ -181,6 +181,11 @@ export const envValidationSchema = Joi.object({
   RMS_GATEWAY_BASE_URL: Joi.string().allow('').optional(),
   RMS_GATEWAY_WEBHOOK_SECRET: Joi.string().allow('').optional(),
   RMS_GATEWAY_API_KEY: Joi.string().allow('').optional(),
+  DGBOSS_BASE_URL: Joi.string().uri().allow('').optional(),
+  DGBOSS_API_TOKEN: Joi.string().allow('').optional(),
+  DGBOSS_HMAC_SECRET: Joi.string().allow('').optional(),
+  DGBOSS_ASEGURADORA_RIF: Joi.string().allow('').optional(),
+  DGBOSS_TIMEOUT_MS: Joi.number().integer().min(1000).default(30000),
   RMS_GATEWAY_RAMOS: Joi.string().allow('').default('5,7,8,9,45'),
   RMS_GATEWAY_TIMEOUT_MS: Joi.number().integer().min(1000).default(8000),
 });

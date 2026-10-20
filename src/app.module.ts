@@ -36,6 +36,7 @@ import { AseguradorasModule } from './modules/aseguradoras/aseguradoras.module';
 import { SiniestrosModule } from './modules/siniestros/siniestros.module';
 import { RecibosModule } from './modules/recibos/recibos.module';
 import { PolizasModule } from './modules/polizas/polizas.module';
+import { DgbossIntegracionModule } from './modules/dgboss-integracion/dgboss-integracion.module';
 import { ComponentsModule } from './modules/components/components.module';
 
 @Module({
@@ -83,6 +84,7 @@ import { ComponentsModule } from './modules/components/components.module';
     SiniestrosModule,
     RecibosModule,
     PolizasModule,
+    DgbossIntegracionModule,
     ComponentsModule,
   ],
 })
