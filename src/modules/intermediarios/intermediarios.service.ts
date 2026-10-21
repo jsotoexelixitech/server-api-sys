@@ -99,6 +99,7 @@ export class IntermediariosService {
       );
     }
     const cuentas = await this.resolverCuentas(dto.cuentas ?? []);
+    const persona = this.datosPersonaNatural(dto, ipersona);
 
     const tx = this.mssql.transaction();
     await tx.begin();
@@ -136,9 +137,9 @@ export class IntermediariosService {
         .input('xnombre', sql.VarChar(120), nombre.substring(0, 120))
         .input('xapellido', sql.VarChar(120), apellido.substring(0, 120))
         .input('xcliente', sql.VarChar(240), razonSocial)
-        .input('isexo', sql.Char(1), null)
-        .input('iestado_civil', sql.Char(1), null)
-        .input('fnac', sql.DateTime, null)
+        .input('isexo', sql.Char(1), persona.isexo)
+        .input('iestado_civil', sql.Char(1), persona.iestado_civil)
+        .input('fnac', sql.DateTime, persona.fnac)
         .input('xcorreo', sql.Char(60), dto.xcorreo)
         .input('cpais', sql.SmallInt, 58)
         .input('cestado', sql.SmallInt, 0)
@@ -203,14 +204,25 @@ export class IntermediariosService {
         .input('edit', sql.Bit, 0)
         .execute('spCreateGestorWeb');
 
-      // 5. Tipo de ente al final del alta: en QA el registro de maclient puede quedar creado por otro SP del alta
-      //    (cprog vacío, ifuente SQL) con la letra del documento (V, E, G...). La pantalla de Sis2000 solo reconoce
-      //    N o J: se corrige solo cuando el valor actual no es N ni J.
+      // 5. Datos del cliente al final del alta: en QA el registro de maclient puede quedar creado por otro SP del
+      //    alta (cprog vacío, ifuente SQL) con la letra del documento (V, E, G...) y sin sexo / estado civil / fecha.
+      //    Tipo de ente: la pantalla de Sis2000 solo reconoce N o J, se corrige si no es N ni J.
+      //    Sexo, estado civil y fecha de nacimiento: solo se completan si están vacíos (no se pisa lo que ya había).
       await req()
         .input('cci_rif', sql.Numeric(13, 0), cciRif)
         .input('ipersona', sql.Char(1), ipersona)
-        .query(`UPDATE maclient SET ipersona = @ipersona
-                 WHERE cci_rif = @cci_rif AND ISNULL(LTRIM(RTRIM(ipersona)), '') NOT IN ('N', 'J')`);
+        .input('isexo', sql.Char(1), persona.isexo)
+        .input('iestado_civil', sql.Char(1), persona.iestado_civil)
+        .input('fnac', sql.DateTime, persona.fnac)
+        .query(`UPDATE maclient
+                    SET ipersona = CASE WHEN ISNULL(LTRIM(RTRIM(ipersona)), '') IN ('N', 'J') THEN ipersona ELSE @ipersona END,
+                        isexo = CASE WHEN @isexo IS NOT NULL AND ISNULL(LTRIM(RTRIM(isexo)), '') NOT IN ('M', 'F')
+                                     THEN @isexo ELSE isexo END,
+                        iestado_civil = CASE WHEN @iestado_civil IS NOT NULL
+                                              AND ISNULL(LTRIM(RTRIM(iestado_civil)), '') NOT IN ('S', 'C', 'D', 'V', 'U')
+                                             THEN @iestado_civil ELSE iestado_civil END,
+                        fnacimiento = COALESCE(fnacimiento, @fnac)
+                  WHERE cci_rif = @cci_rif`);
 
       await tx.commit();
       this.logger.log(`Intermediario creado cproductor=${cproductor} correo=${dto.xcorreo}`);
@@ -333,6 +345,27 @@ export class IntermediariosService {
       this.logger.error(`Fallo alta de gestor (padre=${dto.cgestor_padre}): ${mensaje}`);
       throw new InternalServerErrorException(`No fue posible crear el gestor: ${mensaje}`);
     }
+  }
+
+  /**
+   * Persona natural: fecha de nacimiento (mayor de 18), sexo (M/F) y estado civil (S/C/D/V/U) son obligatorios.
+   * Persona jurídica: no aplican (van vacíos).
+   */
+  private datosPersonaNatural(
+    dto: CrearIntermediarioDto,
+    ipersona: string,
+  ): { fnac: Date | null; isexo: string | null; iestado_civil: string | null } {
+    if (ipersona !== 'N') return { fnac: null, isexo: null, iestado_civil: null };
+    if (!dto.fnacimiento || !dto.isexo || !dto.iestado_civil) {
+      throw new BadRequestException('Persona natural: indica fecha de nacimiento, sexo y estado civil.');
+    }
+    const fnac = new Date(`${dto.fnacimiento.slice(0, 10)}T00:00:00Z`);
+    const mayorDeEdad = new Date();
+    mayorDeEdad.setUTCFullYear(mayorDeEdad.getUTCFullYear() - 18);
+    if (Number.isNaN(fnac.getTime()) || fnac.getUTCFullYear() < 1900 || fnac > mayorDeEdad) {
+      throw new BadRequestException('La fecha de nacimiento no es válida: el intermediario debe ser mayor de 18 años.');
+    }
+    return { fnac, isexo: dto.isexo, iestado_civil: dto.iestado_civil };
   }
 
   /** Bancos nacionales activos con código de 4 dígitos (mabanco), para las cuentas del intermediario. */
