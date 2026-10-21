@@ -595,14 +595,63 @@ export class CondominioService {
     }
   }
 
-  async getFrecuencias() {
-    return [
-      { codigo: 'A', descripcion: 'Anual', cuotas: 1 },
-      { codigo: 'S', descripcion: 'Semestral', cuotas: 2 },
-      { codigo: 'T', descripcion: 'Trimestral', cuotas: 4 },
-      { codigo: 'M', descripcion: 'Mensual', cuotas: 12 },
-      { codigo: 'E', descripcion: 'Pago Único / Especial', cuotas: 1 },
-    ];
+  private static readonly FRECUENCIAS_BASE = [
+    { codigo: 'A', descripcion: 'Anual', cuotas: 1 },
+    { codigo: 'S', descripcion: 'Semestral', cuotas: 2 },
+    { codigo: 'T', descripcion: 'Trimestral', cuotas: 4 },
+    { codigo: 'M', descripcion: 'Mensual', cuotas: 12 },
+    { codigo: 'E', descripcion: 'Pago Único / Especial', cuotas: 1 },
+  ];
+
+  /**
+   * Frecuencias de pago. Sin plan devuelve el catálogo general. Con ramo y plan, solo las configuradas y vigentes
+   * (iestado = 'V') en maplanes_frec. Si el plan aún no tiene filas vigentes en esa tabla, devuelve el catálogo
+   * general y lo marca con origen = 'catalogo' (y deja una advertencia en el log) para no dejar la venta sin
+   * frecuencias mientras se completan los datos.
+   */
+  async getFrecuencias(cramo?: number, cplan?: string) {
+    const plan = String(cplan ?? '').trim();
+    if (!plan || !Number.isFinite(Number(cramo))) {
+      return { origen: 'catalogo', frecuencias: CondominioService.FRECUENCIAS_BASE };
+    }
+    const T = this.db.types;
+    const res = await this.db.request()
+      .input('cramo', T.Int, Number(cramo))
+      .input('cplan', T.VarChar(10), plan)
+      .query(`
+        SELECT DISTINCT RTRIM(ifrecuencia) AS codigo, RTRIM(xfrecuencia) AS descripcion
+        FROM maplanes_frec
+        WHERE cramo = @cramo
+          AND RTRIM(cplan) = RTRIM(@cplan)
+          AND iestado = 'V'
+      `);
+    const vigentes = new Set<string>();
+    const extra = new Map<string, string>();
+    for (const row of res.recordset as { codigo: string; descripcion: string }[]) {
+      const codigo = String(row.codigo ?? '').trim().toUpperCase();
+      if (!codigo) continue;
+      vigentes.add(codigo);
+      extra.set(codigo, String(row.descripcion ?? '').trim());
+    }
+    if (!vigentes.size) {
+      this.logger.warn(
+        `getFrecuencias: ramo ${cramo} plan ${plan} sin filas vigentes en maplanes_frec; se devuelve el catálogo general`,
+      );
+      return { origen: 'catalogo', frecuencias: CondominioService.FRECUENCIAS_BASE };
+    }
+    const base = new Map(CondominioService.FRECUENCIAS_BASE.map((f) => [f.codigo, f]));
+    const frecuencias = [...vigentes].map(
+      (codigo) =>
+        base.get(codigo) ?? { codigo, descripcion: extra.get(codigo) || codigo, cuotas: null },
+    );
+    // Mismo orden que el catálogo general (A, S, T, M, E) y luego los códigos no estándar
+    const orden = CondominioService.FRECUENCIAS_BASE.map((f) => f.codigo);
+    frecuencias.sort((a, b) => {
+      const ia = orden.indexOf(a.codigo);
+      const ib = orden.indexOf(b.codigo);
+      return (ia < 0 ? 99 : ia) - (ib < 0 ? 99 : ib);
+    });
+    return { origen: 'maplanes_frec', frecuencias };
   }
 
   async getDispositivos(cramo: number) {
