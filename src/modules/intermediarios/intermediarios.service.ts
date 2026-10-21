@@ -130,7 +130,7 @@ export class IntermediariosService {
       }
 
       // 1. Cliente
-      await req()
+      const cliente = await req()
         .input('icedula', sql.Char(1), dto.icedula)
         .input('cci_rif', sql.Numeric(13, 0), cciRif)
         .input('xnombre', sql.VarChar(120), nombre.substring(0, 120))
@@ -149,15 +149,9 @@ export class IntermediariosService {
         .input('ifuente', sql.Char(10), 'SIS2000')
         .output('salida', sql.VarChar(50))
         .execute('spCreateMaclient');
-
-      // spCreateMaclient deja G para gubernamental y vacío para pasaporte, y si el cliente ya existía no lo toca
-      // (hay clientes con la letra del documento: V, E...). La pantalla de Sis2000 solo reconoce N o J: se corrige
-      // solo cuando el valor actual no es N ni J.
-      await req()
-        .input('cci_rif', sql.Numeric(13, 0), cciRif)
-        .input('ipersona', sql.Char(1), ipersona)
-        .query(`UPDATE maclient SET ipersona = @ipersona
-                 WHERE cci_rif = @cci_rif AND ISNULL(LTRIM(RTRIM(ipersona)), '') NOT IN ('N', 'J')`);
+      if (cliente.output?.salida) {
+        this.logger.log(`spCreateMaclient rif=${cciRif}: ${cliente.output.salida}`);
+      }
 
       // 2. Productor
       const maproduc = await req()
@@ -208,6 +202,15 @@ export class IntermediariosService {
         .input('id_agency', sql.Int, null)
         .input('edit', sql.Bit, 0)
         .execute('spCreateGestorWeb');
+
+      // 5. Tipo de ente al final del alta: en QA el registro de maclient puede quedar creado por otro SP del alta
+      //    (cprog vacío, ifuente SQL) con la letra del documento (V, E, G...). La pantalla de Sis2000 solo reconoce
+      //    N o J: se corrige solo cuando el valor actual no es N ni J.
+      await req()
+        .input('cci_rif', sql.Numeric(13, 0), cciRif)
+        .input('ipersona', sql.Char(1), ipersona)
+        .query(`UPDATE maclient SET ipersona = @ipersona
+                 WHERE cci_rif = @cci_rif AND ISNULL(LTRIM(RTRIM(ipersona)), '') NOT IN ('N', 'J')`);
 
       await tx.commit();
       this.logger.log(`Intermediario creado cproductor=${cproductor} correo=${dto.xcorreo}`);
