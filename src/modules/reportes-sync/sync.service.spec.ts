@@ -40,7 +40,7 @@ function build(
     getConnectionConfig: jest.fn(async () => ({
       adapterCodigo: 'MUNDIAL',
       tipoDb: 'mssql',
-      origenConfig: { recibos: originConfig },
+      origenConfig: { recibos: originConfig, polizas: originConfig },
     })),
     querySource: jest.fn(async () => opts.filas ?? FILAS),
   };
@@ -53,6 +53,7 @@ function build(
   const upsertRepo = {
     upsertRecibosChangedBatch: jest.fn(async (_id: number, rows: unknown[]) => opts.changed ?? rows.length),
     insertRecibosBatch: jest.fn(async () => undefined),
+    upsertPolizasChangedBatch: jest.fn(async (_id: number, rows: unknown[]) => opts.changed ?? rows.length),
   };
   const localRepo = {
     countLocalRows: jest.fn(async () => 100),
@@ -247,6 +248,29 @@ describe('SyncService · lectura del origen en paralelo', () => {
     expect(r.rowsSynced).toBe(8); // 4 tramos × 2 filas
     const escritas = (upsertRepo.upsertRecibosChangedBatch.mock.calls[0] as unknown[])[1] as unknown[];
     expect(escritas).toHaveLength(8);
+  });
+
+  it('pólizas: un rango ancho también se lee en tramos y se escribe por diferencias, sin borrar', async () => {
+    const { service, insurerConnection, upsertRepo, localRepo } = build({ REPORTES_SYNC_EXTRACT_PARALLEL: 4 });
+    origenPorTramo(insurerConnection);
+    const r = await service.syncIncremental('polizas', ancho, { ignoreTtl: true });
+
+    expect(insurerConnection.querySource).toHaveBeenCalledTimes(4);
+    expect(r.rowsSynced).toBe(8);
+    expect(upsertRepo.upsertPolizasChangedBatch).toHaveBeenCalledTimes(1);
+    expect((upsertRepo.upsertPolizasChangedBatch.mock.calls[0] as unknown[])[1]).toHaveLength(8);
+    expect(localRepo.deleteLocalRows).not.toHaveBeenCalled();
+  });
+
+  it('pólizas con REPORTES_SYNC_POLIZAS_DELTA=false vuelven a borrar el rango, pero escriben por lotes', async () => {
+    const { service, insurerConnection, upsertRepo, localRepo } = build({
+      REPORTES_SYNC_EXTRACT_PARALLEL: 1,
+      REPORTES_SYNC_POLIZAS_DELTA: false,
+    });
+    origenPorTramo(insurerConnection);
+    await service.syncIncremental('polizas', ancho, { ignoreTtl: true });
+    expect(localRepo.deleteLocalRows).toHaveBeenCalled();
+    expect(upsertRepo.upsertPolizasChangedBatch).toHaveBeenCalled();
   });
 
   it('con REPORTES_SYNC_EXTRACT_PARALLEL=1 hace una sola lectura', async () => {
