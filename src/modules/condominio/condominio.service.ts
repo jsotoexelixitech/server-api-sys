@@ -607,9 +607,8 @@ export class CondominioService {
   /**
    * Frecuencias de pago. Sin plan devuelve el catálogo general. Con ramo y plan ejecuta el mismo SP que usa
    * POST /valrep/frecuencia (sp_busca_frecuencia_plan_nexus): maplanes_frec vigentes (iestado = 'V') y, si se indica
-   * cproductor, maplanes_frec_produc. Si el plan aún no tiene filas devuelve el catálogo general y lo marca con
-   * origen = 'catalogo' (y deja una advertencia en el log) para no dejar la venta sin frecuencias mientras se
-   * completan los datos.
+   * cproductor, maplanes_frec_produc. Solo se devuelven las frecuencias habilitadas: si el plan no tiene ninguna,
+   * la lista va vacía (y queda una advertencia en el log para completar la tabla).
    */
   async getFrecuencias(cramo?: number, cplan?: string, cproductor?: number) {
     const plan = String(cplan ?? '').trim();
@@ -637,10 +636,8 @@ export class CondominioService {
       filas.push({ codigo, descripcion: String(row.xdescripcion ?? '').trim() });
     }
     if (!filas.length) {
-      this.logger.warn(
-        `getFrecuencias: ramo ${cramo} plan ${plan} sin frecuencias en ${spName}; se devuelve el catálogo general`,
-      );
-      return { origen: 'catalogo', frecuencias: CondominioService.FRECUENCIAS_BASE };
+      this.logger.warn(`getFrecuencias: ramo ${cramo} plan ${plan} sin frecuencias habilitadas en ${spName}`);
+      return { origen: 'sp_busca_frecuencia_plan_nexus', frecuencias: [] };
     }
     const base = new Map(CondominioService.FRECUENCIAS_BASE.map((f) => [f.codigo, f]));
     const frecuencias = filas.map(

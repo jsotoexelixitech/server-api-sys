@@ -335,7 +335,7 @@ export class CondominioController {
   @Get('frecuencias')
   @ApiOperation({
     summary: 'Listar frecuencias de pago',
-    description: 'Retorna las frecuencias de pago con sus códigos y el número de cuotas. Con cramo y cplan ejecuta sp_busca_frecuencia_plan_nexus (el mismo de POST /valrep/frecuencia): solo las vigentes (iestado = V) de maplanes_frec, más maplanes_frec_produc si se envía cproductor. Si el plan no tiene frecuencias devuelve el catálogo general (origen = catalogo).',
+    description: 'Retorna las frecuencias de pago con sus códigos y el número de cuotas. Con cramo y cplan ejecuta sp_busca_frecuencia_plan_nexus (el mismo de POST /valrep/frecuencia): solo las vigentes (iestado = V) de maplanes_frec, más maplanes_frec_produc si se envía cproductor. Solo se devuelven las habilitadas: si el plan no tiene ninguna, data va vacío.',
   })
   @ApiResponse({
     status: 200,
