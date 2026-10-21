@@ -8,6 +8,7 @@ import { GetTarificadorDto, UpdateTarificadorTasaDto } from './dto/tarificador.d
 import { CotizacionPreestablecidaDto } from './dto/cotizacion-preestablecida.dto';
 import { parseSPError, toUserFacingError } from '../../common/helpers/sp-error.helper';
 import { buildPolicyPdfUrl } from '../../common/helpers/policy-url.helper';
+import { SP_BUSCA_FRECUENCIA_PLAN_NEXUS } from '../../config/sis2000-sp.constants';
 import {
   SP_BUSCA_PLANES_CONDOMINIO,
   SP_CALCULO_COTIZACION_CONDOMINIO,
@@ -595,14 +596,61 @@ export class CondominioService {
     }
   }
 
-  async getFrecuencias() {
-    return [
-      { codigo: 'A', descripcion: 'Anual', cuotas: 1 },
-      { codigo: 'S', descripcion: 'Semestral', cuotas: 2 },
-      { codigo: 'T', descripcion: 'Trimestral', cuotas: 4 },
-      { codigo: 'M', descripcion: 'Mensual', cuotas: 12 },
-      { codigo: 'E', descripcion: 'Pago Único / Especial', cuotas: 1 },
-    ];
+  private static readonly FRECUENCIAS_BASE = [
+    { codigo: 'A', descripcion: 'Anual', cuotas: 1 },
+    { codigo: 'S', descripcion: 'Semestral', cuotas: 2 },
+    { codigo: 'T', descripcion: 'Trimestral', cuotas: 4 },
+    { codigo: 'M', descripcion: 'Mensual', cuotas: 12 },
+    { codigo: 'E', descripcion: 'Pago Único / Especial', cuotas: 1 },
+  ];
+
+  /**
+   * Frecuencias de pago. Sin plan devuelve el catálogo general. Con ramo y plan ejecuta el mismo SP que usa
+   * POST /valrep/frecuencia (sp_busca_frecuencia_plan_nexus): maplanes_frec vigentes (iestado = 'V') y, si se indica
+   * cproductor, maplanes_frec_produc. Solo se devuelven las frecuencias habilitadas: si el plan no tiene ninguna,
+   * la lista va vacía (y queda una advertencia en el log para completar la tabla).
+   */
+  async getFrecuencias(cramo?: number, cplan?: string, cproductor?: number) {
+    const plan = String(cplan ?? '').trim();
+    if (!plan || !Number.isFinite(Number(cramo))) {
+      return { origen: 'catalogo', frecuencias: CondominioService.FRECUENCIAS_BASE };
+    }
+    const spName =
+      process.env.MSSQL_SP_BUSCA_FRECUENCIA_PLAN_NEXUS?.trim() || SP_BUSCA_FRECUENCIA_PLAN_NEXUS;
+    const T = this.db.types;
+    const req = this.db.request();
+    req.input('cplan', T.VarChar(10), plan);
+    req.input('cramo', T.Int, Number(cramo));
+    req.input('cproductor', T.Numeric(17), Number.isFinite(Number(cproductor)) ? Number(cproductor) : null);
+    req.output('berror', T.Bit, false);
+    req.output('mensaje', T.NVarChar(60), '');
+    const result = await req.execute(spName);
+    const rows = (result.recordset ?? []) as { cvalor: string; xdescripcion: string }[];
+
+    const vistos = new Set<string>();
+    const filas: { codigo: string; descripcion: string }[] = [];
+    for (const row of rows) {
+      const codigo = String(row.cvalor ?? '').trim().toUpperCase();
+      if (!codigo || vistos.has(codigo)) continue;
+      vistos.add(codigo);
+      filas.push({ codigo, descripcion: String(row.xdescripcion ?? '').trim() });
+    }
+    if (!filas.length) {
+      this.logger.warn(`getFrecuencias: ramo ${cramo} plan ${plan} sin frecuencias habilitadas en ${spName}`);
+      return { origen: 'sp_busca_frecuencia_plan_nexus', frecuencias: [] };
+    }
+    const base = new Map(CondominioService.FRECUENCIAS_BASE.map((f) => [f.codigo, f]));
+    const frecuencias = filas.map(
+      (f) => base.get(f.codigo) ?? { codigo: f.codigo, descripcion: f.descripcion || f.codigo, cuotas: null },
+    );
+    // Mismo orden que el catálogo general (A, S, T, M, E) y luego los códigos no estándar
+    const orden = CondominioService.FRECUENCIAS_BASE.map((f) => f.codigo);
+    frecuencias.sort((x, y) => {
+      const ix = orden.indexOf(x.codigo);
+      const iy = orden.indexOf(y.codigo);
+      return (ix < 0 ? 99 : ix) - (iy < 0 ? 99 : iy);
+    });
+    return { origen: 'sp_busca_frecuencia_plan_nexus', frecuencias };
   }
 
   async getDispositivos(cramo: number) {
