@@ -1,5 +1,7 @@
 import { mundialAdapter } from './insurers/adapters/mundial.adapter';
-import { SyncUpsertRepository } from './repositories/sync-upsert.repository';
+import { POLIZA_COLUMNAS, SyncUpsertRepository } from './repositories/sync-upsert.repository';
+
+const param = (col: string) => `r0c${POLIZA_COLUMNAS.findIndex((c) => c.col === col)}`;
 
 const fila = (extra: Record<string, unknown> = {}) => ({
   numero_poliza: '18-1-0000000001',
@@ -26,15 +28,14 @@ describe('Pólizas · coberturas', () => {
     await repo.upsertPoliza(1, { origenClave: 'X-1', numeroPoliza: 'X', coberturas: 'A / B' });
     const [sql, params] = executeQuery.mock.calls[0] as [string, Record<string, unknown>];
     expect(sql).toContain('serial_motor, coberturas,');
-    expect(sql).toContain('@serialMotor, @coberturas,');
     expect(sql).toContain('coberturas = EXCLUDED.coberturas');
-    expect(params.coberturas).toBe('A / B');
+    expect(params[param('coberturas')]).toBe('A / B');
   });
 
   it('el upsert sin coberturas escribe cadena vacía', async () => {
     const executeQuery = jest.fn(async (_sql: string, _params?: Record<string, unknown>) => ({ rowsAffected: 1 }));
     const repo = new SyncUpsertRepository({ executeQuery } as never);
     await repo.upsertPoliza(1, { origenClave: 'X-2', numeroPoliza: 'Y' });
-    expect((executeQuery.mock.calls[0] as [string, Record<string, unknown>])[1].coberturas).toBe('');
+    expect((executeQuery.mock.calls[0] as [string, Record<string, unknown>])[1][param('coberturas')]).toBe('');
   });
 });
