@@ -16,6 +16,7 @@ import { ApiCommonErrors } from '../../common/swagger/api-error-responses';
 import { SWAGGER_TAGS } from '../../common/swagger/swagger-tags.constants';
 import { NestProtected } from '../auth/decorators/nest-protected.decorator';
 import { NEST_AUTH_SCOPES } from '../auth/scopes/nest-auth-scopes.constants';
+import { CoberturasQueryDto } from './dto/coberturas-query.dto';
 import { PolizasQueryDto } from './dto/polizas-query.dto';
 import { RunSyncDto } from './dto/run-sync.dto';
 import { ReportesService } from './reportes.service';
@@ -48,6 +49,24 @@ export class ReportesController {
   async listAseguradoras() {
     try {
       const data = await this.reportesService.listAseguradoras();
+      return { status: true, data };
+    } catch (error) {
+      this.rethrow(error);
+    }
+  }
+
+  @Get('coberturas')
+  @HttpCode(HttpStatus.OK)
+  @ApiOperation({
+    summary: 'Coberturas por ramo',
+    description:
+      'Catálogo de coberturas para el filtro del reporte de pólizas. Con cramo devuelve solo las de ese ramo. ' +
+      'El "codigo" devuelto ("<cramo>-<ccobertura>") es el valor del filtro ccobertura.',
+  })
+  @ApiCommonErrors()
+  async listCoberturas(@Query() query: CoberturasQueryDto) {
+    try {
+      const data = await this.reportesService.listCoberturas(query);
       return { status: true, data };
     } catch (error) {
       this.rethrow(error);

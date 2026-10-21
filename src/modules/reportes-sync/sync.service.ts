@@ -31,6 +31,8 @@ import type { ExtractionPlan } from './insurers/extraction/extraction.planner';
 
 /** Entidades cuya escritura va en una sola transacción (los lectores ven siempre un estado completo). */
 const ENTIDADES_ATOMICAS = new Set(['recibos', 'siniestros']);
+/** Entidades cuyo extract por rango de fechas se lee en tramos paralelos (ver extractFromSource). */
+const ENTIDADES_EXTRACT_POR_TRAMOS = new Set(['recibos', 'polizas']);
 
 export type SyncResult = {
   entidad: string;
@@ -101,6 +103,7 @@ export class SyncService {
       productores: (id, row) => this.upsertRepo.upsertProductor(id, row),
       anulaciones: (id, row) => this.upsertRepo.upsertAnulacion(id, row),
       rechazos: (id, row) => this.upsertRepo.upsertRechazo(id, row),
+      coberturas: (id, row) => this.upsertRepo.upsertCobertura(id, row),
     };
   }
 
@@ -150,6 +153,11 @@ export class SyncService {
     return (
       Number(this.config.get<number>('REPORTES_SYNC_TTL_SECONDS', 120)) * 1000
     );
+  }
+
+  /** Escritura de pólizas por diferencias (lotes multi-fila, solo lo nuevo o modificado). Desactivable. */
+  private isPolizasDeltaEnabled(): boolean {
+    return this.config.get<boolean>('REPORTES_SYNC_POLIZAS_DELTA', true) !== false;
   }
 
   /** Escritura de recibos por diferencias (solo lo nuevo o modificado). Desactivable por si hiciera falta. */
@@ -343,6 +351,11 @@ export class SyncService {
       return mappedRows.length;
     }
 
+    if (entidad === 'polizas') {
+      await this.upsertRepo.upsertPolizasChangedBatch(aseguradoraId, mappedRows, tx);
+      return mappedRows.length;
+    }
+
     const upsert = this.upsertHandlers[entidad];
     if (!upsert) throw new Error(`Entidad de sync no soportada: ${entidad}`);
 
@@ -444,7 +457,8 @@ export class SyncService {
     const { aseguradoraId, entidad, adapter, plan, watermarkDate, syncFiltros, connectionConfig } = args;
     if (plan.source === 'api') throw new Error('extractFromSource no aplica a orígenes por API');
     const esQueryConRango =
-      entidad === 'recibos' && Boolean(plan.originConfig?.querySql?.includes('/*SYNC_DATE_COL*/'));
+      ENTIDADES_EXTRACT_POR_TRAMOS.has(entidad) &&
+      Boolean(plan.originConfig?.querySql?.includes('/*SYNC_DATE_COL*/'));
     const tramos = esQueryConRango
       ? tramosParaRango(syncFiltros.desde, syncFiltros.hasta, this.getExtractParallelism())
       : 1;
@@ -560,6 +574,53 @@ export class SyncService {
         msPurga: Date.now() - tPurga0,
       },
     );
+    return { rowsSynced: unicas.length, maxModifiedAt: maxModified, rowsChanged: cambiadas };
+  }
+
+  /**
+   * Pólizas, escritura por diferencias (como recibos): cada fila se transforma una vez, se deduplica por clave
+   * y se escribe por lotes multi-fila insertando lo nuevo y actualizando solo lo que cambió.
+   * No borra pólizas del alcance: en el origen no se eliminan (se anulan, y eso llega como cambio de estatus),
+   * y el extract puede venir filtrado por ramo, productor, etc., así que un borrado por rango perdería datos.
+   */
+  private async writePolizasDelta(args: {
+    aseguradoraId: number;
+    rows: Record<string, unknown>[];
+    adapter: InsurerAdapter;
+    connectionConfig: InsurerConnectionConfig;
+    tx?: PgTransaction;
+  }): Promise<{ rowsSynced: number; maxModifiedAt: Date | null; rowsChanged: number }> {
+    const { aseguradoraId, rows, adapter, connectionConfig, tx } = args;
+    const t0 = Date.now();
+    const mapeadas = rows.map((row) => this.mapRowForSync('polizas', row, adapter, connectionConfig));
+
+    const vistas = new Set<string>();
+    const unicas: Record<string, unknown>[] = [];
+    for (let i = mapeadas.length - 1; i >= 0; i -= 1) {
+      const m = mapeadas[i];
+      const clave = m.origenClave != null ? String(m.origenClave).trim() : '';
+      if (!clave || vistas.has(clave)) continue;
+      vistas.add(clave);
+      unicas.push(m);
+    }
+    unicas.reverse();
+
+    const limiteFecha = new Date(Date.now() + 24 * 60 * 60 * 1000);
+    let maxModified: Date | null = null;
+    for (const m of unicas) {
+      const candidata = m.origenModifiedAt;
+      if (candidata instanceof Date && candidata <= limiteFecha && (!maxModified || candidata > maxModified)) {
+        maxModified = candidata;
+      }
+    }
+    const tPreparar = Date.now() - t0;
+
+    const cambiadas = await this.upsertRepo.upsertPolizasChangedBatch(aseguradoraId, unicas, tx);
+    this.syncLog(`polizas: ${unicas.length} leídas, ${cambiadas} nuevas o modificadas`, {
+      aseguradoraId,
+      msPreparar: tPreparar,
+      msUpsert: Date.now() - t0 - tPreparar,
+    });
     return { rowsSynced: unicas.length, maxModifiedAt: maxModified, rowsChanged: cambiadas };
   }
 
@@ -820,6 +881,9 @@ export class SyncService {
       // los lectores concurrentes (otro usuario ejecutando el reporte) ven el estado
       // anterior completo hasta el COMMIT, nunca un rango a medias.
       const writeTarget = async (tx?: PgTransaction) => {
+        if (entidad === 'polizas' && !catalog && this.isPolizasDeltaEnabled()) {
+          return this.writePolizasDelta({ aseguradoraId, rows, adapter, connectionConfig, tx });
+        }
         if (entidad === 'recibos' && !catalog && this.isDeltaEnabled()) {
           return this.writeRecibosDelta({
             aseguradoraId,
