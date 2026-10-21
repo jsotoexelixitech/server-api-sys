@@ -82,6 +82,14 @@ export class IntermediariosController {
     return { status: true, message: 'Gestor creado.', data };
   }
 
+  @Get('bancos')
+  @NestProtected(NEST_AUTH_SCOPES.INTERMEDIARIOS_WRITE)
+  @ApiHeader(APIKEY_HEADER)
+  @ApiOperation({ summary: 'Bancos nacionales activos (mabanco) para las cuentas del intermediario' })
+  async bancos() {
+    return { status: true, data: await this.intermediarios.bancos() };
+  }
+
   @Get('gestores')
   @NestProtected(NEST_AUTH_SCOPES.INTERMEDIARIOS_WRITE)
   @ApiHeader(APIKEY_HEADER)

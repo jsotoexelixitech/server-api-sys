@@ -1,6 +1,18 @@
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
-import { Transform } from 'class-transformer';
-import { IsEmail, IsIn, IsInt, IsNotEmpty, IsOptional, IsString, Matches, MaxLength } from 'class-validator';
+import { Transform, Type } from 'class-transformer';
+import {
+  ArrayMaxSize,
+  IsArray,
+  IsEmail,
+  IsIn,
+  IsInt,
+  IsNotEmpty,
+  IsOptional,
+  IsString,
+  Matches,
+  MaxLength,
+  ValidateNested,
+} from 'class-validator';
 
 const recortar = ({ value }: { value: unknown }) => (typeof value === 'string' ? value.trim() : value);
 
@@ -13,6 +25,19 @@ export function normalizarTelefonoVenezuela(valor: unknown): string {
   if (digitos.length === 12 && digitos.startsWith('58')) digitos = `0${digitos.slice(2)}`;
   if (digitos.length === 10 && /^[24]/.test(digitos)) digitos = `0${digitos}`;
   return digitos;
+}
+
+/** Cuenta bancaria nacional del intermediario (maproduc.ccuentaban / itipocta). */
+export class CuentaBancariaDto {
+  @ApiProperty({ example: '01050067211067478957', description: '20 dígitos; los 4 primeros son el banco (mabanco.CBANCO_REF)' })
+  @Transform(({ value }) => String(value ?? '').replace(/\D/g, ''))
+  @Matches(/^\d{20}$/, { message: 'La cuenta bancaria debe tener 20 dígitos' })
+  ccuenta!: string;
+
+  @ApiProperty({ example: 'CO', enum: ['CO', 'AH'], description: 'CO corriente · AH ahorro' })
+  @Transform(({ value }) => (typeof value === 'string' ? value.trim().toUpperCase() : value))
+  @IsIn(['CO', 'AH'])
+  itipocta!: 'CO' | 'AH';
 }
 
 /** Alta de intermediario tradicional (corredor / productor), mismo flujo que la pasarela. */
@@ -87,6 +112,14 @@ export class CrearIntermediarioDto {
   @IsOptional()
   @IsIn([1, 2, 3])
   ctipoprod?: number;
+
+  @ApiPropertyOptional({ type: [CuentaBancariaDto], description: 'Hasta 2 cuentas (maproduc cuenta 1 y 2)' })
+  @IsOptional()
+  @IsArray()
+  @ArrayMaxSize(2)
+  @ValidateNested({ each: true })
+  @Type(() => CuentaBancariaDto)
+  cuentas?: CuentaBancariaDto[];
 
   @ApiPropertyOptional({ example: '80123', description: 'Código de intermediario; si se omite se asigna el siguiente libre' })
   @Transform(({ value }) => (value === '' || value == null ? undefined : String(value).replace(/\D/g, '')))
