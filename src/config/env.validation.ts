@@ -154,6 +154,7 @@ export const envValidationSchema = Joi.object({
   /** Igual que la de recibos, para siniestros. */
   REPORTES_SYNC_SINIESTROS_ON_EXECUTE: Joi.boolean().default(true),
   /** Recibos: escribir solo lo nuevo o modificado (false = borrar el rango e insertar todo, como antes). */
+  REPORTES_SYNC_POLIZAS_DELTA: Joi.boolean().default(true),
   REPORTES_SYNC_RECIBOS_DELTA: Joi.boolean().default(true),
   /** Segundos que un alcance (filtros del usuario) se considera sincronizado antes de volver al origen. */
   REPORTES_SYNC_SCOPE_TTL_SECONDS: Joi.number().integer().min(0).default(30),

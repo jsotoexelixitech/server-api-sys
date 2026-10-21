@@ -101,6 +101,93 @@ export const SINIESTRO_COLUMNAS: ReadonlyArray<{ col: string; key: string; def?:
   { col: 'tipo_vehiculo', key: 'tipoVehiculo' },
 ];
 
+/** Filas por sentencia: 39 columnas × 500 = 19.500 parámetros (límite de PG: 65.535). */
+export const POLIZA_LOTE = 500;
+
+/**
+ * Columna de PG ← claves del objeto mapeado (la primera con valor gana; las demás son nombres antiguos).
+ * `expr` envuelve el marcador (coberturas_codigos llega como texto "7-1,7-3" y se guarda como text[]).
+ */
+export const POLIZA_COLUMNAS: ReadonlyArray<{ col: string; keys: string[]; expr?: (p: string) => string }> = [
+  { col: 'origen_clave', keys: ['origenClave', 'origenId'] },
+  { col: 'numero_poliza', keys: ['numeroPoliza'] },
+  { col: 'numero_poliza_relacionada', keys: ['numeroPolizaRelacionada'] },
+  { col: 'fecha_emision_poliza', keys: ['fechaEmisionPoliza'] },
+  { col: 'fecha_desde_poliza', keys: ['fechaDesdePoliza', 'fechaInicio'] },
+  { col: 'fecha_hasta_poliza', keys: ['fechaHastaPoliza', 'fechaFin'] },
+  { col: 'estado', keys: ['estado'] },
+  { col: 'ramo', keys: ['ramo', 'producto'] },
+  { col: 'tipo_ramo', keys: ['tipoRamo'] },
+  { col: 'plan', keys: ['plan'] },
+  { col: 'forma', keys: ['forma'] },
+  { col: 'frecuencia', keys: ['frecuencia'] },
+  { col: 'sucursal', keys: ['sucursal'] },
+  { col: 'canal_venta', keys: ['canalVenta'] },
+  { col: 'canal_alterno', keys: ['canalAlterno'] },
+  { col: 'productor', keys: ['productor'] },
+  { col: 'estatus_poliza', keys: ['estatusPoliza'] },
+  { col: 'moneda', keys: ['moneda'] },
+  { col: 'prima_total', keys: ['primaTotal', 'primaAnual'] },
+  { col: 'nombre_tomador', keys: ['nombreTomador', 'nombreContratante'] },
+  { col: 'cedula_tomador', keys: ['cedulaTomador', 'documentoContratante'] },
+  { col: 'nombre_asegurado', keys: ['nombreAsegurado'] },
+  { col: 'cedula_asegurado', keys: ['cedulaAsegurado'] },
+  { col: 'nombre_beneficiario_preferencial', keys: ['nombreBeneficiarioPreferencial'] },
+  { col: 'cedula_beneficiario_preferencial', keys: ['cedulaBeneficiarioPreferencial'] },
+  { col: 'marca_vehiculo', keys: ['marcaVehiculo'] },
+  { col: 'modelo_vehiculo', keys: ['modeloVehiculo'] },
+  { col: 'version_vehiculo', keys: ['versionVehiculo'] },
+  { col: 'anio_vehiculo', keys: ['anioVehiculo'] },
+  { col: 'placa', keys: ['placa'] },
+  { col: 'color_vehiculo', keys: ['colorVehiculo'] },
+  { col: 'serial_carroceria', keys: ['serialCarroceria'] },
+  { col: 'serial_motor', keys: ['serialMotor'] },
+  { col: 'id_ramo', keys: ['idRamo'] },
+  { col: 'id_productor', keys: ['idProductor'] },
+  { col: 'id_canal', keys: ['idCanal'] },
+  {
+    col: 'coberturas_codigos',
+    keys: ['coberturasCodigos'],
+    expr: (p) => `string_to_array(NULLIF(${p}, ''), ',')`,
+  },
+  { col: 'origen_modified_at', keys: ['origenModifiedAt'] },
+];
+
+const POLIZA_COMPARABLES = POLIZA_COLUMNAS.filter((c) => c.col !== 'origen_clave').map((c) => c.col);
+
+/**
+ * INSERT multi-fila de pólizas que inserta lo nuevo y actualiza SOLO lo que cambió (IS DISTINCT FROM, como
+ * recibos): las filas idénticas no se escriben. RETURNING 1 hace que rowsAffected cuente solo lo escrito.
+ */
+export function buildPolizasUpsert(
+  aseguradoraId: number,
+  rows: Record<string, unknown>[],
+): { query: string; params: Record<string, unknown> } {
+  const params: Record<string, unknown> = { aseguradoraId };
+  const values = rows.map((row, r) => {
+    const marcadores = POLIZA_COLUMNAS.map((c, k) => {
+      const nombre = `r${r}c${k}`;
+      const key = c.keys.find((x) => row[x] !== undefined && row[x] !== null);
+      params[nombre] = key ? row[key] : null;
+      return c.expr ? c.expr(`@${nombre}`) : `@${nombre}`;
+    });
+    return `(@aseguradoraId, ${marcadores.join(', ')}, NOW())`;
+  });
+  const SEP = ',\n       ';
+  const query = `INSERT INTO poliza (
+       id_aseguradora, ${POLIZA_COLUMNAS.map((c) => c.col).join(', ')}, synced_at
+     ) VALUES
+       ${values.join(SEP)}
+     ON CONFLICT (id_aseguradora, origen_clave) WHERE origen_clave IS NOT NULL
+     DO UPDATE SET
+       ${POLIZA_COMPARABLES.map((c) => `${c} = EXCLUDED.${c}`).join(SEP)},
+       synced_at = NOW()
+     WHERE (${POLIZA_COMPARABLES.map((c) => `poliza.${c}`).join(', ')})
+       IS DISTINCT FROM (${POLIZA_COMPARABLES.map((c) => `EXCLUDED.${c}`).join(', ')})
+     RETURNING 1`;
+  return { query, params };
+}
+
 const NL = '\n';
 
 /** Arma el INSERT multi-fila con parámetros con nombre (@r{fila}c{columna}). */
@@ -338,107 +425,28 @@ export class SyncUpsertRepository {
     aseguradoraId: number,
     row: Record<string, unknown>,
   ): Promise<void> {
-    const origenClave = row.origenClave || row.origenId;
-    await this.exec(
-      `INSERT INTO poliza (
-       id_aseguradora, origen_clave, numero_poliza, numero_poliza_relacionada,
-       fecha_emision_poliza, fecha_desde_poliza, fecha_hasta_poliza, estado, ramo, tipo_ramo,
-       plan, forma, frecuencia, sucursal, canal_venta, canal_alterno, productor,
-       estatus_poliza, moneda, prima_total, nombre_tomador, cedula_tomador,
-       nombre_asegurado, cedula_asegurado, nombre_beneficiario_preferencial,
-       cedula_beneficiario_preferencial, marca_vehiculo, modelo_vehiculo, version_vehiculo,
-       anio_vehiculo, placa, color_vehiculo, serial_carroceria, serial_motor,
-       id_ramo, id_productor, id_canal, origen_modified_at, synced_at
-     ) VALUES (
-       @aseguradoraId, @origenClave, @numeroPoliza, @numeroPolizaRelacionada,
-       @fechaEmisionPoliza, @fechaDesdePoliza, @fechaHastaPoliza, @estado, @ramo, @tipoRamo,
-       @plan, @forma, @frecuencia, @sucursal, @canalVenta, @canalAlterno, @productor,
-       @estatusPoliza, @moneda, @primaTotal, @nombreTomador, @cedulaTomador,
-       @nombreAsegurado, @cedulaAsegurado, @nombreBeneficiarioPreferencial,
-       @cedulaBeneficiarioPreferencial, @marcaVehiculo, @modeloVehiculo, @versionVehiculo,
-       @anioVehiculo, @placa, @colorVehiculo, @serialCarroceria, @serialMotor,
-       @idRamo, @idProductor, @idCanal, @origenModifiedAt, NOW()
-     )
-     ON CONFLICT (id_aseguradora, origen_clave) WHERE origen_clave IS NOT NULL
-     DO UPDATE SET
-       numero_poliza = EXCLUDED.numero_poliza,
-       numero_poliza_relacionada = EXCLUDED.numero_poliza_relacionada,
-       fecha_emision_poliza = EXCLUDED.fecha_emision_poliza,
-       fecha_desde_poliza = EXCLUDED.fecha_desde_poliza,
-       fecha_hasta_poliza = EXCLUDED.fecha_hasta_poliza,
-       estado = EXCLUDED.estado,
-       ramo = EXCLUDED.ramo,
-       tipo_ramo = EXCLUDED.tipo_ramo,
-       plan = EXCLUDED.plan,
-       forma = EXCLUDED.forma,
-       frecuencia = EXCLUDED.frecuencia,
-       sucursal = EXCLUDED.sucursal,
-       canal_venta = EXCLUDED.canal_venta,
-       canal_alterno = EXCLUDED.canal_alterno,
-       productor = EXCLUDED.productor,
-       estatus_poliza = EXCLUDED.estatus_poliza,
-       moneda = EXCLUDED.moneda,
-       prima_total = EXCLUDED.prima_total,
-       nombre_tomador = EXCLUDED.nombre_tomador,
-       cedula_tomador = EXCLUDED.cedula_tomador,
-       nombre_asegurado = EXCLUDED.nombre_asegurado,
-       cedula_asegurado = EXCLUDED.cedula_asegurado,
-       nombre_beneficiario_preferencial = EXCLUDED.nombre_beneficiario_preferencial,
-       cedula_beneficiario_preferencial = EXCLUDED.cedula_beneficiario_preferencial,
-       marca_vehiculo = EXCLUDED.marca_vehiculo,
-       modelo_vehiculo = EXCLUDED.modelo_vehiculo,
-       version_vehiculo = EXCLUDED.version_vehiculo,
-       anio_vehiculo = EXCLUDED.anio_vehiculo,
-       placa = EXCLUDED.placa,
-       color_vehiculo = EXCLUDED.color_vehiculo,
-       serial_carroceria = EXCLUDED.serial_carroceria,
-       serial_motor = EXCLUDED.serial_motor,
-       id_ramo = EXCLUDED.id_ramo,
-       id_productor = EXCLUDED.id_productor,
-       id_canal = EXCLUDED.id_canal,
-       origen_modified_at = EXCLUDED.origen_modified_at,
-       synced_at = NOW()`,
-      {
-        aseguradoraId,
-        origenClave,
-        numeroPoliza: row.numeroPoliza,
-        numeroPolizaRelacionada: row.numeroPolizaRelacionada,
-        fechaEmisionPoliza: row.fechaEmisionPoliza,
-        fechaDesdePoliza: row.fechaDesdePoliza ?? row.fechaInicio,
-        fechaHastaPoliza: row.fechaHastaPoliza ?? row.fechaFin,
-        estado: row.estado,
-        ramo: row.ramo ?? row.producto,
-        tipoRamo: row.tipoRamo,
-        plan: row.plan,
-        forma: row.forma,
-        frecuencia: row.frecuencia,
-        sucursal: row.sucursal,
-        canalVenta: row.canalVenta,
-        canalAlterno: row.canalAlterno,
-        productor: row.productor,
-        estatusPoliza: row.estatusPoliza,
-        moneda: row.moneda,
-        primaTotal: row.primaTotal ?? row.primaAnual,
-        nombreTomador: row.nombreTomador ?? row.nombreContratante,
-        cedulaTomador: row.cedulaTomador ?? row.documentoContratante,
-        nombreAsegurado: row.nombreAsegurado,
-        cedulaAsegurado: row.cedulaAsegurado,
-        nombreBeneficiarioPreferencial: row.nombreBeneficiarioPreferencial,
-        cedulaBeneficiarioPreferencial: row.cedulaBeneficiarioPreferencial,
-        marcaVehiculo: row.marcaVehiculo,
-        modeloVehiculo: row.modeloVehiculo,
-        versionVehiculo: row.versionVehiculo,
-        anioVehiculo: row.anioVehiculo,
-        placa: row.placa,
-        colorVehiculo: row.colorVehiculo,
-        serialCarroceria: row.serialCarroceria,
-        serialMotor: row.serialMotor,
-        idRamo: row.idRamo,
-        idProductor: row.idProductor,
-        idCanal: row.idCanal,
-        origenModifiedAt: row.origenModifiedAt,
-      },
-    );
+    await this.upsertPolizasChangedBatch(aseguradoraId, [row]);
+  }
+
+  /**
+   * Pólizas por lotes (buildPolizasUpsert): una sentencia por lote en vez de una por fila, y solo se
+   * escriben las filas nuevas o modificadas. Devuelve cuántas se insertaron o cambiaron realmente.
+   */
+  async upsertPolizasChangedBatch(
+    aseguradoraId: number,
+    rows: Record<string, unknown>[],
+    tx?: PgTransaction,
+  ): Promise<number> {
+    let escritas = 0;
+    for (let i = 0; i < rows.length; i += POLIZA_LOTE) {
+      const { query, params } = buildPolizasUpsert(aseguradoraId, rows.slice(i, i + POLIZA_LOTE));
+      const result = await (tx ?? this.reportesPg).executeQuery(query, params);
+      if ('error' in result && result.error) {
+        throw new Error(result.message);
+      }
+      escritas += result.rowsAffected || 0;
+    }
+    return escritas;
   }
 
   private async upsertCatalog(
@@ -499,6 +507,33 @@ export class SyncUpsertRepository {
       extraCols: [{ col: 'activo', param: 'activo' }],
       extraVals: { activo: row.activo !== false && row.activo !== 0 },
     });
+  }
+
+  /**
+   * Catálogo de coberturas por ramo. ccobertura se repite entre ramos, por eso la clave es
+   * codigo = "<cramo>-<ccobertura>", el mismo valor que guarda poliza.coberturas_codigos.
+   */
+  async upsertCobertura(
+    aseguradoraId: number,
+    row: Record<string, unknown>,
+  ): Promise<void> {
+    const codigo = String(row.id ?? row.codigo ?? '').trim();
+    if (!codigo) return;
+    await this.exec(
+      `INSERT INTO cobertura (id_aseguradora, codigo, id_ramo, ccobertura, descripcion, activo, synced_at)
+       VALUES (@aseguradoraId, @codigo, @idRamo, @ccobertura, @descripcion, @activo, NOW())
+       ON CONFLICT (id_aseguradora, codigo)
+       DO UPDATE SET id_ramo = EXCLUDED.id_ramo, ccobertura = EXCLUDED.ccobertura,
+         descripcion = EXCLUDED.descripcion, activo = EXCLUDED.activo, synced_at = NOW()`,
+      {
+        aseguradoraId,
+        codigo,
+        idRamo: row.cramo ?? row.idRamo ?? null,
+        ccobertura: row.ccobertura ?? null,
+        descripcion: row.descripcion ?? null,
+        activo: row.activo !== false && row.activo !== 0,
+      },
+    );
   }
 
   async upsertCanal(
