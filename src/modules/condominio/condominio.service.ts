@@ -8,6 +8,7 @@ import { GetTarificadorDto, UpdateTarificadorTasaDto } from './dto/tarificador.d
 import { CotizacionPreestablecidaDto } from './dto/cotizacion-preestablecida.dto';
 import { parseSPError, toUserFacingError } from '../../common/helpers/sp-error.helper';
 import { buildPolicyPdfUrl } from '../../common/helpers/policy-url.helper';
+import { SP_BUSCA_FRECUENCIA_PLAN_NEXUS } from '../../config/sis2000-sp.constants';
 import {
   SP_BUSCA_PLANES_CONDOMINIO,
   SP_CALCULO_COTIZACION_CONDOMINIO,
@@ -604,54 +605,55 @@ export class CondominioService {
   ];
 
   /**
-   * Frecuencias de pago. Sin plan devuelve el catálogo general. Con ramo y plan, solo las configuradas y vigentes
-   * (iestado = 'V') en maplanes_frec. Si el plan aún no tiene filas vigentes en esa tabla, devuelve el catálogo
-   * general y lo marca con origen = 'catalogo' (y deja una advertencia en el log) para no dejar la venta sin
-   * frecuencias mientras se completan los datos.
+   * Frecuencias de pago. Sin plan devuelve el catálogo general. Con ramo y plan ejecuta el mismo SP que usa
+   * POST /valrep/frecuencia (sp_busca_frecuencia_plan_nexus): maplanes_frec vigentes (iestado = 'V') y, si se indica
+   * cproductor, maplanes_frec_produc. Si el plan aún no tiene filas devuelve el catálogo general y lo marca con
+   * origen = 'catalogo' (y deja una advertencia en el log) para no dejar la venta sin frecuencias mientras se
+   * completan los datos.
    */
-  async getFrecuencias(cramo?: number, cplan?: string) {
+  async getFrecuencias(cramo?: number, cplan?: string, cproductor?: number) {
     const plan = String(cplan ?? '').trim();
     if (!plan || !Number.isFinite(Number(cramo))) {
       return { origen: 'catalogo', frecuencias: CondominioService.FRECUENCIAS_BASE };
     }
+    const spName =
+      process.env.MSSQL_SP_BUSCA_FRECUENCIA_PLAN_NEXUS?.trim() || SP_BUSCA_FRECUENCIA_PLAN_NEXUS;
     const T = this.db.types;
-    const res = await this.db.request()
-      .input('cramo', T.Int, Number(cramo))
-      .input('cplan', T.VarChar(10), plan)
-      .query(`
-        SELECT DISTINCT RTRIM(ifrecuencia) AS codigo, RTRIM(xfrecuencia) AS descripcion
-        FROM maplanes_frec
-        WHERE cramo = @cramo
-          AND RTRIM(cplan) = RTRIM(@cplan)
-          AND iestado = 'V'
-      `);
-    const vigentes = new Set<string>();
-    const extra = new Map<string, string>();
-    for (const row of res.recordset as { codigo: string; descripcion: string }[]) {
-      const codigo = String(row.codigo ?? '').trim().toUpperCase();
-      if (!codigo) continue;
-      vigentes.add(codigo);
-      extra.set(codigo, String(row.descripcion ?? '').trim());
+    const req = this.db.request();
+    req.input('cplan', T.VarChar(10), plan);
+    req.input('cramo', T.Int, Number(cramo));
+    req.input('cproductor', T.Numeric(17), Number.isFinite(Number(cproductor)) ? Number(cproductor) : null);
+    req.output('berror', T.Bit, false);
+    req.output('mensaje', T.NVarChar(60), '');
+    const result = await req.execute(spName);
+    const rows = (result.recordset ?? []) as { cvalor: string; xdescripcion: string }[];
+
+    const vistos = new Set<string>();
+    const filas: { codigo: string; descripcion: string }[] = [];
+    for (const row of rows) {
+      const codigo = String(row.cvalor ?? '').trim().toUpperCase();
+      if (!codigo || vistos.has(codigo)) continue;
+      vistos.add(codigo);
+      filas.push({ codigo, descripcion: String(row.xdescripcion ?? '').trim() });
     }
-    if (!vigentes.size) {
+    if (!filas.length) {
       this.logger.warn(
-        `getFrecuencias: ramo ${cramo} plan ${plan} sin filas vigentes en maplanes_frec; se devuelve el catálogo general`,
+        `getFrecuencias: ramo ${cramo} plan ${plan} sin frecuencias en ${spName}; se devuelve el catálogo general`,
       );
       return { origen: 'catalogo', frecuencias: CondominioService.FRECUENCIAS_BASE };
     }
     const base = new Map(CondominioService.FRECUENCIAS_BASE.map((f) => [f.codigo, f]));
-    const frecuencias = [...vigentes].map(
-      (codigo) =>
-        base.get(codigo) ?? { codigo, descripcion: extra.get(codigo) || codigo, cuotas: null },
+    const frecuencias = filas.map(
+      (f) => base.get(f.codigo) ?? { codigo: f.codigo, descripcion: f.descripcion || f.codigo, cuotas: null },
     );
     // Mismo orden que el catálogo general (A, S, T, M, E) y luego los códigos no estándar
     const orden = CondominioService.FRECUENCIAS_BASE.map((f) => f.codigo);
-    frecuencias.sort((a, b) => {
-      const ia = orden.indexOf(a.codigo);
-      const ib = orden.indexOf(b.codigo);
-      return (ia < 0 ? 99 : ia) - (ib < 0 ? 99 : ib);
+    frecuencias.sort((x, y) => {
+      const ix = orden.indexOf(x.codigo);
+      const iy = orden.indexOf(y.codigo);
+      return (ix < 0 ? 99 : ix) - (iy < 0 ? 99 : iy);
     });
-    return { origen: 'maplanes_frec', frecuencias };
+    return { origen: 'sp_busca_frecuencia_plan_nexus', frecuencias };
   }
 
   async getDispositivos(cramo: number) {

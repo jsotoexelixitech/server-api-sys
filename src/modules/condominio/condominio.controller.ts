@@ -335,7 +335,7 @@ export class CondominioController {
   @Get('frecuencias')
   @ApiOperation({
     summary: 'Listar frecuencias de pago',
-    description: 'Retorna las frecuencias de pago con sus códigos y el número de cuotas. Con cramo y cplan devuelve solo las configuradas y vigentes (iestado = V) en maplanes_frec para ese plan; si el plan no tiene filas vigentes devuelve el catálogo general (origen = catalogo).',
+    description: 'Retorna las frecuencias de pago con sus códigos y el número de cuotas. Con cramo y cplan ejecuta sp_busca_frecuencia_plan_nexus (el mismo de POST /valrep/frecuencia): solo las vigentes (iestado = V) de maplanes_frec, más maplanes_frec_produc si se envía cproductor. Si el plan no tiene frecuencias devuelve el catálogo general (origen = catalogo).',
   })
   @ApiResponse({
     status: 200,
@@ -354,7 +354,7 @@ export class CondominioController {
     }
   })
   async getFrecuencias(@Query() query: GetFrecuenciasDto) {
-    const { origen, frecuencias } = await this.condominioService.getFrecuencias(query.cramo, query.cplan);
+    const { origen, frecuencias } = await this.condominioService.getFrecuencias(query.cramo, query.cplan, query.cproductor);
     return { status: true, origen, data: frecuencias };
   }
 

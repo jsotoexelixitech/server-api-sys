@@ -14,4 +14,10 @@ export class GetFrecuenciasDto {
   @IsString()
   @MaxLength(10)
   cplan?: string;
+
+  @ApiPropertyOptional({ example: 80080, description: 'Productor (maproduc.cproductor). Suma las frecuencias de maplanes_frec_produc.' })
+  @IsOptional()
+  @Type(() => Number)
+  @IsInt()
+  cproductor?: number;
 }
