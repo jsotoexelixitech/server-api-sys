@@ -3,6 +3,7 @@ import { Transform, Type } from 'class-transformer';
 import {
   ArrayMaxSize,
   IsArray,
+  IsDateString,
   IsEmail,
   IsIn,
   IsInt,
@@ -82,6 +83,27 @@ export class CrearIntermediarioDto {
   @IsString()
   @MaxLength(120)
   xapellido?: string;
+
+  @ApiPropertyOptional({ example: '1985-04-21', description: 'Fecha de nacimiento (persona natural, mayor de 18)' })
+  @IsOptional()
+  @IsDateString()
+  fnacimiento?: string;
+
+  @ApiPropertyOptional({ example: 'M', enum: ['M', 'F'], description: 'Sexo (persona natural): M masculino · F femenino' })
+  @Transform(({ value }) => (typeof value === 'string' ? value.trim().toUpperCase() : value))
+  @IsOptional()
+  @IsIn(['M', 'F'])
+  isexo?: 'M' | 'F';
+
+  @ApiPropertyOptional({
+    example: 'S',
+    enum: ['S', 'C', 'D', 'V', 'U'],
+    description: 'Estado civil (persona natural): S soltero · C casado · D divorciado · V viudo · U unión estable',
+  })
+  @Transform(({ value }) => (typeof value === 'string' ? value.trim().toUpperCase() : value))
+  @IsOptional()
+  @IsIn(['S', 'C', 'D', 'V', 'U'])
+  iestado_civil?: 'S' | 'C' | 'D' | 'V' | 'U';
 
   @ApiProperty({ example: 'contacto@corretaje.com', description: 'Correo; también es el usuario web (seusuariosweb.xlogin, máx. 50)' })
   @Transform(({ value }) => (typeof value === 'string' ? value.trim().toLowerCase() : value))
