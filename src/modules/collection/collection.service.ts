@@ -7,6 +7,7 @@ import {
 import { ConfigService } from '@nestjs/config';
 import { MssqlService } from '../../database/mssql.service';
 import { CollectionPaymentDto } from './dto/collection-payment.dto';
+import { evaluateReferenceReuse } from './reference-reuse.util';
 import { parseSPError } from '../../common/helpers/sp-error.helper';
 import { buildIngresoCajaUrl } from '../../common/helpers/policy-url.helper';
 
@@ -454,6 +455,55 @@ export class CollectionService {
     return result.recordset[0] as ApiClientRow;
   }
 
+  /**
+   * Una referencia bancaria no puede cobrar a otro asegurado ni superar el monto del movimiento.
+   * Solo mira cobros recientes: referencias antiguas de otros orígenes pueden coincidir por azar.
+   * COLLECTION_REFERENCE_REUSE_DAYS (default 60); 0 desactiva la validación.
+   */
+  private async assertReferenceNotReused(body: CollectionPaymentDto): Promise<void> {
+    const days = Number(process.env.COLLECTION_REFERENCE_REUSE_DAYS ?? 60);
+    if (!Number.isFinite(days) || days <= 0) return;
+
+    const referencia = body.xreferencia.trim();
+    const receipt = await this.getReceiptAmounts(body.cnrecibo);
+    const T = this.db.types;
+
+    const priorReq = this.db.request();
+    priorReq.input('referencia', T.VarChar(30), referencia);
+    priorReq.input('days', T.Int, Math.floor(days));
+    const prior = await priorReq.query(`
+      SELECT casegurado, mpago
+      FROM cbreporte_pago
+      WHERE LTRIM(RTRIM(xreferencia)) = @referencia
+        AND fingreso >= DATEADD(day, -@days, GETDATE())
+    `);
+
+    const movReq = this.db.request();
+    movReq.input('referencia', T.VarChar(50), referencia);
+    const movement = await movReq.query(`
+      SELECT TOP 1 monto
+      FROM pago_movil
+      WHERE LTRIM(RTRIM(referencia_banco)) = @referencia
+      ORDER BY id
+    `);
+
+    const monto = movement.recordset?.[0]?.['monto'];
+    const result = evaluateReferenceReuse({
+      ctenedor: receipt.ctenedor,
+      mpago: Number(body.mpago),
+      movementAmount: monto == null ? null : Number(monto),
+      prior: (prior.recordset ?? []).map((r: Record<string, unknown>) => ({
+        casegurado: Number(r['casegurado']),
+        mpago: Number(r['mpago'] ?? 0),
+      })),
+    });
+    if (!result.ok) {
+      this.logger.warn(
+        `assertReferenceNotReused: ref=${referencia} cnrecibo=${body.cnrecibo} rechazada (${result.reason})`,
+      );
+      throw new BadRequestException(result.message);
+    }
+  }
   /** Construye payload de cobro a partir del recibo y datos de pago verificado. */
   async buildCollectionPayload(
     apikey: string,
@@ -469,6 +519,7 @@ export class CollectionService {
       await this.ensureFarmaciaFacturaRegistered(body);
     } else {
       await this.ensureMobilePaymentRegistered(body);
+      await this.assertReferenceNotReused(body);
     }
     await this.assertPaymentRegistered(body.xreferencia.trim());
     return this.buildCollectionPayloadInternal(apikey, body);
