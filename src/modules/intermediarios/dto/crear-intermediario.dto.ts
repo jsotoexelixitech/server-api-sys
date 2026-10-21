@@ -4,12 +4,33 @@ import { IsEmail, IsIn, IsInt, IsNotEmpty, IsOptional, IsString, Matches, MaxLen
 
 const recortar = ({ value }: { value: unknown }) => (typeof value === 'string' ? value.trim() : value);
 
+/** Teléfono de Venezuela: celular 04XX o fijo 02XX + 7 dígitos (11 en total, con el 0 inicial). */
+export const TELEFONO_VENEZUELA = /^0(2\d{2}|4(12|14|16|22|24|26))\d{7}$/;
+
+/** Deja el teléfono como 0XXXXXXXXXX: quita espacios, guiones y paréntesis y convierte +58 / 58 en 0. */
+export function normalizarTelefonoVenezuela(valor: unknown): string {
+  let digitos = String(valor ?? '').replace(/\D/g, '');
+  if (digitos.length === 12 && digitos.startsWith('58')) digitos = `0${digitos.slice(2)}`;
+  if (digitos.length === 10 && /^[24]/.test(digitos)) digitos = `0${digitos}`;
+  return digitos;
+}
+
 /** Alta de intermediario tradicional (corredor / productor), mismo flujo que la pasarela. */
 export class CrearIntermediarioDto {
   @ApiProperty({ example: 'J', enum: ['V', 'E', 'J', 'G', 'P'], description: 'Tipo de documento' })
   @Transform(({ value }) => (typeof value === 'string' ? value.trim().toUpperCase() : value))
   @IsIn(['V', 'E', 'J', 'G', 'P'])
   icedula!: string;
+
+  @ApiPropertyOptional({
+    example: 'J',
+    enum: ['N', 'J'],
+    description: 'Tipo de ente (maclient.ipersona): N natural (V/E/P) o J jurídica (J/G). Si se omite, sale del documento.',
+  })
+  @Transform(({ value }) => (typeof value === 'string' ? value.trim().toUpperCase() : value))
+  @IsOptional()
+  @IsIn(['N', 'J'])
+  ipersona?: 'N' | 'J';
 
   @ApiProperty({ example: '401234567', description: 'Cédula o RIF (solo dígitos)' })
   @Transform(({ value }) => String(value ?? '').replace(/\D/g, ''))
@@ -43,9 +64,11 @@ export class CrearIntermediarioDto {
   @MaxLength(50, { message: 'xcorreo admite hasta 50 caracteres (es el usuario de login)' })
   xcorreo!: string;
 
-  @ApiProperty({ example: '04141234567' })
-  @Transform(({ value }) => String(value ?? '').replace(/\D/g, ''))
-  @Matches(/^\d{1,20}$/, { message: 'xtelefono debe tener solo dígitos' })
+  @ApiProperty({ example: '04141234567', description: 'Venezuela: celular 0412/0414/0416/0422/0424/0426 o fijo 02XX + 7 dígitos; acepta +58' })
+  @Transform(({ value }) => normalizarTelefonoVenezuela(value))
+  @Matches(TELEFONO_VENEZUELA, {
+    message: 'xtelefono debe ser un teléfono de Venezuela: 0412/0414/0416/0422/0424/0426 o fijo 02XX, seguido de 7 dígitos',
+  })
   xtelefono!: string;
 
   @ApiPropertyOptional({ maxLength: 60 })
