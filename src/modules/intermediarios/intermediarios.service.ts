@@ -33,6 +33,19 @@ export interface GestorCreado {
   cscanalalt: number | null;
 }
 
+export interface Banco {
+  cbanco: number;
+  cbanco_ref: string;
+  xbanco: string;
+}
+
+/** Cuenta lista para maproduc: banco resuelto por los 4 primeros dígitos y número con guiones. */
+interface CuentaMaproduc {
+  cbanco: number;
+  ccuentaban: string;
+  itipocta: string;
+}
+
 export interface GestorResumen {
   cgestor: string;
   xgestor: string;
@@ -85,6 +98,7 @@ export class IntermediariosService {
           : 'Persona jurídica requiere RIF J o G.',
       );
     }
+    const cuentas = await this.resolverCuentas(dto.cuentas ?? []);
 
     const tx = this.mssql.transaction();
     await tx.begin();
@@ -151,14 +165,14 @@ export class IntermediariosService {
         .input('xproductor', sql.VarChar(240), razonSocial)
         .input('ccarnet', sql.Char(10), null)
         .input('csucur', sql.SmallInt, dto.csucur ?? 1)
-        .input('cbanco', sql.SmallInt, null)
-        .input('cbanco2', sql.SmallInt, null)
-        .input('ccuentaban', sql.Char(30), null)
-        .input('ccuentaban2', sql.Char(30), null)
+        .input('cbanco', sql.SmallInt, cuentas[0]?.cbanco ?? null)
+        .input('cbanco2', sql.SmallInt, cuentas[1]?.cbanco ?? null)
+        .input('ccuentaban', sql.Char(30), cuentas[0]?.ccuentaban ?? null)
+        .input('ccuentaban2', sql.Char(30), cuentas[1]?.ccuentaban ?? null)
         .input('istatpro', sql.Char(1), 'V')
         .input('xcontacto', sql.Char(60), telefono)
-        .input('itipocta', sql.Char(2), null)
-        .input('itipocta2', sql.Char(2), null)
+        .input('itipocta', sql.Char(2), cuentas[0]?.itipocta ?? null)
+        .input('itipocta2', sql.Char(2), cuentas[1]?.itipocta ?? null)
         .input('iformapago', sql.Char(1), 'T')
         .input('ctipoprod', sql.SmallInt, dto.ctipoprod ?? 2)
         .input('xcorreo', sql.NVarChar(60), dto.xcorreo)
@@ -316,6 +330,40 @@ export class IntermediariosService {
       this.logger.error(`Fallo alta de gestor (padre=${dto.cgestor_padre}): ${mensaje}`);
       throw new InternalServerErrorException(`No fue posible crear el gestor: ${mensaje}`);
     }
+  }
+
+  /** Bancos nacionales activos con código de 4 dígitos (mabanco), para las cuentas del intermediario. */
+  async bancos(): Promise<Banco[]> {
+    const res = await this.mssql.request().query<Banco>(
+      `SELECT CBANCO AS cbanco, LTRIM(RTRIM(CBANCO_REF)) AS cbanco_ref, LTRIM(RTRIM(XBANCO)) AS xbanco
+         FROM mabanco
+        WHERE ITIPO = 'V' AND BACTIVO = 1 AND LEN(LTRIM(RTRIM(CBANCO_REF))) = 4
+        ORDER BY LTRIM(RTRIM(XBANCO))`,
+    );
+    return res.recordset;
+  }
+
+  /**
+   * Valida las cuentas (20 dígitos, sin repetir) y resuelve el banco por sus 4 primeros dígitos (mabanco.CBANCO_REF).
+   * Se guardan con guiones (0105-0067-2110-6747-8957), igual que las cuentas que ya tiene maproduc.
+   */
+  private async resolverCuentas(cuentas: { ccuenta: string; itipocta: string }[]): Promise<CuentaMaproduc[]> {
+    if (!cuentas.length) return [];
+    if (new Set(cuentas.map((c) => c.ccuenta)).size !== cuentas.length) {
+      throw new BadRequestException('Las dos cuentas bancarias son iguales.');
+    }
+    const bancos = new Map((await this.bancos()).map((b) => [b.cbanco_ref, b]));
+    return cuentas.map((c) => {
+      const banco = bancos.get(c.ccuenta.slice(0, 4));
+      if (!banco) {
+        throw new BadRequestException(`La cuenta ${c.ccuenta} no corresponde a un banco nacional activo (código ${c.ccuenta.slice(0, 4)}).`);
+      }
+      return {
+        cbanco: banco.cbanco,
+        ccuentaban: c.ccuenta.match(/.{4}/g)!.join('-'),
+        itipocta: c.itipocta,
+      };
+    });
   }
 
   /** Busca gestores (posibles padres) por código, nombre o correo. */
