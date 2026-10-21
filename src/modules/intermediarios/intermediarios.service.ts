@@ -1,4 +1,5 @@
 import {
+  BadRequestException,
   ConflictException,
   Injectable,
   InternalServerErrorException,
@@ -74,6 +75,16 @@ export class IntermediariosService {
     const apellido = (dto.xapellido || '').toUpperCase();
     const razonSocial = dto.xcliente.toUpperCase();
     const telefono = dto.xtelefono;
+    // Tipo de ente en Sis2000 (maclient.ipersona): N natural (V/E/P) o J jurídica (J/G)
+    const ipersonaDocumento = ['J', 'G'].includes(dto.icedula) ? 'J' : 'N';
+    const ipersona = dto.ipersona ?? ipersonaDocumento;
+    if (ipersona !== ipersonaDocumento) {
+      throw new BadRequestException(
+        ipersona === 'N'
+          ? 'Persona natural requiere cédula V, E o pasaporte P.'
+          : 'Persona jurídica requiere RIF J o G.',
+      );
+    }
 
     const tx = this.mssql.transaction();
     await tx.begin();
@@ -124,6 +135,15 @@ export class IntermediariosService {
         .input('ifuente', sql.Char(10), 'SIS2000')
         .output('salida', sql.VarChar(50))
         .execute('spCreateMaclient');
+
+      // spCreateMaclient deja G para gubernamental y vacío para pasaporte, y si el cliente ya existía no lo toca
+      // (hay clientes con la letra del documento: V, E...). La pantalla de Sis2000 solo reconoce N o J: se corrige
+      // solo cuando el valor actual no es N ni J.
+      await req()
+        .input('cci_rif', sql.Numeric(13, 0), cciRif)
+        .input('ipersona', sql.Char(1), ipersona)
+        .query(`UPDATE maclient SET ipersona = @ipersona
+                 WHERE cci_rif = @cci_rif AND ISNULL(LTRIM(RTRIM(ipersona)), '') NOT IN ('N', 'J')`);
 
       // 2. Productor
       const maproduc = await req()
