@@ -137,6 +137,8 @@ const SP_FILTER_KEYS = [
   'moneda',
   'fdesdeemi',
   'fhastaemi',
+  // "<cramo>-<ccobertura>", el codigo de GET /reportes/coberturas; el SP filtra poliza.coberturas_codigos.
+  'ccobertura',
 ];
 
 function normalizeText(value) {
@@ -333,6 +335,7 @@ function buildExecutePayload(body, schema) {
     moneda: ['moneda', 'cmoneda'],
     fdesdeemi: ['fdesdeemi', 'desdeEmision', 'desde_emision', 'fecha_emision_desde'],
     fhastaemi: ['fhastaemi', 'hastaEmision', 'hasta_emision', 'fecha_emision_hasta'],
+    ccobertura: ['ccobertura', 'cobertura'],
   };
 
   for (const [targetKey, sourceKeys] of Object.entries(aliases)) {
