@@ -5,7 +5,6 @@ import { GetPlanesCondominioDto } from './dto/get-planes-condominio.dto';
 import { CotizacionCondominioDto } from './dto/cotizacion-condominio.dto';
 import { CreateEmissionCondominioDto } from './dto/create-emission-condominio.dto';
 import { GetByRamoDto } from './dto/get-by-ramo.dto';
-import { GetFrecuenciasDto } from './dto/get-frecuencias.dto';
 import { GetTarificadorDto, UpdateTarificadorTasaDto } from './dto/tarificador.dto';
 import { NestProtected } from '../auth/decorators/nest-protected.decorator';
 import { NestApiKey } from '../auth/decorators/nest-api-key.decorator';
@@ -335,7 +334,7 @@ export class CondominioController {
   @Get('frecuencias')
   @ApiOperation({
     summary: 'Listar frecuencias de pago',
-    description: 'Retorna las frecuencias de pago con sus códigos y el número de cuotas. Con cramo y cplan ejecuta sp_busca_frecuencia_plan_nexus (el mismo de POST /valrep/frecuencia): solo las vigentes (iestado = V) de maplanes_frec, más maplanes_frec_produc si se envía cproductor. Solo se devuelven las habilitadas: si el plan no tiene ninguna, data va vacío.',
+    description: 'Retorna el catálogo general de frecuencias de pago con sus códigos y el número de cuotas. Las frecuencias habilitadas de un plan se consultan con POST /valrep/frecuencia.',
   })
   @ApiResponse({
     status: 200,
@@ -353,9 +352,9 @@ export class CondominioController {
       }
     }
   })
-  async getFrecuencias(@Query() query: GetFrecuenciasDto) {
-    const { origen, frecuencias } = await this.condominioService.getFrecuencias(query.cramo, query.cplan, query.cproductor);
-    return { status: true, origen, data: frecuencias };
+  async getFrecuencias() {
+    const data = await this.condominioService.getFrecuencias();
+    return { status: true, data };
   }
 
   @Get('dispositivos')

@@ -772,7 +772,7 @@ export class ValrepService {
     }
   }
 
-  async getFrecuencia(cplan: string, cramo?: number, cproductor?: number) {
+  async getFrecuencia(cplan: string, cramo?: number, cproductor?: number, estricto = false) {
     const spName = this.spBuscaFrecuenciaPlanNexusName();
     try {
       const T = this.db.types;
@@ -794,6 +794,12 @@ export class ValrepService {
         cplan?: string;
       }[];
 
+      if (!rows.length && estricto) {
+        this.logger.warn(
+          `getFrecuencia: plan=${cplan} cramo=${cramo ?? 'null'} cproductor=${cproductor ?? 'null'} sin frecuencias habilitadas en ${spName}`,
+        );
+        return [];
+      }
       if ((Boolean(result.output['berror']) && !rows.length) || !rows.length) {
         this.logger.warn(
           `getFrecuencia: plan=${cplan} cramo=${cramo ?? 'null'} cproductor=${cproductor ?? 'null'} sin filas en ${spName} — fallback ANUAL`,
