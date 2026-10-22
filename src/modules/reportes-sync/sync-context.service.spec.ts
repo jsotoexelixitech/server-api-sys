@@ -86,3 +86,23 @@ describe('SyncContextService · sync al consultar recibos', () => {
     expect(syncService.syncIncremental).not.toHaveBeenCalled();
   });
 });
+
+describe('SyncContextService · catálogos al abrir', () => {
+  it('si un catálogo falla, los demás se sincronizan y el fallo se informa', async () => {
+    const { service, syncService } = build({ REPORTES_SYNC_ENABLED: true });
+    syncService.syncIncremental.mockImplementation((async (entidad: string) => {
+      if (entidad === 'ramos') throw new Error('column "id_aseguradora" does not exist');
+      return { entidad, rowsSynced: 3, skipped: false };
+    }) as never);
+
+    const result = (await service.maybeSyncCatalogsOnOpen({}, {})) as {
+      skipped: boolean;
+      catalogs: Array<{ entidad: string; rowsSynced?: number; error?: string }>;
+    };
+
+    expect(result.skipped).toBe(false);
+    expect(syncService.syncIncremental).toHaveBeenCalledTimes(6);
+    expect(result.catalogs.find((c) => c.entidad === 'ramos')?.error).toContain('id_aseguradora');
+    expect(result.catalogs.find((c) => c.entidad === 'coberturas')?.rowsSynced).toBe(3);
+  });
+});

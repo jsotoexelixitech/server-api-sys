@@ -226,7 +226,8 @@ export class SyncContextService {
       const force = Boolean(
         body?.forceSync || (body?.sync as Record<string, unknown>)?.force,
       );
-      const catalogs = await Promise.all(
+      // Cada catálogo es independiente: si uno falla (p. ej. una tabla local sin id_aseguradora) los demás se sincronizan igual.
+      const settled = await Promise.allSettled(
         CATALOG_ENTIDADES.map((entidad) =>
           this.syncService.syncIncremental(entidad, filtros, {
             force,
@@ -235,6 +236,15 @@ export class SyncContextService {
           }),
         ),
       );
+      const catalogs = settled.map((res, i) => {
+        if (res.status === 'fulfilled') return res.value;
+        const message =
+          res.reason instanceof Error ? res.reason.message : String(res.reason);
+        this.syncLog(`catálogo ${CATALOG_ENTIDADES[i]}: error en sync, se continúa`, {
+          message,
+        });
+        return { entidad: CATALOG_ENTIDADES[i], skipped: true, error: message };
+      });
 
       return {
         skipped: false,
