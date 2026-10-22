@@ -217,6 +217,8 @@ function buildPolizasAdapterBody(body, headers) {
       moneda: nullable(filtros.moneda ?? filtros.cmoneda),
       fdesdeemi: nullable(filtros.fdesdeemi ?? filtros.desdeEmision ?? filtros.desde_emision),
       fhastaemi: nullable(filtros.fhastaemi ?? filtros.hastaEmision ?? filtros.hasta_emision),
+      // "<cramo>-<ccobertura>" (GET /reportes/coberturas); sin esta línea el filtro se perdía aquí.
+      ccobertura: nullable(filtros.ccobertura ?? filtros.cobertura),
       aseguradoraId: nullable(filtros.aseguradoraId ?? filtros.id_aseguradora),
       id_aseguradora: nullable(filtros.id_aseguradora ?? filtros.aseguradoraId),
     },
