@@ -57,9 +57,12 @@ function resolveFieldSpec(
   if (spec === undefined || spec === null) return undefined;
   if (typeof spec === 'string') return pick(row, spec, snakeToCamel(spec));
   if (typeof spec === 'object' && Array.isArray((spec as { concat?: string[] }).concat)) {
-    const parts = (spec as { concat: string[] }).concat.map((field) =>
-      pick(row, field, snakeToCamel(field)),
-    );
+    // Las fechas van como YYYY-MM-DD: String(Date) depende de la zona horaria del proceso y la misma fila
+    // generaba claves distintas (y filas duplicadas) según el servidor que sincronizara.
+    const parts = (spec as { concat: string[] }).concat.map((field) => {
+      const value = pick(row, field, snakeToCamel(field));
+      return value instanceof Date ? toDateOnly(value) : value;
+    });
     return buildOrigenClave(parts);
   }
   if (typeof spec === 'object' && (spec as { field?: string }).field) {
