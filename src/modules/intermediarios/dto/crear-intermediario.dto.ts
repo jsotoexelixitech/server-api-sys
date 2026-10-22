@@ -130,7 +130,7 @@ export class CrearIntermediarioDto {
   @IsInt()
   csucur?: number;
 
-  @ApiPropertyOptional({ example: 2, enum: [1, 2, 3], description: '1 Agente exclusivo · 2 Corredor · 3 Sociedad de corretaje' })
+  @ApiPropertyOptional({ example: 2, enum: [1, 2, 3], description: '1 Agente exclusivo · 2 Corredor (persona natural) · 3 Sociedad de corretaje (persona jurídica, siempre)' })
   @IsOptional()
   @IsIn([1, 2, 3])
   ctipoprod?: number;
