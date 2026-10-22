@@ -1,6 +1,8 @@
 -- sp_rpt_polizas para QA/desarrollo (PG reportes 192.168.8.121 y 192.168.8.120). Los catálogos de esos ambientes no tienen id_aseguradora.
--- Cambios 2026-10-16: el cruce con canal ya no puede fallar con canales no numéricos (::integer dentro de un CASE) y se agrega
--- la columna coberturas. Requiere antes ddl_coberturas_poliza.sql. La firma no cambia: CREATE OR REPLACE.
+-- Versión unificada (2026-10-22): columna coberturas + filtro ccobertura (poliza.coberturas_codigos) + cruce con canal seguro
+-- (el ::integer va dentro de un CASE; PostgreSQL no garantiza el orden de evaluación de los AND).
+-- Es la versión oficial: cualquier otro script que recree sp_rpt_polizas debe partir de esta.
+-- Requiere poliza.coberturas (ddl_coberturas_poliza.sql) y poliza.coberturas_codigos (poliza_cobertura_filtro_qa.sql).
 
 CREATE OR REPLACE FUNCTION public.sp_rpt_polizas(p_payload_json jsonb DEFAULT '{}'::jsonb, p_usuario numeric DEFAULT NULL::numeric)
  RETURNS SETOF jsonb
@@ -16,6 +18,7 @@ DECLARE
     v_moneda text;
     v_fdesdeemi date;
     v_fhastaemi date;
+    v_ccobertura text;
 BEGIN
     IF jsonb_typeof(p_payload_json -> 'filtros') = 'object' THEN
         v_filtros := p_payload_json -> 'filtros';
@@ -31,6 +34,7 @@ BEGIN
     v_moneda     := NULLIF(TRIM(v_filtros ->> 'moneda'), '');
     v_fdesdeemi  := NULLIF(TRIM(v_filtros ->> 'fdesdeemi'), '')::date;
     v_fhastaemi  := NULLIF(TRIM(v_filtros ->> 'fhastaemi'), '')::date;
+    v_ccobertura := NULLIF(TRIM(v_filtros ->> 'ccobertura'), '');
 
     RETURN QUERY
     SELECT to_jsonb(t)
@@ -93,6 +97,7 @@ BEGIN
             AND (v_moneda IS NULL OR p.moneda = v_moneda)
             AND (v_fdesdeemi IS NULL OR p.fecha_emision_poliza >= v_fdesdeemi)
             AND (v_fhastaemi IS NULL OR p.fecha_emision_poliza <= v_fhastaemi)
+            AND (v_ccobertura IS NULL OR p.coberturas_codigos @> ARRAY[v_ccobertura])
         ORDER BY p.fecha_emision_poliza DESC NULLS LAST, p.numero_poliza
     ) t;
 END;
