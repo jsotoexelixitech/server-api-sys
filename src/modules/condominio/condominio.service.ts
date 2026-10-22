@@ -4,7 +4,12 @@ import { MssqlService } from '../../database/mssql.service';
 import { GetPlanesCondominioDto } from './dto/get-planes-condominio.dto';
 import { CotizacionCondominioDto } from './dto/cotizacion-condominio.dto';
 import { CreateEmissionCondominioDto } from './dto/create-emission-condominio.dto';
-import { GetTarificadorDto, UpdateTarificadorTasaDto } from './dto/tarificador.dto';
+import {
+  FRECUENCIAS_CONFIGURABLES,
+  GetTarificadorDto,
+  UpdateTarificadorFrecuenciaDto,
+  UpdateTarificadorTasaDto,
+} from './dto/tarificador.dto';
 import { CotizacionPreestablecidaDto } from './dto/cotizacion-preestablecida.dto';
 import { parseSPError, toUserFacingError } from '../../common/helpers/sp-error.helper';
 import { buildPolicyPdfUrl } from '../../common/helpers/policy-url.helper';
@@ -733,5 +738,118 @@ export class CondominioService {
       `tarificador: ramo=${dto.cramo} cober=${dto.ccober} pprima ${before.pprima} -> ${dto.pprima} usuario=${dto.cusuario} (${dto.xusuario ?? 's/n'})`,
     );
     return { before: { pprima: Number(before.pprima) }, after: { pprima: dto.pprima, cusuariomod: dto.cusuario } };
+  }
+
+  private static readonly FRECUENCIAS_CATALOGO: Record<string, string> = {
+    A: 'Anual',
+    S: 'Semestral',
+    T: 'Trimestral',
+    M: 'Mensual',
+  };
+
+  /**
+   * Frecuencias de pago de los planes vigentes de un ramo (maplanes_frec). Una frecuencia está habilitada cuando
+   * tiene una fila con iestado = 'V'; sin fila o con otro estado cuenta como deshabilitada.
+   */
+  async getTarificadorFrecuencias(dto: GetTarificadorDto) {
+    const T = this.db.types;
+    const planes = await this.db
+      .request()
+      .input('cramo', T.Int, dto.cramo)
+      .query(`
+        SELECT RTRIM(cplan) AS cplan, RTRIM(xplan) AS xplan
+        FROM maplanes
+        WHERE cramo = @cramo AND iestado = 'V'
+        ORDER BY TRY_CAST(RTRIM(cplan) AS INT), cplan
+      `);
+    const filas = await this.db
+      .request()
+      .input('cramo', T.Int, dto.cramo)
+      .query(`
+        SELECT RTRIM(cplan) AS cplan, UPPER(RTRIM(ifrecuencia)) AS ifrecuencia, iestado, fultmod, cusuariomod
+        FROM maplanes_frec
+        WHERE cramo = @cramo
+      `);
+    const porClave = new Map<string, { habilitada: boolean; fultmod: Date | null; cusuariomod: number | null }>();
+    for (const f of filas.recordset as any[]) {
+      const key = `${f.cplan}|${f.ifrecuencia}`;
+      const previo = porClave.get(key);
+      const habilitada = String(f.iestado ?? '').trim() === 'V';
+      // Con filas duplicadas basta una vigente para que el SP la devuelva
+      porClave.set(key, {
+        habilitada: habilitada || Boolean(previo?.habilitada),
+        fultmod: f.fultmod ?? previo?.fultmod ?? null,
+        cusuariomod: f.cusuariomod == null ? (previo?.cusuariomod ?? null) : Number(f.cusuariomod),
+      });
+    }
+    return {
+      cramo: dto.cramo,
+      planes: (planes.recordset as any[])
+        .filter((p) => !dto.cplan || p.cplan === String(dto.cplan).trim())
+        .map((p) => ({
+          cplan: p.cplan,
+          xplan: p.xplan,
+          frecuencias: FRECUENCIAS_CONFIGURABLES.map((codigo) => {
+            const f = porClave.get(`${p.cplan}|${codigo}`);
+            return {
+              codigo,
+              descripcion: CondominioService.FRECUENCIAS_CATALOGO[codigo],
+              habilitada: Boolean(f?.habilitada),
+              configurada: Boolean(f),
+              fultmod: f?.fultmod ?? null,
+              cusuariomod: f?.cusuariomod ?? null,
+            };
+          }),
+        })),
+    };
+  }
+
+  /**
+   * Habilita (iestado V) o deshabilita (iestado N) una frecuencia de un plan vigente en maplanes_frec. Si no existe la
+   * fila y se habilita, se crea; si no existe y se deshabilita no hay nada que hacer. Deja constancia del usuario.
+   */
+  async updateTarificadorFrecuencia(dto: UpdateTarificadorFrecuenciaDto) {
+    const T = this.db.types;
+    const plan = String(dto.cplan).trim();
+    const codigo = String(dto.ifrecuencia).trim().toUpperCase();
+    const estado = dto.habilitada ? 'V' : 'N';
+    const keyReq = () =>
+      this.db
+        .request()
+        .input('cramo', T.Int, dto.cramo)
+        .input('cplan', T.VarChar(6), plan)
+        .input('ifrecuencia', T.VarChar(6), codigo);
+
+    const vigente = await keyReq().query(
+      `SELECT RTRIM(xplan) AS xplan FROM maplanes WHERE cramo = @cramo AND RTRIM(cplan) = RTRIM(@cplan) AND iestado = 'V'`,
+    );
+    if (!vigente.recordset.length) {
+      throw new BadRequestException(`El plan ${plan} no está vigente en el ramo ${dto.cramo}.`);
+    }
+    const xplan = String(vigente.recordset[0].xplan ?? '').trim();
+
+    const where = `cramo = @cramo AND RTRIM(cplan) = RTRIM(@cplan) AND UPPER(RTRIM(ifrecuencia)) = @ifrecuencia`;
+    const actual = await keyReq().query(`SELECT iestado FROM maplanes_frec WHERE ${where}`);
+    const antes = actual.recordset.some((r: any) => String(r.iestado ?? '').trim() === 'V');
+
+    if (actual.recordset.length) {
+      await keyReq()
+        .input('iestado', T.Char(1), estado)
+        .input('cusuario', T.Numeric(18, 0), dto.cusuario)
+        .query(`UPDATE maplanes_frec SET iestado = @iestado, fultmod = GETDATE(), cusuariomod = @cusuario,
+                       cprog = 'NEXUS_TARIFICADOR' WHERE ${where}`);
+    } else if (dto.habilitada) {
+      await keyReq()
+        .input('xfrecuencia', T.VarChar(150), CondominioService.FRECUENCIAS_CATALOGO[codigo].toUpperCase())
+        .input('xplan', T.VarChar(60), xplan.slice(0, 60))
+        .input('cusuario', T.Numeric(18, 0), dto.cusuario)
+        .query(`INSERT INTO maplanes_frec
+                  (cramo, cplan, ifrecuencia, u_version, xfrecuencia, xplan, ndias, iestado, cprog, bnacional, fingreso, cusuario, itipo)
+                VALUES (@cramo, @cplan, @ifrecuencia, '!', @xfrecuencia, @xplan, 0, 'V', 'NEXUS_TARIFICADOR', 0, GETDATE(), @cusuario, 'D')`);
+    }
+    this.logger.warn(
+      `tarificador frecuencia: ramo=${dto.cramo} plan=${plan} ${codigo} ${antes ? 'V' : 'N'} -> ${estado} usuario=${dto.cusuario} (${dto.xusuario ?? 's/n'})`,
+    );
+    return { before: { habilitada: antes }, after: { habilitada: dto.habilitada, cusuariomod: dto.cusuario } };
   }
 }
