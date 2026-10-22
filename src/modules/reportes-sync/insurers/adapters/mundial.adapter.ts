@@ -68,6 +68,24 @@ export const mundialAdapter: InsurerAdapter = {
   },
 
   mapCatalogRow(row) {
+    // Coberturas: el id es texto "<cramo>-<ccobertura>" (ccobertura se repite entre ramos); no se convierte a número.
+    const ccobertura = toStr(pick(row, 'ccobertura'));
+    if (ccobertura) {
+      const codigo = toStr(pick(row, 'id', 'codigo'));
+      const activoCob = pick(row, 'activo');
+      return {
+        origenClave: codigo,
+        id: codigo,
+        cramo: toNum(pick(row, 'cramo', 'id_ramo')),
+        ccobertura,
+        descripcion: toStr(pick(row, 'descripcion', 'xdescripcion_l')) || ccobertura,
+        activo:
+          activoCob === undefined || activoCob === null
+            ? true
+            : Boolean(activoCob === true || activoCob === 1 || activoCob === '1'),
+        origenModifiedAt: toDate(pick(row, 'modified_at')) || new Date(),
+      };
+    }
     const id = toNum(
       pick(row, 'id', 'codigo', 'cramo', 'ccanalalt', 'cproductor', 'canula', 'crechazo'),
     );
