@@ -5,8 +5,7 @@ import { GetPlanesCondominioDto } from './dto/get-planes-condominio.dto';
 import { CotizacionCondominioDto } from './dto/cotizacion-condominio.dto';
 import { CreateEmissionCondominioDto } from './dto/create-emission-condominio.dto';
 import { GetByRamoDto } from './dto/get-by-ramo.dto';
-import { GetFrecuenciasDto } from './dto/get-frecuencias.dto';
-import { GetTarificadorDto, UpdateTarificadorTasaDto } from './dto/tarificador.dto';
+import { GetTarificadorDto, UpdateTarificadorFrecuenciaDto, UpdateTarificadorTasaDto } from './dto/tarificador.dto';
 import { NestProtected } from '../auth/decorators/nest-protected.decorator';
 import { NestApiKey } from '../auth/decorators/nest-api-key.decorator';
 import { NEST_AUTH_SCOPES } from '../auth/scopes/nest-auth-scopes.constants';
@@ -335,7 +334,7 @@ export class CondominioController {
   @Get('frecuencias')
   @ApiOperation({
     summary: 'Listar frecuencias de pago',
-    description: 'Retorna las frecuencias de pago con sus códigos y el número de cuotas. Con cramo y cplan ejecuta sp_busca_frecuencia_plan_nexus (el mismo de POST /valrep/frecuencia): solo las vigentes (iestado = V) de maplanes_frec, más maplanes_frec_produc si se envía cproductor. Solo se devuelven las habilitadas: si el plan no tiene ninguna, data va vacío.',
+    description: 'Retorna el catálogo general de frecuencias de pago con sus códigos y el número de cuotas. Las frecuencias habilitadas de un plan se consultan con POST /valrep/frecuencia.',
   })
   @ApiResponse({
     status: 200,
@@ -353,9 +352,9 @@ export class CondominioController {
       }
     }
   })
-  async getFrecuencias(@Query() query: GetFrecuenciasDto) {
-    const { origen, frecuencias } = await this.condominioService.getFrecuencias(query.cramo, query.cplan, query.cproductor);
-    return { status: true, origen, data: frecuencias };
+  async getFrecuencias() {
+    const data = await this.condominioService.getFrecuencias();
+    return { status: true, data };
   }
 
   @Get('dispositivos')
@@ -430,6 +429,27 @@ export class CondominioController {
   })
   async updateTarificadorTasa(@Body() dto: UpdateTarificadorTasaDto) {
     const data = await this.condominioService.updateTarificadorTasa(dto);
+    return { status: true, data };
+  }
+
+  @Get('tarificador/frecuencias')
+  @ApiOperation({
+    summary: 'Frecuencias de pago de los planes (maplanes_frec)',
+    description: 'Por plan vigente del ramo 16 u 38, indica cuáles de las frecuencias A, S, T y M están habilitadas (iestado = V).',
+  })
+  async getTarificadorFrecuencias(@Query() query: GetTarificadorDto) {
+    const data = await this.condominioService.getTarificadorFrecuencias(query);
+    return { status: true, data };
+  }
+
+  @Put('tarificador/frecuencias')
+  @NestProtected(NEST_AUTH_SCOPES.TARIFAS_CONDOMINIO)
+  @ApiOperation({
+    summary: 'Habilitar o deshabilitar una frecuencia de pago de un plan',
+    description: 'Actualiza maplanes_frec.iestado (V habilitada, N deshabilitada) y registra el usuario en cusuariomod; si la frecuencia no existe y se habilita, la crea. Solo ramos 16 y 38. Requiere el scope tarifas:condominio.',
+  })
+  async updateTarificadorFrecuencia(@Body() dto: UpdateTarificadorFrecuenciaDto) {
+    const data = await this.condominioService.updateTarificadorFrecuencia(dto);
     return { status: true, data };
   }
 }

@@ -1,6 +1,6 @@
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
 import { Type } from 'class-transformer';
-import { IsIn, IsInt, IsNotEmpty, IsNumber, IsOptional, IsString, Max, MaxLength, Min } from 'class-validator';
+import { IsBoolean, IsIn, IsInt, IsNotEmpty, IsNumber, IsOptional, IsString, Max, MaxLength, Min } from 'class-validator';
 
 /** Ramos cuyo tarifario puede consultarse/editarse desde el tarificador de Técnica. */
 export const TARIFICADOR_RAMOS = [16, 38] as const;
@@ -43,6 +43,43 @@ export class UpdateTarificadorTasaDto {
   @Min(0)
   @Max(100)
   pprima: number;
+
+  @ApiProperty({ example: 20364172, description: 'Código de usuario Sis2000 de quien modifica (auditoría cusuariomod).' })
+  @Type(() => Number)
+  @IsInt()
+  @Min(1)
+  cusuario: number;
+
+  @ApiPropertyOptional({ example: 'Nombre Apellido', description: 'Nombre del usuario, solo para el log.' })
+  @IsOptional()
+  @IsString()
+  @MaxLength(120)
+  xusuario?: string;
+}
+
+/** Frecuencias de pago que se pueden habilitar o deshabilitar por plan desde el panel de Técnica. */
+export const FRECUENCIAS_CONFIGURABLES = ['A', 'S', 'T', 'M'] as const;
+
+/** Habilita o deshabilita una frecuencia de pago de un plan (maplanes_frec.iestado: V = habilitada). */
+export class UpdateTarificadorFrecuenciaDto {
+  @ApiProperty({ example: 38 })
+  @Type(() => Number)
+  @IsIn(TARIFICADOR_RAMOS as unknown as number[])
+  cramo: number;
+
+  @ApiProperty({ example: '2', description: 'Código de plan vigente del ramo (maplanes.cplan).' })
+  @IsString()
+  @IsNotEmpty()
+  @MaxLength(6)
+  cplan: string;
+
+  @ApiProperty({ example: 'T', enum: FRECUENCIAS_CONFIGURABLES as unknown as string[] })
+  @IsIn(FRECUENCIAS_CONFIGURABLES as unknown as string[])
+  ifrecuencia: string;
+
+  @ApiProperty({ example: true, description: 'true = habilitada (iestado V); false = deshabilitada (iestado N).' })
+  @IsBoolean()
+  habilitada: boolean;
 
   @ApiProperty({ example: 20364172, description: 'Código de usuario Sis2000 de quien modifica (auditoría cusuariomod).' })
   @Type(() => Number)
