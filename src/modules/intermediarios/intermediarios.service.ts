@@ -100,6 +100,11 @@ export class IntermediariosService {
     }
     const cuentas = await this.resolverCuentas(dto.cuentas ?? []);
     const persona = this.datosPersonaNatural(dto, ipersona);
+    // Tipo de productor (MAITPROD): jurídica siempre 3 Sociedad de corretaje; natural 1 Agente exclusivo o 2 Corredor
+    if (ipersona === 'N' && dto.ctipoprod === 3) {
+      throw new BadRequestException('Persona natural: el tipo de productor es Corredor o Agente exclusivo, no Sociedad de corretaje.');
+    }
+    const ctipoprod = ipersona === 'J' ? 3 : (dto.ctipoprod ?? 2);
 
     const tx = this.mssql.transaction();
     await tx.begin();
@@ -169,7 +174,7 @@ export class IntermediariosService {
         .input('itipocta', sql.Char(2), cuentas[0]?.itipocta ?? null)
         .input('itipocta2', sql.Char(2), cuentas[1]?.itipocta ?? null)
         .input('iformapago', sql.Char(1), 'T')
-        .input('ctipoprod', sql.SmallInt, dto.ctipoprod ?? 2)
+        .input('ctipoprod', sql.SmallInt, ctipoprod)
         .input('xcorreo', sql.NVarChar(60), dto.xcorreo)
         .input('cproductor', sql.Numeric(11, 0), cproductor)
         .input('ifuente', sql.NVarChar(10), 'SIS2000')
