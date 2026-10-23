@@ -1,11 +1,11 @@
 -- =============================================================================
--- 02 — sp_pre_emision_automovil_rcv_nexus (versión QA 23-oct-2026 + país)
+-- 2 de 2 — sp_pre_emision_automovil_rcv_nexus (versión QA 23-oct-2026 + país)
+-- APLICAR DESPUÉS del 1 de 2 (sp_emision_automovil_rcv_nexus debe aceptar los parámetros).
 -- Cambios (marcados con [cpais 23-oct-2026]):
 --   1) Dos parámetros opcionales al final: @cpais_tomador, @cpais_titular (default NULL).
 --   2) Herencia tomador <-> titular también del país.
---   3) Tras SET @id = SCOPE_IDENTITY(): UPDATE del país en TMEMISION_AUTOMOVIL_RCV2.
--- No se toca el INSERT ni ninguna otra lógica. Sin país todo queda igual que hoy.
--- Requiere 01 aplicado. Respaldo para volver atrás: respaldo/sp_pre_emision_automovil_rcv_nexus.QA-2026-10-23.sql
+--   3) Pasa el país a sp_emision_automovil_rcv_nexus en el EXEC.
+-- No se toca la tabla TMEMISION_AUTOMOVIL_RCV2, el INSERT ni otra lógica. Sin país todo queda igual.
 -- =============================================================================
 USE Sis2000;
 GO
@@ -674,18 +674,13 @@ BEGIN
 
         SET @id = SCOPE_IDENTITY();
 
-        -- [cpais 23-oct-2026] País de la dirección (solo si viene; sin país queda NULL → 58 en la emisión).
-        IF @cpais_tomador IS NOT NULL OR @cpais_titular IS NOT NULL
-            UPDATE TMEMISION_AUTOMOVIL_RCV2
-               SET cpais_tomador = @cpais_tomador,
-                   cpais_titular = @cpais_titular
-             WHERE id = @id;
-
         -- 11. Invocar sp_emision_automovil_rcv_nexus
         EXEC sp_emision_automovil_rcv_nexus
             @id = @id,
             @pSuccess = @pSuccess OUTPUT,
-            @pErrorMessage = @pErrorMessage OUTPUT;
+            @pErrorMessage = @pErrorMessage OUTPUT,
+            @cpais_tomador = @cpais_tomador,   -- [cpais 23-oct-2026]
+            @cpais_titular = @cpais_titular;   -- [cpais 23-oct-2026]
 
         -- Si la emisión interna falla, abortar y hacer rollback atómico
         IF @pSuccess = 0 OR @pSuccess IS NULL
