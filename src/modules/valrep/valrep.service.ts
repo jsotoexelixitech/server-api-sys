@@ -824,12 +824,14 @@ export class ValrepService {
 
   /**
    * Producto Sis2000 para consultar exclusiones en mausuplan (itipouso=E).
-   * RCV nacional (cramo 18) → producto '24'.
+   * RCV nacional (cramo 18) → producto '24'. RCV binacional (iplaca B, ramo 28) sin
+   * cproducto también es RCV auto → '24' (antes respondía 400 con sesión de gestor).
    */
   private resolveCproductoForExclusion(body: {
     cramo?: number;
     cproducto?: string;
     csubitem?: string;
+    iplaca?: string;
   }): string {
     if (!body.csubitem?.trim()) {
       return body.cproducto?.trim() ?? RCV_AUTO_CPRODUCTO;
@@ -838,6 +840,9 @@ export class ValrepService {
       return RCV_AUTO_CPRODUCTO;
     }
     const cp = body.cproducto?.trim();
+    if (!cp && String(body.iplaca ?? '').trim().toUpperCase() === 'B') {
+      return RCV_AUTO_CPRODUCTO;
+    }
     if (!cp) {
       throw new BadRequestException(
         'cproducto es requerido cuando cramo !== 18 y se envía csubitem.',
