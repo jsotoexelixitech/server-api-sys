@@ -10,4 +10,13 @@ export class GetCitiesDto {
   @IsInt()
   @Min(1)
   cestado?: number;
+
+  @ApiPropertyOptional({
+    example: 58,
+    description: 'País (mapaises.cpais). Default 58 = Venezuela; 57 = Colombia (placa extranjera).',
+  })
+  @IsOptional()
+  @IsInt()
+  @Min(1)
+  cpais?: number;
 }
