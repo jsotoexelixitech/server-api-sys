@@ -1,18 +1,21 @@
 -- =============================================================================
--- 03 — sp_emision_automovil_rcv_nexus (versión QA 23-oct-2026 + país)
+-- 1 de 2 — sp_emision_automovil_rcv_nexus (versión QA 23-oct-2026 + país)
+-- APLICAR PRIMERO (el 2 de 2 le envía los parámetros nuevos).
 -- Cambios (marcados con [cpais 23-oct-2026]):
---   1) Variables @cpais_tomador, @cpais_titular leídas de TMEMISION_AUTOMOVIL_RCV2.
+--   1) Dos parámetros opcionales al final: @cpais_tomador, @cpais_titular (default NULL).
 --   2) Si vienen NULL → 58 (Venezuela), igual que hoy.
 --   3) sp_create_maclient_nexus de TITULAR y TOMADOR recibe ese país en lugar del 58 fijo.
--- Conductor y beneficiario siguen con 58. Nada más cambia.
--- Requiere 01 aplicado. Respaldo para volver atrás: respaldo/sp_emision_automovil_rcv_nexus.QA-2026-10-23.sql
+-- No se toca la tabla TMEMISION_AUTOMOVIL_RCV2. Conductor y beneficiario siguen con 58.
 -- =============================================================================
 USE Sis2000;
 GO
 CREATE OR ALTER PROCEDURE [dbo].[sp_emision_automovil_rcv_nexus]
     @id                  INT,
     @pSuccess            BIT = 0 OUTPUT,
-    @pErrorMessage       NVARCHAR(MAX) = NULL OUTPUT
+    @pErrorMessage       NVARCHAR(MAX) = NULL OUTPUT,
+    -- [cpais 23-oct-2026] País de la dirección (lo envía sp_pre_emision). NULL = 58 Venezuela.
+    @cpais_tomador       SMALLINT      = NULL,
+    @cpais_titular       SMALLINT      = NULL
 AS
 BEGIN
     SET NOCOUNT ON;
@@ -66,8 +69,7 @@ BEGIN
         @icedula_conductor char(1), @xrif_conductor numeric(13), @xnombre_conductor varchar(250), @xapellido_conductor varchar(250),
         @isexo_conductor char(1), @iestado_civil_conductor char(1), @fnac_conductor date, @cestado_conductor varchar(100),
         @cciudad_conductor varchar(100), @xdireccion_conductor varchar(1000), @xtelefono_conductor varchar(250), @xcorreo_conductor varchar(250),
-        @itipo_diligencia char(1), @cprofesion_tomador int, @cactividad_tomador int, @cprofesion_titular int, @cactividad_titular int, @cgestor varchar(50),
-        @cpais_tomador SMALLINT, @cpais_titular SMALLINT; -- [cpais 23-oct-2026]
+        @itipo_diligencia char(1), @cprofesion_tomador int, @cactividad_tomador int, @cprofesion_titular int, @cactividad_titular int, @cgestor varchar(50);
 
         -- Leer datos del registro de pre-emisión
         SELECT
@@ -97,8 +99,7 @@ BEGIN
         @xdireccion_beneficiario = xdireccion_beneficiario, @xtelefono_beneficiario = xtelefono_beneficiario, @xcorreo_beneficiario = xcorreo_beneficiario,
         @itipoEmi = itipo_emi, @coberAdicional = cober_adicional, @tasaPt = ptasa_pt, @tasaCa = ptasa_ca, @tasaPp = ptasa_pp,
         @itipo_diligencia = itipo_diligencia, @cprofesion_tomador = cprofesion_tomador, @cactividad_tomador = cactividad_tomador,
-        @cprofesion_titular = cprofesion_titular, @cactividad_titular = cactividad_titular, @cgestor = cgestor,
-        @cpais_tomador = cpais_tomador, @cpais_titular = cpais_titular -- [cpais 23-oct-2026]
+        @cprofesion_titular = cprofesion_titular, @cactividad_titular = cactividad_titular, @cgestor = cgestor
         FROM TMEMISION_AUTOMOVIL_RCV2 WHERE ID = @ID;
 
         -- Validación de integridad estricta ACID: Si cpoliza es nulo, no continuar y forzar excepción
