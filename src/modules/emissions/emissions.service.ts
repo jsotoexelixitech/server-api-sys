@@ -1702,6 +1702,18 @@ export class EmissionsService {
       fhasta: { type: T.Date, value: b['fhasta'] },
     };
 
+    // País de la dirección del tomador/titular (placa extranjera, ej. 57 Colombia).
+    // Solo con NEST_RCV_SEND_CPAIS=1: el SP debe tener @cpais_tomador/@cpais_titular
+    // (docs/sql/rcv-cpais-extranjero). Sin la variable el SP no recibe nada nuevo.
+    if (this.config.get<string>('NEST_RCV_SEND_CPAIS') === '1') {
+      const cpaisTomador = this.intField(this.pick(b, 'cpais_tomador'));
+      const cpaisTitular = this.intField(this.pick(b, 'cpais_titular')) ?? cpaisTomador;
+      if (cpaisTomador != null || cpaisTitular != null) {
+        params['cpais_tomador'] = { type: T.SmallInt, value: cpaisTomador };
+        params['cpais_titular'] = { type: T.SmallInt, value: cpaisTitular };
+      }
+    }
+
     Object.entries(params).forEach(([key, field]) =>
       req.input(key, (field as { type: unknown }).type, (field as { value: unknown }).value),
     );
