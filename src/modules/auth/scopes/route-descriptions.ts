@@ -9,7 +9,8 @@ const ROUTE_LABELS: Record<string, string> = {
   'POST /api/v1/inma/categorias-uso': 'Categorías de uso del vehículo',
   // catalog:read — valrep
   'GET /api/v1/valrep/states': 'Estados (geo)',
-  'GET /api/v1/valrep/cities': 'Ciudades por estado',
+  'GET /api/v1/valrep/cities': 'Ciudades por estado (cpais opcional, 57 Colombia)',
+  'GET /api/v1/valrep/vigencias': 'Vigencias por tipo de placa (mavigencias_PR, placa extranjera)',
   'POST /api/v1/valrep/getLists': 'Listas auxiliares del tarificador',
   'POST /api/v1/valrep/productos': 'Productos RCV disponibles',
   'POST /api/v1/valrep/matipoemision': 'Tipo de emisión por canal/productor',
