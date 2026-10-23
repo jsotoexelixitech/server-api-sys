@@ -221,7 +221,10 @@ export class ValrepService {
 
   // ── Estados ──────────────────────────────────────────────────────────────
 
-  async getStates(): Promise<{ cestado: number; xdescripcion_l: string }[]> {
+  async getStates(cpais?: number): Promise<{ cestado: number; xdescripcion_l: string }[]> {
+    const pais = cpais != null && Number(cpais) > 0 ? Number(cpais) : 58;
+    // Otro país (ej. 57 Colombia, placa extranjera): maestados por cpais. Venezuela sigue con el SP.
+    if (pais !== 58) return this.getStatesByPais(pais);
     try {
       const T = this.db.types;
       const req = this.db.request();
@@ -247,7 +250,12 @@ export class ValrepService {
 
   async getCities(
     cestado?: number,
+    cpais?: number,
   ): Promise<{ cciudad: number; xdescripcion_l: string }[]> {
+    const pais = cpais != null && Number(cpais) > 0 ? Number(cpais) : 58;
+    // sp_ma_obtener_ciudades filtra solo por cestado y los códigos DANE (Colombia) se cruzan
+    // con los de Venezuela: otro país usa maciudades por cpais + cestado.
+    if (pais !== 58) return this.getCitiesByPais(pais, cestado);
     try {
       const T = this.db.types;
       const req = this.db.request();
@@ -270,6 +278,81 @@ export class ValrepService {
       const msg = err instanceof Error ? err.message : String(err);
       this.logger.error(`getCities: ${msg}`);
       throw new InternalServerErrorException('Error al obtener ciudades.');
+    }
+  }
+
+  /** Estados de un país distinto de Venezuela (maestados). */
+  private async getStatesByPais(cpais: number): Promise<{ cestado: number; xdescripcion_l: string }[]> {
+    try {
+      const T = this.db.types;
+      const req = this.db.request();
+      req.input('cpais', T.Int, cpais);
+      const result = await req.query(
+        'SELECT cestado, RTRIM(xdescripcion_l) AS xdescripcion_l FROM maestados WHERE cpais = @cpais ORDER BY xdescripcion_l',
+      );
+      return ((result.recordset ?? []) as { cestado: number; xdescripcion_l: string }[])
+        .map((r) => ({ cestado: Number(r.cestado), xdescripcion_l: String(r.xdescripcion_l ?? '').trim() }))
+        .filter((r) => r.xdescripcion_l && !ValrepService.isGeoCatalogPlaceholder(r.xdescripcion_l));
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : String(err);
+      this.logger.error(`getStatesByPais cpais=${cpais}: ${msg}`);
+      throw new InternalServerErrorException('Error al obtener estados.');
+    }
+  }
+
+  /** Ciudades de un país distinto de Venezuela (maciudades por cpais + cestado). */
+  private async getCitiesByPais(
+    cpais: number,
+    cestado?: number,
+  ): Promise<{ cciudad: number; xdescripcion_l: string }[]> {
+    try {
+      const T = this.db.types;
+      const req = this.db.request();
+      req.input('cpais', T.Int, cpais);
+      req.input('cestado', T.Int, cestado ?? null);
+      const result = await req.query(
+        'SELECT cciudad, RTRIM(xdescripcion_l) AS xdescripcion_l FROM maciudades ' +
+          'WHERE cpais = @cpais AND (@cestado IS NULL OR cestado = @cestado) ORDER BY xdescripcion_l',
+      );
+      return ((result.recordset ?? []) as { cciudad: number; xdescripcion_l: string }[])
+        .map((r) => ({ cciudad: Number(r.cciudad), xdescripcion_l: String(r.xdescripcion_l ?? '').trim() }))
+        .filter((r) => r.xdescripcion_l && !ValrepService.isGeoCatalogPlaceholder(r.xdescripcion_l));
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : String(err);
+      this.logger.error(`getCitiesByPais cpais=${cpais} cestado=${cestado ?? 'todas'}: ${msg}`);
+      throw new InternalServerErrorException('Error al obtener ciudades.');
+    }
+  }
+
+  // ── Vigencias por tipo de placa (mavigencias_PR) ─────────────────────────
+
+  /**
+   * Vigencias cortas de placa extranjera (iplaca E): % de la prima anual por meses.
+   * Mismo catálogo que SysIP (quotes/automobile/searchValidity); spCalculoAuto aplica el %.
+   */
+  async getVigencias(iplaca = 'E'): Promise<
+    { cvigencia: number; xvigencia: string; imedida_tiempo: string; ntiempo: number; itipovalor: string; nvalor: number }[]
+  > {
+    try {
+      const T = this.db.types;
+      const req = this.db.request();
+      req.input('iplaca', T.Char(1), String(iplaca || 'E').trim().toUpperCase().charAt(0));
+      const result = await req.query(
+        'SELECT cvigencia, RTRIM(xvigencia) AS xvigencia, RTRIM(imedida_tiempo) AS imedida_tiempo, ' +
+          'ntiempo, RTRIM(itipovalor) AS itipovalor, nvalor FROM mavigencias_PR WHERE iplaca = @iplaca ORDER BY cvigencia',
+      );
+      return ((result.recordset ?? []) as Record<string, unknown>[]).map((r) => ({
+        cvigencia: Number(r.cvigencia),
+        xvigencia: String(r.xvigencia ?? '').trim(),
+        imedida_tiempo: String(r.imedida_tiempo ?? '').trim().toUpperCase(),
+        ntiempo: Number(r.ntiempo),
+        itipovalor: String(r.itipovalor ?? '').trim().toUpperCase(),
+        nvalor: Number(r.nvalor),
+      }));
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : String(err);
+      this.logger.error(`getVigencias iplaca=${iplaca}: ${msg}`);
+      throw new InternalServerErrorException('Error al obtener las vigencias.');
     }
   }
 
@@ -386,9 +469,19 @@ export class ValrepService {
     return `${y}-${m}-${day}`;
   }
 
-  /** Vigencia cotización — misma lógica que emision policyMapper.resolveVigencia. */
-  private resolveQuoteVigenciaYmd(ndias?: number | null): { fdesde: string; fhasta: string } {
+  /**
+   * Vigencia cotización — misma lógica que emision policyMapper.resolveVigencia.
+   * fhasta explícito (placa extranjera, mavigencias_PR) manda sobre ndias/anual.
+   */
+  private resolveQuoteVigenciaYmd(
+    ndias?: number | null,
+    fhastaExplicita?: string | null,
+  ): { fdesde: string; fhasta: string } {
     const fdesde = this.formatLocalYmd(new Date());
+    const fh = String(fhastaExplicita ?? '').trim();
+    if (/^\d{4}-\d{2}-\d{2}$/.test(fh) && fh > fdesde) {
+      return { fdesde, fhasta: fh };
+    }
     const fhastaDate = new Date(`${fdesde}T12:00:00`);
     const n = ndias != null ? Number(ndias) : null;
     if (n != null && !Number.isNaN(n) && n > 0) {
@@ -484,7 +577,7 @@ export class ValrepService {
         body.fano,
       );
       const mvalor = vinma.mvalor;
-      const { fdesde, fhasta } = this.resolveQuoteVigenciaYmd(body.ndias);
+      const { fdesde, fhasta } = this.resolveQuoteVigenciaYmd(body.ndias, body.fhasta);
       const ifrecuencia = String(body.ifrecuencia ?? 'A')
         .trim()
         .toUpperCase()
