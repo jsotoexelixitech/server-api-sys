@@ -111,12 +111,14 @@ export class IntermediariosService {
     const req = () => new sql.Request(tx);
 
     try {
+      // Duplicados: RIF y correo bloqueados dentro de la transacción (dos altas simultáneas no pasan las dos)
       const rif = await req()
         .input('cci_rif', sql.Numeric(13, 0), cciRif)
-        .query('SELECT COUNT(*) AS existe FROM maproduc WHERE cci_rif = @cci_rif');
+        .query('SELECT COUNT(*) AS existe FROM maproduc WITH (UPDLOCK, HOLDLOCK) WHERE cci_rif = @cci_rif');
       if (rif.recordset[0].existe > 0) {
         throw new ConflictException(`Ya existe un intermediario con la cédula/RIF ${cciRif}.`);
       }
+      await this.asegurarCorreoIntermediarioLibre(req, dto.xcorreo);
 
       // Código indicado o el siguiente libre, bloqueado dentro de la transacción
       let cproductor: number;
@@ -179,7 +181,12 @@ export class IntermediariosService {
         .input('cproductor', sql.Numeric(11, 0), cproductor)
         .input('ifuente', sql.NVarChar(10), 'SIS2000')
         .execute('spCreateMaproduc');
-      cproductor = Number(maproduc.recordset?.[0]?.cproductor) || cproductor;
+      // spCreateMaproduc no lanza error: si el RIF o el código ya existen devuelve status ERROR y deshace lo suyo
+      const productor = maproduc.recordset?.[0];
+      if (String(productor?.status ?? '').trim().toUpperCase() === 'ERROR') {
+        throw new ConflictException(productor?.message || 'No fue posible crear el productor (RIF o código ya existente).');
+      }
+      cproductor = Number(productor?.cproductor) || cproductor;
 
       // 3. Usuario web. xlogin en mayúsculas como el resto de usuarios de Sis2000 y la clave como la
       //    compara el login (seusuariosweb.xcontrasena = @xcontrasena, sin hash).
@@ -240,6 +247,10 @@ export class IntermediariosService {
       }
       if (err instanceof ConflictException) throw err;
       const mensaje = err instanceof Error ? err.message : String(err);
+      // Respaldo: si un SP de La Mundial detecta el duplicado (p. ej. "USUARIO ... YA ESTÁ REGISTRADO"), es 409, no 500
+      if (/YA EST[ÁA] REGISTRAD|YA EXISTE/i.test(mensaje)) {
+        throw new ConflictException(mensaje);
+      }
       this.logger.error(`Fallo alta de intermediario (rif=${cciRif}): ${mensaje}`);
       throw new InternalServerErrorException(`No fue posible crear el intermediario: ${mensaje}`);
     }
@@ -425,13 +436,38 @@ export class IntermediariosService {
     return res.recordset;
   }
 
+  /** Canal / agencia / asesor: el correo no puede ser de otro gestor (bloqueado dentro de la transacción). */
   private async asegurarCorreoLibre(req: () => any, xcorreo: string): Promise<void> {
     const sql = this.mssql.types;
     const existe = await req()
       .input('xcorreo', sql.VarChar(200), xcorreo)
-      .query('SELECT COUNT(*) AS existe FROM magestor WHERE LTRIM(RTRIM(xcorreo)) = @xcorreo');
+      .query('SELECT COUNT(*) AS existe FROM magestor WITH (UPDLOCK, HOLDLOCK) WHERE xcorreo = @xcorreo');
     if (existe.recordset[0].existe > 0) {
       throw new ConflictException(`Ya existe un gestor con el correo ${xcorreo}.`);
+    }
+  }
+
+  /**
+   * Intermediario: el correo es su usuario web. No puede estar en MACORREDORES_WEB (lo que valida
+   * spCreateUsuarioCorredorWeb), como login en seusuariosweb ni como correo de otro gestor.
+   * Comparación por igualdad (collation CI de Sis2000) para poder bloquear por índice dentro de la transacción.
+   */
+  private async asegurarCorreoIntermediarioLibre(req: () => any, xcorreo: string): Promise<void> {
+    const sql = this.mssql.types;
+    const res = await req()
+      .input('xcorreo', sql.VarChar(200), xcorreo)
+      .input('xlogin', sql.VarChar(200), xcorreo.toUpperCase())
+      .query(
+        `SELECT (SELECT COUNT(*) FROM MACORREDORES_WEB WITH (UPDLOCK, HOLDLOCK) WHERE xcorreo = @xcorreo) AS corredor,
+                (SELECT COUNT(*) FROM seusuariosweb WITH (UPDLOCK, HOLDLOCK) WHERE xlogin = @xlogin) AS usuario,
+                (SELECT COUNT(*) FROM magestor WITH (UPDLOCK, HOLDLOCK) WHERE xcorreo = @xcorreo) AS gestor`,
+      );
+    const fila = res.recordset[0];
+    if (fila.corredor > 0 || fila.usuario > 0) {
+      throw new ConflictException(`Ya existe un usuario con el correo ${xcorreo}. Usa otro correo.`);
+    }
+    if (fila.gestor > 0) {
+      throw new ConflictException(`El correo ${xcorreo} ya está registrado en otro gestor. Usa otro correo.`);
     }
   }
 
