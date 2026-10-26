@@ -496,6 +496,7 @@ export class ValrepController {
           },
         ],
         pa: 182.61,
+        primaCuotaInicial: 36.98,
         ca: 0,
         pt: 0,
         ap: 0,
