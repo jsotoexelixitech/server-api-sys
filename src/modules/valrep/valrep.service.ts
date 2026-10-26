@@ -24,6 +24,7 @@ import {
 } from './repositories/mausuplan.repository';
 import { GetProductosPersonasDto } from './dto/get-productos-personas.dto';
 import { MarketplaceCanalResolver } from './marketplace-canal.resolver';
+import { parseCoberturasCuotaInicial, sumPrimaCuotaInicial } from './cuota-inicial';
 
 export interface CotizacionResult {
   mprimaext: number;
@@ -82,6 +83,11 @@ export interface CalculatePlanCoberturasResponse {
   status: true;
   mount: CalculatePlanCoberturasRow[];
   pa: number;
+  /**
+   * Prima anual (USD) de Daños a personas y Daños a cosas: se cobra completa en la cuota inicial
+   * cuando la frecuencia no es anual (ver cuota-inicial.ts).
+   */
+  primaCuotaInicial: number;
   ca: number;
   pt: number;
   ap: number;
@@ -1317,6 +1323,10 @@ export class ValrepService {
         status: true,
         mount: detalle,
         pa: totalPA,
+        primaCuotaInicial: sumPrimaCuotaInicial(
+          detalle,
+          parseCoberturasCuotaInicial(process.env.RCV_COBERTURAS_CUOTA_INICIAL),
+        ),
         ca: totalCA,
         pt: totalPT,
         ap: totalAP,
