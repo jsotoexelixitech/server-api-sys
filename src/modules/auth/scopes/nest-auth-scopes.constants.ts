@@ -26,6 +26,8 @@ export const NEST_AUTH_SCOPES = {
   INTERMEDIARIOS_WRITE: 'intermediarios:write',
   /** Administración del menú lateral de Sis2000 (desplegables, opciones y permisos por rol). */
   MENU_SIS2000_ADMIN: 'menu-sis2000:admin',
+  /** Autopago retail (/api/v1/autopago/*): catálogo SKU y registro de ventas en caja. */
+  AUTOPAGO_WRITE: 'autopago:write',
 } as const;
 
 export type NestAuthScopeId =
@@ -177,6 +179,18 @@ export const NEST_AUTH_SCOPE_CATALOG: NestAuthScopeMeta[] = [
       'GET /api/v1/menu-sis2000/usuarios',
       'GET /api/v1/menu-sis2000/usuarios/:cusuario/menu',
       'POST /api/v1/menu-sis2000/usuarios/:cusuario/sincronizar',
+    ],
+  },
+  {
+    id: NEST_AUTH_SCOPES.AUTOPAGO_WRITE,
+    label: 'Autopago retail (venta en caja)',
+    description:
+      'Catálogo de SKU del canal y registro de ventas en caja que generan enlaces de emisión (Farmatodo)',
+    routes: [
+      'GET /api/v1/autopago/productos',
+      'POST /api/v1/autopago/ventas',
+      'GET /api/v1/autopago/ventas/{nfactura}',
+      'POST /api/v1/autopago/emisiones/{token}/reenviar',
     ],
   },
 ];

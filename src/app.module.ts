@@ -40,6 +40,7 @@ import { SiniestrosModule } from './modules/siniestros/siniestros.module';
 import { RecibosModule } from './modules/recibos/recibos.module';
 import { PolizasModule } from './modules/polizas/polizas.module';
 import { ComponentsModule } from './modules/components/components.module';
+import { AutopagoModule } from './modules/autopago/autopago.module';
 
 @Module({
   imports: [
@@ -90,6 +91,7 @@ import { ComponentsModule } from './modules/components/components.module';
     RecibosModule,
     PolizasModule,
     ComponentsModule,
+    AutopagoModule,
   ],
 })
 export class AppModule {}

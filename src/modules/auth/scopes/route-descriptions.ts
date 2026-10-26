@@ -58,6 +58,13 @@ const ROUTE_LABELS: Record<string, string> = {
     'Correo: envío de póliza emitida al tomador',
   'POST /api/v1/mail/send':
     'Correo: envío genérico con plantilla',
+  // autopago:write — venta en caja (Farmatodo)
+  'GET /api/v1/autopago/productos': 'Autopago: catálogo de SKU del canal',
+  'POST /api/v1/autopago/ventas': 'Autopago: registrar venta en caja y enviar enlaces de emisión',
+  'GET /api/v1/autopago/ventas/:param': 'Autopago: estado de una venta por factura',
+  'POST /api/v1/autopago/emisiones/:param/reenviar': 'Autopago: reenviar correo del enlace',
+  'GET /api/v1/autopago/emisiones/:param': 'Autopago: datos del enlace de emisión (público)',
+  'POST /api/v1/autopago/emisiones/:param/emitida': 'Autopago: marcar enlace como emitido',
   // emissions:condominio
   'GET /api/v1/condominio/productos': 'Productos de condominio',
   'GET /api/v1/condominio/frecuencias': 'Frecuencias de pago condominio',
