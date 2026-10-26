@@ -20,6 +20,8 @@ export const NEST_AUTH_SCOPES = {
   REPORT_WRITE: 'report:write',
   /** Login de usuarios Sis2000 (seusuariosweb) para el portal La Mundial. */
   PORTAL_LOGIN: 'portal:login',
+  /** Autopago retail (/api/v1/autopago/*): catálogo SKU y registro de ventas en caja. */
+  AUTOPAGO_WRITE: 'autopago:write',
 } as const;
 
 export type NestAuthScopeId =
@@ -131,6 +133,18 @@ export const NEST_AUTH_SCOPE_CATALOG: NestAuthScopeMeta[] = [
     description:
       'Validar usuario/clave Sis2000 (seusuariosweb) y resolver entidad del marketplace',
     routes: [],
+  },
+  {
+    id: NEST_AUTH_SCOPES.AUTOPAGO_WRITE,
+    label: 'Autopago retail (venta en caja)',
+    description:
+      'Catálogo de SKU del canal y registro de ventas en caja que generan enlaces de emisión (Farmatodo)',
+    routes: [
+      'GET /api/v1/autopago/productos',
+      'POST /api/v1/autopago/ventas',
+      'GET /api/v1/autopago/ventas/{nfactura}',
+      'POST /api/v1/autopago/emisiones/{token}/reenviar',
+    ],
   },
 ];
 
