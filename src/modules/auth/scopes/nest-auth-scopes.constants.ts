@@ -20,6 +20,8 @@ export const NEST_AUTH_SCOPES = {
   REPORT_WRITE: 'report:write',
   /** Login de usuarios Sis2000 (seusuariosweb) para el portal La Mundial. */
   PORTAL_LOGIN: 'portal:login',
+  /** Alta de intermediarios (corredor / productor) en Sis2000. */
+  INTERMEDIARIOS_WRITE: 'intermediarios:write',
 } as const;
 
 export type NestAuthScopeId =
@@ -131,6 +133,17 @@ export const NEST_AUTH_SCOPE_CATALOG: NestAuthScopeMeta[] = [
     description:
       'Validar usuario/clave Sis2000 (seusuariosweb) y resolver entidad del marketplace',
     routes: [],
+  },
+  {
+    id: NEST_AUTH_SCOPES.INTERMEDIARIOS_WRITE,
+    label: 'Alta de intermediarios',
+    description: 'Crear intermediarios, canales Alterno/Directo y gestores (agencias / asesores) en Sis2000',
+    routes: [
+      'POST /api/v1/intermediarios',
+      'POST /api/v1/intermediarios/canal',
+      'POST /api/v1/intermediarios/gestor',
+      'GET /api/v1/intermediarios/gestores',
+    ],
   },
 ];
 

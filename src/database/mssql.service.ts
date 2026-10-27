@@ -81,6 +81,17 @@ export class MssqlService implements OnModuleInit, OnModuleDestroy {
     return this.pool.request();
   }
 
+  /**
+   * Transacción sobre el pool compartido (begin/commit/rollback los maneja quien la usa).
+   * Las requests de la transacción se crean con `new sql.Request(tx)`.
+   */
+  transaction(): sql.Transaction {
+    if (!this.pool || !this.pool.connected) {
+      throw new Error('mssql pool is not connected');
+    }
+    return new sql.Transaction(this.pool);
+  }
+
   /** Re-exported so services can reference sql.Int, sql.NVarChar, etc. without their own import. */
   get types(): typeof sql {
     return sql;
