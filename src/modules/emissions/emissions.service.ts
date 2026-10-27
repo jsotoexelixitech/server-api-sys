@@ -1320,7 +1320,7 @@ export class EmissionsService {
         type: T.Char(1),
         value: this.pick(b, 'icedula_tomador', 'tipo_cedula_tomador', 'cedula_tomador'),
       },
-      xrif_tomador: { type: T.Numeric(9), value: this.pick(b, 'xrif_tomador', 'rif_tomador') },
+      xrif_tomador: { type: T.Numeric(13, 0), value: this.pick(b, 'xrif_tomador', 'rif_tomador') },
       xnombre_tomador: { type: T.NVarChar(250), value: this.pick(b, 'xnombre_tomador', 'nombre_tomador') },
       xapellido_tomador: { type: T.NVarChar(250), value: this.pick(b, 'xapellido_tomador', 'apellido_tomador') },
       isexo_tomador: { type: T.Char(1), value: this.pick(b, 'isexo_tomador', 'sexo_tomador') },
@@ -1353,7 +1353,7 @@ export class EmissionsService {
         type: T.Char(1),
         value: this.pick(b, 'icedula_titular', 'tipo_cedula_titular', 'cedula_titular'),
       },
-      xrif_titular: { type: T.Numeric(9), value: this.pick(b, 'xrif_titular', 'rif_titular') },
+      xrif_titular: { type: T.Numeric(13, 0), value: this.pick(b, 'xrif_titular', 'rif_titular') },
       xnombre_titular: { type: T.NVarChar(250), value: this.pick(b, 'xnombre_titular', 'nombre_titular') },
       xapellido_titular: { type: T.NVarChar(250), value: this.pick(b, 'xapellido_titular', 'apellido_titular') },
       isexo_titular: { type: T.Char(1), value: this.pick(b, 'isexo_titular', 'sexo_titular') },
@@ -1611,6 +1611,18 @@ export class EmissionsService {
       fdesde: { type: T.Date, value: b['fdesde'] },
       fhasta: { type: T.Date, value: b['fhasta'] },
     };
+
+    // País de la dirección del tomador/titular (placa extranjera, ej. 57 Colombia).
+    // Solo con NEST_RCV_SEND_CPAIS=1: el SP debe tener @cpais_tomador/@cpais_titular
+    // (docs/sql/rcv-cpais-extranjero). Sin la variable el SP no recibe nada nuevo.
+    if (this.config.get<string>('NEST_RCV_SEND_CPAIS') === '1') {
+      const cpaisTomador = this.intField(this.pick(b, 'cpais_tomador'));
+      const cpaisTitular = this.intField(this.pick(b, 'cpais_titular')) ?? cpaisTomador;
+      if (cpaisTomador != null || cpaisTitular != null) {
+        params['cpais_tomador'] = { type: T.SmallInt, value: cpaisTomador };
+        params['cpais_titular'] = { type: T.SmallInt, value: cpaisTitular };
+      }
+    }
 
     Object.entries(params).forEach(([key, field]) =>
       req.input(key, (field as { type: unknown }).type, (field as { value: unknown }).value),

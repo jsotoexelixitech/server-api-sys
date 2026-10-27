@@ -1,6 +1,6 @@
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
 import { Type } from 'class-transformer';
-import { IsIn, IsInt, IsNotEmpty, IsOptional, IsString, Max, MaxLength, Min, MinLength } from 'class-validator';
+import { IsIn, IsInt, IsNotEmpty, IsOptional, IsString, Max, MaxLength, Min, MinLength, Matches } from 'class-validator';
 import { AUTO_IFRECUENCIA_VALUES } from '../constants/auto-ifrecuencia.constants';
 
 export class GetCotizacionAutoDto {
@@ -102,6 +102,16 @@ export class GetCotizacionAutoDto {
   @Type(() => Number)
   @IsInt()
   ndias?: number;
+
+  @ApiPropertyOptional({
+    example: '2027-01-23',
+    description:
+      'Fin de vigencia (YYYY-MM-DD) para placa extranjera según mavigencias_PR. ' +
+      'sp_calculo_auto_nexus prorratea la prima anual por meses. Si se omite: ndias o +1 año.',
+  })
+  @IsOptional()
+  @Matches(/^\d{4}-\d{2}-\d{2}$/)
+  fhasta?: string;
 
   @ApiPropertyOptional({
     example: 7,

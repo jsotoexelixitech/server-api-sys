@@ -2,6 +2,8 @@ import { Body, Controller, Get, HttpCode, HttpStatus, Post, Query } from '@nestj
 import { ApiBody, ApiExcludeEndpoint, ApiOperation, ApiQuery, ApiResponse, ApiTags } from '@nestjs/swagger';
 import { GetPlanesV2Dto } from './dto/get-planes-v2.dto';
 import { GetCitiesDto } from './dto/get-cities.dto';
+import { GetStatesDto } from './dto/get-states.dto';
+import { GetVigenciasDto } from './dto/get-vigencias.dto';
 import { GetCotizacionAutoDto } from './dto/get-cotizacion-auto.dto';
 import { CalculatePlanCoberturasDto } from './dto/calculate-plan-coberturas.dto';
 import { GetFrecuenciaDto } from './dto/get-frecuencia.dto';
@@ -85,17 +87,20 @@ export class ValrepController {
 
   @Get('states')
   @ApiOperation({
-    summary: 'Paso 2a · Estados de Venezuela',
-    description: 'Listado de estados de Venezuela. Use `cestado` en la consulta de ciudades.',
+    summary: 'Paso 2a · Estados (Venezuela por defecto)',
+    description:
+      'Listado de estados. Sin `cpais` = Venezuela (58). `cpais=57` = Colombia (placa extranjera). ' +
+      'Use `cestado` (y el mismo `cpais`) en la consulta de ciudades.',
     operationId: 'valrepStates',
   })
+  @ApiQuery({ name: 'cpais', required: false, type: Number, example: 58, description: 'País (58 Venezuela, 57 Colombia).' })
   @ApiResponse({
     status: 200,
     schema: { example: { status: true, data: { states: [{ cestado: 1, xdescripcion_l: 'Distrito Capital' }, { cestado: 2, xdescripcion_l: 'Amazonas' }] } } },
   })
   @Api500()
-  async getStates() {
-    const states = await this.valrepService.getStates();
+  async getStates(@Query() dto: GetStatesDto) {
+    const states = await this.valrepService.getStates(dto.cpais);
     return { status: true, data: { states } };
   }
 
@@ -108,11 +113,29 @@ export class ValrepController {
     operationId: 'valrepCities',
   })
   @ApiQuery({ name: 'cestado', required: false, type: Number, example: 1, description: 'Código de estado (de /states). Omitir para todas.' })
+  @ApiQuery({ name: 'cpais', required: false, type: Number, example: 58, description: 'País (58 Venezuela por defecto, 57 Colombia).' })
   @ApiResponse({ status: 200, schema: { example: { status: true, data: { cities: [{ cciudad: 128, xdescripcion_l: 'Caracas' }] } } } })
   @ApiCommonErrors()
   async getCities(@Query() dto: GetCitiesDto) {
-    const cities = await this.valrepService.getCities(dto.cestado);
+    const cities = await this.valrepService.getCities(dto.cestado, dto.cpais);
     return { status: true, data: { cities } };
+  }
+
+  // ── GET /api/v1/valrep/vigencias ────────────────────────────────────────
+
+  @Get('vigencias')
+  @ApiOperation({
+    summary: 'Vigencias por tipo de placa (placa extranjera)',
+    description:
+      'Catálogo mavigencias_PR. Para `iplaca=E`: menos de un mes (15 días) a 12 meses, con el % de la ' +
+      'prima anual (`nvalor`). Enviar el `fhasta` resultante en /valrep/cotizacion y en la emisión.',
+    operationId: 'valrepVigencias',
+  })
+  @ApiQuery({ name: 'iplaca', required: false, type: String, example: 'E' })
+  @ApiCommonErrors()
+  async getVigencias(@Query() dto: GetVigenciasDto) {
+    const vigencias = await this.valrepService.getVigencias(dto.iplaca ?? 'E');
+    return { status: true, data: { vigencias } };
   }
 
   // ── POST /api/v1/valrep/getLists ───────────────────────────────────────

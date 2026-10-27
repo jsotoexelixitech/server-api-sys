@@ -144,6 +144,21 @@ export class CreateEmissionAutoDto {
   @IsInt()
   ciudad_titular: number;
 
+  @ApiPropertyOptional({
+    example: 57,
+    description:
+      'País de la dirección del tomador (mapaises.cpais). Solo placa extranjera; 58 Venezuela por defecto. ' +
+      'Se envía al SP si NEST_RCV_SEND_CPAIS=1.',
+  })
+  @IsOptional()
+  @IsInt()
+  cpais_tomador?: number;
+
+  @ApiPropertyOptional({ example: 57, description: 'País de la dirección del titular. Si se omite, el del tomador.' })
+  @IsOptional()
+  @IsInt()
+  cpais_titular?: number;
+
   @ApiProperty({ example: 'Av norte 8 amadores a planas', description: 'Dirección del titular' })
   @IsString()
   direccion_titular: string;
