@@ -1,7 +1,7 @@
 -- =============================================================================
--- 2 de 2 — sp_emision_personas_general_nexus — v3.4 (proveedores del plan en ADPROVEEDOR) · 27-oct-2026
+-- 2 de 3 — sp_emision_personas_general_nexus — v3.4 (proveedores del plan en ADPROVEEDOR) · 27-oct-2026
 -- v3.4: después de generar coberturas y recibos, y dentro de la misma transacción, llama a
---   sp_registrar_proveedor_poliza_nexus (1 de 2) para registrar en ADPROVEEDOR los proveedores
+--   sp_registrar_proveedor_poliza_nexus (1 de 3) para registrar en ADPROVEEDOR los proveedores
 --   configurados para el plan (MAPLPROV_PER), con la vigencia de la póliza y fingreso.
 --   Criterio del DBA: asignación automática por plan, sin selección manual en la emisión.
 --   Único cambio respecto a la v3.3, marcado con [proveedor 27-oct-2026]. Si el plan no tiene

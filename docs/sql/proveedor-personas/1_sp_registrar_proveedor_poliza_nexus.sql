@@ -1,5 +1,5 @@
 -- =============================================================================
--- 1 de 2 — sp_registrar_proveedor_poliza_nexus (NUEVO) · 27-oct-2026
+-- 1 de 3 — sp_registrar_proveedor_poliza_nexus (NUEVO) · 27-oct-2026
 -- Registra en ADPROVEEDOR los proveedores configurados para el plan de la póliza
 -- (MAPLPROV_PER), de forma automática al emitir una póliza de personas desde Nexus.
 --
@@ -35,12 +35,18 @@ CREATE OR ALTER PROCEDURE [dbo].[sp_registrar_proveedor_poliza_nexus]
     @cusuario       NUMERIC(11,0) = NULL,
     @ifuente        CHAR(10)      = NULL,
     @ccerti         NUMERIC(10,0) = 0,
-    @qregistrados   INT           = NULL OUTPUT
+    @qregistrados   INT           = NULL OUTPUT,
+    -- Fecha a la que el proveedor debe estar vigente en MAPLPROV_PER. Por defecto, el inicio
+    -- de la póliza (emisión). La carga de pólizas ya emitidas (3 de 3) pasa la fecha de hoy.
+    @fvigencia      DATETIME      = NULL,
+    -- Identifica el origen de la fila: emisión ('NEXUS_PROV V1.0') o carga ('NEXUS_PROV CARGA').
+    @cprog          CHAR(20)      = 'NEXUS_PROV V1.0'
 AS
 BEGIN
     SET NOCOUNT ON;
 
     DECLARE @tasa NUMERIC(13,6);
+    DECLARE @fref DATETIME = ISNULL(@fvigencia, @fdesde);
 
     -- Tasa de la póliza; si la póliza está en Bs (ptasamon = 1) se usa la tasa $ del día,
     -- igual que hace Sis2000 para convertir el costo del proveedor (mcosto = mcostoext × tasa).
@@ -67,7 +73,7 @@ BEGIN
         ISNULL(p.mcostoext, 0),
         ISNULL(NULLIF(RTRIM(p.cmoneda), ''), '$'),
         @tasa,
-        'NEXUS_PROV V1.0',
+        ISNULL(@cprog, 'NEXUS_PROV V1.0'),
         ISNULL(@ifuente, 'NEXUS'),
         NULL, NULL,
         GETDATE(),
@@ -76,8 +82,8 @@ BEGIN
     FROM maplprov_per p
     WHERE p.cramo = @cramo
       AND RTRIM(p.cplan) = RTRIM(@cplan)
-      AND p.fdesde <= @fdesde
-      AND (p.fhasta IS NULL OR p.fhasta >= @fdesde)
+      AND p.fdesde <= @fref
+      AND (p.fhasta IS NULL OR p.fhasta >= @fref)
       AND NOT EXISTS (
             SELECT 1 FROM adproveedor a
             WHERE a.cpoliza = @cpoliza AND a.fanopol = @fanopol AND a.fmespol = @fmespol
