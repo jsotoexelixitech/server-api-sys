@@ -147,7 +147,7 @@ export class AutopagoService {
       SET NOCOUNT ON;
       SELECT CAST(s.csku AS VARCHAR(20)) AS csku, RTRIM(s.cproducto) AS cproducto, s.cramo,
              RTRIM(s.cplan) AS cplan, s.ccanalalt,
-             (SELECT TOP 1 RTRIM(m.xdescripcion) FROM maproductos m WITH (NOLOCK)
+             (SELECT TOP 1 RTRIM(m.xdescripcion_l) FROM maproductos m WITH (NOLOCK)
                WHERE RTRIM(m.cproducto) = RTRIM(s.cproducto)) AS xproducto,
              COALESCE(
                (SELECT TOP 1 RTRIM(p.xplan) FROM maplanes p WITH (NOLOCK)
@@ -197,6 +197,8 @@ export class AutopagoService {
     } catch (err) {
       this.logger.warn(`taprodsku no disponible (${err instanceof Error ? err.message : String(err)}).`);
     }
+    // El respaldo AUTOPAGO_SKU_MAP solo se ofrece si el canal no tiene SKU en taprodsku.
+    if (rows.length > 0) return rows;
     const vistos = new Set(rows.map((r) => r.csku));
     for (const key of Object.keys(this.envSkuMap())) {
       if (vistos.has(key)) continue;
