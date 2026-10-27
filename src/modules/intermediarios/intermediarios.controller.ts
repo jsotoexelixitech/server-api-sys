@@ -183,7 +183,7 @@ export class IntermediariosController {
     @Query('fdesde') fdesde: string,
     @Query('fhasta') fhasta?: string,
   ) {
-    if (!/^d{4}-d{2}-d{2}/.test(fdesde || '')) throw new BadRequestException('fdesde debe ser AAAA-MM-DD.');
+    if (!/^\d{4}-\d{2}-\d{2}/.test(fdesde || '')) throw new BadRequestException('fdesde debe ser AAAA-MM-DD.');
     return { status: true, data: await this.comisiones.tope(cproductor, cramo, fdesde, fhasta || undefined) };
   }
 
