@@ -1,5 +1,5 @@
 -- =============================================================================
--- 1 de 3 — sp_registrar_proveedor_poliza_nexus (NUEVO) · 27-oct-2026
+-- 1 de 3 — sp_registrar_proveedor_poliza_nexus (NUEVO) — versión 1.0 · 27-oct-2026
 -- Registra en ADPROVEEDOR los proveedores configurados para el plan de la póliza
 -- (MAPLPROV_PER), de forma automática al emitir una póliza de personas desde Nexus.
 --
@@ -16,7 +16,7 @@
 --
 -- Idempotente: no duplica (NOT EXISTS sobre la clave adproveedor_pk).
 -- Si el plan no tiene proveedores configurados, no inserta y no falla (@qregistrados = 0).
--- No crea ni modifica tablas. Se llama desde sp_emision_personas_general_nexus v3.4
+-- No crea ni modifica tablas. Se llama desde sp_emision_personas_general_nexus (archivo 02)
 -- dentro de su misma transacción: si falla, la emisión hace rollback completo.
 --
 -- Ambiente: ejecutar en Sis2000_QA primero (cambiar el USE). En producción: USE Sis2000.

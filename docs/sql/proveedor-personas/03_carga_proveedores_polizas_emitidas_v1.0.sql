@@ -1,9 +1,9 @@
 -- =============================================================================
--- 3 de 3 — Carga de proveedores en pólizas de personas YA EMITIDAS por Nexus · 27-oct-2026
+-- 3 de 3 — Carga de proveedores en pólizas de personas YA EMITIDAS por Nexus — versión 1.0 · 27-oct-2026
 -- Asocia en ADPROVEEDOR los proveedores del plan (MAPLPROV_PER) a las pólizas de personas
--- emitidas por Nexus antes de la v3.4 (las nuevas ya los registran al emitir).
+-- emitidas por Nexus antes del cambio del archivo 02 (las nuevas ya los registran al emitir).
 --
--- Requiere: 1_sp_registrar_proveedor_poliza_nexus.sql aplicado.
+-- Requiere: 01_sp_registrar_proveedor_poliza_nexus_v1.0.sql aplicado.
 -- Alcance:  ADPOLIZA.cprog = 'TEmision_Per_Ge' (pólizas de personas emitidas por Nexus),
 --           vigentes (istatpol 'V' y fhasta >= hoy), cuyo plan tiene hoy proveedores
 --           vigentes en MAPLPROV_PER y que todavía no tienen filas en ADPROVEEDOR.
