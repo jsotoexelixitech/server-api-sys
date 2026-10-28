@@ -27,7 +27,9 @@ MarketPlace, tarjeta y autopago): todas usan `sp_emision_personas_general_nexus`
 tal como estaba antes del 02 (exportado de la BD el 28-oct-2026). Para volver atrás, ejecutarlo
 cambiando `CREATE` por `CREATE OR ALTER`.
 
-**Estado QA (28-oct-2026):** 01 y 02 aplicados por La Mundial. Pendiente: probar una emisión con `49/MAP2` y luego el 03.
+**Estado QA (28-oct-2026):** 01 y 02 aplicados por La Mundial. Prueba OK: póliza `49-1-1100016139` (MAP2)
+registró el proveedor `311624457` con la vigencia de la póliza, `mcostoext 11.05`, `mcosto 9813.71` (× 888.1183),
+`cprog NEXUS_PROV V1.0`. Pendiente: el 03.
 
 Verificación tras ejecutar el 02 (esperado: modify_date de hoy, `tiene_ctitular = sí`, `tiene_proveedor = sí`):
 
