@@ -106,3 +106,25 @@ describe('SyncContextService · catálogos al abrir', () => {
     expect(result.catalogs.find((c) => c.entidad === 'coberturas')?.rowsSynced).toBe(3);
   });
 });
+
+describe('SyncContextService · sync al consultar pólizas', () => {
+  it('con REPORTES_SYNC_POLIZAS_ON_EXECUTE=false la consulta de pólizas no sincroniza', async () => {
+    const { service, syncService } = build({
+      REPORTES_SYNC_ENABLED: true,
+      REPORTES_SYNC_POLIZAS_ON_EXECUTE: false,
+    });
+    const result = (await service.maybeSyncBeforeReport('polizas', body)) as { skipped: boolean; reason: string };
+    expect(syncService.syncIncremental).not.toHaveBeenCalled();
+    expect(result.skipped).toBe(true);
+    expect(result.reason).toContain('REPORTES_SYNC_POLIZAS_ON_EXECUTE=false');
+  });
+
+  it('forceSync sincroniza pólizas aunque el sync al consultar esté desactivado', async () => {
+    const { service, syncService } = build({
+      REPORTES_SYNC_ENABLED: true,
+      REPORTES_SYNC_POLIZAS_ON_EXECUTE: false,
+    });
+    await service.maybeSyncBeforeReport('polizas', { ...body, forceSync: true });
+    expect(syncService.syncIncremental).toHaveBeenCalledTimes(1);
+  });
+});
