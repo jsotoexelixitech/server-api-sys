@@ -100,6 +100,19 @@ export interface CalculatePlanCoberturasResponse {
   cproducto: string;
 }
 
+export interface PlanRiesgoGeneral {
+  cramo: number;
+  xramo: string;
+  ctiporamo: number;
+  cplan: string;
+  xplan: string;
+  cproducto: string | null;
+  qcoberturas: number;
+  msumamax: number;
+  mprima: number;
+  cotizable: boolean;
+}
+
 @Injectable()
 export class ValrepService {
   private readonly logger = new Logger(ValrepService.name);
@@ -808,6 +821,49 @@ export class ValrepService {
       const msg = err instanceof Error ? err.message : String(err);
       this.logger.error(`getOcupacionesNexus: ${msg}`);
       throw new InternalServerErrorException('No se pudo obtener la lista de profesiones.');
+    }
+  }
+
+  /**
+   * Planes vigentes de riesgos generales (maramos.ctiporamo 1 y 6, sin RCV ramo 26) con su tarifa en maplantar.
+   * Los planes que La Mundial cree aparecen solos; `cotizable` indica si spCalculoRiesgoGeneral puede calcularlos
+   * (coberturas en maplantar con suma > 0).
+   */
+  async getPlanesRiesgosGenerales(): Promise<PlanRiesgoGeneral[]> {
+    try {
+      const result = await this.db.request().query(`
+        SELECT r.cramo, RTRIM(r.xdescripcion_l) AS xramo, r.ctiporamo,
+               RTRIM(p.cplan) AS cplan, RTRIM(p.xplan) AS xplan, RTRIM(p.cproducto) AS cproducto,
+               t.qcoberturas, t.msumamax, t.mprima
+        FROM maplanes p WITH (NOLOCK)
+        INNER JOIN maramos r WITH (NOLOCK) ON r.cramo = p.cramo
+        CROSS APPLY (
+          SELECT COUNT(*) AS qcoberturas, MAX(c.msumamax) AS msumamax, SUM(c.mprima) AS mprima
+          FROM maplantar c WITH (NOLOCK)
+          WHERE c.cramo = p.cramo AND c.cplan = p.cplan
+        ) t
+        WHERE r.ctiporamo IN (1, 6) AND r.iestado = 'V' AND p.iestado = 'V' AND r.cramo <> 26
+        ORDER BY r.xdescripcion_l, t.mprima, p.cplan`);
+      return ((result.recordset ?? []) as Record<string, unknown>[]).map((r) => {
+        const qcoberturas = Number(r.qcoberturas ?? 0);
+        const msumamax = Number(r.msumamax ?? 0);
+        return {
+          cramo: Number(r.cramo),
+          xramo: String(r.xramo ?? '').trim(),
+          ctiporamo: Number(r.ctiporamo),
+          cplan: String(r.cplan ?? '').trim(),
+          xplan: String(r.xplan ?? '').trim(),
+          cproducto: r.cproducto ? String(r.cproducto).trim() : null,
+          qcoberturas,
+          msumamax,
+          mprima: Number(r.mprima ?? 0),
+          cotizable: qcoberturas > 0 && msumamax > 0,
+        };
+      });
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : String(err);
+      this.logger.error(`getPlanesRiesgosGenerales: ${msg}`);
+      throw new InternalServerErrorException('No se pudo obtener los planes de riesgos generales.');
     }
   }
 

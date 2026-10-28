@@ -228,6 +228,38 @@ export class ValrepController {
     return { status: true, data: { listas } };
   }
 
+  // ── GET /api/v1/valrep/planes/riesgos-generales ─────────────────────────
+
+  @Get('planes/riesgos-generales')
+  @ApiOperation({
+    summary: 'Planes de riesgos generales (cotizador RC)',
+    description:
+      'Planes vigentes de los ramos con `maramos.ctiporamo` 1 y 6 (sin RCV, ramo 26), con su tarifa en `maplantar`. ' +
+      'Los planes nuevos de Sis2000 aparecen sin cambios de código. `cotizable = false` cuando el plan no tiene ' +
+      'coberturas con suma en `maplantar` (spCalculoRiesgoGeneral no lo puede calcular).\n\n' +
+      '**Siguiente paso:** `POST /partner/starter/patrimonial/quote` con `cramo` y `cplan`.',
+    operationId: 'valrepPlanesRiesgosGenerales',
+  })
+  @ApiResponse({
+    status: 200,
+    schema: {
+      example: {
+        status: true,
+        data: [
+          {
+            cramo: 20, xramo: 'NAVES', ctiporamo: 6, cplan: 'RCE1', xplan: 'Plan I 5.000$ Embarcación (Uso Recreo)',
+            cproducto: 'EMB', qcoberturas: 1, msumamax: 5000, mprima: 50, cotizable: true,
+          },
+        ],
+      },
+    },
+  })
+  @Api500()
+  async getPlanesRiesgosGenerales() {
+    const data = await this.valrepService.getPlanesRiesgosGenerales();
+    return { status: true, data };
+  }
+
   // ── Funerario: pasos 1–3 (catálogo valrep, fb_organizacion_swagger) ───────
 
   @Post('productos')
