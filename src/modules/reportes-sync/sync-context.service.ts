@@ -11,6 +11,7 @@ import { SyncService, type SyncResult } from './sync.service';
 const SYNC_ON_EXECUTE_VAR: Record<string, string> = {
   recibos: 'REPORTES_SYNC_RECIBOS_ON_EXECUTE',
   siniestros: 'REPORTES_SYNC_SINIESTROS_ON_EXECUTE',
+  polizas: 'REPORTES_SYNC_POLIZAS_ON_EXECUTE',
 };
 
 export type SyncFiltrosBuilt = Record<string, unknown> & {
@@ -139,7 +140,7 @@ export class SyncContextService {
         const result = {
           skipped: true,
           reason:
-            'sync al consultar desactivado (REPORTES_SYNC_RECIBOS_ON_EXECUTE=false): lo hace el refresco programado',
+            `sync al consultar desactivado (${SYNC_ON_EXECUTE_VAR[entidad]}=false): lo hace el refresco programado`,
         };
         this.syncLog(`${entidad}: omitido (${result.reason})`);
         return result;
