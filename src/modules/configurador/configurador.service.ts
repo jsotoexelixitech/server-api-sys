@@ -260,7 +260,7 @@ export class ConfiguradorService {
   private async validarPlanEnBd(dto: PlanDto) {
     this.exigirReglas(validarPlan(dto));
     await this.exigirRamo(dto.cramo);
-    if (!(await this.existe('SELECT 1 FROM maproducto WHERE cproducto = @cprod', { cprod: dto.cproducto }))) {
+    if (!(await this.existe('SELECT 1 FROM maproductos WHERE cproducto = @cprod', { cprod: dto.cproducto }))) {
       throw new BadRequestException(`No existe el producto ${dto.cproducto}.`);
     }
     const errores: string[] = [];
