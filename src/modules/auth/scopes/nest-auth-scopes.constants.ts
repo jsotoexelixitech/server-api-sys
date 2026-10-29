@@ -3,6 +3,8 @@ export const NEST_AUTH_SCOPES = {
   EMISSIONS_AUTO: 'emissions:auto',
   EMISSIONS_PERSON: 'emissions:person',
   EMISSIONS_CONDOMINIO: 'emissions:condominio',
+  /** Emisión por coberturas de riesgos generales (cotizador RC, ramos 16 y 38). */
+  EMISSIONS_RIESGOS_GENERALES: 'emissions:riesgos-generales',
   /** Replicar tasas del tarificador de Condominio/Hogar (matarifa_d, ramos 16 y 38). */
   TARIFAS_CONDOMINIO: 'tarifas:condominio',
   COLLECTION_WRITE: 'collection:write',
@@ -59,6 +61,12 @@ export const NEST_AUTH_SCOPE_CATALOG: NestAuthScopeMeta[] = [
     label: 'Emisión condominio',
     description: 'Emitir pólizas de condominio',
     routes: ['POST /api/v1/condominio/emision'],
+  },
+  {
+    id: NEST_AUTH_SCOPES.EMISSIONS_RIESGOS_GENERALES,
+    label: 'Emisión riesgos generales',
+    description: 'Emitir pólizas de riesgos generales con las coberturas elegidas (cotizador RC)',
+    routes: ['POST /api/v1/riesgos-generales/emision'],
   },
   {
     id: NEST_AUTH_SCOPES.TARIFAS_CONDOMINIO,
