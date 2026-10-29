@@ -6,8 +6,10 @@ import {
   Logger,
   NotFoundException,
 } from '@nestjs/common';
+import { ConfigService } from '@nestjs/config';
 import { randomBytes } from 'crypto';
 import { MssqlService } from '../../database/mssql.service';
+import { MailService } from '../mail/mail.service';
 import { CrearIntermediarioDto } from './dto/crear-intermediario.dto';
 import { CrearCanalDto } from './dto/crear-canal.dto';
 import { CrearGestorDto } from './dto/crear-gestor.dto';
@@ -17,6 +19,8 @@ export interface IntermediarioCreado {
   xcorreo: string;
   xlogin: string;
   claveTemporal: string;
+  /** Correo con el usuario y la clave enviado al intermediario (false si el envío está apagado o falló) */
+  correoEnviado: boolean;
 }
 
 export interface CanalCreado {
@@ -71,15 +75,20 @@ function generarClaveTemporal(): string {
  * Alta de intermediario tradicional en Sis2000, con los mismos SPs y parámetros que la pasarela
  * (lamundialcms, agencies_masters_model::create_agencia_master_sisip_completo), en UNA transacción:
  *   1. spCreateMaclient            -> maclient (+ correo, tel, dir, atr)
- *   2. spCreateMaproduc            -> maproduc, maclient_rel
+ *   2. spCreateMaproduc            -> maproduc, maclient_rel (carnet = código; luego la zona)
  *   3. spCreateUsuarioCorredorWeb  -> seusuariosweb, macorredores_web
  *   4. spCreateGestorWeb           -> magestor (cgestor_anterior = NULL)
+ * Tras el commit se envía al intermediario el correo con su usuario y clave temporal.
  */
 @Injectable()
 export class IntermediariosService {
   private readonly logger = new Logger(IntermediariosService.name);
 
-  constructor(private readonly mssql: MssqlService) {}
+  constructor(
+    private readonly mssql: MssqlService,
+    private readonly mail: MailService,
+    private readonly config: ConfigService,
+  ) {}
 
   async crear(dto: CrearIntermediarioDto): Promise<IntermediarioCreado> {
     const sql = this.mssql.types;
@@ -110,6 +119,7 @@ export class IntermediariosService {
     await tx.begin();
     const req = () => new sql.Request(tx);
 
+    let creado: Omit<IntermediarioCreado, 'correoEnviado'>;
     try {
       // Duplicados: RIF y correo bloqueados dentro de la transacción (dos altas simultáneas no pasan las dos)
       const rif = await req()
@@ -165,7 +175,7 @@ export class IntermediariosService {
       const maproduc = await req()
         .input('cci_rif', sql.Numeric(13, 0), cciRif)
         .input('xproductor', sql.VarChar(240), razonSocial)
-        .input('ccarnet', sql.Char(10), null)
+        .input('ccarnet', sql.Char(10), String(cproductor))
         .input('csucur', sql.SmallInt, dto.csucur ?? 1)
         .input('cbanco', sql.SmallInt, cuentas[0]?.cbanco ?? null)
         .input('cbanco2', sql.SmallInt, cuentas[1]?.cbanco ?? null)
@@ -187,6 +197,12 @@ export class IntermediariosService {
         throw new ConflictException(productor?.message || 'No fue posible crear el productor (RIF o código ya existente).');
       }
       cproductor = Number(productor?.cproductor) || cproductor;
+
+      // Zona (maproduc.czonprod): spCreateMaproduc la deja en NULL. Sociedad de corretaje 2; productor 1.
+      await req()
+        .input('cproductor', sql.Numeric(11, 0), cproductor)
+        .input('czonprod', sql.SmallInt, ctipoprod === 3 ? 2 : 1)
+        .query('UPDATE maproduc SET czonprod = @czonprod WHERE cproductor = @cproductor');
 
       // 3. Usuario web. xlogin en mayúsculas como el resto de usuarios de Sis2000 y la clave como la
       //    compara el login (seusuariosweb.xcontrasena = @xcontrasena, sin hash).
@@ -238,7 +254,7 @@ export class IntermediariosService {
 
       await tx.commit();
       this.logger.log(`Intermediario creado cproductor=${cproductor} correo=${dto.xcorreo}`);
-      return { cproductor, xcorreo: dto.xcorreo, xlogin: dto.xcorreo.toUpperCase(), claveTemporal };
+      creado = { cproductor, xcorreo: dto.xcorreo, xlogin: dto.xcorreo.toUpperCase(), claveTemporal };
     } catch (err) {
       try {
         await tx.rollback();
@@ -253,6 +269,43 @@ export class IntermediariosService {
       }
       this.logger.error(`Fallo alta de intermediario (rif=${cciRif}): ${mensaje}`);
       throw new InternalServerErrorException(`No fue posible crear el intermediario: ${mensaje}`);
+    }
+
+    // Fuera de la transacción: si el correo falla, el intermediario ya quedó creado y la pantalla muestra la clave
+    return { ...creado, correoEnviado: await this.enviarCorreoAcceso(creado, razonSocial) };
+  }
+
+  /** Correo al intermediario con su código, usuario y clave temporal (módulo mail, plantilla branded). */
+  private async enviarCorreoAcceso(creado: Omit<IntermediarioCreado, 'correoEnviado'>, razonSocial: string): Promise<boolean> {
+    const urlSis2000 = this.config.get<string>('SIS2000_LOGIN_URL')?.trim();
+    try {
+      const res = await this.mail.sendTemplatedEmail({
+        to: creado.xcorreo,
+        toName: razonSocial,
+        template: 'branded',
+        data: {
+          subject: 'Tu usuario de Sis2000 - La Mundial de Seguros',
+          title: 'Tu usuario de Sis2000 está listo',
+          intro: `${razonSocial}, ya estás registrado como intermediario de La Mundial de Seguros. Estos son tus datos de acceso a Sis2000:`,
+          ctaLabel: urlSis2000 ? 'Ingresar a Sis2000' : undefined,
+          ctaUrl: urlSis2000 || undefined,
+          extraNote: 'La clave es temporal: te recomendamos cambiarla en tu primer ingreso. No compartas estos datos con nadie.',
+        },
+        fields: [
+          { label: 'Código de productor', value: String(creado.cproductor) },
+          { label: 'Usuario', value: creado.xlogin },
+          { label: 'Clave temporal', value: creado.claveTemporal },
+        ],
+      });
+      if (res.sent) {
+        this.logger.log(`Correo de acceso enviado cproductor=${creado.cproductor} a ${creado.xcorreo}`);
+      } else {
+        this.logger.warn(`Correo de acceso NO enviado cproductor=${creado.cproductor}: ${res.error ?? res.mode}`);
+      }
+      return res.sent;
+    } catch (err) {
+      this.logger.warn(`Correo de acceso NO enviado cproductor=${creado.cproductor}: ${err instanceof Error ? err.message : String(err)}`);
+      return false;
     }
   }
 

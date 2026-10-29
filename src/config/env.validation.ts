@@ -122,6 +122,8 @@ export const envValidationSchema = Joi.object({
   SMTP_REPLY_TO: Joi.string().email().optional(),
   /** Endpoint PHP sendmail_sisip (modo sisip). Mismo contrato que SysIP email_php.service.js */
   URL_API_EMAIL: Joi.string().uri().optional(),
+  /** Login de Sis2000 del ambiente: botón "Ingresar a Sis2000" del correo de alta de intermediarios (sin él, no hay botón). */
+  SIS2000_LOGIN_URL: Joi.string().uri().optional(),
 
   /** Reportes ET — PostgreSQL DB `reportes` (independiente de Sis2000 MSSQL). */
   REPORTES_ENABLED: Joi.boolean().default(false),
