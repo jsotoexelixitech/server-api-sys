@@ -15,6 +15,7 @@ export const SWAGGER_TAGS = {
   RENOVATIONS: '11. Renovaciones',
   PRODUCT_EMISSION: '12. Emisión genérica (product-builder)',
   REPORTES: '13. Reportes dinámicos (ET)',
+  CONFIGURADOR: '14. Configurador de productos (product-builder)',
 } as const;
 
 export const SWAGGER_TAG_ORDER: string[] = Object.values(SWAGGER_TAGS);

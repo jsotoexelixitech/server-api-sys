@@ -26,6 +26,8 @@ export const NEST_AUTH_SCOPES = {
   INTERMEDIARIOS_WRITE: 'intermediarios:write',
   /** Administración del menú lateral de Sis2000 (desplegables, opciones y permisos por rol). */
   MENU_SIS2000_ADMIN: 'menu-sis2000:admin',
+  /** Configurador de productos en Sis2000: coberturas, tarifas, tablas de tasas por edad y planes (product-builder). */
+  CONFIGURADOR_WRITE: 'configurador:write',
 } as const;
 
 export type NestAuthScopeId =
@@ -177,6 +179,26 @@ export const NEST_AUTH_SCOPE_CATALOG: NestAuthScopeMeta[] = [
       'GET /api/v1/menu-sis2000/usuarios',
       'GET /api/v1/menu-sis2000/usuarios/:cusuario/menu',
       'POST /api/v1/menu-sis2000/usuarios/:cusuario/sincronizar',
+    ],
+  },
+  {
+    id: NEST_AUTH_SCOPES.CONFIGURADOR_WRITE,
+    label: 'Configurador de productos',
+    description: 'Crear y editar coberturas, tarifas, tablas de tasas por edad y planes en Sis2000 (product-builder)',
+    routes: [
+      'GET /api/v1/configurador/coberturas',
+      'POST /api/v1/configurador/coberturas',
+      'PATCH /api/v1/configurador/coberturas/:cramo/:ccobertura',
+      'GET /api/v1/configurador/tarifas',
+      'POST /api/v1/configurador/tarifas',
+      'POST /api/v1/configurador/tarifas/detalles',
+      'PATCH /api/v1/configurador/tarifas/:cramo/:ccober/:ctarifa',
+      'GET /api/v1/configurador/tablas-edad/:ctablaedad',
+      'POST /api/v1/configurador/tablas-edad',
+      'PUT /api/v1/configurador/tablas-edad/:ctablaedad/tramos',
+      'POST /api/v1/configurador/planes',
+      'PUT /api/v1/configurador/planes/:cramo/:cplan',
+      'DELETE /api/v1/configurador/planes/:cramo/:cplan',
     ],
   },
 ];
