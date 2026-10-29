@@ -16,6 +16,9 @@ const IFUENTE = 'NEXUS';
 
 const rtrim = (v: unknown) => String(v ?? '').trim();
 
+/** Un solo lote en transacción: con XACT_ABORT cualquier error revierte todo (no depende de sql.Transaction del pool). */
+const lote = (sentencias: string[]) => `SET XACT_ABORT ON;\nBEGIN TRAN;\n${sentencias.join('\n')}\nCOMMIT TRAN;`;
+
 /**
  * Configurador de productos en Sis2000 (lo usa proyecto-product-builder). Coberturas, tarifas y tablas de tasas por
  * edad con SQL propio; planes con spMantPlanes (llena maplanes, maplantar, maplanes_frec, maplcober_per,
@@ -113,24 +116,23 @@ export class ConfiguradorService {
     if (await this.existe('SELECT 1 FROM matarifa WHERE cramo = @cramo AND ccober = @ccob AND ctarifa = @ctar', claves)) {
       throw new ConflictException(`La tarifa ${dto.ctarifa} ya existe para la cobertura ${dto.ccober} del ramo ${dto.cramo}.`);
     }
-    await this.enTransaccion('crear tarifa', async (tx) => {
-      const req = new sql.Request(tx);
-      this.claveTarifa(req, dto);
-      req.input('xtm', sql.Char(15), dto.xtarifam.trim());
-      req.input('xt', sql.Char(60), (dto.xtarifa ?? dto.xtarifam).trim());
-      req.input('xab', sql.Char(5), (dto.xabrev ?? '').trim() || null);
-      req.input('oblig', sql.Char(1), dto.bobligatoria ? 'T' : '0');
-      this.auditoria(req);
-      // Ramo y cobertura internos se copian de macoberturas, como en las tarifas existentes.
-      await req.query(`
-        INSERT INTO matarifa (cramo, ccober, ctarifa, u_version, ctarifdepe, xtarifa, xtarifam, xabrev, bfija, bpertotal,
-          bobligatoria, bprocent, bprocsal, isuma, brutcal, cramoint, ccoberturaint, ctarifaint, qordenimp, ietiqtarimp, bprimarea,
-          iestado, cprog, ifuente, fingreso, cusuario, ccategoria)
-        SELECT @cramo, @ccob, @ctar, '!', '0', @xt, @xtm, @xab, '0', '0', @oblig, '0', '0', 'S', 1, c.cramoint, c.ccoberturaint,
-          TRY_CAST(RTRIM(@ctar) AS SMALLINT), 0, 'C', 0, 'V', @cprog, @ifuente, GETDATE(), @cusuario, 1
-        FROM macoberturas c WHERE c.cramo = @cramo AND c.ccobertura = @ccob`);
-      for (const d of dto.detalles ?? []) await this.insertarDetalle(new sql.Request(tx), { ...dto, ...d });
-    });
+    const req = this.db.request();
+    this.claveTarifa(req, dto);
+    req.input('xtm', sql.Char(15), dto.xtarifam.trim());
+    req.input('xt', sql.Char(60), (dto.xtarifa ?? dto.xtarifam).trim());
+    req.input('xab', sql.Char(5), (dto.xabrev ?? '').trim() || null);
+    req.input('oblig', sql.Char(1), dto.bobligatoria ? 'T' : '0');
+    this.auditoria(req);
+    // Ramo y cobertura internos se copian de macoberturas, como en las tarifas existentes.
+    const sentencias = [`
+      INSERT INTO matarifa (cramo, ccober, ctarifa, u_version, ctarifdepe, xtarifa, xtarifam, xabrev, bfija, bpertotal,
+        bobligatoria, bprocent, bprocsal, isuma, brutcal, cramoint, ccoberturaint, ctarifaint, qordenimp, ietiqtarimp, bprimarea,
+        iestado, cprog, ifuente, fingreso, cusuario, ccategoria)
+      SELECT @cramo, @ccob, @ctar, '!', '0', @xt, @xtm, @xab, '0', '0', @oblig, '0', '0', 'S', 1, c.cramoint, c.ccoberturaint,
+        TRY_CAST(RTRIM(@ctar) AS SMALLINT), 0, 'C', 0, 'V', @cprog, @ifuente, GETDATE(), @cusuario, 1
+      FROM macoberturas c WHERE c.cramo = @cramo AND c.ccobertura = @ccob;`];
+    (dto.detalles ?? []).forEach((d, i) => sentencias.push(this.sqlDetalle(req, d, i)));
+    await this.escribir('crear tarifa', () => req.query(lote(sentencias)));
     return { cramo: dto.cramo, ccober: dto.ccober.trim(), ctarifa: dto.ctarifa.trim(), detalles: dto.detalles?.length ?? 0 };
   }
 
@@ -139,7 +141,11 @@ export class ConfiguradorService {
     if (!(await this.existe('SELECT 1 FROM matarifa WHERE cramo = @cramo AND ccober = @ccob AND ctarifa = @ctar', claves))) {
       throw new NotFoundException(`No existe la tarifa ${dto.ctarifa} de la cobertura ${dto.ccober} del ramo ${dto.cramo}.`);
     }
-    await this.escribir('crear detalle de tarifa', () => this.insertarDetalle(this.db.request(), dto));
+    const req = this.db.request();
+    this.claveTarifa(req, dto);
+    this.auditoria(req);
+    const insert = this.sqlDetalle(req, dto, 0);
+    await this.escribir('crear detalle de tarifa', () => req.query(insert));
     return { cramo: dto.cramo, ccober: dto.ccober.trim(), ctarifa: dto.ctarifa.trim(), fdesde: dto.fdesde };
   }
 
@@ -182,17 +188,16 @@ export class ConfiguradorService {
     if (await this.existe('SELECT 1 FROM mapltabedad WHERE ctablaedad = @ctab', { ctab: dto.ctablaedad })) {
       throw new ConflictException(`La tabla de tasas ${dto.ctablaedad} ya existe.`);
     }
-    await this.enTransaccion('crear tabla de tasas', async (tx) => {
-      const req = new sql.Request(tx);
-      req.input('ctab', sql.Char(10), dto.ctablaedad.trim());
-      req.input('xtab', sql.Char(60), dto.xtablaedad.trim());
-      req.input('iaplica', sql.Char(2), dto.iaplica_tabedad ?? 'TS');
-      this.auditoria(req);
-      await req.query(`
-        INSERT INTO mapltabedad (ctablaedad, u_version, xtablaedad, iaplica_tabedad, cprog, ifuente, fingreso, cusuario, ccategoria)
-        VALUES (@ctab, '!', @xtab, @iaplica, @cprog, @ifuente, GETDATE(), @cusuario, 1)`);
-      for (const t of dto.tramos) await this.insertarTramo(new sql.Request(tx), dto.ctablaedad, t);
-    });
+    const req = this.db.request();
+    req.input('ctab', sql.Char(10), dto.ctablaedad.trim());
+    req.input('xtab', sql.Char(60), dto.xtablaedad.trim());
+    req.input('iaplica', sql.Char(2), dto.iaplica_tabedad ?? 'TS');
+    this.auditoria(req);
+    const sentencias = [`
+      INSERT INTO mapltabedad (ctablaedad, u_version, xtablaedad, iaplica_tabedad, cprog, ifuente, fingreso, cusuario, ccategoria)
+      VALUES (@ctab, '!', @xtab, @iaplica, @cprog, @ifuente, GETDATE(), @cusuario, 1);`];
+    dto.tramos.forEach((t, i) => sentencias.push(this.sqlTramo(req, t, i)));
+    await this.escribir('crear tabla de tasas', () => req.query(lote(sentencias)));
     return { ctablaedad: dto.ctablaedad.trim(), tramos: dto.tramos.length };
   }
 
@@ -200,12 +205,12 @@ export class ConfiguradorService {
   async reemplazarTramos(ctablaedad: string, tramos: TramoEdadDto[]) {
     this.exigirReglas(validarTramos(tramos));
     const tabla = await this.obtenerTablaEdad(ctablaedad);
-    await this.enTransaccion('reemplazar tramos', async (tx) => {
-      const del = new sql.Request(tx);
-      del.input('ctab', sql.Char(10), ctablaedad.trim());
-      await del.query('DELETE FROM mapltabedad_d WHERE ctablaedad = @ctab');
-      for (const t of tramos) await this.insertarTramo(new sql.Request(tx), ctablaedad, t);
-    });
+    const req = this.db.request();
+    req.input('ctab', sql.Char(10), ctablaedad.trim());
+    this.auditoria(req);
+    const sentencias = ['DELETE FROM mapltabedad_d WHERE ctablaedad = @ctab;'];
+    tramos.forEach((t, i) => sentencias.push(this.sqlTramo(req, t, i)));
+    await this.escribir('reemplazar tramos', () => req.query(lote(sentencias)));
     this.logger.warn(`reemplazarTramos ${ctablaedad}: ${tabla.tramos.length} → ${tramos.length} tramos; planes: ${JSON.stringify(tabla.usada_por)}`);
     return { ctablaedad: ctablaedad.trim(), antes: tabla.tramos, tramos: tramos.length, usada_por: tabla.usada_por };
   }
@@ -384,47 +389,34 @@ export class ConfiguradorService {
     req.input('cusuario', sql.Numeric(11, 0), CUSUARIO);
   }
 
-  private insertarDetalle(req: sql.Request, d: DetalleTarifaDto & { cramo: number; ccober: string; ctarifa: string }) {
-    this.claveTarifa(req, d);
-    req.input('fdesde', sql.Date, d.fdesde);
-    req.input('fhasta', sql.Date, d.fhasta ?? null);
-    req.input('msumamin', sql.Numeric(17, 2), d.msumamin ?? 0);
-    req.input('msumamax', sql.Numeric(17, 2), d.msumamax ?? 0);
-    req.input('mprima', sql.Numeric(17, 2), d.mprima ?? 0);
-    req.input('pprima', sql.Numeric(13, 6), d.pprima ?? 0);
-    this.auditoria(req);
-    return req.query(`
+  /** INSERT de matarifa_d con parámetros sufijados `i`; la clave (@cramo, @ccob, @ctar) y la auditoría ya están en req. */
+  private sqlDetalle(req: sql.Request, d: DetalleTarifaDto, i: number) {
+    req.input(`fdesde${i}`, sql.Date, d.fdesde);
+    req.input(`fhasta${i}`, sql.Date, d.fhasta ?? null);
+    req.input(`msumamin${i}`, sql.Numeric(17, 2), d.msumamin ?? 0);
+    req.input(`msumamax${i}`, sql.Numeric(17, 2), d.msumamax ?? 0);
+    req.input(`mprima${i}`, sql.Numeric(17, 2), d.mprima ?? 0);
+    req.input(`pprima${i}`, sql.Numeric(13, 6), d.pprima ?? 0);
+    return `
       INSERT INTO matarifa_d (cramo, ccober, ctarifa, fdesde, u_version, fhasta, msumamin, msumamax, mprima, pprima, bfraded,
         mdedu_fran, mdedu_franext, pdedu_fran, iestado, cprog, ifuente, fingreso, cusuario, ccategoria)
-      VALUES (@cramo, @ccob, @ctar, @fdesde, '!', @fhasta, @msumamin, @msumamax, @mprima, @pprima, '0', 0, 0, 0, 'V',
-        @cprog, @ifuente, GETDATE(), @cusuario, 1)`);
+      VALUES (@cramo, @ccob, @ctar, @fdesde${i}, '!', @fhasta${i}, @msumamin${i}, @msumamax${i}, @mprima${i}, @pprima${i}, '0', 0, 0, 0,
+        'V', @cprog, @ifuente, GETDATE(), @cusuario, 1);`;
   }
 
-  private insertarTramo(req: sql.Request, ctablaedad: string, t: TramoEdadDto) {
-    req.input('ctab', sql.Char(10), ctablaedad.trim());
-    req.input('emin', sql.TinyInt, t.nedad_min);
-    req.input('emax', sql.TinyInt, t.nedad_max);
-    req.input('pprima', sql.Numeric(13, 6), t.pprima);
-    req.input('mprima', sql.Numeric(17, 2), t.mprima ?? 0);
-    req.input('msuma', sql.Numeric(17, 2), t.msuma ?? 0);
-    req.input('msumamax', sql.Numeric(17, 2), t.msumamax ?? 0);
-    this.auditoria(req);
-    return req.query(`
+  /** INSERT de mapltabedad_d con parámetros sufijados `i`; @ctab y la auditoría ya están en req. */
+  private sqlTramo(req: sql.Request, t: TramoEdadDto, i: number) {
+    req.input(`emin${i}`, sql.TinyInt, t.nedad_min);
+    req.input(`emax${i}`, sql.TinyInt, t.nedad_max);
+    req.input(`pprima${i}`, sql.Numeric(13, 6), t.pprima);
+    req.input(`mprima${i}`, sql.Numeric(17, 2), t.mprima ?? 0);
+    req.input(`msuma${i}`, sql.Numeric(17, 2), t.msuma ?? 0);
+    req.input(`msumamax${i}`, sql.Numeric(17, 2), t.msumamax ?? 0);
+    return `
       INSERT INTO mapltabedad_d (ctablaedad, nedad_min, u_version, nedad_max, msuma, msumamax, pprima, mprima, cprog, ifuente,
         fingreso, cusuario, ccategoria)
-      VALUES (@ctab, @emin, '!', @emax, @msuma, @msumamax, @pprima, @mprima, @cprog, @ifuente, GETDATE(), @cusuario, 1)`);
-  }
-
-  private async enTransaccion(accion: string, fn: (tx: sql.Transaction) => Promise<void>) {
-    const tx = this.db.transaction();
-    await tx.begin();
-    try {
-      await fn(tx);
-      await tx.commit();
-    } catch (err) {
-      await tx.rollback().catch(() => undefined);
-      throw this.errorSql(accion, err);
-    }
+      VALUES (@ctab, @emin${i}, '!', @emax${i}, @msuma${i}, @msumamax${i}, @pprima${i}, @mprima${i}, @cprog, @ifuente, GETDATE(),
+        @cusuario, 1);`;
   }
 
   private async escribir<R>(accion: string, fn: () => Promise<R>): Promise<R> {
