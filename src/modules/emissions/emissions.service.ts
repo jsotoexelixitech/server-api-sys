@@ -1224,7 +1224,7 @@ export class EmissionsService {
    * Resuelve los datos de entidad provenientes del marketplace/iframe:
    * - cramo dinámico recibido.
    * - centidad = 'P' -> cproductor = citem; si viene cgestor, se asigna cgestor y se busca en magestor ccanalalt y cscanalalt.
-   * - centidad = 'C' -> ccanalalt = citem; busca en magestor filtrando por ccanalalt para obtener cgestor y cscanalalt.
+   * - centidad = 'C' -> ccanalalt = citem; busca el gestor en magestor por ccanalalt + subcanal (cscanalalt_in) o cgestor.
    */
   private async resolveMarketplaceEntity(b: Record<string, unknown>): Promise<void> {
     const centidad = String(this.pick(b, 'centidad', 'entidad') ?? '').trim().toUpperCase();
@@ -1285,14 +1285,24 @@ export class EmissionsService {
       }
       b['ctipocanal'] = 'A';
 
+      // marketplace/canal/:id/:csub manda el subcanal (cscanalalt_in); marketplace/canal/:id/user/:cgestor, el gestor.
+      // El gestor se busca dentro de ese subcanal (con preferencia por el cgestor recibido); sin subcanal, en todo el canal.
+      const cscanalaltParam = this.intField(this.pick(b, 'cscanalalt', 'cscanalalt_in', 'csub'));
+      if (cscanalaltParam != null) {
+        b['cscanalalt'] = cscanalaltParam;
+      }
+
       if (citemNum != null) {
         const req = this.db.request();
         req.input('ccanalalt', T.Int, citemNum);
+        req.input('cscanalalt', T.Int, cscanalaltParam);
+        req.input('cgestor', T.VarChar(50), cgestorParam);
         const result = await req.query(`
           SELECT TOP 1 cgestor, cscanalalt
           FROM magestor
           WHERE ccanalalt = @ccanalalt
-          ORDER BY fingreso DESC
+            AND (@cscanalalt IS NULL OR cscanalalt = @cscanalalt)
+          ORDER BY CASE WHEN LTRIM(RTRIM(cgestor)) = @cgestor THEN 0 ELSE 1 END, fingreso DESC
         `);
         const row = result.recordset?.[0];
         if (row) {
@@ -1302,6 +1312,10 @@ export class EmissionsService {
           if (row.cscanalalt != null) {
             b['cscanalalt'] = Number(row.cscanalalt);
           }
+        } else if (cscanalaltParam != null) {
+          this.logger.warn(
+            `resolveMarketplaceEntity: sin gestor en magestor para ccanalalt=${citemNum} cscanalalt=${cscanalaltParam} cgestor=${cgestorParam}`,
+          );
         }
       }
       this.logger.log(
