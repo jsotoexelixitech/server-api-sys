@@ -10,6 +10,14 @@ export interface ExcludedPlansQuery {
   citem: string;
 }
 
+export interface AssignedPlansQuery {
+  /** Entidad del canal (P, C, G). */
+  centidad: string;
+  /** Código del productor/canal/gestor (mausuplan.citem). */
+  citem: string;
+  cramo: number;
+}
+
 /** Producto Sis2000 asociado al ramo RCV nacional (cramo 18). */
 export const RCV_AUTO_CPRODUCTO = '24';
 
@@ -70,6 +78,38 @@ export class MausuplanRepository {
       `getExcludedPlans centidad=${centidades.join('|')} citem=${citem} cproducto=${cproducto} → ${result.length} plan(es) excluidos`,
     );
     return result;
+  }
+
+  /**
+   * Planes asignados de forma específica a la entidad (mausuplan itipouso='A' con citem).
+   * Los generales (citem NULL, "disponible para todos") no entran.
+   */
+  async getAssignedPlans(query: AssignedPlansQuery): Promise<Set<string>> {
+    const centidad = query.centidad.trim().toUpperCase();
+    const citem = query.citem.trim();
+    if (!centidad || !citem) {
+      return new Set();
+    }
+
+    const req = this.db.request();
+    const T = this.db.types;
+    req.input('citem', T.NVarChar(50), citem);
+    req.input('centidad', T.NVarChar(6), centidad);
+    req.input('cramo', T.Int, query.cramo);
+
+    const result = await req.query<{ cplan: string }>(`
+      SELECT DISTINCT TRIM(cplan) AS cplan
+      FROM mausuplan WITH (NOLOCK)
+      WHERE citem = @citem
+        AND centidad = @centidad
+        AND cramo = @cramo
+        AND itipouso = 'A'
+    `);
+    return new Set(
+      (result.recordset ?? [])
+        .map((row) => String(row.cplan ?? '').trim())
+        .filter(Boolean),
+    );
   }
 
   private async queryExcludedPlans(query: ExcludedPlansQuery): Promise<string[]> {
