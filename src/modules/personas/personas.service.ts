@@ -179,12 +179,30 @@ export class PersonasService {
     };
   }
 
+  /** Profesión, ocupación y actividad al SP solo con la variable (el pre-SP anterior no las conoce). */
+  private sendProfesionPersonas(): boolean {
+    return this.config.get<string>('NEST_PERSONAS_SEND_PROFESION') === '1';
+  }
+
+  /** Claves del JSON de asegurados para profesión, ocupación y actividad (pre-SP 30-oct-2026). */
+  private profesionAseguradoFields(a: Record<string, unknown>): Record<string, number> {
+    const fields: Record<string, number | null> = {
+      cprofesion_asegurado: this.intField(a.cprofesion_asegurado ?? a.cprofesion),
+      cocupacion_asegurado: this.intField(a.cocupacion_asegurado ?? a.cocupacion),
+      cactividad_asegurado: this.intField(a.cactividad_asegurado ?? a.cactividad),
+    };
+    return Object.fromEntries(
+      Object.entries(fields).filter((e): e is [string, number] => e[1] != null),
+    );
+  }
+
   /** JSON de asegurados al formato OPENJSON del pre-SP personas. */
   private mapAseguradosForSp(
     lista: Record<string, unknown>[],
     getPar: (p: unknown) => number,
   ): string | null {
     if (!lista.length) return null;
+    const sendProfesion = this.sendProfesionPersonas();
     const mapped = lista.map((a) => {
       const estado = this.intField(
         a.estado_asegurado ?? a.cestado ?? a.estado,
@@ -213,6 +231,7 @@ export class PersonasService {
         nestatura_asegurado: this.decimalField(a.nestatura_asegurado ?? a.estatura),
         // % del cuestionario (pre-SP v3 los guarda en _ASEG; v2 ignora estas claves).
         ...this.pctFields(a),
+        ...(sendProfesion ? this.profesionAseguradoFields(a) : {}),
       };
     });
     return JSON.stringify(mapped);
@@ -1395,7 +1414,8 @@ export class PersonasService {
           // Usuario Sis2000 del canal; sin valor el SP de emisión deja 7.
           cusuario: { type: T.Int, value: this.intField(b['cusuario']) },
           asegurados: {
-            type: T.NVarChar(5000),
+            // MAX como el parámetro del SP: un JSON cortado no pasa ISJSON y el SP descarta los asegurados.
+            type: T.NVarChar(T.MAX),
             value: this.mapAseguradosForSp(asegurados as Record<string, unknown>[], getPar),
           },
           beneficiarios: {
@@ -1411,6 +1431,15 @@ export class PersonasService {
         });
         if (titularPct.precargo) params.precargo_titular = { type: T.Numeric(13, 2), value: titularPct.precargo };
         if (titularPct.pdescuento) params.pdescuento_titular = { type: T.Numeric(13, 2), value: titularPct.pdescuento };
+
+        // Profesión, ocupación y actividad del tomador y el titular (pre-SP 30-oct-2026).
+        if (this.sendProfesionPersonas()) {
+          for (const rol of ['tomador', 'titular'] as const) {
+            params[`cprofesion_${rol}`] = { type: T.SmallInt, value: this.intField(b[`cprofesion_${rol}`]) };
+            params[`cocupacion_${rol}`] = { type: T.SmallInt, value: this.intField(b[`cocupacion_${rol}`]) };
+            params[`cactividad_${rol}`] = { type: T.Numeric(18, 0), value: this.intField(b[`cactividad_${rol}`]) };
+          }
+        }
 
         Object.entries(params).forEach(([key, field]) =>
           req.input(key, (field as { type: unknown }).type, (field as { value: unknown }).value),
