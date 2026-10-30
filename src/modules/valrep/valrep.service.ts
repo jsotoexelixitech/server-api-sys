@@ -793,7 +793,12 @@ export class ValrepService {
     try {
       const result = await this.db.request().execute('sp_get_ocupaciones_nexus');
       const rows = (result.recordset ?? []) as Record<string, unknown>[];
-      const mapped = this.mapCatalogRows(rows, ['cocupacion', 'cvalor'], ['xocupacion', 'xdescripcion']);
+      // cprofesion/xprofesion: versiones anteriores del SP devolvían el código de ocupación con ese nombre.
+      const mapped = this.mapCatalogRows(
+        rows,
+        ['cocupacion', 'cprofesion', 'cvalor'],
+        ['xocupacion', 'xprofesion', 'xdescripcion'],
+      );
       if (!mapped.length) {
         throw new BadRequestException('No se encontraron ocupaciones.');
       }
