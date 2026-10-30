@@ -47,3 +47,14 @@ UNION ALL SELECT 'maocupac', iestado, COUNT(*) FROM maocupac GROUP BY iestado
 UNION ALL SELECT 'maactivi', NULL, COUNT(*) FROM maactivi;
 SELECT cprofesion, RTRIM(xprofesion) AS xprofesion, iestado FROM maprofes ORDER BY cprofesion;
 SELECT cactividad, COUNT(*) AS repetidos FROM maactivi GROUP BY cactividad HAVING COUNT(*) > 1;
+
+-- 6. Clientes que corrige 04_corregir_maclient_atr_ocupacion.sql (mismo filtro; 96 al 29-oct)
+SELECT RTRIM(a.ifuente) AS ifuente, COUNT(*) AS clientes
+FROM maclient_atr a
+WHERE a.cprog IS NULL
+  AND ISNULL(a.cprofesion, 0) <> 0
+  AND ISNULL(a.cocupacion, 0) = 0
+  AND COALESCE(a.fultmod, a.fingreso) >= '2026-08-20'
+  AND EXISTS (SELECT 1 FROM maocupac o WHERE o.cocupacion = a.cprofesion)
+GROUP BY RTRIM(a.ifuente)
+ORDER BY clientes DESC;
