@@ -801,18 +801,14 @@ export class ValrepService {
       .filter((item) => item.cvalor !== '' && item.xdescripcion !== '');
   }
 
-  /** Profesiones / ocupaciones — sp_get_ocupaciones_nexus (campo cprofesion). */
+  /** Ocupaciones — sp_get_ocupaciones_nexus (maocupac, campo cocupacion). */
   async getOcupacionesNexus(): Promise<{ cvalor: string; xdescripcion: string }[]> {
     try {
       const result = await this.db.request().execute('sp_get_ocupaciones_nexus');
       const rows = (result.recordset ?? []) as Record<string, unknown>[];
-      const mapped = this.mapCatalogRows(rows, ['cprofesion', 'cocupacion', 'cvalor'], [
-        'xprofesion',
-        'xocupacion',
-        'xdescripcion',
-      ]);
+      const mapped = this.mapCatalogRows(rows, ['cocupacion', 'cvalor'], ['xocupacion', 'xdescripcion']);
       if (!mapped.length) {
-        throw new BadRequestException('No se encontraron ocupaciones/profesiones.');
+        throw new BadRequestException('No se encontraron ocupaciones.');
       }
       this.logger.log(`getOcupacionesNexus: ${mapped.length} items vía SP`);
       return mapped;
@@ -820,6 +816,25 @@ export class ValrepService {
       if (err instanceof BadRequestException) throw err;
       const msg = err instanceof Error ? err.message : String(err);
       this.logger.error(`getOcupacionesNexus: ${msg}`);
+      throw new InternalServerErrorException('No se pudo obtener la lista de ocupaciones.');
+    }
+  }
+
+  /** Profesiones — sp_get_profesiones_nexus (maprofes, campo cprofesion). */
+  async getProfesionesNexus(): Promise<{ cvalor: string; xdescripcion: string }[]> {
+    try {
+      const result = await this.db.request().execute('sp_get_profesiones_nexus');
+      const rows = (result.recordset ?? []) as Record<string, unknown>[];
+      const mapped = this.mapCatalogRows(rows, ['cprofesion', 'cvalor'], ['xprofesion', 'xdescripcion']);
+      if (!mapped.length) {
+        throw new BadRequestException('No se encontraron profesiones.');
+      }
+      this.logger.log(`getProfesionesNexus: ${mapped.length} items vía SP`);
+      return mapped;
+    } catch (err) {
+      if (err instanceof BadRequestException) throw err;
+      const msg = err instanceof Error ? err.message : String(err);
+      this.logger.error(`getProfesionesNexus: ${msg}`);
       throw new InternalServerErrorException('No se pudo obtener la lista de profesiones.');
     }
   }
