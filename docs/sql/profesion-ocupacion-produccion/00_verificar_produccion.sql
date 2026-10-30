@@ -48,7 +48,7 @@ UNION ALL SELECT 'maactivi', NULL, COUNT(*) FROM maactivi;
 SELECT cprofesion, RTRIM(xprofesion) AS xprofesion, iestado FROM maprofes ORDER BY cprofesion;
 SELECT cactividad, COUNT(*) AS repetidos FROM maactivi GROUP BY cactividad HAVING COUNT(*) > 1;
 
--- 6. Clientes que corrige 04_corregir_maclient_atr_ocupacion.sql (mismo filtro; 96 al 29-oct)
+-- 6. Clientes con un código de ocupación en cprofesion (incidencia del 29-oct). Debe dar 0: ya se corrigió.
 SELECT RTRIM(a.ifuente) AS ifuente, COUNT(*) AS clientes
 FROM maclient_atr a
 WHERE a.cprog IS NULL

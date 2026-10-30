@@ -2,19 +2,17 @@
 -- sp_create_maclient_nexus · PRODUCCIÓN · profesión, ocupación y actividad por separado
 -- Fecha: 2026-10-30
 --
--- Base: la versión de PRODUCCIÓN del 29-oct-2026 con el parche de la incidencia de profesiones
--- (respaldo/sp_create_maclient_nexus.PROD-2026-10-29-parche-ocupacion.sql):
+-- Base: la definición de PRODUCCIÓN exportada el 30-oct-2026 (respaldo/sp_create_maclient_nexus.PROD-2026-10-30.sql),
+-- que ya trae el parche de la incidencia de profesiones del 29-oct:
 --   - el código que llega en @cprofesion es una OCUPACIÓN y se guarda en cocupacion;
---   - @cprog vacío pasa a 'NEXUS' (04_corregir_maclient_atr_ocupacion.sql depende de esto).
+--   - @cprog vacío pasa a 'NEXUS'.
 --
--- ANTES DE APLICAR: comparar con la definición exportada de producción (prod_sp_create_maclient_nexus.sql).
--- Fuera de los bloques marcados debe ser idéntica a la base; si no, avisar y no aplicar.
---
--- Cambios (marcados con [ocupacion 29-oct-2026]), los mismos aplicados en QA:
+-- Cambios (marcados con [ocupacion 29-oct-2026]), los mismos aplicados y probados en QA:
 --   1) Dos parámetros opcionales al final: @cocupacion y @bocupacion_separada (default 0).
 --   2) @bocupacion_separada = 1: @cprofesion es la PROFESIÓN (maprofes) → cprofesion, y @cocupacion es la
 --      OCUPACIÓN (maocupac) → cocupacion. Cada código se valida contra su catálogo.
---   3) @bocupacion_separada = 0 (todas las llamadas actuales): igual que la base, @cprofesion es la ocupación.
+--   3) @bocupacion_separada = 0 (todas las llamadas actuales): igual que hoy, @cprofesion es la ocupación.
+-- Volver atrás: aplicar el respaldo.
 -- =============================================================================
 CREATE OR ALTER PROCEDURE [dbo].[sp_create_maclient_nexus]
     @icedula CHAR(1),

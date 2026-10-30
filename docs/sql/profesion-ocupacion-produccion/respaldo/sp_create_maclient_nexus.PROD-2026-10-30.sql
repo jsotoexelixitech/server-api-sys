@@ -11,7 +11,7 @@
 -- Los SP que lo llaman (sp_emision_automovil_rcv_nexus, sp_emision_personas_general_nexus) no cambian.
 -- Datos ya grabados: corregir-maclient-atr-ocupacion-nexus.sql
 -- =============================================================================
-CREATE OR ALTER PROCEDURE [dbo].[sp_create_maclient_nexus]
+CREATE PROCEDURE [dbo].[sp_create_maclient_nexus]
     @icedula CHAR(1),
     @cci_rif NUMERIC(13, 0),
     @xnombre VARCHAR(120),
@@ -279,4 +279,4 @@ BEGIN
         RAISERROR (@ErrorMessage, @ErrorSeverity, @ErrorState);
     END CATCH
 END;
-GO
+
