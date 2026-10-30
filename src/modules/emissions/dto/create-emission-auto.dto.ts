@@ -1,5 +1,6 @@
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
 import {
+  IsBoolean,
   IsDateString,
   IsIn,
   IsInt,
@@ -165,6 +166,27 @@ export class CreateEmissionAutoDto {
   @IsOptional()
   @IsInt()
   cpais_titular?: number;
+
+  @ApiPropertyOptional({
+    example: true,
+    description:
+      'true: `cprofesion_*` es la profesión (maprofes, GET /valrep/profesiones) y `cocupacion_*` la ocupación ' +
+      '(maocupac, GET /valrep/ocupaciones). Sin el flag, `cprofesion_*` se interpreta como ocupación. ' +
+      'Se envía al SP si NEST_RCV_SEND_OCUPACION=1.',
+  })
+  @IsOptional()
+  @IsBoolean()
+  bocupacion_separada?: boolean;
+
+  @ApiPropertyOptional({ example: 120, description: 'Ocupación del tomador (maocupac.cocupacion). Requiere bocupacion_separada.' })
+  @IsOptional()
+  @IsInt()
+  cocupacion_tomador?: number;
+
+  @ApiPropertyOptional({ example: 120, description: 'Ocupación del titular. Si se omite, la del tomador.' })
+  @IsOptional()
+  @IsInt()
+  cocupacion_titular?: number;
 
   @ApiProperty({ example: 'Av norte 8 amadores a planas', description: 'Dirección del titular' })
   @IsString()

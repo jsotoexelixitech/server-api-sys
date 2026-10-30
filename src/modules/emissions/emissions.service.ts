@@ -1638,6 +1638,26 @@ export class EmissionsService {
       }
     }
 
+    // Profesión (maprofes) y ocupación (maocupac) por separado: el front lo indica con bocupacion_separada.
+    // Solo con NEST_RCV_SEND_OCUPACION=1: el SP debe tener @cocupacion_*/@bocupacion_separada
+    // (docs/sql/rcv-profesion-ocupacion). Sin la variable la ocupación va en @cprofesion_*, que es
+    // donde el SP actual la espera, y la profesión no se envía.
+    const ocupacionSeparada = ['true', '1'].includes(
+      String(this.pick(b, 'bocupacion_separada') ?? '').trim().toLowerCase(),
+    );
+    if (ocupacionSeparada) {
+      const cocupacionTomador = this.intField(this.pick(b, 'cocupacion_tomador')) ?? null;
+      const cocupacionTitular = this.intField(this.pick(b, 'cocupacion_titular')) ?? null;
+      if (this.config.get<string>('NEST_RCV_SEND_OCUPACION') === '1') {
+        params['cocupacion_tomador'] = { type: T.SmallInt, value: cocupacionTomador };
+        params['cocupacion_titular'] = { type: T.SmallInt, value: cocupacionTitular };
+        params['bocupacion_separada'] = { type: T.Bit, value: true };
+      } else {
+        params['cprofesion_tomador'] = { type: T.Int, value: cocupacionTomador };
+        params['cprofesion_titular'] = { type: T.Int, value: cocupacionTitular };
+      }
+    }
+
     Object.entries(params).forEach(([key, field]) =>
       req.input(key, (field as { type: unknown }).type, (field as { value: unknown }).value),
     );
