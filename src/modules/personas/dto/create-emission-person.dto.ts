@@ -118,6 +118,16 @@ export class CreateEmissionPersonDto {
   @IsOptional() @IsNumber()
   pdescuento_titular?: number;
 
+  // ── Profesión (maprofes), ocupación (maocupac) y actividad económica (maactivi) ──
+  // Solo llegan al SP con NEST_PERSONAS_SEND_PROFESION=1. Cada asegurado puede traer
+  // cprofesion / cocupacion / cactividad en `asegurados[]`.
+  @ApiPropertyOptional({ example: 36 }) @IsOptional() cprofesion_tomador?: number | string;
+  @ApiPropertyOptional({ example: 101 }) @IsOptional() cocupacion_tomador?: number | string;
+  @ApiPropertyOptional({ example: 1 }) @IsOptional() cactividad_tomador?: number | string;
+  @ApiPropertyOptional({ example: 36 }) @IsOptional() cprofesion_titular?: number | string;
+  @ApiPropertyOptional({ example: 101 }) @IsOptional() cocupacion_titular?: number | string;
+  @ApiPropertyOptional({ example: 1 }) @IsOptional() cactividad_titular?: number | string;
+
   // ── Asegurados (para trazabilidad; el cálculo de prima ya viene en `prima`) ──
   @ApiPropertyOptional({ type: [Object], description: 'Lista de asegurados (opcional, informativa).' })
   @IsOptional() @IsArray()
