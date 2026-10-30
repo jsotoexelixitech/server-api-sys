@@ -75,7 +75,7 @@ function generarClaveTemporal(): string {
  * Alta de intermediario tradicional en Sis2000, con los mismos SPs y parámetros que la pasarela
  * (lamundialcms, agencies_masters_model::create_agencia_master_sisip_completo), en UNA transacción:
  *   1. spCreateMaclient            -> maclient (+ correo, tel, dir, atr)
- *   2. spCreateMaproduc            -> maproduc, maclient_rel (carnet = código; luego la zona)
+ *   2. spCreateMaproduc            -> maproduc, maclient_rel (carnet = código; luego la zona y la cuenta de pago)
  *   3. spCreateUsuarioCorredorWeb  -> seusuariosweb, macorredores_web
  *   4. spCreateGestorWeb           -> magestor (cgestor_anterior = NULL)
  * Tras el commit se envía al intermediario el correo con su usuario y clave temporal.
@@ -203,6 +203,21 @@ export class IntermediariosService {
         .input('cproductor', sql.Numeric(11, 0), cproductor)
         .input('czonprod', sql.SmallInt, ctipoprod === 3 ? 2 : 1)
         .query('UPDATE maproduc SET czonprod = @czonprod WHERE cproductor = @cproductor');
+
+      // Cuenta para pagos: las órdenes de pago de comisiones y gastos de ramo (spOrdenPago, fn_validar_ordenPago_aut)
+      // la leen de maclient_banco con cmodcob 3 (transferencia), no de maproduc. Se registra la primera cuenta, solo
+      // dígitos como el resto de productores, si el cliente no tiene ya una cuenta de pago.
+      if (cuentas[0]) {
+        await req()
+          .input('cci_rif', sql.Numeric(13, 0), cciRif)
+          .input('cbanco', sql.SmallInt, cuentas[0].cbanco)
+          .input('xcuentabanc', sql.Char(30), cuentas[0].ccuentaban.replace(/\D/g, ''))
+          .query(`IF NOT EXISTS (SELECT 1 FROM maclient_banco WITH (UPDLOCK, HOLDLOCK) WHERE cci_rif = @cci_rif AND cmodcob = 3)
+                    INSERT INTO maclient_banco (cci_rif, cclave_num, u_version, cbanco, cmodcob, xcuentabanc, cprog, ifuente, fingreso)
+                    SELECT @cci_rif, ISNULL(MAX(cclave_num), 0) + 1, '!', @cbanco, 3, @xcuentabanc, 'nest-api', 'SIS2000', GETDATE()
+                      FROM maclient_banco WITH (UPDLOCK, HOLDLOCK)
+                     WHERE cci_rif = @cci_rif`);
+      }
 
       // 3. Usuario web. xlogin en mayúsculas como el resto de usuarios de Sis2000 y la clave como la
       //    compara el login (seusuariosweb.xcontrasena = @xcontrasena, sin hash).
