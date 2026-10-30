@@ -13,6 +13,7 @@ import { MailService } from '../mail/mail.service';
 import { CrearIntermediarioDto } from './dto/crear-intermediario.dto';
 import { CrearCanalDto } from './dto/crear-canal.dto';
 import { CrearGestorDto } from './dto/crear-gestor.dto';
+import { EditarIntermediarioDto } from './dto/editar-intermediario.dto';
 
 export interface IntermediarioCreado {
   cproductor: number;
@@ -21,6 +22,29 @@ export interface IntermediarioCreado {
   claveTemporal: string;
   /** Correo con el usuario y la clave enviado al intermediario (false si el envío está apagado o falló) */
   correoEnviado: boolean;
+}
+
+/** Datos del intermediario que se pueden editar después del alta. */
+export interface IntermediarioDatos {
+  cproductor: number;
+  xproductor: string;
+  cci_rif: number;
+  xcorreo: string;
+  xlogin: string | null;
+  xtelefono: string;
+  xdireccion: string;
+  /** Cuentas de maproduc (cuenta 1 y 2), solo dígitos */
+  cuentas: { ccuenta: string; itipocta: string }[];
+  /** Cuenta de la que salen los pagos de comisiones (maclient_banco, cmodcob 3), solo dígitos */
+  cuentaPago: string | null;
+}
+
+export interface IntermediarioEditado {
+  cproductor: number;
+  xcorreo: string;
+  xlogin: string | null;
+  /** Aviso al correo nuevo con el usuario (null si el correo no cambió) */
+  correoEnviado: boolean | null;
 }
 
 export interface CanalCreado {
@@ -293,35 +317,252 @@ export class IntermediariosService {
   /** Correo al intermediario con su código, usuario y clave temporal (módulo mail, plantilla branded). */
   private async enviarCorreoAcceso(creado: Omit<IntermediarioCreado, 'correoEnviado'>, razonSocial: string): Promise<boolean> {
     const urlSis2000 = this.config.get<string>('SIS2000_LOGIN_URL')?.trim();
+    return this.enviarCorreo(creado.cproductor, 'acceso', {
+      to: creado.xcorreo,
+      toName: razonSocial,
+      template: 'branded',
+      data: {
+        subject: 'Tu usuario de Sis2000 - La Mundial de Seguros',
+        title: 'Tu usuario de Sis2000 está listo',
+        intro: `${razonSocial}, ya estás registrado como intermediario de La Mundial de Seguros. Estos son tus datos de acceso a Sis2000:`,
+        ctaLabel: urlSis2000 ? 'Ingresar a Sis2000' : undefined,
+        ctaUrl: urlSis2000 || undefined,
+        extraNote: 'La clave es temporal: te recomendamos cambiarla en tu primer ingreso. No compartas estos datos con nadie.',
+      },
+      fields: [
+        { label: 'Código de productor', value: String(creado.cproductor) },
+        { label: 'Usuario', value: creado.xlogin },
+        { label: 'Clave temporal', value: creado.claveTemporal },
+      ],
+    });
+  }
+
+  /** Aviso al correo nuevo del intermediario: desde ahora ingresa con este usuario; la clave no cambia. */
+  private async enviarCorreoCambioUsuario(editado: Omit<IntermediarioEditado, 'correoEnviado'>, razonSocial: string): Promise<boolean> {
+    const urlSis2000 = this.config.get<string>('SIS2000_LOGIN_URL')?.trim();
+    return this.enviarCorreo(editado.cproductor, 'cambio de usuario', {
+      to: editado.xcorreo,
+      toName: razonSocial,
+      template: 'branded',
+      data: {
+        subject: 'Cambio de tu usuario de Sis2000 - La Mundial de Seguros',
+        title: 'Actualizamos tu correo en Sis2000',
+        intro: `${razonSocial}, tu correo de intermediario de La Mundial de Seguros ahora es este. Desde ahora ingresas a Sis2000 con:`,
+        ctaLabel: urlSis2000 ? 'Ingresar a Sis2000' : undefined,
+        ctaUrl: urlSis2000 || undefined,
+        extraNote: 'Tu clave no cambió. Si no solicitaste este cambio, comunícate con La Mundial de Seguros.',
+      },
+      fields: [
+        { label: 'Código de productor', value: String(editado.cproductor) },
+        { label: 'Usuario', value: editado.xlogin || editado.xcorreo.toUpperCase() },
+      ],
+    });
+  }
+
+  /** Envía con el módulo mail; nunca lanza: devuelve si salió y lo deja en el log. */
+  private async enviarCorreo(
+    cproductor: number,
+    motivo: string,
+    mensaje: Parameters<MailService['sendTemplatedEmail']>[0],
+  ): Promise<boolean> {
     try {
-      const res = await this.mail.sendTemplatedEmail({
-        to: creado.xcorreo,
-        toName: razonSocial,
-        template: 'branded',
-        data: {
-          subject: 'Tu usuario de Sis2000 - La Mundial de Seguros',
-          title: 'Tu usuario de Sis2000 está listo',
-          intro: `${razonSocial}, ya estás registrado como intermediario de La Mundial de Seguros. Estos son tus datos de acceso a Sis2000:`,
-          ctaLabel: urlSis2000 ? 'Ingresar a Sis2000' : undefined,
-          ctaUrl: urlSis2000 || undefined,
-          extraNote: 'La clave es temporal: te recomendamos cambiarla en tu primer ingreso. No compartas estos datos con nadie.',
-        },
-        fields: [
-          { label: 'Código de productor', value: String(creado.cproductor) },
-          { label: 'Usuario', value: creado.xlogin },
-          { label: 'Clave temporal', value: creado.claveTemporal },
-        ],
-      });
+      const res = await this.mail.sendTemplatedEmail(mensaje);
       if (res.sent) {
-        this.logger.log(`Correo de acceso enviado cproductor=${creado.cproductor} a ${creado.xcorreo}`);
+        this.logger.log(`Correo de ${motivo} enviado cproductor=${cproductor} a ${mensaje.to}`);
       } else {
-        this.logger.warn(`Correo de acceso NO enviado cproductor=${creado.cproductor}: ${res.error ?? res.mode}`);
+        this.logger.warn(`Correo de ${motivo} NO enviado cproductor=${cproductor}: ${res.error ?? res.mode}`);
       }
       return res.sent;
     } catch (err) {
-      this.logger.warn(`Correo de acceso NO enviado cproductor=${creado.cproductor}: ${err instanceof Error ? err.message : String(err)}`);
+      this.logger.warn(`Correo de ${motivo} NO enviado cproductor=${cproductor}: ${err instanceof Error ? err.message : String(err)}`);
       return false;
     }
+  }
+
+  /** Datos editables del intermediario: maproduc, contacto del cliente, usuario web y cuenta de pago. */
+  async obtener(cproductor: number): Promise<IntermediarioDatos> {
+    const sql = this.mssql.types;
+    const res = await this.mssql
+      .request()
+      .input('cproductor', sql.Numeric(11, 0), cproductor)
+      .input('ccorredor', sql.VarChar(50), String(cproductor))
+      .query(
+        `SELECT p.cproductor, LTRIM(RTRIM(p.xproductor)) AS xproductor, p.cci_rif,
+                LTRIM(RTRIM(p.xcorreo)) AS xcorreo, LTRIM(RTRIM(p.xcontacto)) AS xtelefono,
+                LTRIM(RTRIM(p.ccuentaban)) AS ccuentaban, LTRIM(RTRIM(p.itipocta)) AS itipocta,
+                LTRIM(RTRIM(p.ccuentaban2)) AS ccuentaban2, LTRIM(RTRIM(p.itipocta2)) AS itipocta2,
+                (SELECT TOP (1) LTRIM(RTRIM(CONVERT(VARCHAR(250), d.xavecalle))) FROM maclient_dir d
+                  WHERE d.cci_rif = p.cci_rif ORDER BY d.cclave_num) AS xdireccion,
+                (SELECT TOP (1) LTRIM(RTRIM(u.xlogin)) FROM seusuariosweb u
+                  WHERE u.ccorredor = @ccorredor AND (u.xcorreo = p.xcorreo OR u.xlogin = p.xcorreo)) AS xlogin,
+                (SELECT TOP (1) LTRIM(RTRIM(b.xcuentabanc)) FROM maclient_banco b
+                  WHERE b.cci_rif = p.cci_rif AND b.cmodcob = 3) AS cuentaPago
+           FROM maproduc p
+          WHERE p.cproductor = @cproductor`,
+      );
+    const fila = res.recordset[0];
+    if (!fila) throw new NotFoundException(`No existe el intermediario ${cproductor}.`);
+    const digitos = (valor: unknown) => String(valor ?? '').replace(/\D/g, '');
+    return {
+      cproductor,
+      xproductor: fila.xproductor ?? '',
+      cci_rif: Number(fila.cci_rif),
+      xcorreo: fila.xcorreo ?? '',
+      xlogin: fila.xlogin ?? null,
+      xtelefono: fila.xtelefono ?? '',
+      xdireccion: fila.xdireccion ?? '',
+      cuentas: [
+        { ccuenta: digitos(fila.ccuentaban), itipocta: fila.itipocta ?? '' },
+        { ccuenta: digitos(fila.ccuentaban2), itipocta: fila.itipocta2 ?? '' },
+      ].filter((c) => c.ccuenta),
+      cuentaPago: digitos(fila.cuentaPago) || null,
+    };
+  }
+
+  /**
+   * Cambia contacto y cuentas del intermediario en las mismas tablas que llena el alta, en una transacción.
+   * No usa spUpdateUsuarioCorredorWeb de La Mundial: actualiza todos los usuarios web con el mismo ccorredor
+   * (también los de sus productores) y, si no se le pasa la clave, la cambia por el código del productor.
+   *   - Correo: maproduc, MACORREDORES_WEB, su gestor (magestor), maclient_correo y su usuario web (seusuariosweb;
+   *     el login pasa al correo nuevo si era el correo anterior). La clave no se toca.
+   *   - Teléfono: maproduc.xcontacto y maclient_tel. Dirección: la primera de maclient_dir (la del alta).
+   *   - Cuentas: maproduc cuenta 1 y 2; la primera también en maclient_banco (cmodcob 3), de donde la toman las
+   *     órdenes de pago. Se actualiza la fila que ya existe: con dos filas cmodcob 3 spOrdenPago falla.
+   */
+  async editar(cproductor: number, dto: EditarIntermediarioDto, operador?: number): Promise<IntermediarioEditado> {
+    const sql = this.mssql.types;
+    const cuentas = dto.cuentas ? await this.resolverCuentas(dto.cuentas) : null;
+    const ccorredor = String(cproductor);
+
+    const tx = this.mssql.transaction();
+    await tx.begin();
+    const req = () => new sql.Request(tx);
+
+    let editado: Omit<IntermediarioEditado, 'correoEnviado'>;
+    let razonSocial = '';
+    let cambiaCorreo = false;
+    try {
+      const actual = await req()
+        .input('cproductor', sql.Numeric(11, 0), cproductor)
+        .query(
+          `SELECT p.cci_rif, LTRIM(RTRIM(p.xproductor)) AS xproductor, LTRIM(RTRIM(p.xcorreo)) AS xcorreo,
+                  LTRIM(RTRIM(p.xcontacto)) AS xcontacto,
+                  (SELECT TOP (1) LTRIM(RTRIM(CONVERT(VARCHAR(250), d.xavecalle))) FROM maclient_dir d
+                    WHERE d.cci_rif = p.cci_rif ORDER BY d.cclave_num) AS xdireccion
+             FROM maproduc p WITH (UPDLOCK, HOLDLOCK)
+            WHERE p.cproductor = @cproductor`,
+        );
+      const fila = actual.recordset[0];
+      if (!fila) throw new NotFoundException(`No existe el intermediario ${cproductor}.`);
+      const cciRif = Number(fila.cci_rif);
+      razonSocial = fila.xproductor ?? '';
+      const correoAnterior = String(fila.xcorreo ?? '');
+      const telefonoAnterior = String(fila.xcontacto ?? '');
+      cambiaCorreo = correoAnterior.toLowerCase() !== dto.xcorreo;
+      const cambios: string[] = [];
+
+      if (cambiaCorreo) {
+        await this.asegurarCorreoIntermediarioLibre(req, dto.xcorreo);
+        // Filas del correo anterior solo si había uno: con '' se tocarían filas sin correo
+        await req()
+          .input('cproductor', sql.Numeric(11, 0), cproductor)
+          .input('ccorredor', sql.VarChar(50), ccorredor)
+          .input('cci_rif', sql.Numeric(13, 0), cciRif)
+          .input('xcorreo', sql.VarChar(60), dto.xcorreo)
+          .input('correoAnterior', sql.VarChar(200), correoAnterior)
+          .query(`UPDATE maproduc SET xcorreo = @xcorreo WHERE cproductor = @cproductor;
+                  UPDATE MACORREDORES_WEB SET xcorreo = @xcorreo WHERE cproductor = @ccorredor;
+                  IF @correoAnterior <> ''
+                  BEGIN
+                    UPDATE seusuariosweb
+                       SET xlogin = CASE WHEN xlogin = @correoAnterior THEN UPPER(@xcorreo) ELSE xlogin END,
+                           xcorreo = @xcorreo
+                     WHERE ccorredor = @ccorredor AND (xcorreo = @correoAnterior OR xlogin = @correoAnterior);
+                    UPDATE magestor SET xcorreo = @xcorreo
+                     WHERE xcorreo = @correoAnterior
+                       AND (LTRIM(RTRIM(cgestor)) = @ccorredor OR LTRIM(RTRIM(cgestor)) LIKE @ccorredor + '-%');
+                    UPDATE maclient_correo SET xcorreo = @xcorreo WHERE cci_rif = @cci_rif AND xcorreo = @correoAnterior;
+                  END`);
+        cambios.push(`correo ${correoAnterior || '(vacío)'} -> ${dto.xcorreo}`);
+      }
+
+      if (telefonoAnterior !== dto.xtelefono) {
+        await req()
+          .input('cproductor', sql.Numeric(11, 0), cproductor)
+          .input('cci_rif', sql.Numeric(13, 0), cciRif)
+          .input('xtelefono', sql.Char(20), dto.xtelefono)
+          .input('telefonoAnterior', sql.VarChar(60), telefonoAnterior)
+          .query(`UPDATE maproduc SET xcontacto = @xtelefono WHERE cproductor = @cproductor;
+                  IF @telefonoAnterior <> ''
+                    UPDATE maclient_tel SET xtelefono = @xtelefono WHERE cci_rif = @cci_rif AND xtelefono = @telefonoAnterior;`);
+        cambios.push('teléfono');
+      }
+
+      if (dto.xdireccion !== undefined && dto.xdireccion !== (fila.xdireccion ?? '')) {
+        // Como spCreateMaclient: la dirección del cliente es la primera de maclient_dir; si no tiene, se crea
+        await req()
+          .input('cci_rif', sql.Numeric(13, 0), cciRif)
+          .input('xdireccion', sql.Char(60), dto.xdireccion)
+          .query(`DECLARE @clave INT = (SELECT MIN(cclave_num) FROM maclient_dir WHERE cci_rif = @cci_rif);
+                  IF @clave IS NOT NULL
+                    UPDATE maclient_dir SET xavecalle = @xdireccion WHERE cci_rif = @cci_rif AND cclave_num = @clave;
+                  ELSE IF LTRIM(RTRIM(@xdireccion)) <> ''
+                    INSERT INTO maclient_dir (cci_rif, cclave_num, u_version, itipodirec, xavecalle, cpais, cestado, cciudad,
+                                              cprog, ifuente, fingreso, cusuario, ccategoria)
+                    VALUES (@cci_rif, 1, '!', 'H', @xdireccion, 58, 0, 0, 'nest-api', 'SIS2000', GETDATE(), 7, 1);`);
+        cambios.push('dirección');
+      }
+
+      if (cuentas) {
+        await req()
+          .input('cproductor', sql.Numeric(11, 0), cproductor)
+          .input('cbanco', sql.SmallInt, cuentas[0]?.cbanco ?? null)
+          .input('ccuentaban', sql.Char(30), cuentas[0]?.ccuentaban ?? null)
+          .input('itipocta', sql.Char(2), cuentas[0]?.itipocta ?? null)
+          .input('cbanco2', sql.SmallInt, cuentas[1]?.cbanco ?? null)
+          .input('ccuentaban2', sql.Char(30), cuentas[1]?.ccuentaban ?? null)
+          .input('itipocta2', sql.Char(2), cuentas[1]?.itipocta ?? null)
+          .query(`UPDATE maproduc
+                     SET cbanco = @cbanco, ccuentaban = @ccuentaban, itipocta = @itipocta,
+                         cbanco2 = @cbanco2, ccuentaban2 = @ccuentaban2, itipocta2 = @itipocta2
+                   WHERE cproductor = @cproductor`);
+        // Sin cuentas no se borra la cuenta de pago: quitarla es decisión de La Mundial (pagos)
+        if (cuentas[0]) {
+          await req()
+            .input('cci_rif', sql.Numeric(13, 0), cciRif)
+            .input('cbanco', sql.SmallInt, cuentas[0].cbanco)
+            .input('xcuentabanc', sql.Char(30), cuentas[0].ccuentaban.replace(/\D/g, ''))
+            .query(`UPDATE maclient_banco SET cbanco = @cbanco, xcuentabanc = @xcuentabanc WHERE cci_rif = @cci_rif AND cmodcob = 3;
+                    IF @@ROWCOUNT = 0
+                      INSERT INTO maclient_banco (cci_rif, cclave_num, u_version, cbanco, cmodcob, xcuentabanc, cprog, ifuente, fingreso)
+                      SELECT @cci_rif, ISNULL(MAX(cclave_num), 0) + 1, '!', @cbanco, 3, @xcuentabanc, 'nest-api', 'SIS2000', GETDATE()
+                        FROM maclient_banco WITH (UPDLOCK, HOLDLOCK)
+                       WHERE cci_rif = @cci_rif`);
+        }
+        cambios.push('cuentas');
+      }
+
+      const usuario = await req()
+        .input('ccorredor', sql.VarChar(50), ccorredor)
+        .input('xcorreo', sql.VarChar(60), dto.xcorreo)
+        .query('SELECT TOP (1) LTRIM(RTRIM(xlogin)) AS xlogin FROM seusuariosweb WHERE ccorredor = @ccorredor AND xcorreo = @xcorreo');
+
+      await tx.commit();
+      this.logger.log(`Intermediario ${cproductor} editado por cusuario=${operador ?? '-'}: ${cambios.join(', ') || 'sin cambios'}`);
+      editado = { cproductor, xcorreo: dto.xcorreo, xlogin: usuario.recordset[0]?.xlogin ?? null };
+    } catch (err) {
+      await this.deshacer(tx);
+      if (err instanceof ConflictException || err instanceof NotFoundException) throw err;
+      const mensaje = err instanceof Error ? err.message : String(err);
+      this.logger.error(`Fallo edición de intermediario ${cproductor}: ${mensaje}`);
+      throw new InternalServerErrorException(`No fue posible guardar los cambios del intermediario: ${mensaje}`);
+    }
+
+    // Fuera de la transacción, como en el alta: si el aviso falla, los cambios ya quedaron guardados
+    return {
+      ...editado,
+      correoEnviado: cambiaCorreo ? await this.enviarCorreoCambioUsuario(editado, razonSocial) : null,
+    };
   }
 
   /**

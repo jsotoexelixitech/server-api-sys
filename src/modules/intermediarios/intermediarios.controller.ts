@@ -19,6 +19,7 @@ import { APIKEY_HEADER } from '../../common/swagger/api-docs.constants';
 import { CrearIntermediarioDto } from './dto/crear-intermediario.dto';
 import { CrearCanalDto } from './dto/crear-canal.dto';
 import { CrearGestorDto } from './dto/crear-gestor.dto';
+import { EditarIntermediarioDto } from './dto/editar-intermediario.dto';
 import { ConfigurarProductosDto } from './dto/configurar-productos.dto';
 import { GuardarComisionDto } from './dto/guardar-comision.dto';
 import { IntermediariosService } from './intermediarios.service';
@@ -205,5 +206,39 @@ export class IntermediariosController {
   ) {
     const data = await this.comisiones.guardar(cproductor, dto, Number(operador) || undefined);
     return { status: true, message: 'Guardado.', data };
+  }
+
+  // Al final: ':cproductor' no debe tapar las rutas fijas de arriba (bancos, gestores, productos)
+  @Get(':cproductor')
+  @NestProtected(NEST_AUTH_SCOPES.INTERMEDIARIOS_WRITE)
+  @ApiHeader(APIKEY_HEADER)
+  @ApiOperation({
+    summary: 'Datos editables del intermediario',
+    description: 'Correo, usuario web, teléfono, dirección, cuentas de maproduc y cuenta de pago (maclient_banco cmodcob 3).',
+  })
+  @ApiResponse({ status: 404, description: 'Intermediario inexistente.' })
+  async obtener(@Param('cproductor', ParseIntPipe) cproductor: number) {
+    return { status: true, data: await this.intermediarios.obtener(cproductor) };
+  }
+
+  @Put(':cproductor')
+  @NestProtected(NEST_AUTH_SCOPES.INTERMEDIARIOS_WRITE)
+  @ApiHeader(APIKEY_HEADER)
+  @ApiOperation({
+    summary: 'Editar correo, teléfono, dirección y cuentas del intermediario',
+    description:
+      'En una transacción, en las mismas tablas del alta. Si cambia el correo cambia también el usuario web ' +
+      '(la clave no) y se avisa al correo nuevo. La primera cuenta es la cuenta de pago (maclient_banco cmodcob 3).',
+  })
+  @ApiResponse({ status: 200, description: 'Cambios guardados.' })
+  @ApiResponse({ status: 404, description: 'Intermediario inexistente.' })
+  @ApiResponse({ status: 409, description: 'El correo ya es de otro usuario o gestor.' })
+  async editar(
+    @Param('cproductor', ParseIntPipe) cproductor: number,
+    @Body() dto: EditarIntermediarioDto,
+    @Headers('x-sis2000-cusuario') operador?: string,
+  ) {
+    const data = await this.intermediarios.editar(cproductor, dto, Number(operador) || undefined);
+    return { status: true, message: 'Cambios guardados.', data };
   }
 }
