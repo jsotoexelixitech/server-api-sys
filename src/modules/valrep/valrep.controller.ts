@@ -182,8 +182,8 @@ export class ValrepController {
 
   @Get('ocupaciones')
   @ApiOperation({
-    summary: 'Profesiones / ocupaciones (diligencia debida RCV)',
-    description: 'Ejecuta `sp_get_ocupaciones_nexus` — catálogo para el campo Profesión (`cprofesion`).',
+    summary: 'Ocupaciones (diligencia debida RCV)',
+    description: 'Ejecuta `sp_get_ocupaciones_nexus` — catálogo `maocupac` para el campo Ocupación (`cocupacion`).',
     operationId: 'valrepOcupaciones',
   })
   @ApiResponse({
@@ -200,6 +200,31 @@ export class ValrepController {
   @Api500()
   async getOcupaciones() {
     const listas = await this.valrepService.getOcupacionesNexus();
+    return { status: true, data: { listas } };
+  }
+
+  // ── GET /api/v1/valrep/profesiones ────────────────────────────────────────
+
+  @Get('profesiones')
+  @ApiOperation({
+    summary: 'Profesiones (diligencia debida RCV)',
+    description: 'Ejecuta `sp_get_profesiones_nexus` — catálogo `maprofes` para el campo Profesión (`cprofesion`).',
+    operationId: 'valrepProfesiones',
+  })
+  @ApiResponse({
+    status: 200,
+    schema: {
+      example: {
+        status: true,
+        data: {
+          listas: [{ cvalor: '7', xdescripcion: 'ABOGADO' }],
+        },
+      },
+    },
+  })
+  @Api500()
+  async getProfesiones() {
+    const listas = await this.valrepService.getProfesionesNexus();
     return { status: true, data: { listas } };
   }
 
