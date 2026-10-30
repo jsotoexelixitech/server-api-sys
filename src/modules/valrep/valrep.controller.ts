@@ -422,7 +422,9 @@ export class ValrepController {
       'Planes de automóvil disponibles con parentescos y coberturas. ' +
       'El `cplan` devuelto se usa en frecuencia, cotización y emisión.\n\n' +
       'Con `csubitem` + `centidad` se excluyen planes restringidos al gestor (mausuplan itipouso=E). ' +
-      'RCV (cramo 18) usa cproducto 24 para la exclusión; otros ramos requieren `cproducto` en el body.',
+      'RCV (cramo 18) usa cproducto 24 para la exclusión; otros ramos requieren `cproducto` en el body.\n\n' +
+      '`basignado`: true si el plan está asignado a la entidad consultada (`centidad` + `citem`); ' +
+      'false si es un plan general (disponible para todos) o si no se envía `citem`.',
     operationId: 'valrepPlanesV2',
   })
   @ApiBody({ type: GetPlanesV2Dto })
@@ -433,7 +435,7 @@ export class ValrepController {
         status: true,
         data: {
           plan: [{
-            cramo: 18, cplan: 'RCVBAS', xplan: 'Plan 5.000$ (RCV)',
+            cramo: 18, cplan: 'RCVBAS', xplan: 'Plan 5.000$ (RCV)', basignado: false,
             parentescos: [{ cparen: 'T', xparentesco: 'TITULAR', min_edad: 18, max_edad: 75 }],
             coberturas:  [{ ccobertura: '17', xcobertura: 'RESPONSABILIDAD CIVIL' }],
           }],

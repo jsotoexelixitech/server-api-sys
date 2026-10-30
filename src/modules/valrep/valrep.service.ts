@@ -183,6 +183,12 @@ export class ValrepService {
       const recordset = result.recordset ?? [];
       let planes = await this.enrichWithParentescos(recordset);
       planes = await this.enrichWithCoberturas(planes);
+      // spBuscaPlan sin centidad usa las filas de productor (P)
+      planes = await this.markAssignedPlans(planes, {
+        centidad: centidad ?? 'P',
+        citem,
+        cramo: body.cramo,
+      });
 
       return this.applyCsubitemExclusion(planes, {
         csubitem: body.csubitem,
@@ -1253,6 +1259,27 @@ export class ValrepService {
         'Error al obtener el detalle del plan.',
       );
     }
+  }
+
+  /**
+   * basignado: true si el plan está asignado a la entidad consultada (mausuplan con su citem);
+   * false si solo llega como plan general (citem NULL) o si la consulta no trae citem.
+   */
+  private async markAssignedPlans(
+    planes: PlanItem[],
+    opts: { centidad: string; citem: string | null; cramo: number },
+  ): Promise<PlanItem[]> {
+    const asignados = opts.citem
+      ? await this.mausuplanRepo.getAssignedPlans({
+          centidad: opts.centidad,
+          citem: opts.citem,
+          cramo: opts.cramo,
+        })
+      : new Set<string>();
+    for (const plan of planes) {
+      plan.basignado = asignados.has(String(plan['cplan'] ?? '').trim());
+    }
+    return planes;
   }
 
   private async enrichWithCoberturas(planes: PlanItem[]): Promise<PlanItem[]> {
