@@ -1,4 +1,4 @@
-import { calcularCoberturas, type CoberturaTarifa } from './riesgos-generales.calculo';
+import { calcularCoberturas, mapCoberturaRamo, type CoberturaTarifa } from './riesgos-generales.calculo';
 
 const cob = (ccober: string, pprima: number, extra: Partial<CoberturaTarifa> = {}): CoberturaTarifa => ({
   ccober, ctarifa: '1', xcobertura: `COB ${ccober}`, msumaplan: 10000, pprima, msumamin: 0, msumamax: 0,
@@ -32,5 +32,22 @@ describe('calcularCoberturas', () => {
       'La cobertura 1 está repetida.', 'La cobertura 99 no pertenece al plan.',
       'COB 5: la suma máxima es 50000.', 'COB 22: no tiene tasa vigente en matarifa_d.',
     ]);
+  });
+});
+
+describe('mapCoberturaRamo', () => {
+  const fila = { ccober: '5   ', ctarifa: '1 ', xcobertura: 'ROBO ', cmoneda: '$   ', bobligatoria: '0', pprima: 0.4 };
+
+  it('recorta textos y pasa a número con 0 por defecto', () => {
+    expect(mapCoberturaRamo({ ...fila, mprima: null, msumamin: 1000, msumamax: 50000 })).toEqual({
+      ccober: '5', ctarifa: '1', xcobertura: 'ROBO', cmoneda: '$', obligatoria: false,
+      pprima: 0.4, mprima: 0, msumamin: 1000, msumamax: 50000, pcomision: 0,
+    });
+  });
+
+  it('obligatoria con bobligatoria T o si es la básica', () => {
+    expect(mapCoberturaRamo({ ...fila, bobligatoria: 't' }).obligatoria).toBe(true);
+    expect(mapCoberturaRamo({ ...fila, ccober: '1   ', bobligatoria: null }).obligatoria).toBe(true);
+    expect(mapCoberturaRamo({ ...fila, bobligatoria: null }).obligatoria).toBe(false);
   });
 });

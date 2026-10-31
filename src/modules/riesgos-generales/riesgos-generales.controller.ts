@@ -1,7 +1,7 @@
 import { Body, Controller, Get, HttpCode, HttpStatus, Post, Query } from '@nestjs/common';
 import { ApiBody, ApiHeader, ApiOperation, ApiTags } from '@nestjs/swagger';
 import { RiesgosGeneralesService } from './riesgos-generales.service';
-import { CotizarCoberturasDto, EmitirCoberturasDto, TarifaPlanDto } from './dto/riesgos-generales.dto';
+import { CoberturasRamoDto, CotizarCoberturasDto, EmitirCoberturasDto, TarifaPlanDto } from './dto/riesgos-generales.dto';
 import { NestProtected } from '../auth/decorators/nest-protected.decorator';
 import { NEST_AUTH_SCOPES } from '../auth/scopes/nest-auth-scopes.constants';
 import { APIKEY_HEADER } from '../../common/swagger/api-docs.constants';
@@ -24,6 +24,23 @@ export class RiesgosGeneralesController {
   @ApiCommonErrors()
   async tarifa(@Query() dto: TarifaPlanDto) {
     return { status: true, data: await this.service.getTarifa(dto) };
+  }
+
+  @Get('coberturas')
+  @ApiOperation({
+    summary: 'Coberturas del ramo con tarifa vigente',
+    description:
+      'Todas las coberturas activas del ramo (macoberturas) con tarifa vigente en matarifa y matarifa_d, sin depender de ' +
+      'un plan; el cotizador RC arma con ellas las combinaciones. Por cobertura y tarifa: `pprima` (tasa %) y `mprima` ' +
+      '(prima fija) de matarifa_d, topes `msumamin`/`msumamax` (0 = sin tope), `obligatoria` (matarifa.bobligatoria o ' +
+      'cobertura básica), `cmoneda` de macoberturas y `pcomision` de maarancel. Si una cobertura tiene varias tarifas ' +
+      'vigentes sale una vez por tarifa. Cualquier ramo; solo lectura.',
+    operationId: 'riesgosGeneralesCoberturasRamo',
+  })
+  @ApiHeader(APIKEY_HEADER)
+  @ApiCommonErrors()
+  async coberturas(@Query() dto: CoberturasRamoDto) {
+    return { status: true, data: await this.service.getCoberturasRamo(dto) };
   }
 
   @Post('cotizacion')
