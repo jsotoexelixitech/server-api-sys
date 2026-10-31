@@ -41,12 +41,49 @@ export interface CotizacionCalculada {
   coberturas: CoberturaCalculada[];
 }
 
+/** Cobertura del ramo con tarifa vigente, sin plan (GET coberturas): base de las combinaciones del cotizador RC. */
+export interface CoberturaRamo {
+  ccober: string;
+  ctarifa: string;
+  xcobertura: string;
+  /** Moneda de la cobertura (macoberturas.cmoneda). */
+  cmoneda: string;
+  /** matarifa.bobligatoria = 'T' o cobertura básica. */
+  obligatoria: boolean;
+  /** Tasa vigente de matarifa_d (%). */
+  pprima: number;
+  /** Prima fija vigente de matarifa_d. */
+  mprima: number;
+  /** Topes de matarifa_d; 0 = sin tope. */
+  msumamin: number;
+  msumamax: number;
+  /** Comisión de maarancel (%). */
+  pcomision: number;
+}
+
 export const COBERTURA_BASICA = '1';
 
 const r2 = (n: number) => Math.round((n + Number.EPSILON) * 100) / 100;
 
 export const esObligatoria = (c: Pick<CoberturaTarifa, 'ccober' | 'obligatoria'>) =>
   c.obligatoria || c.ccober === COBERTURA_BASICA;
+
+/** Fila de macoberturas + matarifa + matarifa_d vigente + maarancel → CoberturaRamo. */
+export function mapCoberturaRamo(r: Record<string, unknown>): CoberturaRamo {
+  const ccober = String(r.ccober ?? '').trim();
+  return {
+    ccober,
+    ctarifa: String(r.ctarifa ?? '').trim(),
+    xcobertura: String(r.xcobertura ?? '').trim(),
+    cmoneda: String(r.cmoneda ?? '$').trim(),
+    obligatoria: esObligatoria({ ccober, obligatoria: String(r.bobligatoria ?? '').trim().toUpperCase() === 'T' }),
+    pprima: Number(r.pprima ?? 0),
+    mprima: Number(r.mprima ?? 0),
+    msumamin: Number(r.msumamin ?? 0),
+    msumamax: Number(r.msumamax ?? 0),
+    pcomision: Number(r.pcomision ?? 0),
+  };
+}
 
 /**
  * Valida y calcula las coberturas pedidas contra la tarifa del plan.

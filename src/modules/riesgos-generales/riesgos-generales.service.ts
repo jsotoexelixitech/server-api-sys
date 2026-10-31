@@ -4,8 +4,12 @@ import { MssqlService } from '../../database/mssql.service';
 import { parseSPError, toUserFacingError } from '../../common/helpers/sp-error.helper';
 import { buildPolicyPdfUrl } from '../../common/helpers/policy-url.helper';
 import { SP_PRE_EMISION_CONDOMINIO } from '../../config/sis2000-sp.constants';
-import { calcularCoberturas, esObligatoria, type CoberturaTarifa, type CotizacionCalculada } from './riesgos-generales.calculo';
-import { CotizarCoberturasDto, EmitirCoberturasDto, PersonaRiesgoDto, TarifaPlanDto } from './dto/riesgos-generales.dto';
+import {
+  calcularCoberturas, esObligatoria, mapCoberturaRamo, type CoberturaTarifa, type CotizacionCalculada,
+} from './riesgos-generales.calculo';
+import {
+  CoberturasRamoDto, CotizarCoberturasDto, EmitirCoberturasDto, PersonaRiesgoDto, TarifaPlanDto,
+} from './dto/riesgos-generales.dto';
 
 /** Usuario Sis2000 de las emisiones Nexus de riesgos generales (mismo que condominio). */
 const CUSUARIO_NEXUS = 20364172;
@@ -71,6 +75,38 @@ export class RiesgosGeneralesService {
       cmoneda: String(rows[0].cmoneda ?? '$'),
       coberturas: coberturas.map((c) => ({ ...c, obligatoria: esObligatoria(c) })),
     };
+  }
+
+  /**
+   * Coberturas activas del ramo con tarifa vigente, sin plan (el cotizador RC arma con ellas las combinaciones).
+   * Una cobertura con varias tarifas vigentes en matarifa sale una vez por tarifa.
+   */
+  async getCoberturasRamo(dto: CoberturasRamoDto) {
+    const req = this.db.request();
+    req.input('cramo', this.db.types.Int, dto.cramo);
+    const result = await req.query(`
+      SELECT RTRIM(c.ccobertura) AS ccober, RTRIM(t.ctarifa) AS ctarifa, RTRIM(c.xdescripcion_l) AS xcobertura,
+             RTRIM(c.cmoneda) AS cmoneda, t.bobligatoria,
+             d.pprima, d.mprima, d.msumamin, d.msumamax, ara.pcomision
+      FROM macoberturas c WITH (NOLOCK)
+      INNER JOIN matarifa t WITH (NOLOCK) ON t.cramo = c.cramo AND t.ccober = c.ccobertura AND t.iestado = 'V'
+      CROSS APPLY (
+        SELECT TOP 1 x.pprima, x.mprima, x.msumamin, x.msumamax
+        FROM matarifa_d x WITH (NOLOCK)
+        WHERE x.cramo = t.cramo AND x.ccober = t.ccober AND x.ctarifa = t.ctarifa AND x.iestado = 'V'
+          AND x.fdesde <= GETDATE() AND (x.fhasta IS NULL OR x.fhasta >= GETDATE())
+        ORDER BY x.fdesde DESC
+      ) d
+      OUTER APPLY (
+        SELECT TOP 1 a.pcomision
+        FROM maarancel a WITH (NOLOCK)
+        WHERE a.cramo = c.cramo AND a.iestado = 'V' AND a.ctarifa = t.ctarifa
+      ) ara
+      WHERE c.cramo = @cramo AND c.iestado = 'V'
+      ORDER BY CASE WHEN RTRIM(c.ccobertura) = '1' THEN 0 ELSE 1 END, TRY_CAST(RTRIM(c.ccobertura) AS INT), c.ccobertura, t.ctarifa`);
+    const rows = (result.recordset ?? []) as Record<string, unknown>[];
+    if (!rows.length) throw new NotFoundException(`El ramo ${dto.cramo} no tiene coberturas con tarifa vigente.`);
+    return { cramo: dto.cramo, coberturas: rows.map((r) => mapCoberturaRamo(r)) };
   }
 
   async cotizar(dto: CotizarCoberturasDto): Promise<CotizacionCalculada> {
