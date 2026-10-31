@@ -20,6 +20,15 @@ export class TarifaPlanDto {
   cplan: string;
 }
 
+/** Coberturas del ramo con tarifa vigente: cualquier ramo (solo lectura); RAMOS_COBERTURAS no aplica aquí. */
+export class CoberturasRamoDto {
+  @ApiProperty({ example: 38, description: 'Código del ramo (cualquier ramo; consulta de solo lectura).' })
+  @Type(() => Number)
+  @IsInt()
+  @Min(1)
+  cramo: number;
+}
+
 export class CoberturaPedidaDto {
   @ApiProperty({ example: '1', description: 'Código de cobertura (macoberturas.ccobertura).' })
   @IsString()
