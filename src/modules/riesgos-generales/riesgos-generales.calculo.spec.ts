@@ -1,4 +1,4 @@
-import { calcularCoberturas, mapCoberturaRamo, type CoberturaTarifa } from './riesgos-generales.calculo';
+import { calcularCoberturas, mapCoberturaRamo, mapRamoPatrimonial, type CoberturaTarifa } from './riesgos-generales.calculo';
 
 const cob = (ccober: string, pprima: number, extra: Partial<CoberturaTarifa> = {}): CoberturaTarifa => ({
   ccober, ctarifa: '1', xcobertura: `COB ${ccober}`, msumaplan: 10000, pprima, msumamin: 0, msumamax: 0,
@@ -49,5 +49,19 @@ describe('mapCoberturaRamo', () => {
     expect(mapCoberturaRamo({ ...fila, bobligatoria: 't' }).obligatoria).toBe(true);
     expect(mapCoberturaRamo({ ...fila, ccober: '1   ', bobligatoria: null }).obligatoria).toBe(true);
     expect(mapCoberturaRamo({ ...fila, bobligatoria: null }).obligatoria).toBe(false);
+  });
+});
+
+describe('mapRamoPatrimonial', () => {
+  it('recorta el nombre y pasa a número', () => {
+    expect(mapRamoPatrimonial({ cramo: 38, xramo: 'COMBINADO RESIDENCIAL   ', ctiporamo: 6, qcoberturas: 12 })).toEqual({
+      cramo: 38, xramo: 'COMBINADO RESIDENCIAL', ctiporamo: 6, qcoberturas: 12,
+    });
+  });
+
+  it('sin nombre ni conteo: texto vacío y 0 coberturas', () => {
+    expect(mapRamoPatrimonial({ cramo: 25, xramo: null, ctiporamo: 1, qcoberturas: null })).toEqual({
+      cramo: 25, xramo: '', ctiporamo: 1, qcoberturas: 0,
+    });
   });
 });

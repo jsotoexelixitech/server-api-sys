@@ -43,6 +43,21 @@ export class RiesgosGeneralesController {
     return { status: true, data: await this.service.getCoberturasRamo(dto) };
   }
 
+  @Get('ramos')
+  @ApiOperation({
+    summary: 'Ramos patrimoniales (ctiporamo 1 y 6)',
+    description:
+      'Todos los ramos vigentes de maramos con ctiporamo 1 y 6 (sin RCV, ramo 26), tengan o no planes. Por ramo: ' +
+      '`cramo`, `xramo`, `ctiporamo` y `qcoberturas` = coberturas activas con tarifa vigente en matarifa y matarifa_d ' +
+      '(las mismas que devuelve GET coberturas); 0 = el ramo no se puede cotizar por cobertura. Solo lectura.',
+    operationId: 'riesgosGeneralesRamos',
+  })
+  @ApiHeader(APIKEY_HEADER)
+  @ApiCommonErrors()
+  async ramos() {
+    return { status: true, data: await this.service.getRamos() };
+  }
+
   @Post('cotizacion')
   @HttpCode(HttpStatus.OK)
   @ApiOperation({
