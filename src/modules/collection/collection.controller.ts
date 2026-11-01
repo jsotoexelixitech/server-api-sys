@@ -157,6 +157,15 @@ export class CollectionController {
     description: 'Recibo cobrado; ingreso de caja generado.',
     schema: { example: RCV_COLLECTION_ACTIVATE_RESPONSE },
   })
+  @ApiResponse({
+    status: 400,
+    description:
+      'Referencia ya usada: pago móvil ya validado (misma referencia, teléfono origen y banco origen), ' +
+      'o referencia ya cobrada a otro asegurado / por encima del monto del movimiento.',
+    schema: {
+      example: { status: false, message: 'El pago ya fue validado previamente.' },
+    },
+  })
   @Api401()
   @ApiCommonErrors()
   async activate(
