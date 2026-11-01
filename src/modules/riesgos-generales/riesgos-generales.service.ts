@@ -5,7 +5,7 @@ import { parseSPError, toUserFacingError } from '../../common/helpers/sp-error.h
 import { buildPolicyPdfUrl } from '../../common/helpers/policy-url.helper';
 import { SP_PRE_EMISION_CONDOMINIO } from '../../config/sis2000-sp.constants';
 import {
-  calcularCoberturas, esObligatoria, mapCoberturaRamo, type CoberturaTarifa, type CotizacionCalculada,
+  calcularCoberturas, esObligatoria, mapCoberturaRamo, mapRamoPatrimonial, type CoberturaTarifa, type CotizacionCalculada,
 } from './riesgos-generales.calculo';
 import {
   CoberturasRamoDto, CotizarCoberturasDto, EmitirCoberturasDto, PersonaRiesgoDto, TarifaPlanDto,
@@ -107,6 +107,31 @@ export class RiesgosGeneralesService {
     const rows = (result.recordset ?? []) as Record<string, unknown>[];
     if (!rows.length) throw new NotFoundException(`El ramo ${dto.cramo} no tiene coberturas con tarifa vigente.`);
     return { cramo: dto.cramo, coberturas: rows.map((r) => mapCoberturaRamo(r)) };
+  }
+
+  /**
+   * Ramos patrimoniales vigentes (maramos.ctiporamo 1 y 6, sin RCV ramo 26), tengan o no planes. `qcoberturas` cuenta
+   * las coberturas activas con tarifa vigente, con las mismas condiciones de getCoberturasRamo (0 = no cotizable).
+   */
+  async getRamos() {
+    const result = await this.db.request().query(`
+      SELECT r.cramo, RTRIM(r.xdescripcion_l) AS xramo, r.ctiporamo, k.qcoberturas
+      FROM maramos r WITH (NOLOCK)
+      OUTER APPLY (
+        SELECT COUNT(DISTINCT c.ccobertura) AS qcoberturas
+        FROM macoberturas c WITH (NOLOCK)
+        INNER JOIN matarifa t WITH (NOLOCK) ON t.cramo = c.cramo AND t.ccober = c.ccobertura AND t.iestado = 'V'
+        WHERE c.cramo = r.cramo AND c.iestado = 'V'
+          AND EXISTS (
+            SELECT 1
+            FROM matarifa_d x WITH (NOLOCK)
+            WHERE x.cramo = t.cramo AND x.ccober = t.ccober AND x.ctarifa = t.ctarifa AND x.iestado = 'V'
+              AND x.fdesde <= GETDATE() AND (x.fhasta IS NULL OR x.fhasta >= GETDATE())
+          )
+      ) k
+      WHERE r.ctiporamo IN (1, 6) AND r.iestado = 'V' AND r.cramo <> 26
+      ORDER BY xramo, r.cramo`);
+    return ((result.recordset ?? []) as Record<string, unknown>[]).map((r) => mapRamoPatrimonial(r));
   }
 
   async cotizar(dto: CotizarCoberturasDto): Promise<CotizacionCalculada> {
