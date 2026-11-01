@@ -61,6 +61,15 @@ export interface CoberturaRamo {
   pcomision: number;
 }
 
+/** Ramo patrimonial (maramos.ctiporamo 1 y 6) para el cotizador RC, tenga o no planes (GET ramos). */
+export interface RamoPatrimonial {
+  cramo: number;
+  xramo: string;
+  ctiporamo: number;
+  /** Coberturas activas con tarifa vigente (las mismas de GET coberturas); 0 = no se puede cotizar por cobertura. */
+  qcoberturas: number;
+}
+
 export const COBERTURA_BASICA = '1';
 
 const r2 = (n: number) => Math.round((n + Number.EPSILON) * 100) / 100;
@@ -82,6 +91,16 @@ export function mapCoberturaRamo(r: Record<string, unknown>): CoberturaRamo {
     msumamin: Number(r.msumamin ?? 0),
     msumamax: Number(r.msumamax ?? 0),
     pcomision: Number(r.pcomision ?? 0),
+  };
+}
+
+/** Fila de maramos + conteo de coberturas con tarifa vigente → RamoPatrimonial. */
+export function mapRamoPatrimonial(r: Record<string, unknown>): RamoPatrimonial {
+  return {
+    cramo: Number(r.cramo),
+    xramo: String(r.xramo ?? '').trim(),
+    ctiporamo: Number(r.ctiporamo ?? 0),
+    qcoberturas: Number(r.qcoberturas ?? 0),
   };
 }
 
