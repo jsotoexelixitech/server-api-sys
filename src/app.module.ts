@@ -11,6 +11,7 @@ import { PersonasModule } from './modules/personas/personas.module';
 import { CondominioModule } from './modules/condominio/condominio.module';
 import { IntermediariosModule } from './modules/intermediarios/intermediarios.module';
 import { EndososModule } from './modules/endosos/endosos.module';
+import { FlotaModule } from './modules/flota/flota.module';
 
 import { AppApiModule } from './modules/app/app.module';
 import { ExternalModule } from './modules/external/external.module';
@@ -62,6 +63,7 @@ import { ComponentsModule } from './modules/components/components.module';
     CondominioModule,
     IntermediariosModule,
     EndososModule,
+    FlotaModule,
     AppApiModule,
     ExternalModule,
     DocumentsModule,

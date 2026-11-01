@@ -22,6 +22,8 @@ export const NEST_AUTH_SCOPES = {
   PORTAL_LOGIN: 'portal:login',
   /** Alta de intermediarios (corredor / productor) en Sis2000. */
   INTERMEDIARIOS_WRITE: 'intermediarios:write',
+  /** Póliza de flota con recibo por viaje (Ridery): póliza, certificados y recibos por certificado. */
+  FLOTA_WRITE: 'flota:write',
 } as const;
 
 export type NestAuthScopeId =
@@ -143,6 +145,20 @@ export const NEST_AUTH_SCOPE_CATALOG: NestAuthScopeMeta[] = [
       'POST /api/v1/intermediarios/canal',
       'POST /api/v1/intermediarios/gestor',
       'GET /api/v1/intermediarios/gestores',
+    ],
+  },
+  {
+    id: NEST_AUTH_SCOPES.FLOTA_WRITE,
+    label: 'Póliza de flota por viaje',
+    description:
+      'Póliza de flota sin recibo por certificado, inclusión de vehículos/conductores y recibo por viaje sobre el certificado',
+    routes: [
+      'GET /api/flota/polizas/{cnpoliza}',
+      'GET /api/flota/polizas/{cnpoliza}/certificados/{ccerti}/recibos',
+      'POST /api/flota/polizas',
+      'POST /api/flota/polizas/{cnpoliza}/certificados',
+      'POST /api/flota/polizas/{cnpoliza}/certificados/{ccerti}/excluir',
+      'POST /api/flota/polizas/{cnpoliza}/certificados/{ccerti}/recibos',
     ],
   },
 ];
