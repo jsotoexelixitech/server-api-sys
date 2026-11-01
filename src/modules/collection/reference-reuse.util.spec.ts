@@ -1,4 +1,4 @@
-import { evaluateReferenceReuse } from './reference-reuse.util';
+import { evaluateReferenceReuse, pickMovementAmount } from './reference-reuse.util';
 
 describe('evaluateReferenceReuse', () => {
   const base = { ctenedor: 100, mpago: 1000, movementAmount: 1000 };
@@ -51,5 +51,21 @@ describe('evaluateReferenceReuse', () => {
       prior: [{ casegurado: '100' as unknown as number, mpago: 0 }],
     });
     expect(r).toEqual({ ok: true });
+  });
+});
+
+describe('pickMovementAmount', () => {
+  it('prefiere pago_movil.monto cuando existe', () => {
+    expect(pickMovementAmount({ pagoMovilMonto: '150.50', sypagoPayAmt: 999 })).toBe(150.5);
+  });
+
+  it('cae a trsypago.pay_amt y luego a amt para referencias SyPago', () => {
+    expect(pickMovementAmount({ pagoMovilMonto: null, sypagoPayAmt: 320, sypagoAmt: 300 })).toBe(320);
+    expect(pickMovementAmount({ pagoMovilMonto: undefined, sypagoPayAmt: null, sypagoAmt: '300' })).toBe(300);
+  });
+
+  it('devuelve null si no hay monto conocido o no es positivo', () => {
+    expect(pickMovementAmount({})).toBeNull();
+    expect(pickMovementAmount({ pagoMovilMonto: 0, sypagoPayAmt: 'abc', sypagoAmt: -5 })).toBeNull();
   });
 });

@@ -16,6 +16,23 @@ export type ReferenceReuseResult =
 const AMOUNT_TOLERANCE = 0.01;
 
 /**
+ * Monto del movimiento bancario asociado a la referencia: pago_movil.monto si existe;
+ * si no, trsypago.pay_amt (o amt) para referencias SyPago. null si no se conoce.
+ */
+export function pickMovementAmount(params: {
+  pagoMovilMonto?: unknown;
+  sypagoPayAmt?: unknown;
+  sypagoAmt?: unknown;
+}): number | null {
+  for (const raw of [params.pagoMovilMonto, params.sypagoPayAmt, params.sypagoAmt]) {
+    if (raw == null || raw === '') continue;
+    const n = Number(raw);
+    if (Number.isFinite(n) && n > 0) return n;
+  }
+  return null;
+}
+
+/**
  * Decide si una referencia bancaria puede cobrar este recibo.
  * - Usada antes por otro asegurado: se rechaza.
  * - Usada antes por el mismo asegurado: lo ya cobrado + este cobro no puede superar
