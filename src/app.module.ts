@@ -13,6 +13,7 @@ import { RiesgosGeneralesModule } from './modules/riesgos-generales/riesgos-gene
 import { IntermediariosModule } from './modules/intermediarios/intermediarios.module';
 import { EndososModule } from './modules/endosos/endosos.module';
 import { RmsGatewayModule } from './modules/rms-gateway/rms-gateway.module';
+import { FlotaModule } from './modules/flota/flota.module';
 
 import { AppApiModule } from './modules/app/app.module';
 import { ExternalModule } from './modules/external/external.module';
@@ -68,6 +69,7 @@ import { AutopagoModule } from './modules/autopago/autopago.module';
     IntermediariosModule,
     EndososModule,
     RmsGatewayModule,
+    FlotaModule,
     AppApiModule,
     ExternalModule,
     DocumentsModule,

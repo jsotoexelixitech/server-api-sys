@@ -38,8 +38,17 @@ export const NEST_AUTH_SCOPES = {
   INTERMEDIARIOS_WRITE: 'intermediarios:write',
   /** Administración del menú lateral de Sis2000 (desplegables, opciones y permisos por rol). */
   MENU_SIS2000_ADMIN: 'menu-sis2000:admin',
+<<<<<<< HEAD
   /** Autopago retail (/api/v1/autopago/*): catálogo SKU y registro de ventas en caja. */
   AUTOPAGO_WRITE: 'autopago:write',
+=======
+  /** Configurador de productos en Sis2000: coberturas, tarifas, tablas de tasas por edad y planes (product-builder). */
+  CONFIGURADOR_WRITE: 'configurador:write',
+  /** Consulta de solo lectura para renovar una póliza como póliza nueva (/api/v1/renovacion/). */
+  RENOVACION_READ: 'renovacion:read',
+  /** Póliza de flota con recibo por viaje (Ridery): póliza, certificados y recibos por certificado. */
+  FLOTA_WRITE: 'flota:write',
+>>>>>>> 4e31ae0 (feat(flota): póliza de flota con recibo por viaje sobre el certificado (Ridery))
 } as const;
 
 export type NestAuthScopeId =
@@ -223,6 +232,20 @@ export const NEST_AUTH_SCOPE_CATALOG: NestAuthScopeMeta[] = [
       'POST /api/v1/autopago/ventas',
       'GET /api/v1/autopago/ventas/{nfactura}',
       'POST /api/v1/autopago/emisiones/{token}/reenviar',
+    ],
+  },
+  {
+    id: NEST_AUTH_SCOPES.FLOTA_WRITE,
+    label: 'Póliza de flota por viaje',
+    description:
+      'Póliza de flota sin recibo por certificado, inclusión de vehículos/conductores y recibo por viaje sobre el certificado',
+    routes: [
+      'GET /api/flota/polizas/{cnpoliza}',
+      'GET /api/flota/polizas/{cnpoliza}/certificados/{ccerti}/recibos',
+      'POST /api/flota/polizas',
+      'POST /api/flota/polizas/{cnpoliza}/certificados',
+      'POST /api/flota/polizas/{cnpoliza}/certificados/{ccerti}/excluir',
+      'POST /api/flota/polizas/{cnpoliza}/certificados/{ccerti}/recibos',
     ],
   },
 ];
