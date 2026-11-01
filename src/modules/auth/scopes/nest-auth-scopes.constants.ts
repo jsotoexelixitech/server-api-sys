@@ -30,6 +30,8 @@ export const NEST_AUTH_SCOPES = {
   CONFIGURADOR_WRITE: 'configurador:write',
   /** Consulta de solo lectura para renovar una póliza como póliza nueva (/api/v1/renovacion/). */
   RENOVACION_READ: 'renovacion:read',
+  /** Póliza de flota con recibo por viaje (Ridery): póliza, certificados y recibos por certificado. */
+  FLOTA_WRITE: 'flota:write',
 } as const;
 
 export type NestAuthScopeId =
@@ -209,6 +211,20 @@ export const NEST_AUTH_SCOPE_CATALOG: NestAuthScopeMeta[] = [
     description:
       'Datos de una póliza para renovarla como póliza nueva: personas/vehículo, elegibilidad y planes de hoy (solo lectura)',
     routes: ['GET /api/v1/renovacion/:cnpoliza', 'POST /api/v1/renovacion/:cnpoliza/link'],
+  },
+  {
+    id: NEST_AUTH_SCOPES.FLOTA_WRITE,
+    label: 'Póliza de flota por viaje',
+    description:
+      'Póliza de flota sin recibo por certificado, inclusión de vehículos/conductores y recibo por viaje sobre el certificado',
+    routes: [
+      'GET /api/flota/polizas/{cnpoliza}',
+      'GET /api/flota/polizas/{cnpoliza}/certificados/{ccerti}/recibos',
+      'POST /api/flota/polizas',
+      'POST /api/flota/polizas/{cnpoliza}/certificados',
+      'POST /api/flota/polizas/{cnpoliza}/certificados/{ccerti}/excluir',
+      'POST /api/flota/polizas/{cnpoliza}/certificados/{ccerti}/recibos',
+    ],
   },
 ];
 

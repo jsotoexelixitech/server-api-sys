@@ -13,6 +13,7 @@ import { IntermediariosModule } from './modules/intermediarios/intermediarios.mo
 import { ConfiguradorModule } from './modules/configurador/configurador.module';
 import { EndososModule } from './modules/endosos/endosos.module';
 import { RmsGatewayModule } from './modules/rms-gateway/rms-gateway.module';
+import { FlotaModule } from './modules/flota/flota.module';
 
 import { AppApiModule } from './modules/app/app.module';
 import { ExternalModule } from './modules/external/external.module';
@@ -68,6 +69,7 @@ import { ComponentsModule } from './modules/components/components.module';
     ConfiguradorModule,
     EndososModule,
     RmsGatewayModule,
+    FlotaModule,
     AppApiModule,
     ExternalModule,
     DocumentsModule,
