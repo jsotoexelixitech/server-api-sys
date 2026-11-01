@@ -7,7 +7,11 @@ import {
 import { ConfigService } from '@nestjs/config';
 import { MssqlService } from '../../database/mssql.service';
 import { CollectionPaymentDto } from './dto/collection-payment.dto';
-import { evaluateReferenceReuse } from './reference-reuse.util';
+import {
+  hasPagoMovilDuplicateLookupFields,
+  PAGO_MOVIL_ALREADY_VALIDATED_MESSAGE,
+} from './pago-movil-validation.util';
+import { evaluateReferenceReuse, pickMovementAmount } from './reference-reuse.util';
 import { parseSPError } from '../../common/helpers/sp-error.helper';
 import { buildIngresoCajaUrl } from '../../common/helpers/policy-url.helper';
 
@@ -99,6 +103,54 @@ export class CollectionService {
     }
   }
 
+  /**
+   * Pago móvil ya registrado (referencia exacta, teléfono origen y banco origen).
+   * Solo aplica si el integrador envía los tres datos; si falta alguno no se puede afirmar duplicado.
+   */
+  private async findExistingValidatedPagoMovil(
+    body: CollectionPaymentDto,
+  ): Promise<boolean> {
+    if (!hasPagoMovilDuplicateLookupFields(body)) {
+      return false;
+    }
+
+    const referencia = body.xreferencia.trim();
+    const tel = body.xtelefono!.trim();
+    const bankVariants = this.bankRefVariants(body.cbanco_ref!.trim());
+    if (!bankVariants.length) return false;
+
+    const T = this.db.types;
+    const req = this.db.request();
+    req.input('referencia', T.VarChar(50), referencia);
+    req.input('tel', T.VarChar(20), tel);
+
+    const bankClauses = bankVariants.map((variant, index) => {
+      const param = `bankRef${index}`;
+      req.input(param, T.VarChar(10), variant);
+      return `LTRIM(RTRIM(banco_origen)) = @${param}`;
+    });
+
+    const result = await req.query(`
+      SELECT TOP 1 1 AS found
+      FROM pago_movil
+      WHERE LTRIM(RTRIM(referencia_banco)) = @referencia
+        AND LTRIM(RTRIM(telefono_origen)) = @tel
+        AND (${bankClauses.join(' OR ')})
+    `);
+
+    return (result.recordset?.length ?? 0) > 0;
+  }
+
+  /** Rechaza (400) un pago móvil que ya fue validado con la misma referencia, teléfono y banco. */
+  private async assertPagoMovilNotAlreadyValidated(body: CollectionPaymentDto): Promise<void> {
+    if (await this.findExistingValidatedPagoMovil(body)) {
+      this.logger.warn(
+        `assertPagoMovilNotAlreadyValidated: ref=${body.xreferencia.trim()} cnrecibo=${body.cnrecibo} rechazada (duplicado)`,
+      );
+      throw new BadRequestException(PAGO_MOVIL_ALREADY_VALIDATED_MESSAGE);
+    }
+  }
+
   /** ¿Existe la referencia en pago_movil o trsypago? */
   private async isPaymentRegistered(xreferencia: string): Promise<boolean> {
     const T = this.db.types;
@@ -114,13 +166,66 @@ export class CollectionService {
     return Number(result.recordset?.[0]?.['found'] ?? 0) === 1;
   }
 
+  private sumRowsAffected(result: { rowsAffected?: number[] }): number {
+    if (!result.rowsAffected?.length) return 0;
+    return result.rowsAffected.reduce((total, count) => total + count, 0);
+  }
+
+  /** Fila en pago_movil con la referencia exacta enviada en el body (sin LIKE). */
+  private async hasExactPagoMovilReference(referencia: string): Promise<boolean> {
+    const T = this.db.types;
+    const req = this.db.request();
+    req.input('referencia', T.VarChar(50), referencia);
+    const result = await req.query(`
+      SELECT TOP 1 1 AS found
+      FROM pago_movil
+      WHERE LTRIM(RTRIM(referencia_banco)) = @referencia
+    `);
+    return (result.recordset?.length ?? 0) > 0;
+  }
+
+  /** Actualiza pagador/bancos en fila existente cuando el integrador reenvía teléfono o cédula. */
+  private async syncPagoMovilPagadorFromBody(
+    referencia: string,
+    body: CollectionPaymentDto,
+  ): Promise<void> {
+    const dni = body.cci_rif?.trim() || null;
+    const telOrig = body.xtelefono?.trim() || null;
+    const telDest = body.telefono_dest?.trim() || null;
+    const bancoOrig = body.cbanco_ref?.trim() || null;
+    const bancoDest = body.cbanco_dest_ref?.trim() || null;
+    if (!dni && !telOrig && !telDest && !bancoOrig && !bancoDest) return;
+
+    const T = this.db.types;
+    const upd = this.db.request();
+    upd.input('referencia', T.VarChar(50), referencia);
+    upd.input('dni', T.VarChar(20), dni);
+    upd.input('tel_orig', T.VarChar(20), telOrig);
+    upd.input('tel_dest', T.VarChar(20), telDest);
+    upd.input('banco_orig', T.VarChar(10), bancoOrig);
+    upd.input('banco_dest', T.VarChar(10), bancoDest);
+    await upd.query(`
+      UPDATE pago_movil SET
+        dni = COALESCE(@dni, dni),
+        telefono_origen = COALESCE(@tel_orig, telefono_origen),
+        telefono_destino = COALESCE(@tel_dest, telefono_destino),
+        banco_origen = COALESCE(@banco_orig, banco_origen),
+        banco_destino = COALESCE(@banco_dest, banco_destino)
+      WHERE LTRIM(RTRIM(referencia_banco)) = @referencia
+    `);
+  }
+
   /**
    * Tras verificar pago móvil vía SysIP, la fila puede no existir en la BD que usa nest-api
    * (instancia distinta o registro solo en el gateway). Inserta en pago_movil si falta.
+   * Se compara la referencia exacta: un LIKE que coincida con otra fila no debe omitir el registro.
    */
   private async ensureMobilePaymentRegistered(body: CollectionPaymentDto): Promise<void> {
     const ref = body.xreferencia.trim();
-    if (await this.isPaymentRegistered(ref)) return;
+    if (await this.hasExactPagoMovilReference(ref)) {
+      await this.syncPagoMovilPagadorFromBody(ref, body);
+      return;
+    }
 
     const bankRef = body.cbanco_ref?.trim();
     if (!bankRef) {
@@ -147,7 +252,7 @@ export class CollectionService {
     ins.input('monto', T.Numeric(18, 2), body.mpago);
     ins.input('fecha', T.DateTime, fechaMov);
 
-    await ins.query(`
+    const insertResult = await ins.query(`
       INSERT INTO pago_movil
         (dni, telefono_origen, telefono_destino, banco_origen, banco_destino,
          referencia_banco, monto, fecha_movimiento, descripcion, refpk, ifuente, fcreacion)
@@ -155,11 +260,15 @@ export class CollectionService {
         @dni, @tel_orig, @tel_dest, @banco_orig, @banco_dest,
         @referencia, @monto, @fecha, 'Pago verificado Exelixi', @referencia, 'EXELIXI', GETDATE()
       WHERE NOT EXISTS (
-        SELECT 1 FROM pago_movil WHERE referencia_banco = @referencia
+        SELECT 1 FROM pago_movil WHERE LTRIM(RTRIM(referencia_banco)) = @referencia
       )
     `);
 
-    this.logger.log(`ensureMobilePayment: ref=${ref} registrado en pago_movil (Exelixi)`);
+    if (this.sumRowsAffected(insertResult) > 0) {
+      this.logger.log(`ensureMobilePayment: ref=${ref} registrado en pago_movil (Exelixi)`);
+    } else {
+      this.logger.warn(`ensureMobilePayment: ref=${ref} sin INSERT (referencia ya existía)`);
+    }
   }
 
   /**
@@ -168,7 +277,10 @@ export class CollectionService {
    */
   private async ensureFarmaciaFacturaRegistered(body: CollectionPaymentDto): Promise<void> {
     const ref = body.xreferencia.trim();
-    if (await this.isPaymentRegistered(ref)) return;
+    if (await this.hasExactPagoMovilReference(ref)) {
+      await this.syncPagoMovilPagadorFromBody(ref, body);
+      return;
+    }
 
     const T = this.db.types;
     const fechaMov = new Date(`${body.fpago}T12:00:00`);
@@ -189,7 +301,7 @@ export class CollectionService {
     ins.input('monto', T.Numeric(18, 2), body.mpago);
     ins.input('fecha', T.DateTime, fechaMov);
 
-    await ins.query(`
+    const insertResult = await ins.query(`
       INSERT INTO pago_movil
         (dni, telefono_origen, telefono_destino, banco_origen, banco_destino,
          referencia_banco, monto, fecha_movimiento, descripcion, refpk, ifuente, fcreacion)
@@ -197,11 +309,15 @@ export class CollectionService {
         @dni, @tel_orig, @tel_dest, @banco_orig, @banco_dest,
         @referencia, @monto, @fecha, 'Factura farmacia RCV tarjeta', @referencia, 'FARMACIA-RVC', GETDATE()
       WHERE NOT EXISTS (
-        SELECT 1 FROM pago_movil WHERE referencia_banco = @referencia
+        SELECT 1 FROM pago_movil WHERE LTRIM(RTRIM(referencia_banco)) = @referencia
       )
     `);
 
-    this.logger.log(`ensureFarmaciaFactura: ref=${ref} registrado en pago_movil (farmacia)`);
+    if (this.sumRowsAffected(insertResult) > 0) {
+      this.logger.log(`ensureFarmaciaFactura: ref=${ref} registrado en pago_movil (farmacia)`);
+    } else {
+      this.logger.warn(`ensureFarmaciaFactura: ref=${ref} sin INSERT (referencia ya existía)`);
+    }
   }
 
   /** La referencia debe existir en pago_movil o trsypago (mismo criterio que SysIP). */
@@ -487,11 +603,29 @@ export class CollectionService {
       ORDER BY id
     `);
 
-    const monto = movement.recordset?.[0]?.['monto'];
+    // Referencias SyPago no están en pago_movil: el monto del movimiento vive en trsypago.
+    let sypago: Record<string, unknown> | undefined;
+    if (!movement.recordset?.length) {
+      const syReq = this.db.request();
+      syReq.input('referencia', T.VarChar(50), referencia);
+      const syResult = await syReq.query(`
+        SELECT TOP 1 pay_amt, amt
+        FROM trsypago
+        WHERE LTRIM(RTRIM(ref_ibp)) = @referencia
+        ORDER BY csypago
+      `);
+      sypago = syResult.recordset?.[0] as Record<string, unknown> | undefined;
+    }
+
+    const movementAmount = pickMovementAmount({
+      pagoMovilMonto: movement.recordset?.[0]?.['monto'],
+      sypagoPayAmt: sypago?.['pay_amt'],
+      sypagoAmt: sypago?.['amt'],
+    });
     const result = evaluateReferenceReuse({
       ctenedor: receipt.ctenedor,
       mpago: Number(body.mpago),
-      movementAmount: monto == null ? null : Number(monto),
+      movementAmount,
       prior: (prior.recordset ?? []).map((r: Record<string, unknown>) => ({
         casegurado: Number(r['casegurado']),
         mpago: Number(r['mpago'] ?? 0),
@@ -518,6 +652,8 @@ export class CollectionService {
     if (body.origen_pago === 'farmacia') {
       await this.ensureFarmaciaFacturaRegistered(body);
     } else {
+      // Orden: duplicado exacto (antes de insertar) → registrar si falta → reuso en cobros previos.
+      await this.assertPagoMovilNotAlreadyValidated(body);
       await this.ensureMobilePaymentRegistered(body);
       await this.assertReferenceNotReused(body);
     }
