@@ -21,6 +21,7 @@ import {
   parseDiasEnv,
   resolverCanal,
   sugerirVigencia,
+  cpolizaTxt,
   toIsoDate,
   txt,
 } from './renovacion.util';
@@ -60,15 +61,22 @@ export class RenovacionService {
     const fdesde = toIsoDate(pol['fdesde_iso'] as string);
     const fhasta = toIsoDate(pol['fhasta_iso'] as string);
 
+    this.logger.log(
+      `consultar ${cnpoliza}: cpoliza=${cpolizaTxt(pol)} periodo=${String(pol['fanopol'])}/${String(pol['fmespol'])} ` +
+        `ctenedor=${String(pol['ctenedor'])} casegurado=${String(pol['casegurado'])} cramo=${cramo}`,
+    );
     const [renovadaPor, recibosPendientes, clientes, vehiculo, asegurados, beneficiarios] =
       await Promise.all([
-        this.loadRenovadaPor(cnpoliza),
-        this.countRecibosPendientes(pol),
-        this.loadClientes(pol),
-        rcv ? this.loadVehiculo(pol) : Promise.resolve(null),
-        rcv ? Promise.resolve([] as Row[]) : this.loadAsegurados(pol),
-        this.loadBeneficiarios(pol),
+        this.safe(cnpoliza, 'renovadaPor', () => this.loadRenovadaPor(cnpoliza), null),
+        this.safe(cnpoliza, 'recibosPendientes', () => this.countRecibosPendientes(pol), 0),
+        this.safe(cnpoliza, 'clientes', () => this.loadClientes(pol), new Map<string, Row>()),
+        rcv ? this.safe(cnpoliza, 'vehiculo', () => this.loadVehiculo(pol), null) : Promise.resolve(null),
+        rcv ? Promise.resolve([] as Row[]) : this.safe(cnpoliza, 'asegurados', () => this.loadAsegurados(pol), [] as Row[]),
+        this.safe(cnpoliza, 'beneficiarios', () => this.loadBeneficiarios(pol), [] as Row[]),
       ]);
+    if (!clientes.size) this.logger.warn(`consultar ${cnpoliza}: sin filas en maclient para tomador/titular`);
+    if (rcv && !vehiculo) this.logger.warn(`consultar ${cnpoliza}: sin filas en vhcerti`);
+    if (!rcv && !asegurados.length) this.logger.warn(`consultar ${cnpoliza}: sin filas en peasegurados`);
 
     const elegibilidad = evaluarElegibilidad({
       fhasta,
@@ -105,7 +113,7 @@ export class RenovacionService {
       cnpoliza,
       tipo: rcv ? 'RCV' : 'PERSONAS',
       poliza_origen: {
-        cpoliza: txt(pol['cpoliza']),
+        cpoliza: cpolizaTxt(pol),
         cnpoliza,
         cnpoliza_rel: txt(pol['cnpoliza_rel']),
         cramo,
@@ -158,7 +166,7 @@ export class RenovacionService {
         activo: planActivo,
         disponible_en_canal: disponibleEnCanal,
       },
-      canal_planes: canal,
+      canal_planes: planes.canal_usado ?? canal,
       otros_planes: planes.items.filter((p) => p.cplan !== cplan),
       planes_error: planes.error,
       advertencias,
@@ -171,6 +179,16 @@ export class RenovacionService {
     };
   }
 
+  /** Ejecuta una subconsulta; si falla deja el error real en pm2 logs y sigue con el valor por defecto. */
+  private async safe<R>(cnpoliza: string, etiqueta: string, fn: () => Promise<R>, fallback: R): Promise<R> {
+    try {
+      return await fn();
+    } catch (err) {
+      this.logger.warn(`consultar ${cnpoliza} [${etiqueta}] falló: ${err instanceof Error ? err.message : String(err)}`);
+      return fallback;
+    }
+  }
+
   /** Último periodo (fanopol/fmespol) de la póliza + descripciones. */
   private async loadPoliza(cnpoliza: string): Promise<Row | null> {
     const req = this.db.request();
@@ -178,6 +196,7 @@ export class RenovacionService {
     const res = await req.query(`
       SELECT TOP 1
         p.*,
+        CONVERT(varchar(20), p.cpoliza) AS cpoliza_txt,
         CONVERT(varchar(10), p.fdesde, 23) AS fdesde_iso,
         CONVERT(varchar(10), p.fhasta, 23) AS fhasta_iso,
         TRIM(r.xdescripcion_l) AS xramo_ren,
@@ -218,12 +237,12 @@ export class RenovacionService {
 
   private async countRecibosPendientes(pol: Row): Promise<number> {
     const req = this.db.request();
-    req.input('cpoliza', T.Numeric(19, 0), pol['cpoliza']);
+    req.input('cpoliza', T.VarChar(20), cpolizaTxt(pol));
     req.input('fanopol', T.SmallInt, pol['fanopol']);
     req.input('fmespol', T.TinyInt, pol['fmespol']);
     const res = await req.query(`
       SELECT COUNT(*) AS n FROM adrecibos WITH (NOLOCK)
-      WHERE cpoliza = @cpoliza AND fanopol = @fanopol AND fmespol = @fmespol AND iestadorec = 'P'
+      WHERE cpoliza = CAST(@cpoliza AS NUMERIC(19, 0)) AND fanopol = @fanopol AND fmespol = @fmespol AND iestadorec = 'P'
     `);
     return Number(res.recordset?.[0]?.['n'] ?? 0);
   }
@@ -232,7 +251,7 @@ export class RenovacionService {
   private async loadClientes(pol: Row): Promise<Map<string, Row>> {
     const out = new Map<string, Row>();
     const req = this.db.request();
-    req.input('cpoliza', T.Numeric(19, 0), pol['cpoliza']);
+    req.input('cpoliza', T.VarChar(20), cpolizaTxt(pol));
     req.input('fanopol', T.SmallInt, pol['fanopol']);
     req.input('fmespol', T.TinyInt, pol['fmespol']);
     const res = await req.query(`
@@ -248,7 +267,7 @@ export class RenovacionService {
       CROSS APPLY (VALUES (p.ctenedor), (p.casegurado), (p.cbeneficiario)) ids(id)
       INNER JOIN maclient c WITH (NOLOCK) ON c.cci_rif = ids.id
       OUTER APPLY (SELECT TOP 1 cestado, cciudad, xavecalle FROM maclient_dir dd WITH (NOLOCK) WHERE dd.cci_rif = c.cci_rif) d
-      WHERE p.cpoliza = @cpoliza AND p.fanopol = @fanopol AND p.fmespol = @fmespol
+      WHERE p.cpoliza = CAST(@cpoliza AS NUMERIC(19, 0)) AND p.fanopol = @fanopol AND p.fmespol = @fmespol
     `);
     for (const row of (res.recordset ?? []) as Row[]) {
       const key = txt(row['cci_rif']);
@@ -259,7 +278,7 @@ export class RenovacionService {
 
   private async loadVehiculo(pol: Row): Promise<Row | null> {
     const req = this.db.request();
-    req.input('cpoliza', T.Numeric(19, 0), pol['cpoliza']);
+    req.input('cpoliza', T.VarChar(20), cpolizaTxt(pol));
     req.input('fanopol', T.SmallInt, pol['fanopol']);
     req.input('fmespol', T.TinyInt, pol['fmespol']);
     const res = await req.query(`
@@ -269,7 +288,7 @@ export class RenovacionService {
       FROM vhcerti v WITH (NOLOCK)
       LEFT JOIN mavinma i WITH (NOLOCK)
         ON v.cano = i.qano AND v.cmarca = i.cmarca AND v.cmodelo = i.cmodelo AND v.cversion = i.cversion
-      WHERE v.cpoliza = @cpoliza
+      WHERE v.cpoliza = CAST(@cpoliza AS NUMERIC(19, 0))
       ORDER BY CASE WHEN v.fanopol = @fanopol AND v.fmespol = @fmespol THEN 0 ELSE 1 END, v.fanopol DESC, v.fmespol DESC
     `);
     return (res.recordset?.[0] as Row) ?? null;
@@ -277,7 +296,7 @@ export class RenovacionService {
 
   private async loadAsegurados(pol: Row): Promise<Row[]> {
     const req = this.db.request();
-    req.input('cpoliza', T.Numeric(19, 0), pol['cpoliza']);
+    req.input('cpoliza', T.VarChar(20), cpolizaTxt(pol));
     const res = await req.query(`
       SELECT
         a.*,
@@ -288,28 +307,26 @@ export class RenovacionService {
       FROM peasegurados a WITH (NOLOCK)
       LEFT JOIN maclient c WITH (NOLOCK) ON c.cci_rif = CAST(a.casegurado AS VARCHAR(50))
       LEFT JOIN maparent mp WITH (NOLOCK) ON mp.cparentesco = a.cparentesco
-      WHERE a.cpoliza = @cpoliza
+      WHERE a.cpoliza = CAST(@cpoliza AS NUMERIC(19, 0))
     `);
     return filtrarPorPeriodo((res.recordset ?? []) as Row[], pol['fanopol'], pol['fmespol']);
   }
 
   private async loadBeneficiarios(pol: Row): Promise<Row[]> {
-    try {
-      const req = this.db.request();
-      req.input('cnpoliza', T.VarChar(30), txt(pol['cnpoliza']));
-      req.input('fanopol', T.SmallInt, pol['fanopol']);
-      req.input('fmespol', T.TinyInt, pol['fmespol']);
-      const res = await req.query(`
-        SELECT b.*
-        FROM pebenefi b WITH (NOLOCK)
-        WHERE RTRIM(b.cnpoliza) = @cnpoliza AND b.fanopol = @fanopol AND b.fmespol = @fmespol
-          AND ISNULL(b.iclaseaseg, 'B') = 'B'
-      `);
-      return (res.recordset ?? []) as Row[];
-    } catch (err) {
-      this.logger.warn(`loadBeneficiarios ${String(pol['cnpoliza'])}: ${err instanceof Error ? err.message : err}`);
-      return [];
-    }
+    const req = this.db.request();
+    req.input('cnpoliza', T.VarChar(30), txt(pol['cnpoliza']));
+    req.input('fanopol', T.SmallInt, pol['fanopol']);
+    req.input('fmespol', T.TinyInt, pol['fmespol']);
+    const res = await req.query(`
+      SELECT b.*
+      FROM pebenefi b WITH (NOLOCK)
+      WHERE RTRIM(b.cnpoliza) = @cnpoliza AND b.fanopol = @fanopol AND b.fmespol = @fmespol
+    `);
+    // iclaseaseg B = beneficiario (si la columna no viene, se toman todas).
+    return ((res.recordset ?? []) as Row[]).filter((b) => {
+      const clase = txt(b['iclaseaseg'])?.toUpperCase();
+      return !clase || clase === 'B';
+    });
   }
 
   /** Mismos servicios de planes que Emisión: RCV → spBuscaPlan (planes/v2); personas → sp_busca_plan_producto_nexus. */
@@ -319,37 +336,68 @@ export class RenovacionService {
     cproducto: string | null;
     canal: { centidad: string; citem: string };
     cproductor: unknown;
-  }): Promise<{ items: ReturnType<typeof mapPlanDisponible>[]; error: string | null }> {
-    try {
-      if (args.rcv) {
-        const productor = Number(txt(args.cproductor)) || Number(this.config.get('LAMUNDIAL_PRODUCTOR') ?? 80080);
-        const dto = {
-          cramo: args.cramo,
-          cproductor: productor,
-          cusuario: 'renovacion',
-          centidad: args.canal.centidad,
-          citem: args.canal.citem,
-          cproducto: args.cproducto ?? undefined,
-        } as GetPlanesV2Dto;
-        const { planes } = await this.valrep.getPlanesV2(dto);
-        return { items: (planes ?? []).map((p) => mapPlanDisponible(p as Row)), error: null };
-      }
-      if (!args.cproducto) {
-        return { items: [], error: 'El plan no tiene cproducto en maplanes_per; no se pudieron listar planes.' };
-      }
-      const { planes } = await this.valrep.getPlanesProducto({
-        cproducto: args.cproducto,
-        centidad: args.canal.centidad,
-        citem: args.canal.citem,
-      });
-      const items = (planes ?? [])
-        .map((p) => mapPlanDisponible(p as Row))
-        .filter((p) => p.cramo == null || p.cramo === args.cramo);
-      return { items, error: null };
-    } catch (err) {
-      const msg = err instanceof Error ? err.message : String(err);
-      this.logger.warn(`loadPlanesHoy ramo=${args.cramo} producto=${args.cproducto}: ${msg}`);
-      return { items: [], error: msg };
+  }): Promise<{
+    items: ReturnType<typeof mapPlanDisponible>[];
+    error: string | null;
+    canal_usado: { centidad: string; citem: string } | null;
+  }> {
+    const productor = String(
+      Number(txt(args.cproductor)) || Number(this.config.get('LAMUNDIAL_PRODUCTOR') ?? 80080) || 80080,
+    );
+    // Canal de la póliza primero; si falla o no trae planes, productor (como Emisión sin entidad: P/cproductor).
+    const intentos = [args.canal];
+    if (!(args.canal.centidad === 'P' && args.canal.citem === productor)) {
+      intentos.push({ centidad: 'P', citem: productor });
     }
+    const errores: string[] = [];
+    for (const canal of intentos) {
+      try {
+        const items = await this.fetchPlanes(args, canal, Number(productor));
+        if (items.length) return { items, error: null, canal_usado: canal };
+        errores.push(`${canal.centidad}/${canal.citem}: sin planes`);
+        this.logger.warn(`loadPlanesHoy ramo=${args.cramo} canal=${canal.centidad}/${canal.citem}: sin planes`);
+      } catch (err) {
+        const msg = err instanceof Error ? err.message : String(err);
+        errores.push(`${canal.centidad}/${canal.citem}: ${msg}`);
+        this.logger.warn(
+          `loadPlanesHoy ramo=${args.cramo} producto=${args.cproducto} canal=${canal.centidad}/${canal.citem}: ${msg}`,
+        );
+      }
+    }
+    return { items: [], error: errores.join(' | '), canal_usado: null };
+  }
+
+  private async fetchPlanes(
+    args: { cramo: number; rcv: boolean; cproducto: string | null },
+    canal: { centidad: string; citem: string },
+    cproductor: number,
+  ): Promise<ReturnType<typeof mapPlanDisponible>[]> {
+    if (args.rcv) {
+      // Mismo body que Emisión (planesClient.buildPlanesV2Body): cusuario numérico de planes.
+      const cusuario = String(
+        this.config.get('LAMUNDIAL_CUSUARIO_PLANES') ?? this.config.get('LAMUNDIAL_CUSUARIO') ?? '4',
+      );
+      const dto = {
+        cramo: args.cramo,
+        cproductor,
+        cusuario,
+        centidad: canal.centidad,
+        citem: canal.citem,
+        cproducto: args.cproducto ?? undefined,
+      } as GetPlanesV2Dto;
+      const { planes } = await this.valrep.getPlanesV2(dto);
+      return (planes ?? []).map((p) => mapPlanDisponible(p as Row));
+    }
+    if (!args.cproducto) {
+      throw new Error('El plan no tiene cproducto en maplanes_per; no se pudieron listar planes.');
+    }
+    const { planes } = await this.valrep.getPlanesProducto({
+      cproducto: args.cproducto,
+      centidad: canal.centidad,
+      citem: canal.citem,
+    });
+    return (planes ?? [])
+      .map((p) => mapPlanDisponible(p as Row))
+      .filter((p) => p.cramo == null || p.cramo === args.cramo);
   }
 }
