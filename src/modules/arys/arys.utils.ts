@@ -52,6 +52,31 @@ const itemLabels = (item: Record<string, unknown>, labelKeys: string[]): string[
   labelKeys.map((key) => normalizeText(item?.[key])).filter(Boolean);
 
 /**
+ * Exact match first, then containment only if exactly one item matches.
+ * Used for ciudades (`Baruta` → `NUESTRA SEÑORA DEL ROSARIO DE BARUTA`); an
+ * ambiguous label (`Colón` → `SAN JUAN DE COLÓN` | `COLONCITO`) returns null.
+ */
+export const findUniqueByLabel = (
+  items: Record<string, unknown>[],
+  label: unknown,
+  labelKeys: string[],
+): Record<string, unknown> | null => {
+  const exact = findByLabel(items, label, labelKeys);
+  if (exact) return exact;
+
+  const normalizedLabel = normalizeText(label);
+  if (normalizedLabel.length < 4) return null;
+
+  const hits = items.filter((item) =>
+    itemLabels(item, labelKeys).some(
+      (value) =>
+        value.length >= 4 && (value.includes(normalizedLabel) || normalizedLabel.includes(value)),
+    ),
+  );
+  return hits.length === 1 ? hits[0] : null;
+};
+
+/**
  * Exact match first, then prefix/contains. Used for marca/modelo/versión/color
  * when Sis2000 and Arys do not share the same label (`R3` vs `R3 - Sincronico`).
  */

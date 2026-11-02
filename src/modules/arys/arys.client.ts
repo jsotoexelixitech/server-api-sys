@@ -16,6 +16,7 @@ import {
   extractNumericResult,
   findBestByLabel,
   findByLabel,
+  findUniqueByLabel,
   firstCatalogItem,
   isZeroArysResult,
   normalizeText,
@@ -162,14 +163,10 @@ export class ArysClient {
     ciudadName: unknown,
   ): Promise<Record<string, unknown> | null> {
     const ciudades = await this.getCiudades(estadoId);
-    const normalizedInput = normalizeText(ciudadName);
     const numericInput = Number(ciudadName);
     return (
-      ciudades.find(
-        (ciudad) =>
-          ciudad.id_ciudad === numericInput ||
-          normalizeText(ciudad.ciudad1) === normalizedInput,
-      ) ?? null
+      ciudades.find((ciudad) => ciudad.id_ciudad === numericInput) ??
+      findUniqueByLabel(ciudades, ciudadName, ['ciudad1'])
     );
   }
 

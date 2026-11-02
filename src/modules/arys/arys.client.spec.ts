@@ -49,6 +49,36 @@ describe('ArysClient', () => {
     expect(version?.id_version).toBe(11);
   });
 
+  describe('findCiudadByName', () => {
+    const ciudades = [
+      { id_ciudad: 561, ciudad1: 'NUESTRA SEÑORA DEL ROSARIO DE BARUTA' },
+      { id_ciudad: 571, ciudad1: 'SAN ANTONIO DE LOS ALTOS' },
+      { id_ciudad: 577, ciudad1: 'CÚA' },
+      { id_ciudad: 601, ciudad1: 'SAN JUAN DE COLÓN' },
+      { id_ciudad: 602, ciudad1: 'COLONCITO' },
+    ];
+
+    beforeEach(() => {
+      global.fetch = jest.fn().mockResolvedValue({
+        ok: true,
+        json: async () => ({ isSuccess: true, result: ciudades }),
+      } as Response);
+    });
+
+    it.each([
+      ['San Antonio de Los Altos', 571],
+      ['Cua', 577],
+      ['Baruta', 561],
+    ])('resuelve %s → %i', async (nombre, id) => {
+      const ciudad = await client.findCiudadByName(15, nombre);
+      expect(ciudad?.id_ciudad).toBe(id);
+    });
+
+    it('no adivina si el nombre coincide con varias ciudades (Colón)', async () => {
+      expect(await client.findCiudadByName(20, 'Colón')).toBeNull();
+    });
+  });
+
   it('rechaza AddVehiculo con result 0 e incluye errorMessage', async () => {
     global.fetch = jest.fn().mockResolvedValue({
       ok: true,
