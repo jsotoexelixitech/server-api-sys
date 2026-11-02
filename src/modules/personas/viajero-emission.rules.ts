@@ -47,6 +47,17 @@ export function isViajeLocalPlan(
   return String(plan ?? '').trim().toUpperCase() === VIAJE_LOCAL_PLAN;
 }
 
+/**
+ * Tarifa diaria USD de la prorrata viajero (la misma de spCalculoViajeroProrrata).
+ * La usa el fallback cuando el SP no está en la BD: mapltabedad_d.mprima no es diaria.
+ */
+export const VIAJERO_TARIFA_DIARIA_USD = 0.75;
+
+/** Prima USD de la prorrata viajero: ndias × tarifa diaria, a 2 decimales. */
+export function viajeroProrrataPrimaExt(ndias: number): number {
+  return Math.round(ndias * VIAJERO_TARIFA_DIARIA_USD * 100) / 100;
+}
+
 /** Planes con prima = ndias × tarifa diaria (VIAJE ramo 25, VIAJ* ramo 5). */
 export function isViajeroProrrataPlan(
   cramo: number | null | undefined,
