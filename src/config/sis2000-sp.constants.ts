@@ -56,6 +56,9 @@ export const SP_GET_SUSTANCIAS_NEXUS = 'sp_get_sustancias_nexus';
 /** Frecuencias de pago por plan RCV (POST /valrep/frecuencia). */
 export const SP_BUSCA_FRECUENCIA_PLAN_NEXUS = 'sp_busca_frecuencia_plan_nexus';
 
+/** Planes RCV de POST /valrep/planes/v2: copia de spBuscaPlan con @bexclusivos (override: MSSQL_SP_BUSCA_PLAN_NEXUS). */
+export const SP_BUSCA_PLAN_NEXUS = 'sp_busca_plan_nexus';
+
 /** Planes funerarios por producto + canal (POST /personas/planes y /valrep/planes/producto). */
 export const SP_BUSCA_PLAN_PRODUCTO_NEXUS = 'sp_busca_plan_producto_nexus';
 

@@ -9,6 +9,7 @@ import { MssqlService } from '../../database/mssql.service';
 import { parseSPError } from '../../common/helpers/sp-error.helper';
 import {
   SP_BUSCA_FRECUENCIA_PLAN_NEXUS,
+  SP_BUSCA_PLAN_NEXUS,
   SP_BUSCA_PLAN_PRODUCTO_NEXUS,
   SP_CALCULO_AUTO_NEXUS,
   SP_GET_SUSTANCIAS_NEXUS,
@@ -138,6 +139,9 @@ export class ValrepService {
   }
 
   async getPlanesV2(body: GetPlanesV2Dto): Promise<PlanesQueryResult> {
+    if (body.bexclusivos === true && !body.citem) {
+      throw new BadRequestException('bexclusivos requiere citem');
+    }
     try {
       const req = this.db.request();
       const T = this.db.types;
@@ -167,23 +171,28 @@ export class ValrepService {
       req.input('centidad', T.NVarChar(6), centidad);
       req.input('bnacional', T.Bit, body.iplaca === 'B');
       req.output('mensaje', T.NVarChar(500), '');
+      // Solo si viene en true: así el override MSSQL_SP_BUSCA_PLAN_NEXUS=spBuscaPlan sigue funcionando
+      if (body.bexclusivos === true) {
+        req.input('bexclusivos', T.Bit, true);
+      }
 
-      const result = await req.execute('spBuscaPlan');
+      const spName = this.spBuscaPlanNexusName();
+      const result = await req.execute(spName);
       const mensaje: string = result.output['mensaje'] ?? '';
 
       if (mensaje) {
         const isError = !mensaje.toLowerCase().includes('encontrad');
         if (isError) {
-          this.logger.warn(`spBuscaPlan mensaje: ${mensaje}`);
+          this.logger.warn(`${spName} mensaje: ${mensaje}`);
         } else {
-          this.logger.log(`spBuscaPlan: ${mensaje}`);
+          this.logger.log(`${spName}: ${mensaje}`);
         }
       }
 
       const recordset = result.recordset ?? [];
       let planes = await this.enrichWithParentescos(recordset);
       planes = await this.enrichWithCoberturas(planes);
-      // spBuscaPlan sin centidad usa las filas de productor (P)
+      // el SP sin centidad usa las filas de productor (P)
       planes = await this.markAssignedPlans(planes, {
         centidad: centidad ?? 'P',
         citem,
@@ -454,6 +463,10 @@ export class ValrepService {
       process.env.MSSQL_SP_BUSCA_FRECUENCIA_PLAN_NEXUS?.trim() ||
       SP_BUSCA_FRECUENCIA_PLAN_NEXUS
     );
+  }
+
+  private spBuscaPlanNexusName(): string {
+    return process.env.MSSQL_SP_BUSCA_PLAN_NEXUS?.trim() || SP_BUSCA_PLAN_NEXUS;
   }
 
   private spBuscaPlanProductoNexusName(): string {
