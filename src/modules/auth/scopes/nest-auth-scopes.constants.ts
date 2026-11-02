@@ -30,6 +30,8 @@ export const NEST_AUTH_SCOPES = {
   MENU_SIS2000_ADMIN: 'menu-sis2000:admin',
   /** Autopago retail (/api/v1/autopago/*): catálogo SKU y registro de ventas en caja. */
   AUTOPAGO_WRITE: 'autopago:write',
+  /** Consulta de solo lectura para renovar una póliza como póliza nueva (/api/v1/renovacion/). */
+  RENOVACION_READ: 'renovacion:read',
 } as const;
 
 export type NestAuthScopeId =
@@ -200,6 +202,13 @@ export const NEST_AUTH_SCOPE_CATALOG: NestAuthScopeMeta[] = [
       'GET /api/v1/autopago/ventas/{nfactura}',
       'POST /api/v1/autopago/emisiones/{token}/reenviar',
     ],
+  },
+  {
+    id: NEST_AUTH_SCOPES.RENOVACION_READ,
+    label: 'Renovación (consulta)',
+    description:
+      'Datos de una póliza para renovarla como póliza nueva: personas/vehículo, elegibilidad y planes de hoy (solo lectura)',
+    routes: ['GET /api/v1/renovacion/:cnpoliza'],
   },
 ];
 
