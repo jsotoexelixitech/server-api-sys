@@ -32,6 +32,7 @@ import {
   isViajeLocalPlan,
   isViajeroPlan,
   isViajeroProrrataPlan,
+  VIAJERO_TARIFA_DIARIA_USD,
 } from './viajero-emission.rules';
 
 class Mutex {
@@ -717,6 +718,7 @@ export class PersonasService {
     req.input('nedad', T.Int, asegurado.nedad_asegurado);
     req.input('ndias', T.Int, ndias);
     req.input('ptasamon_in', T.Float, body.ptasamon ?? null);
+    req.input('tarifa_dia', T.Numeric(18, 4), VIAJERO_TARIFA_DIARIA_USD);
 
     const result = await req.query(`
       DECLARE @tarifa NUMERIC(18,6), @ptasamon FLOAT, @cmoneda CHAR(4), @ctablatar CHAR(10);
@@ -748,7 +750,9 @@ export class PersonasService {
       IF @tarifa IS NULL OR @tarifa <= 0
         THROW 99002, 'Sin tarifa diaria en mapltabedad_d para plan/edad.', 1;
 
-      SET @mprimaext = ROUND(CAST(@ndias AS NUMERIC(18,6)) * @tarifa, 2);
+      -- mapltabedad_d.mprima NO es tarifa diaria (VIAJE4 3 días = 0.45): solo valida plan/edad.
+      -- Prima = ndias × tarifa diaria fija, igual que spCalculoViajeroProrrata.
+      SET @mprimaext = ROUND(CAST(@ndias AS NUMERIC(18,6)) * @tarifa_dia, 2);
       SET @mprima = ROUND(@mprimaext * @ptasamon, 2);
 
       SELECT @mprima AS mprima, @mprimaext AS mprimaext, @tarifa AS tarifa_diaria, @ndias AS ndias;
