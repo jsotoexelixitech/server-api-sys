@@ -22,6 +22,8 @@ export const NEST_AUTH_SCOPES = {
   PORTAL_LOGIN: 'portal:login',
   /** Alta de intermediarios (corredor / productor) en Sis2000. */
   INTERMEDIARIOS_WRITE: 'intermediarios:write',
+  /** Consulta de solo lectura para renovar una póliza como póliza nueva (/api/v1/renovacion/). */
+  RENOVACION_READ: 'renovacion:read',
 } as const;
 
 export type NestAuthScopeId =
@@ -144,6 +146,13 @@ export const NEST_AUTH_SCOPE_CATALOG: NestAuthScopeMeta[] = [
       'POST /api/v1/intermediarios/gestor',
       'GET /api/v1/intermediarios/gestores',
     ],
+  },
+  {
+    id: NEST_AUTH_SCOPES.RENOVACION_READ,
+    label: 'Renovación (consulta)',
+    description:
+      'Datos de una póliza para renovarla como póliza nueva: personas/vehículo, elegibilidad y planes de hoy (solo lectura)',
+    routes: ['GET /api/v1/renovacion/:cnpoliza'],
   },
 ];
 

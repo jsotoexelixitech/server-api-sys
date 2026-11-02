@@ -42,6 +42,8 @@ export function inferScopeFromPath(normalizedPath: string): string | undefined {
     return 'renovations:write';
   }
 
+  if (/\/api\/v1\/renovacion\//i.test(path)) return 'renovacion:read';
+
   if (/\/api\/v1\/admin\/(keys|scopes)/i.test(path)) {
     return 'admin:keys';
   }
