@@ -132,7 +132,7 @@ export class ArysRepository {
         CONVERT(DATE, maclient.fnacimiento) AS fnacimiento,
         maclient.ipersona,
         RTRIM(LTRIM(maestados.xdescripcion_c)) AS xestado,
-        TRIM(maciudades.xdescripcion_c) AS xciudad,
+        TRIM(COALESCE(maciudades.xdescripcion_l, maciudades.xdescripcion_c)) AS xciudad,
         TRIM(maclient_dir.xavecalle) AS xavecalle,
         TRIM(maclient_correo.xcorreo) AS xcorreo,
         TRIM(maclient_tel.xtelefono) AS xtelefono,
@@ -150,6 +150,7 @@ export class ArysRepository {
       LEFT JOIN maciudades
         ON maclient_dir.cestado = maciudades.cestado
        AND maclient_dir.cciudad = maciudades.cciudad
+       AND COALESCE(maclient_dir.cpais, 58) = maciudades.cpais
       LEFT JOIN maclient_tel ON maclient.cci_rif = maclient_tel.cci_rif
       LEFT JOIN maclient_atr ON maclient.cci_rif = maclient_atr.cci_rif
       LEFT JOIN maprofes ON maclient_atr.cprofesion = maprofes.cprofesion
@@ -157,6 +158,9 @@ export class ArysRepository {
       WHERE LTRIM(RTRIM(CONVERT(VARCHAR(30), maclient.cci_rif))) = @cciRif
          OR LTRIM(RTRIM(CONVERT(VARCHAR(30), maclient.cid))) IN (@cidRaw, @cidDigits, @cidLetter)
          OR LTRIM(RTRIM(CONVERT(VARCHAR(30), maclient.cid))) LIKE '[VEJPGvejpg]' + @cciRif
+      ORDER BY
+        CASE WHEN maestados.cestado IS NULL THEN 1 ELSE 0 END,
+        CASE WHEN maciudades.cciudad IS NULL THEN 1 ELSE 0 END
     `);
 
     const row = result.recordset?.[0] as ArysPropietaryRow | undefined;
