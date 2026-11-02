@@ -28,6 +28,8 @@ export const NEST_AUTH_SCOPES = {
   MENU_SIS2000_ADMIN: 'menu-sis2000:admin',
   /** Configurador de productos en Sis2000: coberturas, tarifas, tablas de tasas por edad y planes (product-builder). */
   CONFIGURADOR_WRITE: 'configurador:write',
+  /** Consulta de solo lectura para renovar una póliza como póliza nueva (/api/v1/renovacion/). */
+  RENOVACION_READ: 'renovacion:read',
 } as const;
 
 export type NestAuthScopeId =
@@ -200,6 +202,13 @@ export const NEST_AUTH_SCOPE_CATALOG: NestAuthScopeMeta[] = [
       'PUT /api/v1/configurador/planes/:cramo/:cplan',
       'DELETE /api/v1/configurador/planes/:cramo/:cplan',
     ],
+  },
+  {
+    id: NEST_AUTH_SCOPES.RENOVACION_READ,
+    label: 'Renovación (consulta)',
+    description:
+      'Datos de una póliza para renovarla como póliza nueva: personas/vehículo, elegibilidad y planes de hoy (solo lectura)',
+    routes: ['GET /api/v1/renovacion/:cnpoliza'],
   },
 ];
 
