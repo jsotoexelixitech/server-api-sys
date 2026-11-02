@@ -1,15 +1,45 @@
-import { Controller, Get, Param, Query } from '@nestjs/common';
+import { Controller, Get, HttpCode, Param, Post, Query } from '@nestjs/common';
 import { ApiOperation, ApiParam, ApiQuery, ApiResponse, ApiTags } from '@nestjs/swagger';
 import { NestProtected } from '../auth/decorators/nest-protected.decorator';
 import { NEST_AUTH_SCOPES } from '../auth/scopes/nest-auth-scopes.constants';
 import { ApiCrudErrors } from '../../common/swagger/api-error-responses';
 import { RenovacionService } from './renovacion.service';
+import { RenovacionLinkService } from './renovacion-link.service';
 
 @ApiTags('Renovación (póliza nueva)')
 @Controller('v1/renovacion')
 @NestProtected(NEST_AUTH_SCOPES.RENOVACION_READ)
 export class RenovacionController {
-  constructor(private readonly renovacion: RenovacionService) {}
+  constructor(
+    private readonly renovacion: RenovacionService,
+    private readonly links: RenovacionLinkService,
+  ) {}
+
+  @Post(':cnpoliza/link')
+  @HttpCode(200)
+  @ApiOperation({
+    summary: 'Link "Renovar" listo para abrir (OCR con nexus_token + renovar)',
+    description:
+      'Valida elegibilidad (`RENOVACION_PERMITIR_FUERA_VENTANA=true` deja pasar ANTES_DE_VENTANA/FUERA_DE_VENTANA; ' +
+      'ANULADA/YA_RENOVADA → 422), arma la metadata del canal de la póliza (canal alterno/productor, gestor, ramo, producto) ' +
+      'y pide el nexus_token a Nexus `sso-delegate` con `NEXUS_RENOVACION_API_KEY`. ' +
+      'Devuelve `{ link, expira_en, cnpoliza }`; el token dura 1 h. Falta de configuración → 503 con la variable.',
+  })
+  @ApiParam({ name: 'cnpoliza', example: '18-1-1000033143' })
+  @ApiQuery({ name: 'centidad', required: false })
+  @ApiQuery({ name: 'citem', required: false })
+  @ApiResponse({ status: 200, description: '{ link, expira_en, cnpoliza, metadata_canal }' })
+  @ApiResponse({ status: 422, description: 'Póliza no elegible (motivo/mensaje)' })
+  @ApiResponse({ status: 503, description: 'Falta NEXUS_API_URL / NEXUS_RENOVACION_API_KEY' })
+  @ApiCrudErrors()
+  async link(
+    @Param('cnpoliza') cnpoliza: string,
+    @Query('centidad') centidad?: string,
+    @Query('citem') citem?: string,
+  ) {
+    const data = await this.links.generar(cnpoliza, { centidad, citem });
+    return { status: true, data };
+  }
 
   @Get(':cnpoliza')
   @ApiOperation({
