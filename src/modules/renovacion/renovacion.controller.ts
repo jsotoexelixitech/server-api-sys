@@ -30,7 +30,7 @@ export class RenovacionController {
   @ApiQuery({ name: 'citem', required: false })
   @ApiResponse({ status: 200, description: '{ link, expira_en, cnpoliza, metadata_canal }' })
   @ApiResponse({ status: 422, description: 'Póliza no elegible (motivo/mensaje)' })
-  @ApiResponse({ status: 503, description: 'Falta NEXUS_API_URL / NEXUS_RENOVACION_API_KEY' })
+  @ApiResponse({ status: 503, description: 'Falta NEXUS_API_URL / NEXUS_RENOVACION_API_KEY / RENOVACION_NEXUS_EMPRESA_ID / RENOVACION_SUBMODULO_OCR_RCV|PERSONAS' })
   @ApiCrudErrors()
   async link(
     @Param('cnpoliza') cnpoliza: string,

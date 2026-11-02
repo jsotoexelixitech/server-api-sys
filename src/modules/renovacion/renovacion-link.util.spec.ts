@@ -5,6 +5,8 @@ import {
   envTrue,
   expiraJwt,
   permiteLink,
+  resolverDestinoNexus,
+  validarRespuestaNexus,
 } from './renovacion-link.util';
 
 const jwt = (payload: object) =>
@@ -90,5 +92,34 @@ describe('renovacion-link.util', () => {
     expect(enmascararToken('https://h/ocr/?nexus_token=eyJhbGciOiJIUzI1NiJ9.xyz&renovar=1')).toBe(
       'https://h/ocr/?nexus_token=eyJhbGci***&renovar=1',
     );
+  });
+});
+
+describe('destino Nexus', () => {
+  const env = (vars: Record<string, string>) => (k: string) => vars[k];
+
+  it('RCV usa RENOVACION_SUBMODULO_OCR_RCV; personas el de PERSONAS', () => {
+    const vars = { RENOVACION_NEXUS_EMPRESA_ID: '7', RENOVACION_SUBMODULO_OCR_RCV: '17', RENOVACION_SUBMODULO_OCR_PERSONAS: '21' };
+    expect(resolverDestinoNexus(18, env(vars))).toEqual({ ok: true, destino: { empresaId: 7, submoduloId: 17 } });
+    expect(resolverDestinoNexus(9, env(vars))).toEqual({ ok: true, destino: { empresaId: 7, submoduloId: 21 } });
+  });
+
+  it('sin variables → lista lo que falta (sin defaults)', () => {
+    expect(resolverDestinoNexus(18, env({}))).toEqual({
+      ok: false,
+      faltan: ['RENOVACION_NEXUS_EMPRESA_ID', 'RENOVACION_SUBMODULO_OCR_RCV'],
+    });
+    expect(resolverDestinoNexus(9, env({ RENOVACION_NEXUS_EMPRESA_ID: 'x' }))).toEqual({
+      ok: false,
+      faltan: ['RENOVACION_NEXUS_EMPRESA_ID', 'RENOVACION_SUBMODULO_OCR_PERSONAS'],
+    });
+  });
+
+  it('validarRespuestaNexus', () => {
+    const d = { empresaId: 7, submoduloId: 17 };
+    expect(validarRespuestaNexus({ empresa_id: 7, submodulo_id: 17 }, d)).toBeNull();
+    expect(validarRespuestaNexus({ empresa_id: 7 }, d)).toContain('feat/renovacion-link');
+    expect(validarRespuestaNexus({ empresa_id: 7, submodulo_id: 21 }, d)).toContain('submódulo 21');
+    expect(validarRespuestaNexus({ empresa_id: 1, submodulo_id: 17 }, d)).toContain('empresa 1');
   });
 });
