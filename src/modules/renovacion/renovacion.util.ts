@@ -345,3 +345,11 @@ export function filtrarPorPeriodo<T extends Record<string, unknown>>(
   );
   return mismo.length ? mismo : rows;
 }
+
+/**
+ * cpoliza es NUMERIC(19) (ej. 1600000000000189330) y no cabe en un number de JS (pierde precisión).
+ * Se lee como texto (cpoliza_txt) y se manda a SQL como VARCHAR → CAST(... AS NUMERIC(19,0)).
+ */
+export function cpolizaTxt(row: Record<string, unknown>): string | null {
+  return txt(row['cpoliza_txt']) ?? txt(row['cpoliza']);
+}
