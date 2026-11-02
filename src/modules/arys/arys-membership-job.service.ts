@@ -219,10 +219,14 @@ export class ArysMembershipJobService {
   /**
    * Reserva el trabajo de forma atómica para que dos procesos (p. ej. PM2 en cluster)
    * no lo reintenten a la vez. true si esta instancia lo obtuvo.
+   * updated_at se compara por rango de 1 ms: JS no guarda microsegundos, y una fila editada a mano
+   * con now() (08:35:00.467123) nunca sería igual a lo leído (08:35:00.467).
    */
   async claim(job: ArysMembershipJob): Promise<boolean> {
+    const from = job.updatedAt;
+    const to = new Date(from.getTime() + 1);
     const res = await this.prisma.arysMembershipJob.updateMany({
-      where: { id: job.id, status: job.status, updatedAt: job.updatedAt },
+      where: { id: job.id, status: job.status, updatedAt: { gte: from, lt: to } },
       data: { status: 'RETRYING' },
     });
     return res.count === 1;
