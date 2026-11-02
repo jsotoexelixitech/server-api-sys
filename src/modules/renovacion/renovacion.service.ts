@@ -20,6 +20,7 @@ import {
   mapVehiculo,
   parseDiasEnv,
   resolverCanal,
+  resolverTipoVehiculo,
   sugerirVigencia,
   cpolizaTxt,
   toIsoDate,
@@ -31,6 +32,8 @@ type Row = Record<string, unknown>;
 export interface RenovacionQuery {
   centidad?: string;
   citem?: string;
+  ctipo?: string;
+  iplaca?: string;
 }
 
 /**
@@ -94,7 +97,16 @@ export class RenovacionService {
     );
     const cplan = txt(pol['cplan']);
     const cproducto = txt(pol['cproducto_plan']) ?? (rcv ? '24' : null);
-    const planes = await this.loadPlanesHoy({ cramo, rcv, cproducto, canal, cproductor: pol['cproductor'] });
+    const tipoVehiculo = rcv ? resolverTipoVehiculo(vehiculo, cplan, query) : null;
+    const planes = await this.loadPlanesHoy({
+      cramo,
+      rcv,
+      cproducto,
+      canal,
+      cproductor: pol['cproductor'],
+      ctipo: tipoVehiculo?.ctipo ?? null,
+      iplaca: tipoVehiculo?.iplaca ?? null,
+    });
     const disponibleEnCanal = planes.error
       ? null
       : planes.items.some((p) => p.cplan === cplan && (p.cramo == null || p.cramo === cramo));
@@ -284,7 +296,9 @@ export class RenovacionService {
     const res = await req.query(`
       SELECT TOP 1
         v.*,
-        TRIM(i.xmarca) AS xmarca_ren, TRIM(i.xmodelo) AS xmodelo_ren, TRIM(i.xversion) AS xversion_ren
+        TRIM(i.xmarca) AS xmarca_ren, TRIM(i.xmodelo) AS xmodelo_ren, TRIM(i.xversion) AS xversion_ren,
+        (SELECT TOP 1 vi.ctipo FROM VInma vi WITH (NOLOCK)
+          WHERE vi.cmarca = v.cmarca AND vi.cmodelo = v.cmodelo AND vi.cversion = v.cversion AND vi.cano = v.cano) AS ctipo_inma
       FROM vhcerti v WITH (NOLOCK)
       LEFT JOIN mavinma i WITH (NOLOCK)
         ON v.cano = i.qano AND v.cmarca = i.cmarca AND v.cmodelo = i.cmodelo AND v.cversion = i.cversion
@@ -336,6 +350,8 @@ export class RenovacionService {
     cproducto: string | null;
     canal: { centidad: string; citem: string };
     cproductor: unknown;
+    ctipo: number | null;
+    iplaca: string | null;
   }): Promise<{
     items: ReturnType<typeof mapPlanDisponible>[];
     error: string | null;
@@ -368,23 +384,25 @@ export class RenovacionService {
   }
 
   private async fetchPlanes(
-    args: { cramo: number; rcv: boolean; cproducto: string | null },
+    args: { cramo: number; rcv: boolean; cproducto: string | null; ctipo: number | null; iplaca: string | null },
     canal: { centidad: string; citem: string },
     cproductor: number,
   ): Promise<ReturnType<typeof mapPlanDisponible>[]> {
     if (args.rcv) {
-      // Mismo body que Emisión (planesClient.buildPlanesV2Body): cusuario numérico de planes.
+      // Mismo body que Emisión (planesClient.buildPlanesV2Body): cusuario numérico, ctipo (VInma) e iplaca.
       const cusuario = String(
         this.config.get('LAMUNDIAL_CUSUARIO_PLANES') ?? this.config.get('LAMUNDIAL_CUSUARIO') ?? '4',
       );
       const dto = {
-        cramo: args.cramo,
-        cproductor,
-        cusuario,
         centidad: canal.centidad,
         citem: canal.citem,
-        cproducto: args.cproducto ?? undefined,
+        cproductor,
+        cusuario,
+        cramo: args.cramo,
+        ...(args.ctipo != null ? { ctipo: args.ctipo } : {}),
+        ...(args.iplaca ? { iplaca: args.iplaca } : {}),
       } as GetPlanesV2Dto;
+      this.logger.log(`planes/v2 renovacion body=${JSON.stringify(dto)}`);
       const { planes } = await this.valrep.getPlanesV2(dto);
       return (planes ?? []).map((p) => mapPlanDisponible(p as Row));
     }
