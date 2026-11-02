@@ -23,6 +23,15 @@ export class CreateEmissionAutoDto {
   @IsString()
   poliza?: string;
 
+  @ApiPropertyOptional({
+    example: '18-1-0130481024',
+    description:
+      'Renovación como póliza nueva: póliza anterior que se guarda en `cnpoliza_rel` (con `itipoEmi` NU). En emisión nueva omitir.',
+  })
+  @IsOptional()
+  @IsString()
+  cnpoliza_rel?: string;
+
   @ApiProperty({ example: 18, description: 'Código de ramo (18 = automóvil)' })
   @IsInt()
   @Min(1)
