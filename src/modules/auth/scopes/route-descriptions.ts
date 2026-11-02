@@ -121,6 +121,8 @@ const ROUTE_LABELS: Record<string, string> = {
   'GET /api/v1/partner/starter/ping': 'Ping módulo partner',
   // renovations
   'POST /api/v1/renovations/v2/create': 'Renovar póliza (integrador v2)',
+  // renovacion:read
+  'GET /api/v1/renovacion/:param': 'Datos para renovar una póliza como póliza nueva (solo lectura)',
   // report:write (partner ESanchez)
   'POST /api/v1/report/ReRecibosV2': 'Reporte de recibos V2',
   'POST /api/v1/report/movimientosComisiones': 'Movimientos de comisiones',
