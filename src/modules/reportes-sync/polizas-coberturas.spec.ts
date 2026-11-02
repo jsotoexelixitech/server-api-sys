@@ -22,6 +22,12 @@ describe('Pólizas · coberturas', () => {
     expect(mundialAdapter.mapRow('polizas', fila({ coberturas: '   ' }), {} as never).coberturas).toBe('');
   });
 
+  it('el adaptador toma coberturas_codigos sin columnMap (así está MUNDIAL en Producción)', () => {
+    const m = mundialAdapter.mapRow('polizas', fila({ coberturas_codigos: '18-1,18-3' }), {} as never);
+    expect(m.coberturasCodigos).toBe('18-1,18-3');
+    expect(mundialAdapter.mapRow('polizas', fila(), {} as never).coberturasCodigos).toBe('');
+  });
+
   it('el upsert de pólizas escribe y actualiza la columna coberturas', async () => {
     const executeQuery = jest.fn(async (_sql: string, _params?: Record<string, unknown>) => ({ rowsAffected: 1 }));
     const repo = new SyncUpsertRepository({ executeQuery } as never);
