@@ -9,6 +9,7 @@ import {
   mapVehiculo,
   parseDiasEnv,
   resolverCanal,
+  resolverTipoVehiculo,
   sugerirVigencia,
 } from './renovacion.util';
 
@@ -193,5 +194,20 @@ describe('cpolizaTxt', () => {
     expect(Number('1600000000000189330').toString()).not.toBe('1600000000000189330');
     expect(cpolizaTxt({ cpoliza: 1600000000000189400, cpoliza_txt: '1600000000000189330' })).toBe('1600000000000189330');
     expect(cpolizaTxt({ cpoliza: 123 })).toBe('123');
+  });
+});
+
+describe('resolverTipoVehiculo', () => {
+  it('toma ctipo de VInma e iplaca N por defecto', () => {
+    expect(resolverTipoVehiculo({ ctipo_inma: 1 }, 'RCVBAS')).toEqual({ ctipo: 1, iplaca: 'N' });
+  });
+  it('plan BINAC → B', () => {
+    expect(resolverTipoVehiculo({ ctipo_inma: 2 }, 'BINACA')).toEqual({ ctipo: 2, iplaca: 'B' });
+  });
+  it('query manda', () => {
+    expect(resolverTipoVehiculo({ ctipo_inma: 1 }, 'RCVBAS', { ctipo: '4', iplaca: 'e' })).toEqual({ ctipo: 4, iplaca: 'E' });
+  });
+  it('sin vehículo ni VInma → ctipo null', () => {
+    expect(resolverTipoVehiculo(null, 'RCVBAS')).toEqual({ ctipo: null, iplaca: 'N' });
   });
 });
