@@ -41,8 +41,8 @@ export class AutopagoController {
     description:
       'SKU comerciales habilitados para el canal de la API key (Sis2000 `taprodsku` → producto, ramo y plan). ' +
       'El POS solo necesita el `csku`; la homologación a ramo/plan la hace La Mundial. ' +
-      '`mmonto` es el precio del plan en su moneda (`cmoneda`); **el monto a cobrar es `monto_cobrar`** ' +
-      '(`mprima_bs` en Bs y `musd` en USD, calculados con la tasa vigente igual que la cotización de emisión).',
+      '`mmonto` = precio en la moneda del plan indicada en `cmoneda` (ej. `EUR`, `$`); ' +
+      'la conversión a Bs la hace el integrador (TCR). La API no convierte montos.',
     operationId: 'autopagoProductos',
   })
   @ApiQuery({ name: 'ccanalalt', required: false, description: 'Solo pruebas: canal si la API key no tiene uno.' })
@@ -57,7 +57,6 @@ export class AutopagoController {
             {
               csku: '12444564', cproducto: '23', cramo: 18, cplan: 'FARMPA', xproducto: 'RCV Particular', xplan: 'Plan Farmatodo',
               tipo_formulario: 'rcv', mmonto: 33, cmoneda: 'EUR',
-              monto_cobrar: { cmoneda_plan: 'EUR', ptasamon: 251.3, ptasamon_usd: 230.1, mprimaext: 33, mprima_bs: 8292.9, musd: 36.04 },
             },
           ],
         },
