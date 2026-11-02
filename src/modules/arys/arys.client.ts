@@ -202,8 +202,8 @@ export class ArysClient {
       'nombre',
       'carroceria',
     ];
-    const version =
-      findBestByLabel(versiones, vehiculo.xversion, versionKeys) ?? firstCatalogItem(versiones);
+    const porEtiqueta = findBestByLabel(versiones, vehiculo.xversion, versionKeys);
+    const version = porEtiqueta ?? firstCatalogItem(versiones);
     if (!version) {
       throw new BadGatewayException(
         `Versión no encontrada en Arys para ${vehiculo.xmarca} ${vehiculo.xmodelo} ${vehiculo.xversion}`,
@@ -220,7 +220,15 @@ export class ArysClient {
       throw new BadGatewayException(`Color no encontrado en Arys: ${vehiculo.xcolor}`);
     }
 
-    return { marca, modelo, version, color };
+    const versionPor: 'etiqueta' | 'respaldo' = porEtiqueta ? 'etiqueta' : 'respaldo';
+    if (versionPor === 'respaldo') {
+      this.logger.warn(
+        `Arys versión por respaldo: ${vehiculo.xmarca} ${vehiculo.xmodelo} "${vehiculo.xversion ?? ''}" ` +
+          `→ id_version=${String(version.id_version ?? version.id)} "${String(version.version1 ?? '')}"`,
+      );
+    }
+
+    return { marca, modelo, version, color, versionPor };
   }
 
   private assertIds(vehiculoId: number, tipoMembresia: number): void {

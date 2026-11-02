@@ -7,6 +7,7 @@ import { ArysJobStage, ArysMembershipJobService } from './arys-membership-job.se
 import { ArysMonitorReporterService } from './arys-monitor-reporter.service';
 import { buildPropietarioRequest, buildVehiculoRequest } from './arys.mapper';
 import { ArysRepository } from './arys.repository';
+import { ArysDataError } from './arys.utils';
 import {
   ArysCoberturas,
   ArysMembershipRegistrationResult,
@@ -146,12 +147,17 @@ export class ArysService {
         stage = 'propietario';
         const propietary = await this.repository.getPropietaryByCid(target.cid);
         const estado = await this.client.findEstadoByName(propietary.xestado);
+        // Sin datos personales en el respaldo: solo lo que se usó para buscar en el catálogo.
+        const sis2000 = { _sis2000: { xestado: propietary.xestado ?? null, xciudad: propietary.xciudad ?? null } };
         if (!estado) {
-          throw new Error(`Estado no encontrado en Arys: ${propietary.xestado}`);
+          throw new ArysDataError(`Estado no encontrado en Arys: ${propietary.xestado}`, sis2000);
         }
         const ciudad = await this.client.findCiudadByName(Number(estado.id_estado), propietary.xciudad);
         if (!ciudad) {
-          throw new Error(`Ciudad no encontrada en Arys: ${propietary.xciudad}`);
+          throw new ArysDataError(`Ciudad no encontrada en Arys: ${propietary.xciudad}`, {
+            ...sis2000,
+            _id_estado_arys: estado.id_estado,
+          });
         }
 
         const propietarioBody = buildPropietarioRequest(
