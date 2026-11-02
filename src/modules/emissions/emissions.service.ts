@@ -1396,9 +1396,10 @@ export class EmissionsService {
     const req = this.db.request();
     const params: Record<string, { type: unknown; value: unknown }> = {
       // Emisión nueva RCV: cnpoliza_rel vacío; Sis2000 genera cnpoliza.
+      // Renovación (póliza nueva enlazada): solo el campo explícito `cnpoliza_rel`; `poliza` sigue ignorándose.
       cnpoliza_rel: {
         type: T.NVarChar(30),
-        value: null,
+        value: this.nvarchar(this.pick(b, 'cnpoliza_rel')) ?? null,
       },
       cramo: {
         type: T.Int,
