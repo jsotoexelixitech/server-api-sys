@@ -33,6 +33,7 @@ import {
   isViajeroPlan,
   isViajeroProrrataPlan,
   VIAJERO_TARIFA_DIARIA_USD,
+  viajeroDiasCobro,
 } from './viajero-emission.rules';
 
 class Mutex {
@@ -716,7 +717,8 @@ export class PersonasService {
     req.input('cplan', T.VarChar(10), body.cplan.trim());
     req.input('cparen', T.Int, asegurado.cparen);
     req.input('nedad', T.Int, asegurado.nedad_asegurado);
-    req.input('ndias', T.Int, ndias);
+    // VIAJ10 (más de 8 días) cobra los 15 días del plan, no los días del viaje.
+    req.input('ndias', T.Int, viajeroDiasCobro(ramo, body.cplan, ndias));
     req.input('ptasamon_in', T.Float, body.ptasamon ?? null);
     req.input('tarifa_dia', T.Numeric(18, 4), VIAJERO_TARIFA_DIARIA_USD);
 
@@ -776,7 +778,17 @@ export class PersonasService {
     ramo: number,
     asegurado: CotizacionPerDto['asegurados'][number],
   ): Promise<{ mprima: number; mprimaext: number }> {
-    const { fdesde, fhasta } = this.resolveProrrataDates(body);
+    const fechas = this.resolveProrrataDates(body);
+    const { fdesde } = fechas;
+    let { fhasta } = fechas;
+    // VIAJ10 (más de 8 días): el SP prorratea por fechas; se cotiza con los 15 días del plan.
+    const ndiasViaje = this.computeProrrataNdias(fdesde, fhasta);
+    const ndiasCobro = viajeroDiasCobro(ramo, body.cplan, ndiasViaje);
+    if (ndiasCobro !== ndiasViaje) {
+      const hasta = new Date(`${fdesde}T00:00:00Z`);
+      hasta.setUTCDate(hasta.getUTCDate() + ndiasCobro - 1);
+      fhasta = hasta.toISOString().slice(0, 10);
+    }
     const T = this.db.types;
     const req = this.db.request();
     req.input('cramo', T.Int, ramo);
