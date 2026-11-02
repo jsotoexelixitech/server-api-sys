@@ -58,6 +58,24 @@ export function viajeroProrrataPrimaExt(ndias: number): number {
   return Math.round(ndias * VIAJERO_TARIFA_DIARIA_USD * 100) / 100;
 }
 
+/** Plan Viajero de 15 días (ramo 5): cubre viajes de más de 8 días con precio fijo. */
+export const VIAJERO_PLAN_15_DIAS = 'VIAJ10';
+export const VIAJERO_PLAN_15_DIAS_NDIAS = 15;
+
+/**
+ * Días que se cobran: VIAJ10 cobra siempre los 15 días del plan (precio fijo, como
+ * spCalculoPer = suma de coberturas); el resto de planes, los días del viaje.
+ */
+export function viajeroDiasCobro(
+  cramo: number | null | undefined,
+  plan: string | null | undefined,
+  ndias: number,
+): number {
+  const code = String(plan ?? '').trim().toUpperCase();
+  if (cramo === VIAJERO_RAMO && code === VIAJERO_PLAN_15_DIAS) return VIAJERO_PLAN_15_DIAS_NDIAS;
+  return ndias;
+}
+
 /** Planes con prima = ndias × tarifa diaria (VIAJE ramo 25, VIAJ* ramo 5). */
 export function isViajeroProrrataPlan(
   cramo: number | null | undefined,
