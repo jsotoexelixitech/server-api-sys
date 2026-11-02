@@ -121,6 +121,10 @@ export class RenovacionService {
     if (disponibleEnCanal === false) advertencias.push('El plan actual no está disponible hoy para este canal; ofrezca uno de otros_planes.');
 
     const personas = clientes;
+    // Conductor habitual (vhcerti.xconductor → maclient); null si la póliza no lo tiene.
+    const conductor = rcv && vehiculo
+      ? await this.safe(cnpoliza, 'conductor', () => this.loadConductor(pol), null as Row | null)
+      : null;
     return {
       cnpoliza,
       tipo: rcv ? 'RCV' : 'PERSONAS',
@@ -157,6 +161,7 @@ export class RenovacionService {
       tomador: mapPersona(personas.get(txt(pol['ctenedor']) ?? '')),
       titular: mapPersona(personas.get(txt(pol['casegurado']) ?? '')),
       beneficiario_preferencial: rcv ? mapPersona(personas.get(txt(pol['cbeneficiario']) ?? '')) : null,
+      conductor: rcv ? mapPersona(conductor) : null,
       asegurados: asegurados.map(mapAsegurado),
       beneficiarios: beneficiarios.map(mapBeneficiario),
       vehiculo: mapVehiculo(vehiculo),
@@ -286,6 +291,30 @@ export class RenovacionService {
       if (key) out.set(key, row);
     }
     return out;
+  }
+
+  /** Conductor habitual: el SP RCV guarda su cédula en vhcerti.xconductor y lo crea en maclient. */
+  private async loadConductor(pol: Row): Promise<Row | null> {
+    const req = this.db.request();
+    req.input('cpoliza', T.VarChar(20), cpolizaTxt(pol));
+    req.input('fanopol', T.SmallInt, pol['fanopol']);
+    req.input('fmespol', T.TinyInt, pol['fmespol']);
+    const res = await req.query(`
+      SELECT TOP 1
+        c.*,
+        CONVERT(varchar(10), c.fnacimiento, 23) AS fnac_iso,
+        (SELECT TOP 1 TRIM(t.xtelefono) FROM maclient_tel t WITH (NOLOCK) WHERE t.cci_rif = c.cci_rif) AS xtelefono_ren,
+        (SELECT TOP 1 TRIM(e.xcorreo) FROM maclient_correo e WITH (NOLOCK) WHERE e.cci_rif = c.cci_rif) AS xcorreo_ren,
+        d.cestado AS cestado_ren,
+        d.cciudad AS cciudad_ren,
+        TRIM(d.xavecalle) AS xdireccion_ren
+      FROM vhcerti v WITH (NOLOCK)
+      INNER JOIN maclient c WITH (NOLOCK) ON c.cci_rif = v.xconductor
+      OUTER APPLY (SELECT TOP 1 cestado, cciudad, xavecalle FROM maclient_dir dd WITH (NOLOCK) WHERE dd.cci_rif = c.cci_rif) d
+      WHERE v.cpoliza = CAST(@cpoliza AS NUMERIC(19, 0)) AND v.xconductor IS NOT NULL
+      ORDER BY CASE WHEN v.fanopol = @fanopol AND v.fmespol = @fmespol THEN 0 ELSE 1 END, v.fanopol DESC, v.fmespol DESC
+    `);
+    return (res.recordset?.[0] as Row) ?? null;
   }
 
   private async loadVehiculo(pol: Row): Promise<Row | null> {
