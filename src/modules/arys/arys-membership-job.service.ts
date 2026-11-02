@@ -2,6 +2,7 @@ import { Injectable, Logger } from '@nestjs/common';
 import { ArysMembershipJob, Prisma } from '@prisma/client';
 import { PrismaService } from '../../database/prisma/prisma.service';
 import { ArysHttpError } from './arys.client';
+import { ArysDataError } from './arys.utils';
 import { ArysMonitorReporterService } from './arys-monitor-reporter.service';
 import {
   ArysMembershipConfigService,
@@ -146,6 +147,8 @@ export class ArysMembershipJobService {
     if (!job) return;
     const msg = error instanceof Error ? error.message : String(error);
     const http = error instanceof ArysHttpError ? error : null;
+    const requestBody =
+      http?.requestBody ?? (error instanceof ArysDataError ? error.requestBody : undefined);
     const dead = job.attempts >= job.maxAttempts;
     try {
       const cfg = await this.config.get();
@@ -168,7 +171,7 @@ export class ArysMembershipJobService {
             stage,
             httpStatus: http?.httpStatus ?? null,
             error: msg.slice(0, 2000),
-            requestBody: this.toJson(http?.requestBody),
+            requestBody: this.toJson(requestBody),
             responseBody: http?.responseBody ?? null,
           },
         }),

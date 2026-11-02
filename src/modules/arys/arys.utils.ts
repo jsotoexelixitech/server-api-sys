@@ -140,3 +140,13 @@ export const isZeroArysResult = (payload: { result?: unknown } | null | undefine
   const result = payload?.result;
   return result === 0 || result === '0';
 };
+
+/** Fallo de datos antes de llamar a Arys; guarda lo que se intentó armar para respaldo. */
+export class ArysDataError extends Error {
+  constructor(
+    message: string,
+    readonly requestBody: unknown,
+  ) {
+    super(message);
+  }
+}
