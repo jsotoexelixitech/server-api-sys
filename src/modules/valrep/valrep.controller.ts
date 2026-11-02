@@ -424,7 +424,8 @@ export class ValrepController {
       'Con `csubitem` + `centidad` se excluyen planes restringidos al gestor (mausuplan itipouso=E). ' +
       'RCV (cramo 18) usa cproducto 24 para la exclusión; otros ramos requieren `cproducto` en el body.\n\n' +
       '`basignado`: true si el plan está asignado a la entidad consultada (`centidad` + `citem`); ' +
-      'false si es un plan general (disponible para todos) o si no se envía `citem`.',
+      'false si es un plan general (disponible para todos) o si no se envía `citem`.\n\n' +
+      '`bexclusivos: true` (opcional, requiere `citem`): devuelve solo los planes asignados a `citem`, sin los generales.',
     operationId: 'valrepPlanesV2',
   })
   @ApiBody({ type: GetPlanesV2Dto })
