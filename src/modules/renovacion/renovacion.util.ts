@@ -313,6 +313,7 @@ export function mapVehiculo(row: Record<string, unknown> | null | undefined) {
     xversion: txt(pick(row, 'xversion_ren', 'xversion')),
     cano: num(pick(row, 'cano', 'qano')),
     cuso: txt(pick(row, 'cuso', 'ccategovh')),
+    ctipo: num(pick(row, 'ctipo_inma', 'ctipo')),
     xcolor: txt(pick(row, 'xcolor')),
     xsercar: txt(pick(row, 'xsercar')),
     xsermot: txt(pick(row, 'xsermot')),
@@ -352,4 +353,23 @@ export function filtrarPorPeriodo<T extends Record<string, unknown>>(
  */
 export function cpolizaTxt(row: Record<string, unknown>): string | null {
   return txt(row['cpoliza_txt']) ?? txt(row['cpoliza']);
+}
+
+/**
+ * ctipo e iplaca para planes RCV, igual que Emisión (VehicleStep → VInma.ctipo; iplaca N/E/B).
+ * Query manda; si no: ctipo de VInma del vehículo y iplaca B si el plan es BINAC*, E si la placa
+ * viene marcada como extranjera, N en el resto.
+ */
+export function resolverTipoVehiculo(
+  vehiculo: Record<string, unknown> | null | undefined,
+  cplan: string | null,
+  override: { ctipo?: string | number; iplaca?: string } = {},
+): { ctipo: number | null; iplaca: 'N' | 'E' | 'B' } {
+  const oTipo = num(override.ctipo);
+  const ctipo = oTipo != null && oTipo > 0 ? oTipo : num(pick(vehiculo, 'ctipo_inma', 'ctipo'));
+  const oPlaca = txt(override.iplaca)?.toUpperCase();
+  if (oPlaca === 'N' || oPlaca === 'E' || oPlaca === 'B') return { ctipo: ctipo || null, iplaca: oPlaca };
+  if (cplan && /^BINAC/i.test(cplan)) return { ctipo: ctipo || null, iplaca: 'B' };
+  const marca = txt(pick(vehiculo, 'iplaca', 'itipoplaca'))?.toUpperCase();
+  return { ctipo: ctipo || null, iplaca: marca === 'E' || marca === 'B' ? marca : 'N' };
 }
