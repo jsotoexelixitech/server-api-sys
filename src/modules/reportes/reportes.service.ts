@@ -7,6 +7,7 @@ import { SyncContextService } from '../reportes-sync/sync-context.service';
 import { SyncOrchestratorService } from '../reportes-sync/sync-orchestrator.service';
 import { SyncService } from '../reportes-sync/sync.service';
 import { assertQueryResult } from '../reportes-sync/utils/sync.helpers';
+import type { CoberturasQueryDto } from './dto/coberturas-query.dto';
 import type { PolizasQueryDto } from './dto/polizas-query.dto';
 import type { RunSyncDto } from './dto/run-sync.dto';
 
@@ -67,6 +68,42 @@ export class ReportesService {
     }));
   }
 
+  /** Catálogo de coberturas (sincronizado en PG) para el filtro del reporte; opcionalmente de un solo ramo. */
+  async listCoberturas(query: CoberturasQueryDto): Promise<
+    Array<{ codigo: string; cramo: number | null; ccobertura: string | null; descripcion: string }>
+  > {
+    const aseguradoraId = await this.aseguradoraResolver.resolveAseguradoraId(
+      query.aseguradoraId,
+    );
+    if (!aseguradoraId) {
+      const active = await this.insurerConnection.listActiveConnections();
+      throw new BadRequestException(
+        this.aseguradoraResolver.aseguradoraRequiredMessage(active.length),
+      );
+    }
+
+    let sql = `
+    SELECT codigo, id_ramo, ccobertura, descripcion
+    FROM cobertura
+    WHERE id_aseguradora = @aseguradoraId AND activo
+  `;
+    const params: Record<string, unknown> = { aseguradoraId };
+    if (query.cramo) {
+      sql += ' AND id_ramo = @cramo';
+      params.cramo = query.cramo;
+    }
+    sql += ' ORDER BY id_ramo, descripcion, codigo';
+
+    const result = await this.reportesPg.executeQuery(sql, params);
+    const rows = assertQueryResult(result, 'listCoberturas');
+    return rows.map((row) => ({
+      codigo: String(row.codigo),
+      cramo: row.id_ramo != null ? Number(row.id_ramo) : null,
+      ccobertura: row.ccobertura != null ? String(row.ccobertura).trim() : null,
+      descripcion: String(row.descripcion ?? '').trim(),
+    }));
+  }
+
   async getReportePolizas(query: PolizasQueryDto): Promise<{
     data: Record<string, unknown>[];
     meta: Record<string, unknown>;
@@ -105,6 +142,14 @@ export class ReportesService {
     if (query.estado) {
       sql += ' AND estado = @estado';
       params.estado = query.estado;
+    }
+    if (query.cramo) {
+      sql += ' AND id_ramo = @cramo';
+      params.cramo = query.cramo;
+    }
+    if (query.ccobertura) {
+      sql += ' AND coberturas_codigos @> ARRAY[@ccobertura]::text[]';
+      params.ccobertura = query.ccobertura.trim();
     }
 
     sql += ' ORDER BY fecha_emision_poliza DESC NULLS LAST, numero_poliza ASC';

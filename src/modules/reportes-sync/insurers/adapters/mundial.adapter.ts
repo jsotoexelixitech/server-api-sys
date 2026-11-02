@@ -302,6 +302,9 @@ export const mundialAdapter: InsurerAdapter = {
       colorVehiculo: toStr(pick(row, 'color_vehiculo', 'colorVehiculo')),
       serialCarroceria: toStr(pick(row, 'serial_carroceria', 'serialCarroceria')),
       serialMotor: toStr(pick(row, 'serial_motor', 'serialMotor')),
+      coberturas: toStr(pick(row, 'coberturas', 'cobertura', 'xcoberturas')) || '',
+      // "<cramo>-<ccobertura>" separados por coma; el upsert lo guarda como text[] (filtro ccobertura).
+      coberturasCodigos: toStr(pick(row, 'coberturas_codigos', 'coberturasCodigos')) || '',
       idRamo,
       idProductor: toNum(pick(row, 'id_productor', 'idProductor', 'cproductor')),
       idCanal: toNum(pick(row, 'id_canal', 'idCanal', 'ccanal')),
