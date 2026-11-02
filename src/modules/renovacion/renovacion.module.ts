@@ -3,10 +3,11 @@ import { DatabaseModule } from '../../database/database.module';
 import { ValrepModule } from '../valrep/valrep.module';
 import { RenovacionController } from './renovacion.controller';
 import { RenovacionService } from './renovacion.service';
+import { RenovacionLinkService } from './renovacion-link.service';
 
 @Module({
   imports: [DatabaseModule, ValrepModule],
   controllers: [RenovacionController],
-  providers: [RenovacionService],
+  providers: [RenovacionService, RenovacionLinkService],
 })
 export class RenovacionModule {}

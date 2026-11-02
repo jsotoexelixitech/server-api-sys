@@ -169,7 +169,7 @@ export const NEST_AUTH_SCOPE_CATALOG: NestAuthScopeMeta[] = [
     label: 'Renovación (consulta)',
     description:
       'Datos de una póliza para renovarla como póliza nueva: personas/vehículo, elegibilidad y planes de hoy (solo lectura)',
-    routes: ['GET /api/v1/renovacion/:cnpoliza'],
+    routes: ['GET /api/v1/renovacion/:cnpoliza', 'POST /api/v1/renovacion/:cnpoliza/link'],
   },
 ];
 
