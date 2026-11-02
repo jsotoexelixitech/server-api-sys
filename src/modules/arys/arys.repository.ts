@@ -199,17 +199,19 @@ export class ArysRepository {
         v.xplaca,
         v.xsercar,
         v.xsermot,
+        -- RCV2 a veces guarda el código (xversion '08') en vez de la descripción: solo se usa si
+        -- tiene algún carácter no numérico; si no, la descripción sale de VInma.
         COALESCE(
-          NULLIF(LTRIM(RTRIM(t.xmarca)), ''),
+          CASE WHEN LTRIM(RTRIM(t.xmarca)) LIKE '%[^0-9]%' THEN LTRIM(RTRIM(t.xmarca)) END,
           NULLIF(LTRIM(RTRIM(inm.xmarca)), ''),
           NULLIF(LTRIM(RTRIM(mar.xmarca)), '')
         ) AS xmarca,
         COALESCE(
-          NULLIF(LTRIM(RTRIM(t.xmodelo)), ''),
+          CASE WHEN LTRIM(RTRIM(t.xmodelo)) LIKE '%[^0-9]%' THEN LTRIM(RTRIM(t.xmodelo)) END,
           NULLIF(LTRIM(RTRIM(inm.xmodelo)), '')
         ) AS xmodelo,
         COALESCE(
-          NULLIF(LTRIM(RTRIM(t.xversion)), ''),
+          CASE WHEN LTRIM(RTRIM(t.xversion)) LIKE '%[^0-9]%' THEN LTRIM(RTRIM(t.xversion)) END,
           NULLIF(LTRIM(RTRIM(inm.xversion)), '')
         ) AS xversion,
         v.xcolor,
