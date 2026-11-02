@@ -1,5 +1,6 @@
 import {
   addYearsIso,
+  cpolizaTxt,
   describirEstado,
   evaluarElegibilidad,
   filtrarPorPeriodo,
@@ -184,5 +185,13 @@ describe('mapeos', () => {
     ];
     expect(filtrarPorPeriodo(rows, 2026, 10)).toEqual([rows[1]]);
     expect(filtrarPorPeriodo([{ casegurado: 1 }], 2026, 10)).toHaveLength(1);
+  });
+});
+
+describe('cpolizaTxt', () => {
+  it('usa el texto exacto de SQL y no el number (NUMERIC 19 pierde precisión en JS)', () => {
+    expect(Number('1600000000000189330').toString()).not.toBe('1600000000000189330');
+    expect(cpolizaTxt({ cpoliza: 1600000000000189400, cpoliza_txt: '1600000000000189330' })).toBe('1600000000000189330');
+    expect(cpolizaTxt({ cpoliza: 123 })).toBe('123');
   });
 });
