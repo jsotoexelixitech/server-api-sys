@@ -108,3 +108,49 @@ export function expiraJwt(token: string | null | undefined): string | null {
 export function enmascararToken(link: string): string {
   return link.replace(/(nexus_token=)([^&]{0,8})[^&]*/, '$1$2***');
 }
+
+export interface DestinoNexus {
+  empresaId: number;
+  submoduloId: number;
+}
+
+/**
+ * Empresa y submódulo de entrada por ambiente (sin defaults: los ids cambian entre 120, QA y prod).
+ * RCV (ramo 18) → RENOVACION_SUBMODULO_OCR_RCV; el resto → RENOVACION_SUBMODULO_OCR_PERSONAS.
+ * Devuelve las variables que faltan si alguna no está o no es un entero positivo.
+ */
+export function resolverDestinoNexus(
+  cramo: number,
+  env: (k: string) => unknown,
+): { ok: true; destino: DestinoNexus } | { ok: false; faltan: string[] } {
+  const varSub = Number(cramo) === 18 ? 'RENOVACION_SUBMODULO_OCR_RCV' : 'RENOVACION_SUBMODULO_OCR_PERSONAS';
+  const entero = (k: string) => {
+    const n = Number(String(env(k) ?? '').trim());
+    return Number.isInteger(n) && n > 0 ? n : null;
+  };
+  const empresaId = entero('RENOVACION_NEXUS_EMPRESA_ID');
+  const submoduloId = entero(varSub);
+  const faltan = [!empresaId && 'RENOVACION_NEXUS_EMPRESA_ID', !submoduloId && varSub].filter(Boolean) as string[];
+  if (faltan.length || !empresaId || !submoduloId) return { ok: false, faltan };
+  return { ok: true, destino: { empresaId, submoduloId } };
+}
+
+/**
+ * Valida que Nexus emitió el token para la empresa y el submódulo pedidos.
+ * Si no trae `submodulo_id`, ese Nexus no soporta `submoduloId` (falta desplegar feat/renovacion-link).
+ */
+export function validarRespuestaNexus(
+  body: { empresa_id?: unknown; submodulo_id?: unknown },
+  destino: DestinoNexus,
+): string | null {
+  if (body.submodulo_id == null) {
+    return 'El Nexus de este ambiente no soporta submoduloId en sso-delegate (desplegar la rama feat/renovacion-link de Nexus).';
+  }
+  if (Number(body.submodulo_id) !== destino.submoduloId) {
+    return `Nexus emitió el token para el submódulo ${String(body.submodulo_id)} y se pidió ${destino.submoduloId}.`;
+  }
+  if (Number(body.empresa_id) !== destino.empresaId) {
+    return `NEXUS_RENOVACION_API_KEY es de la empresa ${String(body.empresa_id)} y RENOVACION_NEXUS_EMPRESA_ID es ${destino.empresaId}.`;
+  }
+  return null;
+}
