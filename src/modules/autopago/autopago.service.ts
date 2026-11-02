@@ -19,6 +19,7 @@ import {
 } from './autopago-store.service';
 import type { MarcarEmitidaDto } from './dto/marcar-emitida.dto';
 import type { RegistrarVentaDto } from './dto/registrar-venta.dto';
+import { calcularMontoCobrar, MontoCobrar } from './monto-cobrar';
 
 /** Ramos de RCV automóvil: el enlace cae en el flujo de vehículo; el resto en personas. */
 const RCV_RAMOS = new Set([18, 28]);
@@ -32,7 +33,15 @@ export interface SkuInfo {
   xproducto: string | null;
   xplan: string | null;
   tipo_formulario: string;
+  /** Precio del plan (prima en la moneda del plan). */
   mmonto: number | null;
+  /** Moneda del plan en Sis2000 (`maplanes` / `maplanes_per`); `$` si no se conoce. */
+  cmoneda: string;
+  /**
+   * Monto a cobrar calculado con la misma regla que la cotización del flujo Farmatodo
+   * (prima del plan × tasa de su moneda → Bs; / tasa del dólar → USD). null si no hay precio.
+   */
+  monto_cobrar: MontoCobrar | null;
   origen: 'taprodsku' | 'env';
 }
 
@@ -43,7 +52,7 @@ export interface CanalCtx {
 
 type SkuEnvMap = Record<
   string,
-  { cproducto?: string; cramo?: number; cplan?: string; xproducto?: string; xplan?: string; tipo_formulario?: string; mmonto?: number }
+  { cproducto?: string; cramo?: number; cplan?: string; xproducto?: string; xplan?: string; tipo_formulario?: string; mmonto?: number; cmoneda?: string }
 >;
 
 function tipoFormularioDeRamo(cramo: number | null, explicito?: string | null): string {
@@ -132,8 +141,44 @@ export class AutopagoService {
       xplan: entry.xplan ?? null,
       tipo_formulario: tipoFormularioDeRamo(cramo, entry.tipo_formulario),
       mmonto: entry.mmonto != null && Number.isFinite(Number(entry.mmonto)) ? Number(entry.mmonto) : null,
+      cmoneda: String(entry.cmoneda ?? '$').trim() || '$',
+      monto_cobrar: null,
       origen: 'env',
     };
+  }
+
+  /** Tasas Bs de mamonedas por moneda (`$`, `EUR`, …), las mismas que usa getCotizacionAuto. */
+  private async tasasMonedas(): Promise<Map<string, number>> {
+    const tasas = new Map<string, number>();
+    try {
+      const res = await this.db
+        .request()
+        .query(`SELECT RTRIM(cmoneda) AS cmoneda, ptasamon FROM mamonedas WITH (NOLOCK)`);
+      for (const r of (res.recordset ?? []) as Record<string, unknown>[]) {
+        const c = String(r.cmoneda ?? '').trim().toUpperCase();
+        const t = Number(r.ptasamon);
+        if (c && Number.isFinite(t) && t > 0) tasas.set(c, t);
+      }
+    } catch (err) {
+      this.logger.warn(`mamonedas no disponible (${err instanceof Error ? err.message : String(err)}).`);
+    }
+    return tasas;
+  }
+
+  /** Completa `monto_cobrar` de cada SKU con las tasas vigentes (misma fórmula que la cotización). */
+  async completarMontos(rows: SkuInfo[]): Promise<SkuInfo[]> {
+    if (!rows.some((r) => r.mmonto != null)) return rows;
+    const tasas = await this.tasasMonedas();
+    const tasaUsd = tasas.get('$') ?? tasas.get('USD') ?? null;
+    return rows.map((r) => ({
+      ...r,
+      monto_cobrar: calcularMontoCobrar({
+        mmonto: r.mmonto,
+        cmoneda: r.cmoneda,
+        ptasamon: tasas.get(String(r.cmoneda ?? '$').trim().toUpperCase()) ?? null,
+        ptasamonUsd: tasaUsd,
+      }),
+    }));
   }
 
   /** taprodsku del canal (+ nombres de maproductos / maplanes). csku numérico en Sis2000. */
@@ -154,7 +199,13 @@ export class AutopagoService {
                  WHERE p.cramo = s.cramo AND RTRIM(p.cplan) = RTRIM(s.cplan)),
                (SELECT TOP 1 RTRIM(pp.xplan) FROM maplanes_per pp WITH (NOLOCK)
                  WHERE pp.cramo = s.cramo AND RTRIM(pp.cplan) = RTRIM(s.cplan))
-             ) AS xplan
+             ) AS xplan,
+             COALESCE(
+               (SELECT TOP 1 RTRIM(p.cmoneda) FROM maplanes p WITH (NOLOCK)
+                 WHERE p.cramo = s.cramo AND RTRIM(p.cplan) = RTRIM(s.cplan)),
+               (SELECT TOP 1 RTRIM(pp.cmoneda) FROM maplanes_per pp WITH (NOLOCK)
+                 WHERE pp.cramo = s.cramo AND RTRIM(pp.cplan) = RTRIM(s.cplan))
+             ) AS cmoneda
       FROM taprodsku s WITH (NOLOCK)
       WHERE (@ccanalalt IS NULL OR s.ccanalalt = @ccanalalt)
         ${csku != null ? 'AND s.csku = @csku' : ''}
@@ -174,6 +225,8 @@ export class AutopagoService {
         xplan: r.xplan != null ? String(r.xplan) : (extra?.xplan ?? null),
         tipo_formulario: tipoFormularioDeRamo(cramo, extra?.tipo_formulario),
         mmonto: extra?.mmonto != null && Number.isFinite(Number(extra.mmonto)) ? Number(extra.mmonto) : null,
+        cmoneda: String(r.cmoneda ?? extra?.cmoneda ?? '$').trim() || '$',
+        monto_cobrar: null,
         origen: 'taprodsku' as const,
       };
     });
@@ -198,14 +251,14 @@ export class AutopagoService {
       this.logger.warn(`taprodsku no disponible (${err instanceof Error ? err.message : String(err)}).`);
     }
     // El respaldo AUTOPAGO_SKU_MAP solo se ofrece si el canal no tiene SKU en taprodsku.
-    if (rows.length > 0) return rows;
+    if (rows.length > 0) return this.completarMontos(rows);
     const vistos = new Set(rows.map((r) => r.csku));
     for (const key of Object.keys(this.envSkuMap())) {
       if (vistos.has(key)) continue;
       const info = this.envSku(key);
       if (info) rows.push(info);
     }
-    return rows;
+    return this.completarMontos(rows);
   }
 
   // ── Venta ──────────────────────────────────────────────────────────────────
