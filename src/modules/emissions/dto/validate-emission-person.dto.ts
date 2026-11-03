@@ -1,5 +1,7 @@
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
-import { IsDateString, IsIn, IsInt, IsNotEmpty, IsNumber, IsOptional, IsString, Min } from 'class-validator';
+import { Transform } from 'class-transformer';
+import { IsDateString, IsIn, IsInt, IsNotEmpty, IsNumber, IsOptional, IsString, Matches, MaxLength, Min } from 'class-validator';
+import { CID_PASAPORTE_MSG, CID_PASAPORTE_RE, blankToUndefined } from '../../personas/personas-identidad.rules';
 
 export class ValidateEmissionPersonDto {
   @ApiProperty({ example: 18, description: 'Código de ramo' })
@@ -54,4 +56,25 @@ export class ValidateEmissionPersonDto {
   @IsOptional()
   @IsIn(['V', 'E', 'J', 'G', 'P'])
   tipo_cedula_titular?: string;
+
+  @ApiPropertyOptional({ example: 'V', description: 'Tipo de cédula del tomador' })
+  @IsOptional()
+  @IsString()
+  tipo_cedula_tomador?: string;
+
+  @ApiPropertyOptional({ example: 'P-EM2849387', description: 'Pasaporte alfanumérico del titular (maclient.cid); rif_titular = solo dígitos' })
+  @Transform(blankToUndefined)
+  @IsOptional()
+  @IsString()
+  @MaxLength(15)
+  @Matches(CID_PASAPORTE_RE, { message: `cid_titular: ${CID_PASAPORTE_MSG}` })
+  cid_titular?: string;
+
+  @ApiPropertyOptional({ example: 'P-EM2849387', description: 'Pasaporte alfanumérico del tomador (maclient.cid); rif_tomador = solo dígitos' })
+  @Transform(blankToUndefined)
+  @IsOptional()
+  @IsString()
+  @MaxLength(15)
+  @Matches(CID_PASAPORTE_RE, { message: `cid_tomador: ${CID_PASAPORTE_MSG}` })
+  cid_tomador?: string;
 }

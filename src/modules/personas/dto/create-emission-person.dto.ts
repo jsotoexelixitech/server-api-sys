@@ -7,9 +7,11 @@ import {
   IsNumber,
   IsOptional,
   IsString,
+  Matches,
+  MaxLength,
 } from 'class-validator';
 import { Transform } from 'class-transformer';
-import { blankToUndefined } from '../personas-identidad.rules';
+import { CID_PASAPORTE_MSG, CID_PASAPORTE_RE, blankToUndefined } from '../personas-identidad.rules';
 
 /**
  * Payload de emisión de póliza de personas (ramo 9 = Funerario).
@@ -67,6 +69,9 @@ export class CreateEmissionPersonDto {
   @ApiPropertyOptional({ example: 'V' }) @IsOptional() @IsString() @IsNotEmpty() tipo_cedula_tomador?: string;
   @ApiPropertyOptional({ example: 'V' }) @IsOptional() @IsString() @IsNotEmpty() cedula_tomador?: string;
   @ApiProperty({ example: 25221952 }) @IsNotEmpty() rif_tomador: number | string;
+  @ApiPropertyOptional({ example: 'P-EM2849387', description: 'Pasaporte alfanumérico completo (maclient.cid); rif_tomador = solo los dígitos.' })
+  @Transform(blankToUndefined) @IsOptional() @IsString() @MaxLength(15) @Matches(CID_PASAPORTE_RE, { message: `cid_tomador: ${CID_PASAPORTE_MSG}` })
+  cid_tomador?: string;
   @ApiPropertyOptional({ example: 'JUAN' }) @IsOptional() @IsString() nombre_tomador?: string;
   @ApiPropertyOptional({ example: 'PEREZ' }) @IsOptional() @IsString() apellido_tomador?: string;
   @ApiPropertyOptional({ example: 'M' }) @Transform(blankToUndefined) @IsOptional() @IsString() sexo_tomador?: string;
@@ -82,6 +87,9 @@ export class CreateEmissionPersonDto {
   @ApiPropertyOptional({ example: 'V' }) @IsOptional() @IsString() @IsNotEmpty() tipo_cedula_titular?: string;
   @ApiPropertyOptional({ example: 'V' }) @IsOptional() @IsString() @IsNotEmpty() cedula_titular?: string;
   @ApiProperty({ example: 25221952 }) @IsNotEmpty() rif_titular: number | string;
+  @ApiPropertyOptional({ example: 'P-EM2849387', description: 'Pasaporte alfanumérico completo (maclient.cid); rif_titular = solo los dígitos.' })
+  @Transform(blankToUndefined) @IsOptional() @IsString() @MaxLength(15) @Matches(CID_PASAPORTE_RE, { message: `cid_titular: ${CID_PASAPORTE_MSG}` })
+  cid_titular?: string;
   @ApiPropertyOptional({ example: 'JUAN' }) @IsOptional() @IsString() nombre_titular?: string;
   @ApiPropertyOptional({ example: 'PEREZ' }) @IsOptional() @IsString() apellido_titular?: string;
   @ApiPropertyOptional({ example: 'M' }) @Transform(blankToUndefined) @IsOptional() @IsString() sexo_titular?: string;
