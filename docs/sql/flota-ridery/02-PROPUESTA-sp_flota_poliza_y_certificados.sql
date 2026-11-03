@@ -74,7 +74,7 @@ BEGIN
     SET XACT_ABORT ON;
     SELECT @pSuccess = 0, @pErrorMessage = NULL, @pCnpoliza = NULL, @pCpoliza = NULL;
 
-    DECLARE @cprog CHAR(20) = 'NexusFlotaPoliza'   -- adpoliza.cprog es CHAR(20), @ifuente CHAR(10) = 'NEXUS';
+    DECLARE @cprog CHAR(20) = 'NexusFlotaPoliza', @ifuente CHAR(10) = 'NEXUS';  -- adpoliza.cprog es CHAR(20)
 
     BEGIN TRY
         -- 1. Validaciones (antes de abrir la transacción)
@@ -236,7 +236,7 @@ BEGIN
     SET XACT_ABORT ON;
     SELECT @pSuccess = 0, @pErrorMessage = NULL, @pCcerti = NULL;
 
-    DECLARE @cprog CHAR(20) = 'NexusFlotaCertif'   -- vhcerti.cprog es CHAR(20), @ifuente CHAR(10) = 'NEXUS';
+    DECLARE @cprog CHAR(20) = 'NexusFlotaCertif', @ifuente CHAR(10) = 'NEXUS';  -- vhcerti.cprog es CHAR(20)
 
     BEGIN TRY
         -- 1. Validaciones de entrada
