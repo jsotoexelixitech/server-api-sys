@@ -9,7 +9,8 @@ import {
 } from './dto/flota.dto';
 
 const NOTA_SP =
-  'Requiere el SP de Sis2000 indicado (propuesta en docs/sql/flota-ridery/). Si aún no existe responde 501.';
+  'Usa el SP de Sis2000 indicado (creado por La Mundial en Sis2000_QA el 3-nov-2026). ' +
+  'Si la base conectada no lo tiene responde 501.';
 
 /**
  * Póliza de flota con cobro por viaje (Ridery): la póliza colectiva y sus certificados (vehículo + conductor)
