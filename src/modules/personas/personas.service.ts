@@ -33,6 +33,7 @@ import {
   isViajeroPlan,
   isViajeroProrrataPlan,
 } from './viajero-emission.rules';
+import { assertIdentidadesPersonas, blankToNull } from './personas-identidad.rules';
 
 class Mutex {
   private queue: Array<(release: () => void) => void> = [];
@@ -1309,6 +1310,13 @@ export class PersonasService {
         asegurados as Record<string, unknown>[],
         beneficiarios,
       );
+      // Tomador J/G/C permitido; titular/asegurados/beneficiarios solo persona natural.
+      // Identificación alfanumérica (pasaporte) → 400: Sis2000 cci_rif es NUMERIC.
+      assertIdentidadesPersonas(
+        b,
+        asegurados as Record<string, unknown>[],
+        beneficiarios,
+      );
       if (
         isViajeroPlan(cramoEmision, planEmision) ||
         isViajeLocalPlan(cramoEmision, planEmision)
@@ -1496,9 +1504,9 @@ export class PersonasService {
           xrif_tomador: { type: T.Numeric(11, 0), value: this.intField(b['rif_tomador']) },
           xnombre_tomador: { type: T.NVarChar(250), value: b['nombre_tomador'] ?? null },
           xapellido_tomador: { type: T.NVarChar(250), value: b['apellido_tomador'] ?? null },
-          isexo_tomador: { type: T.Char(1), value: b['sexo_tomador'] ?? null },
-          iestado_civil_tomador: { type: T.Char(1), value: b['estado_civil_tomador'] ?? null },
-          fnac_tomador: { type: T.Date, value: b['fnac_tomador'] ?? null },
+          isexo_tomador: { type: T.Char(1), value: blankToNull(b['sexo_tomador']) },
+          iestado_civil_tomador: { type: T.Char(1), value: blankToNull(b['estado_civil_tomador']) },
+          fnac_tomador: { type: T.Date, value: blankToNull(b['fnac_tomador']) },
           cestado_tomador: { type: T.SmallInt, value: this.intField(b['estado_tomador']) },
           cciudad_tomador: { type: T.SmallInt, value: this.intField(b['ciudad_tomador']) },
           xdireccion_tomador: { type: T.NVarChar(1000), value: b['direccion_tomador'] ?? null },
@@ -1511,9 +1519,9 @@ export class PersonasService {
           xrif_titular: { type: T.Numeric(11, 0), value: this.intField(b['rif_titular']) },
           xnombre_titular: { type: T.NVarChar(250), value: b['nombre_titular'] ?? null },
           xapellido_titular: { type: T.NVarChar(250), value: b['apellido_titular'] ?? null },
-          isexo_titular: { type: T.Char(1), value: b['sexo_titular'] ?? null },
-          iestado_civil_titular: { type: T.Char(1), value: b['estado_civil_titular'] ?? null },
-          fnac_titular: { type: T.DateTime, value: b['fnac_titular'] ?? null },
+          isexo_titular: { type: T.Char(1), value: blankToNull(b['sexo_titular']) },
+          iestado_civil_titular: { type: T.Char(1), value: blankToNull(b['estado_civil_titular']) },
+          fnac_titular: { type: T.DateTime, value: blankToNull(b['fnac_titular']) },
           cestado_titular: { type: T.SmallInt, value: this.intField(b['estado_titular']) },
           cciudad_titular: { type: T.SmallInt, value: this.intField(b['ciudad_titular']) },
           xdireccion_titular: { type: T.NVarChar(1000), value: b['direccion_titular'] ?? null },
