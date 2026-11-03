@@ -26,6 +26,7 @@ import {
 import { GetProductosPersonasDto } from './dto/get-productos-personas.dto';
 import { MarketplaceCanalResolver } from './marketplace-canal.resolver';
 import { parseCoberturasCuotaInicial, sumPrimaCuotaInicial } from './cuota-inicial';
+import { dedupeCities } from './ciudades';
 
 export interface CotizacionResult {
   mprimaext: number;
@@ -287,9 +288,10 @@ export class ValrepService {
     cpais?: number,
   ): Promise<{ cciudad: number; xdescripcion_l: string }[]> {
     const pais = cpais != null && Number(cpais) > 0 ? Number(cpais) : 58;
-    // sp_ma_obtener_ciudades filtra solo por cestado y los códigos DANE (Colombia) se cruzan
-    // con los de Venezuela: otro país usa maciudades por cpais + cestado.
-    if (pais !== 58) return this.getCitiesByPais(pais, cestado);
+    // sp_ma_obtener_ciudades filtra solo por cestado (sin cpais): para Aragua devolvía también
+    // ciudades de otros países con el mismo cestado y el mismo cciudad ("Argelia" en vez de
+    // "Santa Cruz"). Con cestado siempre se consulta maciudades por cpais + cestado.
+    if (pais !== 58 || cestado !== undefined) return this.getCitiesByPais(pais, cestado);
     try {
       const T = this.db.types;
       const req = this.db.request();
@@ -348,9 +350,11 @@ export class ValrepService {
         'SELECT cciudad, RTRIM(xdescripcion_l) AS xdescripcion_l FROM maciudades ' +
           'WHERE cpais = @cpais AND (@cestado IS NULL OR cestado = @cestado) ORDER BY xdescripcion_l',
       );
-      return ((result.recordset ?? []) as { cciudad: number; xdescripcion_l: string }[])
-        .map((r) => ({ cciudad: Number(r.cciudad), xdescripcion_l: String(r.xdescripcion_l ?? '').trim() }))
-        .filter((r) => r.xdescripcion_l && !ValrepService.isGeoCatalogPlaceholder(r.xdescripcion_l));
+      return dedupeCities(
+        ((result.recordset ?? []) as { cciudad: number; xdescripcion_l: string }[])
+          .map((r) => ({ cciudad: Number(r.cciudad), xdescripcion_l: String(r.xdescripcion_l ?? '').trim() }))
+          .filter((r) => r.xdescripcion_l && !ValrepService.isGeoCatalogPlaceholder(r.xdescripcion_l)),
+      );
     } catch (err) {
       const msg = err instanceof Error ? err.message : String(err);
       this.logger.error(`getCitiesByPais cpais=${cpais} cestado=${cestado ?? 'todas'}: ${msg}`);
