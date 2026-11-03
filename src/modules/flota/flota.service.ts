@@ -8,9 +8,9 @@ import {
 } from './dto/flota.dto';
 
 /**
- * SP de Sis2000 para la póliza de flota por viaje (Ridery). NO existen todavía en Sis2000:
- * la propuesta está en docs/sql/flota-ridery/ y la debe revisar/crear La Mundial (DBA).
- * Mientras no existan, los endpoints de escritura responden 501 con el nombre del SP que falta.
+ * SP de Sis2000 para la póliza de flota por viaje (Ridery). La Mundial los creó en Sis2000_QA el 3-nov-2026
+ * según la propuesta de docs/sql/flota-ridery/ (firmas verificadas contra sys.parameters).
+ * Si la base conectada (p. ej. producción) no los tiene, los endpoints de escritura responden 501.
  */
 export const FLOTA_SP = {
   CREAR_POLIZA: 'sp_flota_crear_poliza_nexus',
@@ -32,8 +32,12 @@ export class FlotaService {
   async existeSp(nombre: string): Promise<boolean> {
     if (this.spExiste.has(nombre)) return true;
     const req = this.db.request();
-    req.input('nombre', T.NVarChar(200), `dbo.${nombre}`);
-    const res = await req.query(`SELECT OBJECT_ID(@nombre, 'P') AS id`);
+    req.input('nombre', T.NVarChar(128), nombre);
+    // dbo primero y, si no, por nombre en cualquier esquema (el SP se ejecuta sin calificar).
+    const res = await req.query(
+      `SELECT COALESCE(OBJECT_ID(N'dbo.' + @nombre, 'P'),
+         (SELECT TOP 1 object_id FROM sys.procedures WHERE name = @nombre)) AS id`,
+    );
     const existe = res.recordset?.[0]?.id != null;
     if (existe) this.spExiste.add(nombre);
     return existe;
@@ -42,8 +46,8 @@ export class FlotaService {
   private async exigirSp(nombre: string) {
     if (!(await this.existeSp(nombre))) {
       throw new NotImplementedException(
-        `El SP dbo.${nombre} no existe en esta base. Es una propuesta pendiente de La Mundial ` +
-          '(ver docs/sql/flota-ridery/ en nest-api).',
+        `El SP ${nombre} no existe en esta base. La Mundial lo creó en Sis2000_QA; ` +
+          'en otra base debe crearlo su DBA (ver docs/sql/flota-ridery/ en nest-api).',
       );
     }
   }

@@ -63,6 +63,22 @@ describe('FlotaService (nest-api)', () => {
       .rejects.toBeInstanceOf(BadRequestException);
   });
 
+  it('crear póliza manda la firma real de sp_flota_crear_poliza_nexus y devuelve cnpoliza/cpoliza', async () => {
+    const { db, calls } = fakeDb({
+      spExiste: true,
+      output: { pSuccess: true, pCnpoliza: ' 18-1-1130499999 ', pCpoliza: 1234, pErrorMessage: '' },
+    });
+    const svc = new FlotaService(db);
+    const r = await svc.crearPoliza({
+      cramo: 18, cplan: 'RIDER1', cidTomador: 'J-123456789', fdesde: '2026-11-01', fhasta: '2027-11-01',
+    });
+    expect(calls[0].sp).toBe(FLOTA_SP.CREAR_POLIZA);
+    expect(Object.keys(calls[0].inputs).sort()).toEqual(
+      ['cid_tomador', 'cmoneda', 'cplan', 'cproductor', 'cramo', 'csucur', 'cusuario', 'fdesde', 'fhasta'],
+    );
+    expect(r).toMatchObject({ status: true, cnpoliza: '18-1-1130499999', cpoliza: 1234 });
+  });
+
   it('la inclusión de certificado manda @generarRecibo = 0', async () => {
     const { db, calls } = fakeDb({ spExiste: true, output: { pSuccess: true, pCcerti: 7 } });
     const svc = new FlotaService(db);
