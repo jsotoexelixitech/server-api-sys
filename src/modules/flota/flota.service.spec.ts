@@ -3,8 +3,13 @@ import { FLOTA_SP, FlotaService } from './flota.service';
 import { MssqlService } from '../../database/mssql.service';
 
 /** Request de mssql simulado: registra inputs y responde según el SQL o el SP. */
-function fakeDb(opts: { spExiste: boolean; output?: Record<string, unknown> }) {
-  const calls: { sp?: string; inputs: Record<string, unknown> }[] = [];
+function fakeDb(opts: {
+  spExiste: boolean;
+  output?: Record<string, unknown>;
+  /** Respuesta a las consultas que no son OBJECT_ID (por fragmento del SQL). */
+  filas?: (sql: string, inputs: Record<string, unknown>) => Record<string, unknown>[];
+}) {
+  const calls: { sp?: string; sql?: string; inputs: Record<string, unknown> }[] = [];
   const db = {
     request: () => {
       const inputs: Record<string, unknown> = {};
@@ -13,7 +18,8 @@ function fakeDb(opts: { spExiste: boolean; output?: Record<string, unknown> }) {
         output: () => r,
         query: async (sql: string) => {
           if (sql.includes('OBJECT_ID')) return { recordset: [{ id: opts.spExiste ? 123 : null }] };
-          return { recordset: [] };
+          calls.push({ sql, inputs });
+          return { recordset: opts.filas?.(sql, inputs) ?? [] };
         },
         execute: async (sp: string) => {
           calls.push({ sp, inputs });
@@ -47,7 +53,7 @@ describe('FlotaService (nest-api)', () => {
     const r = await svc.crearReciboCertificado('18-1-1130480881', 3, recibo);
     expect(calls[0].sp).toBe(FLOTA_SP.RECIBO_CERTIFICADO);
     expect(calls[0].inputs).toMatchObject({ cnpoliza: '18-1-1130480881', ccerti: 3, mprima: 1, creferencia: 'VIAJE:RDY-1' });
-    expect(r).toMatchObject({ status: true, cnrecibo: '18-998877', crecibo: 998877, yaExistia: false });
+    expect(r).toMatchObject({ status: true, cnrecibo: '18-998877', crecibo: '998877', yaExistia: false });
   });
 
   it('400 si el SP devuelve pSuccess = 0', async () => {
@@ -76,7 +82,34 @@ describe('FlotaService (nest-api)', () => {
     expect(Object.keys(calls[0].inputs).sort()).toEqual(
       ['cid_tomador', 'cmoneda', 'cplan', 'cproductor', 'cramo', 'csucur', 'cusuario', 'fdesde', 'fhasta'],
     );
-    expect(r).toMatchObject({ status: true, cnpoliza: '18-1-1130499999', cpoliza: 1234 });
+    expect(r).toMatchObject({ status: true, cnpoliza: '18-1-1130499999', cpoliza: '1234' });
+  });
+
+  it('crear póliza devuelve cpoliza NUMERIC(19) exacto (releído como texto)', async () => {
+    const { db } = fakeDb({
+      spExiste: true,
+      // El driver ya redondeó el OUTPUT (pérdida de precisión de JS).
+      output: { pSuccess: true, pCnpoliza: '18-1-0130481032', pCpoliza: 1800000000000171500, pErrorMessage: '' },
+      filas: (sql) => (sql.includes('FROM adpoliza') ? [{ v: '1800000000000171560' }] : []),
+    });
+    const r = await new FlotaService(db).crearPoliza({
+      cramo: 18, cplan: 'RIDER1', cidTomador: 'J-123456789', fdesde: '2026-11-01', fhasta: '2027-11-01',
+    });
+    expect(r.cpoliza).toBe('1800000000000171560');
+  });
+
+  it('GET póliza devuelve cpoliza como texto exacto y filtra con VARCHAR', async () => {
+    const { db, calls } = fakeDb({
+      spExiste: true,
+      filas: (sql) => (sql.includes('FROM adpoliza')
+        ? [{ cpoliza: '1800000000000171560', cnpoliza: '18-1-0130481032', fanopol: 2026, fmespol: 11 }]
+        : []),
+    });
+    const r = await new FlotaService(db).getPolizaFlota('18-1-0130481032');
+    expect(r.poliza.cpoliza).toBe('1800000000000171560');
+    const certs = calls.find((c) => c.sql?.includes('FROM vhcerti'));
+    expect(certs?.inputs.cpoliza).toBe('1800000000000171560');
+    expect(certs?.sql).toContain('CAST(@cpoliza AS NUMERIC(19, 0))');
   });
 
   it('la inclusión de certificado manda @generarRecibo = 0', async () => {
