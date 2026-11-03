@@ -17,8 +17,16 @@
    con el contador de sp_crear_recibo_endoso_nexus (sp_calcula_num_contador_nexus caso 7) y
    sp_genera_adpolrea_nexus.
 
-   Pendiente de definir por La Mundial (ver .antigravity/RIDERY-COBRO-POR-VIAJE.md):
-     (1) ¿el recibo por viaje lleva adpolcob/adpoltar? (bloque comentado al final);
+   Coherencia con el archivo 02 (mismos nombres, tablas y contadores):
+     - póliza: la crea sp_flota_crear_poliza_nexus (itipopol 'C', sin recibos);
+     - certificado: lo crea sp_flota_incluir_certificado_nexus (vhcerti 'V' + coberturas en sopolcob/sopoltar
+       sin crecibo) y lo excluye sp_flota_excluir_certificado_nexus (istatcer 'N' + fanulacion);
+     - recibo: contador sp_calcula_num_contador_nexus caso 7 (CRECIBO + correlativo de recibo del ramo);
+       qcuotas = n.º de recibos del certificado + 1; cproces = el de la póliza.
+
+   Pendiente de definir por La Mundial (ver LEEME-SOLICITUD-LA-MUNDIAL.md y .antigravity/RIDERY-COBRO-POR-VIAJE.md):
+     (1) coberturas del recibo: se copian de sopoltar/sopolcob del certificado (paso 6); reparto de la prima
+         y si lleva adpolrea (sp_genera_adpolrea_nexus);
      (2) tasa de cambio: la del día del viaje (propuesta) o la de forigen de la póliza;
      (3) itiporec: 'P' (prima) o 'A' (adicional);
      (4) fhasta = fdesde (viaje en el mismo día) es válido o se usa fdesde + 1.
@@ -90,11 +98,16 @@ BEGIN
         IF @fdesde < @polFdesde OR @fdesde > @polFhasta RAISERROR('La fecha del viaje está fuera de la vigencia de la póliza.', 16, 1);
 
         -- 2. Certificado del conductor — debe existir y estar vigente
-        DECLARE @casegurado NUMERIC(22, 0), @istatcer CHAR(1), @cplanCert NVARCHAR(10);
-        SELECT @casegurado = casegurado, @istatcer = istatcer, @cplanCert = cplan
+        --    (lo crea sp_flota_incluir_certificado_nexus; lo excluye sp_flota_excluir_certificado_nexus con
+        --     istatcer 'N' + fanulacion: un viaje anterior a la exclusión se puede facturar después)
+        DECLARE @casegurado NUMERIC(22, 0), @istatcer CHAR(1), @cplanCert NVARCHAR(10), @certFdesde DATE, @certFanul DATE;
+        SELECT @casegurado = casegurado, @istatcer = istatcer, @cplanCert = cplan,
+               @certFdesde = fdesde, @certFanul = fanulacion
         FROM vhcerti WHERE cpoliza = @cpoliza AND fanopol = @fanopol AND fmespol = @fmespol AND ccerti = @ccerti;
         IF @istatcer IS NULL RAISERROR('El certificado no existe en la póliza.', 16, 1);
-        IF @istatcer NOT IN ('V', 'E') RAISERROR('El certificado no está vigente.', 16, 1);
+        IF @istatcer NOT IN ('V', 'E') AND NOT (@istatcer = 'N' AND @certFanul IS NOT NULL AND @fdesde < @certFanul)
+            RAISERROR('El certificado no está vigente para la fecha del viaje.', 16, 1);
+        IF @fdesde < @certFdesde RAISERROR('El viaje es anterior a la inclusión del certificado.', 16, 1);
 
         -- 3. Montos en $ y Bs (tasa del día del viaje — pendiente (2))
         SET @cmoneda = ISNULL(NULLIF(LTRIM(RTRIM(@cmoneda)), ''), @polMoneda);
@@ -183,10 +196,79 @@ BEGIN
         FROM adpoliza
         WHERE cpoliza = @cpoliza AND fanopol = @fanopol AND fmespol = @fmespol;
 
-        /* (1) Pendiente La Mundial: coberturas/tarifas del recibo.
-           Opción propuesta: copiar las coberturas vigentes del certificado (adpolcob/adpoltar del último recibo
-           del ccerti) con la prima repartida en proporción, igual que sp_crear_recibo_endoso_nexus (#cobs),
-           y luego: EXEC dbo.sp_genera_adpolrea_nexus @crecibo = @newCrecibo;  */
+        /* 6. Coberturas y tarifas del recibo (pendiente (1)).
+           sp_flota_incluir_certificado_nexus deja las coberturas del certificado en sopoltar / sopolcob SIN crecibo
+           (prima 0). Aquí se copian a adpoltar / adpolcob con el crecibo del viaje y la prima del viaje repartida:
+             - en proporción a sopoltar.mprimaext si alguna es > 0 (prima de referencia, si La Mundial la carga);
+             - si todas son 0, toda la prima va a la primera cobertura (qordenimp, ccober).
+           Si el certificado no tiene sopoltar (póliza que no se creó con el 02) el recibo queda sin coberturas,
+           como SPCargaRecibosColectivos. */
+        IF EXISTS (SELECT 1 FROM sopoltar WHERE cpoliza = @cpoliza AND ccerti = @ccerti AND istattar = 'V')
+        BEGIN
+            DECLARE @tar TABLE (ccober CHAR(4), ctarifa CHAR(10), peso NUMERIC(18, 6), orden INT);
+            INSERT INTO @tar (ccober, ctarifa, peso, orden)
+            SELECT ccober, ctarifa, ISNULL(mprimaext, 0),
+                   ROW_NUMBER() OVER (ORDER BY ISNULL(qordenimp, 0), ccober, ctarifa)
+            FROM sopoltar WHERE cpoliza = @cpoliza AND ccerti = @ccerti AND istattar = 'V';
+            DECLARE @pesoTotal NUMERIC(18, 6) = (SELECT SUM(peso) FROM @tar);
+            IF ISNULL(@pesoTotal, 0) <= 0
+            BEGIN
+                UPDATE @tar SET peso = CASE WHEN orden = 1 THEN 1 ELSE 0 END;
+                SET @pesoTotal = 1;
+            END
+
+            INSERT INTO adpoltar
+            (crecibo, ccober, ctarifa, u_version, cramo, cpoliza, fanopol, fmespol, ccerti, ccoberimp, ietiqtarimp, qordenimp,
+             cnpoliza, cnrecibo, cproces, csucur, cmoneda, ptasamon, itipoprod, fdesde, fhasta, itiporiesg, priesg,
+             bfraded, mdedu_fran, mdedu_franext, pdedu_fran, istattar, isuma, cramoint, ccoberturaint, ctarifaint,
+             cprog, ifuente, bok, cerror, fingreso, cusuario, ccategoria,
+             msumabruta, msumabrutaext, msumaaseg, msumaasegext, mprima, mprimaext, pprima,
+             pdescuento, mdescuento, mdescuentoext, precargo, mrecargo, mrecargoext,
+             mprimabruta, mprimabrutaext, bprimarea, mprimareas, mprimareasext, pcomision, mcomision, mcomisionext)
+            SELECT @newCrecibo, s.ccober, s.ctarifa, '!', @cramo, @cpoliza, @fanopol, @fmespol, @ccerti, s.ccoberimp, s.ietiqtarimp, s.qordenimp,
+                   @cnpoliza, @newCnrecibo, s.cproces, @csucur, @cmoneda, @ptasamon, p.itipoprod, @fdesde, @fhasta, 'N', 0,
+                   s.bfraded, s.mdedu_fran, s.mdedu_franext, s.pdedu_fran, 'V', s.isuma, s.cramoint, s.ccoberturaint, s.ctarifaint,
+                   'ReciboViajeNexus', 'NEXUS', 0, 0, GETDATE(), @cusuario, 1,
+                   s.msumaaseg, s.msumaasegext, s.msumaaseg, s.msumaasegext,
+                   ROUND(@primabs * t.peso / @pesoTotal, 2), ROUND(@primaext * t.peso / @pesoTotal, 2), 0,
+                   0, 0, 0, 0, 0, 0,
+                   ROUND(@primabs * t.peso / @pesoTotal, 2), ROUND(@primaext * t.peso / @pesoTotal, 2), 1,
+                   ROUND(@primabs * t.peso / @pesoTotal, 2), ROUND(@primaext * t.peso / @pesoTotal, 2),
+                   s.pcomision, ROUND(@primabs * t.peso / @pesoTotal * s.pcomision / 100, 2),
+                   ROUND(@primaext * t.peso / @pesoTotal * s.pcomision / 100, 2)
+            FROM sopoltar s
+            INNER JOIN @tar t ON t.ccober = s.ccober AND t.ctarifa = s.ctarifa
+            CROSS JOIN (SELECT itipoprod FROM adpoliza WHERE cpoliza = @cpoliza AND fanopol = @fanopol AND fmespol = @fmespol) p
+            WHERE s.cpoliza = @cpoliza AND s.ccerti = @ccerti AND s.istattar = 'V' AND t.peso > 0;
+            -- PREGUNTA LM: bprimarea = 1 (prima reasegurable) y pprima = 0 en el recibo por viaje.
+
+            INSERT INTO adpolcob
+            (crecibo, ccober, u_version, cramo, cpoliza, fanopol, fmespol, ccerti, cnpoliza, cnrecibo, cproces, csucur, cmoneda,
+             ptasamon, fdesde, fhasta, itipoprod, msumaaseg, msumaasegext, mprimabruta, mprimabrutaext, pcomision, mcomision,
+             mcomisionext, mprimareas, mprimareasext, iestado, isuma, ccontrea, cramorea, cramopcnd, ccoberpcnd, cramoint,
+             ccoberturaint, cprog, ifuente, bok, cerror, fingreso, cusuario, ccategoria)
+            SELECT a.crecibo, a.ccober, '!', a.cramo, a.cpoliza, a.fanopol, a.fmespol, a.ccerti, a.cnpoliza, a.cnrecibo, a.cproces,
+                   a.csucur, a.cmoneda, a.ptasamon, a.fdesde, a.fhasta, a.itipoprod, MAX(a.msumaaseg), MAX(a.msumaasegext),
+                   SUM(a.mprimabruta), SUM(a.mprimabrutaext), MAX(a.pcomision), SUM(a.mcomision), SUM(a.mcomisionext),
+                   SUM(a.mprimareas), SUM(a.mprimareasext), 'V', MAX(a.isuma),
+                   MAX(c.ccontrea), MAX(c.cramorea), MAX(c.cramopcnd), MAX(c.ccoberpcnd), MAX(a.cramoint), MAX(a.ccoberturaint),
+                   'ReciboViajeNexus', 'NEXUS', 0, 0, GETDATE(), @cusuario, 1
+            FROM adpoltar a
+            LEFT JOIN sopolcob c ON c.cpoliza = a.cpoliza AND c.ccerti = a.ccerti AND c.ccober = a.ccober AND c.iestado = 'V'
+            WHERE a.crecibo = @newCrecibo
+            GROUP BY a.crecibo, a.ccober, a.cramo, a.cpoliza, a.fanopol, a.fmespol, a.ccerti, a.cnpoliza, a.cnrecibo, a.cproces,
+                     a.csucur, a.cmoneda, a.ptasamon, a.fdesde, a.fhasta, a.itipoprod;
+
+            -- Ajuste de redondeo: la suma de coberturas debe ser igual a la prima del recibo.
+            DECLARE @difBs NUMERIC(18, 2) = @primabs - ISNULL((SELECT SUM(mprimabruta) FROM adpolcob WHERE crecibo = @newCrecibo), 0),
+                    @difExt NUMERIC(18, 2) = @primaext - ISNULL((SELECT SUM(mprimabrutaext) FROM adpolcob WHERE crecibo = @newCrecibo), 0);
+            IF @difBs <> 0 OR @difExt <> 0
+                UPDATE TOP (1) adpolcob SET mprimabruta = mprimabruta + @difBs, mprimabrutaext = mprimabrutaext + @difExt
+                WHERE crecibo = @newCrecibo;
+
+            -- PREGUNTA LM: ¿el recibo por viaje lleva cesión de reaseguro? Si sí:
+            -- EXEC dbo.sp_genera_adpolrea_nexus @crecibo = @newCrecibo;
+        END
 
         INSERT INTO dbo.nxflota_recibo_viaje (creferencia, cpoliza, ccerti, crecibo, cnrecibo, mprima, cmoneda, cusuario)
         VALUES (@creferencia, @cpoliza, @ccerti, @newCrecibo, @newCnrecibo, @mprima, @cmoneda, @cusuario);

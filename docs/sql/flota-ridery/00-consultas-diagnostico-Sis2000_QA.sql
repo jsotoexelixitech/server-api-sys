@@ -52,6 +52,7 @@ FROM sys.procedures
 WHERE name IN (
   'SPCargaRecibosColectivos', 'adBRecibo_Frecuencia_Colectivo', 'spCorrigeCertificadoFlota', 'SP_CalculoAltas',
   'CreaColectivo_AD', 'sp_crear_recibo_endoso_nexus', 'sp_calcula_num_contador_nexus', 'sp_genera_adpolrea_nexus',
+  'sp_contador_nexus', 'sp_create_maclient_nexus',
   -- propuestos (deberían NO existir todavía):
   'sp_flota_crear_poliza_nexus', 'sp_flota_incluir_certificado_nexus', 'sp_flota_excluir_certificado_nexus',
   'sp_crear_recibo_certificado_nexus')
