@@ -564,6 +564,7 @@ export class EmissionsService {
         LEFT JOIN maciudades
           ON maclient_dir.cestado = maciudades.cestado
          AND maclient_dir.cciudad = maciudades.cciudad
+         AND COALESCE(maclient_dir.cpais, 58) = maciudades.cpais
         LEFT JOIN maclient_tel
           ON maclient.cci_rif = maclient_tel.cci_rif
         LEFT JOIN maclient_atr
@@ -578,6 +579,9 @@ export class EmissionsService {
           LTRIM(RTRIM(CONVERT(VARCHAR(30), maclient.cci_rif))) = @cciRif
           OR LTRIM(RTRIM(CONVERT(VARCHAR(30), maclient.cid))) IN (@cidRaw, @cidDigits, @cidLetter)
           OR LTRIM(RTRIM(CONVERT(VARCHAR(30), maclient.cid))) LIKE '[VEJPGvejpg]' + @cciRif
+        ORDER BY
+          CASE WHEN maestados.cestado IS NULL THEN 1 ELSE 0 END,
+          CASE WHEN maciudades.cciudad IS NULL THEN 1 ELSE 0 END
       `);
 
       const row = result.recordset?.[0] as Record<string, unknown> | undefined;
