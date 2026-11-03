@@ -530,7 +530,7 @@ export class EmissionsService {
           maclient_dir.cciudad,
           maclient.cci_rif,
           maclient.cid,
-          TRIM(maciudades.xdescripcion_c) AS xciudad,
+          TRIM(COALESCE(maciudades.xdescripcion_l, maciudades.xdescripcion_c)) AS xciudad,
           TRIM(maclient_dir.xavecalle)    AS xavecalle,
           TRIM(maclient_correo.xcorreo)   AS xcorreo,
           TRIM(maclient_tel.xtelefono)    AS xtelefono,
