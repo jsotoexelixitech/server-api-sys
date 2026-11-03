@@ -21,6 +21,14 @@ export const FLOTA_SP = {
 
 const trim = (v: unknown) => (v == null ? null : String(v).trim());
 
+/**
+ * cpoliza / crecibo son NUMERIC(19,0): pasan Number.MAX_SAFE_INTEGER y el driver los redondea
+ * (1800000000000171560 → 1800000000000171500). Se leen con CONVERT(varchar) y se mandan como VARCHAR
+ * con CAST a NUMERIC(19,0), igual que renovación (b910fc7).
+ */
+const numTxt = (v: unknown) => (v == null || String(v).trim() === '' ? null : String(v).trim());
+const CAST_NUM19 = 'CAST(@cpoliza AS NUMERIC(19, 0))';
+
 @Injectable()
 export class FlotaService {
   private readonly logger = new Logger(FlotaService.name);
@@ -58,7 +66,7 @@ export class FlotaService {
     req.input('cnpoliza', T.NVarChar(30), cnpoliza.trim());
     const res = await req.query(`
       SELECT TOP 1
-        p.cpoliza, TRIM(p.cnpoliza) AS cnpoliza, p.cramo, TRIM(p.cplan) AS cplan, p.fanopol, p.fmespol,
+        CONVERT(varchar(30), p.cpoliza) AS cpoliza, TRIM(p.cnpoliza) AS cnpoliza, p.cramo, TRIM(p.cplan) AS cplan, p.fanopol, p.fmespol,
         p.itipopol, p.ifrecuencia, TRIM(p.cmoneda) AS cmoneda, p.istatpol, p.fdesde, p.fhasta,
         p.casegurado, p.ctenedor, p.cproductor
       FROM adpoliza p
@@ -74,7 +82,7 @@ export class FlotaService {
     try {
       const pol = await this.poliza(cnpoliza);
       const req = this.db.request();
-      req.input('cpoliza', T.Numeric(19, 0), pol.cpoliza);
+      req.input('cpoliza', T.VarChar(30), numTxt(pol.cpoliza));
       req.input('fanopol', T.Int, pol.fanopol);
       req.input('fmespol', T.Int, pol.fmespol);
       const res = await req.query(`
@@ -87,12 +95,12 @@ export class FlotaService {
                    AND r.ccerti = v.ccerti) AS recibos
         FROM vhcerti v
         LEFT JOIN maclient a ON a.cci_rif = v.casegurado
-        WHERE v.cpoliza = @cpoliza AND v.fanopol = @fanopol AND v.fmespol = @fmespol
+        WHERE v.cpoliza = ${CAST_NUM19} AND v.fanopol = @fanopol AND v.fmespol = @fmespol
         ORDER BY v.ccerti`);
       const certificados = res.recordset ?? [];
       return {
         status: true,
-        poliza: { ...pol, cplan: trim(pol.cplan), itipopol: trim(pol.itipopol), ifrecuencia: trim(pol.ifrecuencia) },
+        poliza: { ...pol, cpoliza: numTxt(pol.cpoliza), cplan: trim(pol.cplan), itipopol: trim(pol.itipopol), ifrecuencia: trim(pol.ifrecuencia) },
         totalCertificados: certificados.length,
         certificados,
       };
@@ -108,16 +116,16 @@ export class FlotaService {
     try {
       const pol = await this.poliza(cnpoliza);
       const req = this.db.request();
-      req.input('cpoliza', T.Numeric(19, 0), pol.cpoliza);
+      req.input('cpoliza', T.VarChar(30), numTxt(pol.cpoliza));
       req.input('fanopol', T.Int, pol.fanopol);
       req.input('fmespol', T.Int, pol.fmespol);
       req.input('ccerti', T.Int, ccerti);
       const res = await req.query(`
-        SELECT TOP 200 r.crecibo, TRIM(r.cnrecibo) AS cnrecibo, r.ccerti, TRIM(r.itiporec) AS itiporec,
+        SELECT TOP 200 CONVERT(varchar(30), r.crecibo) AS crecibo, TRIM(r.cnrecibo) AS cnrecibo, r.ccerti, TRIM(r.itiporec) AS itiporec,
                TRIM(r.iestadorec) AS iestadorec, r.fdesde, r.fhasta, r.mprimabruta, r.mprimabrutaext,
                TRIM(r.cmoneda) AS cmoneda, TRIM(r.cprog) AS cprog, r.fingreso
         FROM adrecibos r
-        WHERE r.cpoliza = @cpoliza AND r.fanopol = @fanopol AND r.fmespol = @fmespol AND r.ccerti = @ccerti
+        WHERE r.cpoliza = ${CAST_NUM19} AND r.fanopol = @fanopol AND r.fmespol = @fmespol AND r.ccerti = @ccerti
         ORDER BY r.crecibo DESC`);
       return { status: true, cnpoliza: trim(pol.cnpoliza), ccerti, recibos: res.recordset ?? [] };
     } catch (err: any) {
@@ -127,7 +135,25 @@ export class FlotaService {
     }
   }
 
-  private resultado(res: { output?: Record<string, unknown> }, extra: Record<string, unknown>) {
+  /**
+   * El OUTPUT NUMERIC(19,0) ya llega redondeado por el driver: se relee como texto por su número visible.
+   * Si no se encuentra la fila, se devuelve el OUTPUT como texto (puede venir sin precisión).
+   */
+  private async textoExacto(sql: string, clave: string | null, respaldo: unknown): Promise<string | null> {
+    if (clave) {
+      try {
+        const req = this.db.request();
+        req.input('k', T.NVarChar(30), clave);
+        const v = numTxt((await req.query(sql)).recordset?.[0]?.v);
+        if (v) return v;
+      } catch (err: any) {
+        this.logger.warn(`releer cpoliza/crecibo de ${clave} como texto: ${err.message}`);
+      }
+    }
+    return respaldo == null ? null : String(respaldo);
+  }
+
+  private resultado<E extends Record<string, unknown>>(res: { output?: Record<string, unknown> }, extra: E) {
     const success = Boolean(res.output?.['pSuccess']);
     const message = String(res.output?.['pErrorMessage'] || '').trim();
     if (!success) throw new BadRequestException(message || 'Sis2000 rechazó la operación.');
@@ -163,10 +189,12 @@ export class FlotaService {
       req.output('pSuccess', T.Bit);
       req.output('pErrorMessage', T.NVarChar(T.MAX));
       const res = await req.execute(FLOTA_SP.CREAR_POLIZA);
-      return this.resultado(res, {
-        cnpoliza: trim(res.output?.['pCnpoliza']),
-        cpoliza: res.output?.['pCpoliza'] ?? null,
-      });
+      const cnpoliza = trim(res.output?.['pCnpoliza']);
+      const out = this.resultado(res, { cnpoliza, cpoliza: null as string | null });
+      out.cpoliza = await this.textoExacto(
+        `SELECT TOP 1 CONVERT(varchar(30), cpoliza) AS v FROM adpoliza WHERE cnpoliza = @k
+         ORDER BY fanopol DESC, fmespol DESC`, cnpoliza, res.output?.['pCpoliza']);
+      return out;
     });
   }
 
@@ -237,13 +265,18 @@ export class FlotaService {
       req.output('pErrorMessage', T.NVarChar(T.MAX));
       this.logger.log(`crearReciboCertificado ${cnpoliza}/${ccerti} mprima=${dto.mprima} ref=${dto.creferencia}`);
       const res = await req.execute(FLOTA_SP.RECIBO_CERTIFICADO);
-      return this.resultado(res, {
+      const cnrecibo = trim(res.output?.['pCnrecibo']);
+      const out = this.resultado(res, {
         cnpoliza: cnpoliza.trim(),
         ccerti,
-        cnrecibo: trim(res.output?.['pCnrecibo']),
-        crecibo: res.output?.['pCrecibo'] ?? null,
+        cnrecibo,
+        crecibo: null as string | null,
         yaExistia: Boolean(res.output?.['pYaExistia']),
       });
+      out.crecibo = await this.textoExacto(
+        `SELECT TOP 1 CONVERT(varchar(30), crecibo) AS v FROM adrecibos WHERE cnrecibo = @k ORDER BY crecibo DESC`,
+        cnrecibo, res.output?.['pCrecibo']);
+      return out;
     });
   }
 }

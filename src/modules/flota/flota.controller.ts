@@ -41,7 +41,7 @@ export class FlotaController {
     description: `SP: sp_flota_crear_poliza_nexus. ${NOTA_SP}`,
   })
   @ApiBody({ type: CrearPolizaFlotaDto })
-  @ApiResponse({ status: 201, schema: { example: { status: true, message: '', cnpoliza: '18-1-1130499999', cpoliza: 1800000000001234 } } })
+  @ApiResponse({ status: 201, schema: { example: { status: true, message: '', cnpoliza: '18-1-1130499999', cpoliza: '1800000000000171560' } } })
   @ApiResponse({ status: 501, description: 'El SP aún no existe en Sis2000.' })
   crearPoliza(@Body() dto: CrearPolizaFlotaDto) {
     return this.svc.crearPoliza(dto);
@@ -84,7 +84,7 @@ export class FlotaController {
   @ApiBody({ type: ReciboCertificadoDto })
   @ApiResponse({
     status: 201,
-    schema: { example: { status: true, message: '', cnpoliza: '18-1-1130480881', ccerti: 3, cnrecibo: '18-998877', crecibo: 998877, yaExistia: false } },
+    schema: { example: { status: true, message: '', cnpoliza: '18-1-1130480881', ccerti: 3, cnrecibo: '18-998877', crecibo: '998877', yaExistia: false } },
   })
   @ApiResponse({ status: 501, description: 'El SP aún no existe en Sis2000.' })
   crearRecibo(
