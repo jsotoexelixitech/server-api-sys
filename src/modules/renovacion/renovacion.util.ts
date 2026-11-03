@@ -246,6 +246,23 @@ export interface PersonaRenovacion {
   cestado: string | null;
   cciudad: string | null;
   xdireccion: string | null;
+  /** maclient_atr.cprofesion (maprofes). null si no hay o es 0. */
+  cprofesion: string | null;
+  /** maclient_atr.cocupacion (maocupac). */
+  cocupacion: string | null;
+  /** maclient_atr.cactividad (maactivi). */
+  cactividad: string | null;
+  /** true: cprofesion y cocupacion vienen en su columna propia (profesión y ocupación por separado). */
+  bocupacion_separada: boolean;
+}
+
+/** Código de catálogo Sis2000: null si viene vacío o 0 (el SP inserta 0 cuando no hay profesión). */
+export function codigoCatalogo(value: unknown): string | null {
+  const s = txt(value);
+  if (s == null) return null;
+  const n = Number(s);
+  if (Number.isFinite(n)) return n > 0 ? String(Math.trunc(n)) : null;
+  return s;
 }
 
 /** maclient (+ tel/correo/dir) → bloque persona del formulario. */
@@ -268,6 +285,11 @@ export function mapPersona(row: Record<string, unknown> | null | undefined): Per
     cestado: txt(pick(row, 'cestado_ren', 'cestado')),
     cciudad: txt(pick(row, 'cciudad_ren', 'cciudad')),
     xdireccion: txt(pick(row, 'xdireccion_ren', 'xavecalle', 'xdireccion')),
+    // maclient_atr (Circular SAA-02-1079-2026); el servicio los deja en *_atr. Si faltan, el formulario los pide.
+    cprofesion: codigoCatalogo(pick(row, 'cprofesion_atr', 'cprofesion')),
+    cocupacion: codigoCatalogo(pick(row, 'cocupacion_atr', 'cocupacion')),
+    cactividad: codigoCatalogo(pick(row, 'cactividad_atr', 'cactividad')),
+    bocupacion_separada: true,
   };
 }
 

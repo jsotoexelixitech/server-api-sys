@@ -154,6 +154,13 @@ describe('mapeos', () => {
     expect(mapPersona(undefined)).toBeNull();
   });
 
+  it('mapPersona devuelve profesión, ocupación y actividad de maclient_atr (0 = sin dato)', () => {
+    const p = mapPersona({ cci_rif: 1, cprofesion_atr: 7, cocupacion_atr: 120, cactividad_atr: '00045' });
+    expect(p).toMatchObject({ cprofesion: '7', cocupacion: '120', cactividad: '45', bocupacion_separada: true });
+    const vacio = mapPersona({ cci_rif: 1, cprofesion_atr: 0, cocupacion_atr: null });
+    expect(vacio).toMatchObject({ cprofesion: null, cocupacion: null, cactividad: null });
+  });
+
   it('mapVehiculo usa las descripciones de mavinma', () => {
     expect(
       mapVehiculo({
