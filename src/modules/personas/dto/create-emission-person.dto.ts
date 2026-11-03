@@ -8,6 +8,8 @@ import {
   IsOptional,
   IsString,
 } from 'class-validator';
+import { Transform } from 'class-transformer';
+import { blankToUndefined } from '../personas-identidad.rules';
 
 /**
  * Payload de emisión de póliza de personas (ramo 9 = Funerario).
@@ -67,9 +69,9 @@ export class CreateEmissionPersonDto {
   @ApiProperty({ example: 25221952 }) @IsNotEmpty() rif_tomador: number | string;
   @ApiPropertyOptional({ example: 'JUAN' }) @IsOptional() @IsString() nombre_tomador?: string;
   @ApiPropertyOptional({ example: 'PEREZ' }) @IsOptional() @IsString() apellido_tomador?: string;
-  @ApiPropertyOptional({ example: 'M' }) @IsOptional() @IsString() sexo_tomador?: string;
-  @ApiPropertyOptional({ example: 'S' }) @IsOptional() @IsString() estado_civil_tomador?: string;
-  @ApiPropertyOptional({ example: '1990-01-01' }) @IsOptional() @IsDateString() fnac_tomador?: string;
+  @ApiPropertyOptional({ example: 'M' }) @Transform(blankToUndefined) @IsOptional() @IsString() sexo_tomador?: string;
+  @ApiPropertyOptional({ example: 'S' }) @Transform(blankToUndefined) @IsOptional() @IsString() estado_civil_tomador?: string;
+  @ApiPropertyOptional({ example: '1990-01-01' }) @Transform(blankToUndefined) @IsOptional() @IsDateString() fnac_tomador?: string;
   @ApiPropertyOptional({ example: 1 }) @IsOptional() estado_tomador?: number | string;
   @ApiPropertyOptional({ example: 128 }) @IsOptional() ciudad_tomador?: number | string;
   @ApiPropertyOptional({ example: 'Av. Principal' }) @IsOptional() @IsString() direccion_tomador?: string;
@@ -82,9 +84,9 @@ export class CreateEmissionPersonDto {
   @ApiProperty({ example: 25221952 }) @IsNotEmpty() rif_titular: number | string;
   @ApiPropertyOptional({ example: 'JUAN' }) @IsOptional() @IsString() nombre_titular?: string;
   @ApiPropertyOptional({ example: 'PEREZ' }) @IsOptional() @IsString() apellido_titular?: string;
-  @ApiPropertyOptional({ example: 'M' }) @IsOptional() @IsString() sexo_titular?: string;
-  @ApiPropertyOptional({ example: 'S' }) @IsOptional() @IsString() estado_civil_titular?: string;
-  @ApiPropertyOptional({ example: '1990-01-01' }) @IsOptional() @IsDateString() fnac_titular?: string;
+  @ApiPropertyOptional({ example: 'M' }) @Transform(blankToUndefined) @IsOptional() @IsString() sexo_titular?: string;
+  @ApiPropertyOptional({ example: 'S' }) @Transform(blankToUndefined) @IsOptional() @IsString() estado_civil_titular?: string;
+  @ApiPropertyOptional({ example: '1990-01-01' }) @Transform(blankToUndefined) @IsOptional() @IsDateString() fnac_titular?: string;
   @ApiPropertyOptional({ example: 1 }) @IsOptional() estado_titular?: number | string;
   @ApiPropertyOptional({ example: 128 }) @IsOptional() ciudad_titular?: number | string;
   @ApiPropertyOptional({ example: 'Av. Principal' }) @IsOptional() @IsString() direccion_titular?: string;
