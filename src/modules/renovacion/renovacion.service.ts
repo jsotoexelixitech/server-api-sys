@@ -78,6 +78,17 @@ export class RenovacionService {
         this.safe(cnpoliza, 'beneficiarios', () => this.loadBeneficiarios(pol), [] as Row[]),
       ]);
     if (!clientes.size) this.logger.warn(`consultar ${cnpoliza}: sin filas en maclient para tomador/titular`);
+    // Profesión / ocupación / actividad (maclient_atr). Consulta aparte: si falla, el resto de la renovación sigue.
+    if (clientes.size) {
+      const atributos = await this.safe(cnpoliza, 'atributos', () => this.loadAtributos(pol), new Map<string, Row>());
+      for (const [id, atr] of atributos) {
+        const cli = clientes.get(id);
+        if (!cli) continue;
+        cli['cprofesion_atr'] = atr['cprofesion'] ?? null;
+        cli['cocupacion_atr'] = atr['cocupacion'] ?? null;
+        cli['cactividad_atr'] = atr['cactividad'] ?? null;
+      }
+    }
     if (rcv && !vehiculo) this.logger.warn(`consultar ${cnpoliza}: sin filas en vhcerti`);
     if (!rcv && !asegurados.length) this.logger.warn(`consultar ${cnpoliza}: sin filas en peasegurados`);
 
@@ -284,6 +295,27 @@ export class RenovacionService {
       CROSS APPLY (VALUES (p.ctenedor), (p.casegurado), (p.cbeneficiario)) ids(id)
       INNER JOIN maclient c WITH (NOLOCK) ON c.cci_rif = ids.id
       OUTER APPLY (SELECT TOP 1 cestado, cciudad, xavecalle FROM maclient_dir dd WITH (NOLOCK) WHERE dd.cci_rif = c.cci_rif) d
+      WHERE p.cpoliza = CAST(@cpoliza AS NUMERIC(19, 0)) AND p.fanopol = @fanopol AND p.fmespol = @fmespol
+    `);
+    for (const row of (res.recordset ?? []) as Row[]) {
+      const key = txt(row['cci_rif']);
+      if (key) out.set(key, row);
+    }
+    return out;
+  }
+
+  /** maclient_atr (cprofesion, cocupacion, cactividad) del tomador, titular y beneficiario. */
+  private async loadAtributos(pol: Row): Promise<Map<string, Row>> {
+    const out = new Map<string, Row>();
+    const req = this.db.request();
+    req.input('cpoliza', T.VarChar(20), cpolizaTxt(pol));
+    req.input('fanopol', T.SmallInt, pol['fanopol']);
+    req.input('fmespol', T.TinyInt, pol['fmespol']);
+    const res = await req.query(`
+      SELECT a.*
+      FROM adpoliza p WITH (NOLOCK)
+      CROSS APPLY (VALUES (p.ctenedor), (p.casegurado), (p.cbeneficiario)) ids(id)
+      INNER JOIN maclient_atr a WITH (NOLOCK) ON a.cci_rif = ids.id
       WHERE p.cpoliza = CAST(@cpoliza AS NUMERIC(19, 0)) AND p.fanopol = @fanopol AND p.fmespol = @fmespol
     `);
     for (const row of (res.recordset ?? []) as Row[]) {
