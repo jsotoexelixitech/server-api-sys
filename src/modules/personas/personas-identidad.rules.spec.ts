@@ -3,7 +3,12 @@ import { BadRequestException } from '@nestjs/common';
 import { plainToInstance } from 'class-transformer';
 import { validateSync } from 'class-validator';
 import { CreateEmissionPersonDto } from './dto/create-emission-person.dto';
-import { assertIdentidadesPersonas, blankToNull } from './personas-identidad.rules';
+import {
+  aplicarPasaportesAlfanumericos,
+  assertIdentidadesPersonas,
+  blankToNull,
+  pasaporteSinChoque,
+} from './personas-identidad.rules';
 import { assertViajeroEmission } from './viajero-emission.rules';
 
 const baseDto = {
@@ -78,10 +83,59 @@ describe('assertIdentidadesPersonas', () => {
     ).not.toThrow();
   });
 
-  it('pasaporte alfanumérico (EM2849387) → 400 con mensaje de RIF E', () => {
+  it('pasaporte alfanumérico (EM2849387) sin cid_titular → 400 con mensaje de RIF E', () => {
     expect(() =>
       assertIdentidadesPersonas({ tipo_cedula_titular: 'P', rif_titular: 'EM2849387' }, [], []),
     ).toThrow(/RIF personal E/);
+  });
+
+  it('pasaporte alfanumérico con tipo P y cid_titular → pasa', () => {
+    expect(() =>
+      assertIdentidadesPersonas(
+        { tipo_cedula_titular: 'P', rif_titular: 'EM2849387', cid_titular: 'P-EM2849387' },
+        [],
+        [],
+      ),
+    ).not.toThrow();
+  });
+
+  it('asegurado adicional con letras sigue → 400', () => {
+    expect(() =>
+      assertIdentidadesPersonas(
+        { tipo_cedula_titular: 'P', rif_titular: 2849387, cid_titular: 'P-EM2849387' },
+        [{ icedula_asegurado: 'P', xrif_asegurado: 'AB123456' }],
+        [],
+      ),
+    ).toThrow(/asegurados\[0\]/);
+  });
+});
+
+describe('aplicarPasaportesAlfanumericos', () => {
+  it('normaliza cid y deja rif_* con los dígitos', () => {
+    const b: Record<string, unknown> = { tipo_cedula_titular: 'P', rif_titular: 'EM2849387', cid_titular: 'em2849387' };
+    expect(aplicarPasaportesAlfanumericos(b)).toEqual([{ rol: 'titular', cid: 'P-EM2849387', digitos: 2849387 }]);
+    expect(b['rif_titular']).toBe(2849387);
+    expect(b['cid_titular']).toBe('P-EM2849387');
+  });
+
+  it.each(['P-EM1234', 'P-1234567890', 'P-ABCDEFGHIJ1234'])('%s → 400', (cid) => {
+    expect(() => aplicarPasaportesAlfanumericos({ tipo_cedula_titular: 'P', cid_titular: cid })).toThrow(
+      BadRequestException,
+    );
+  });
+
+  it('cid con tipo V → 400', () => {
+    expect(() => aplicarPasaportesAlfanumericos({ tipo_cedula_tomador: 'V', cid_tomador: 'P-EM2849387' })).toThrow(
+      /tipo de identificación P/,
+    );
+  });
+
+  it('pasaporteSinChoque', () => {
+    expect(pasaporteSinChoque([], 'P-EM2849387', 2849387)).toBe(true);
+    expect(pasaporteSinChoque([{ cci_rif: 2849387, cid: 'P-EM2849387' }], 'P-EM2849387', 2849387)).toBe(true);
+    expect(pasaporteSinChoque([{ cci_rif: 2849387, cid: '0' }], 'P-EM2849387', 2849387)).toBe(true);
+    expect(pasaporteSinChoque([{ cci_rif: 2849387, cid: 'V-2849387' }], 'P-EM2849387', 2849387)).toBe(false);
+    expect(pasaporteSinChoque([{ cci_rif: 999, cid: 'P-EM2849387' }], 'P-EM2849387', 2849387)).toBe(false);
   });
 });
 
