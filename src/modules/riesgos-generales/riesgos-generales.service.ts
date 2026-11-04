@@ -5,7 +5,8 @@ import { parseSPError, toUserFacingError } from '../../common/helpers/sp-error.h
 import { buildPolicyPdfUrl } from '../../common/helpers/policy-url.helper';
 import { SP_PRE_EMISION_CONDOMINIO } from '../../config/sis2000-sp.constants';
 import {
-  calcularCoberturas, esObligatoria, mapCoberturaRamo, mapRamoPatrimonial, type CoberturaTarifa, type CotizacionCalculada,
+  calcularCoberturas, esObligatoria, mapCoberturaRamo, mapRamoPatrimonial, sumarMeses, type CoberturaTarifa,
+  type CotizacionCalculada,
 } from './riesgos-generales.calculo';
 import {
   CoberturasRamoDto, CotizarCoberturasDto, EmitirCoberturasDto, PersonaRiesgoDto, TarifaPlanDto,
@@ -136,7 +137,7 @@ export class RiesgosGeneralesService {
 
   async cotizar(dto: CotizarCoberturasDto): Promise<CotizacionCalculada> {
     const tarifa = await this.getTarifa(dto);
-    const { cotizacion, errores } = calcularCoberturas(tarifa.coberturas, dto.coberturas);
+    const { cotizacion, errores } = calcularCoberturas(tarifa.coberturas, dto.coberturas, dto.calculo);
     if (!cotizacion) throw new BadRequestException(errores.join(' '));
     return cotizacion;
   }
@@ -147,8 +148,10 @@ export class RiesgosGeneralesService {
     const hoy = new Date();
     const ymd = (d: Date) => d.toISOString().split('T')[0];
     const fdesde = ymd(hoy);
+    // Vigencia: `meses` (respeta el fin de mes) o 1 año como hasta ahora.
     const hasta = new Date(hoy);
-    hasta.setFullYear(hasta.getFullYear() + 1);
+    if (dto.meses) hasta.setTime(sumarMeses(hoy, dto.meses).getTime());
+    else hasta.setFullYear(hasta.getFullYear() + 1);
 
     const tasaRes = await this.db.request()
       .input('cramo', T.Int, dto.cramo)
@@ -214,7 +217,7 @@ export class RiesgosGeneralesService {
     req.input('cusuario', T.Int, CUSUARIO_NEXUS);
 
     try {
-      this.logger.log(`emitir: EXEC ${SP_PRE_EMISION_CONDOMINIO} ramo=${dto.cramo} plan=${dto.cplan} rif=${rifAsegurado} prima=${cot.prima_total} coberturas=${cot.coberturas.length}`);
+      this.logger.log(`emitir: EXEC ${SP_PRE_EMISION_CONDOMINIO} ramo=${dto.cramo} plan=${dto.cplan} rif=${rifAsegurado} prima=${cot.prima_total} coberturas=${cot.coberturas.length} fhasta=${ymd(hasta)}`);
       const result = await req.execute(SP_PRE_EMISION_CONDOMINIO);
       const row = (result.recordset?.[0] ?? {}) as Record<string, unknown>;
       const cnpoliza = String(row.cnpoliza ?? '').trim();

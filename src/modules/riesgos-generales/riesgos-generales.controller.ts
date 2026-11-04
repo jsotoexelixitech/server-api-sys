@@ -14,7 +14,7 @@ export class RiesgosGeneralesController {
 
   @Get('tarifa')
   @ApiOperation({
-    summary: 'Tarifa por cobertura de un plan (ramos 16 y 38)',
+    summary: 'Tarifa por cobertura de un plan (ramos 16, 25 y 38)',
     description:
       'Coberturas del plan (maplantar) con la tasa y los topes vigentes de matarifa_d, si son obligatorias (matarifa.bobligatoria ' +
       'o cobertura básica) y la comisión. `msumaplan` es la suma del plan, usada como valor por defecto.',
@@ -62,11 +62,19 @@ export class RiesgosGeneralesController {
   @HttpCode(HttpStatus.OK)
   @ApiOperation({
     summary: 'Cotizar coberturas elegidas',
-    description: 'Prima de cada cobertura = suma × tasa de matarifa_d / 100. Valida obligatorias, topes y tasas vigentes.',
+    description:
+      'Prima de cada cobertura = suma × tasa de matarifa_d / 100. Valida obligatorias, topes y tasas vigentes. ' +
+      'Con `calculo` (unidades × valor_unidad) la suma de todas las coberturas pedidas se calcula en el servidor y se ignora `suma`.',
     operationId: 'riesgosGeneralesCotizacion',
   })
   @ApiHeader(APIKEY_HEADER)
-  @ApiBody({ type: CotizarCoberturasDto, examples: { hogar: { value: { cramo: 38, cplan: '2', coberturas: [{ ccober: '1', suma: 140000 }, { ccober: '5', suma: 24000 }] } } } })
+  @ApiBody({
+    type: CotizarCoberturasDto,
+    examples: {
+      hogar: { value: { cramo: 38, cplan: '2', coberturas: [{ ccober: '1', suma: 140000 }, { ccober: '5', suma: 24000 }] } },
+      calculo: { value: { cramo: 25, cplan: '1', coberturas: [{ ccober: '1' }], calculo: { unidades: 20000, valor_unidad: 2.5 } } },
+    },
+  })
   @ApiCommonErrors()
   async cotizar(@Body() dto: CotizarCoberturasDto) {
     return { status: true, data: await this.service.cotizar(dto) };
@@ -79,7 +87,8 @@ export class RiesgosGeneralesController {
     summary: 'Emitir con las coberturas elegidas',
     description:
       'Recalcula la cotización en el servidor (no acepta primas del cliente) y emite cobertura por cobertura con ' +
-      'sp_pre_emision_condominio_nexus. Recibo pendiente de cobro. Requiere el scope `emissions:riesgos-generales`.',
+      'sp_pre_emision_condominio_nexus. Recibo pendiente de cobro. Acepta `calculo` (suma = unidades × valor_unidad) y ' +
+      '`meses` de vigencia (1 a 60; sin enviar, 1 año). Requiere el scope `emissions:riesgos-generales`.',
     operationId: 'riesgosGeneralesEmision',
   })
   @ApiHeader(APIKEY_HEADER)
