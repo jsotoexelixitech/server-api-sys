@@ -17,6 +17,8 @@ import {
   SP_VALIDATE_AUTOMOVIL_LEGACY,
 } from '../../config/sis2000-sp.constants';
 import { esTipoCedulaJuridica } from './constants/persona-juridica.constants';
+import { cotizacionErrorFromMessage, parseCprocesCotizacion } from './cotizacion-emision';
+import { EmissionRow, splitEmissionRows } from './emission-rcv-aparte';
 import { SearchProprietaryDto } from './dto/search-proprietary.dto';
 import { SearchVehicleByPlateDto, SearchVehicleBySerialDto } from './dto/search-vehicle.dto';
 import { ArysService } from '../arys/arys.service';
@@ -151,20 +153,20 @@ export class EmissionsService {
   }
 
   /** Fila devuelta por sp_pre_emision / sp_emision (recordsets anidados). */
-  private extractEmissionRow(result: {
-    recordset?: Record<string, unknown>[];
-    recordsets?: Record<string, unknown>[][];
-  }): Record<string, unknown> {
-    if (result.recordsets?.length) {
-      for (let i = result.recordsets.length - 1; i >= 0; i--) {
-        const rs = result.recordsets[i];
-        if (rs?.length && rs[0]?.['cnpoliza']) return rs[0];
-      }
-    }
-    if (result.recordset?.length && result.recordset[0]?.['cnpoliza']) {
-      return result.recordset[0];
-    }
-    return {};
+  /** Datos de la póliza de RCV aparte para la respuesta de emisión; se cobra con su propio cnrecibo. */
+  private async buildPolizaRcvAparte(row: EmissionRow, pdfBase: string | undefined) {
+    const cnpoliza = String(row['cnpoliza'] ?? '').trim();
+    const fanopol = row['fanopol'] as number | undefined;
+    const fmespol = row['fmespol'] as number | undefined;
+    return {
+      cnpoliza,
+      cnrecibo: String(row['cnrecibo'] ?? '').trim(),
+      urlpoliza: buildPolicyPdfUrl(pdfBase, cnpoliza, fanopol, fmespol),
+      ncuota: (row['qcuotas'] ?? row['ncuota']) as number | undefined,
+      fanopol,
+      fmespol,
+      ...(await this.lookupPolicyTarjetaKeys(cnpoliza)),
+    };
   }
 
   /** cpoliza + casegurado para activate tarjeta RCV post-emisión. */
@@ -854,6 +856,12 @@ export class EmissionsService {
 
       const b: Record<string, unknown> = { ...body };
 
+      // Cotización de SysIP: el plan, la suma y las primas los toma el SP de sopoltar.
+      const cprocesCotizacion = parseCprocesCotizacion(b);
+      delete b['cproces'];
+      delete b['cproces_cotizacion'];
+      if (cprocesCotizacion != null) b['cproces_cotizacion'] = cprocesCotizacion;
+
       // cnpoliza lo genera Sis2000; string vacío bloquea el SP (no entra a IF @cnpoliza IS NULL)
       if (b['cnpoliza'] == null || String(b['cnpoliza']).trim() === '') {
         delete b['cnpoliza'];
@@ -940,7 +948,8 @@ export class EmissionsService {
       ];
 
       const requiredFields: Array<[string, unknown]> = [
-        ['plan', b['cplan'] ?? b['plan']],
+        // Con cotización el plan es el de la cotización (si viene, el SP valida que coincida).
+        ...(cprocesCotizacion != null ? [] : ([['plan', b['cplan'] ?? b['plan']]] as Array<[string, unknown]>)),
         ['fecha_emision', b['fecha_emision'] ?? b['femision']],
         ['fdesde', b['fdesde']],
         ['fhasta', b['fhasta']],
@@ -982,12 +991,17 @@ export class EmissionsService {
       ).toLowerCase();
 
       if (emissionSource === 'external') {
+        if (cprocesCotizacion != null) {
+          throw new BadRequestException('La emisión desde cotización (cproces) solo está disponible con emisión local.');
+        }
         return await this.createEmissionAutoExternal(b, canal, apikey);
       }
       return await this.emitLocalAutomobile(b, canal);
     } catch (err) {
       if (err instanceof BadRequestException) throw err;
       const msg = parseSPError(err);
+      const cotizacionError = cotizacionErrorFromMessage(msg);
+      if (cotizacionError) throw cotizacionError;
       const lower = msg.toLowerCase();
       if (
         lower.includes('poliza vigente') ||
@@ -1748,6 +1762,12 @@ export class EmissionsService {
       }
     }
 
+    // Solo con cotización: el SP sin @cproces_cotizacion (antes de docs/sql/emision-auto-cotizacion) sigue funcionando.
+    const cprocesCotizacion = this.intField(b['cproces_cotizacion']);
+    if (cprocesCotizacion != null) {
+      params['cproces_cotizacion'] = { type: T.Numeric(13, 0), value: cprocesCotizacion };
+    }
+
     Object.entries(params).forEach(([key, field]) =>
       req.input(key, (field as { type: unknown }).type, (field as { value: unknown }).value),
     );
@@ -1790,9 +1810,8 @@ export class EmissionsService {
       spResult = await retryReq.execute(preEmisionSp);
     }
 
-    let row = this.extractEmissionRow(
-      spResult as { recordset?: Record<string, unknown>[]; recordsets?: Record<string, unknown>[][] },
-    );
+    const { principal, rcvAparte } = splitEmissionRows(spResult);
+    let row = principal;
     if (!row['cnpoliza'] && xplaca) {
       this.logger.warn(`emitLocal: SP sin cnpoliza en recordset; lookup placa=${xplaca}`);
       row = await this.lookupEmissionByPlaca(xplaca);
@@ -1815,10 +1834,16 @@ export class EmissionsService {
       this.config.get<string>('POLICY_PDF_URL') ?? this.config.get<string>('URLPoliza');
     const urlpoliza = buildPolicyPdfUrl(pdfBase, cnpoliza, fanopol, fmespol);
     const url_club_arys = await this.resolveClubArysPdfForEmission(cnpoliza, b);
+    const polizaRcv = rcvAparte ? await this.buildPolizaRcvAparte(rcvAparte, pdfBase) : undefined;
 
-    this.logger.log(`emitLocal OK cnpoliza=${cnpoliza} cnrecibo=${cnrecibo}`);
+    this.logger.log(
+      `emitLocal OK cnpoliza=${cnpoliza} cnrecibo=${cnrecibo}${cprocesCotizacion != null ? ` cotizacion=${cprocesCotizacion}` : ''}${polizaRcv ? ` rcv_aparte=${polizaRcv.cnpoliza}` : ''}`,
+    );
 
-    await this.repairRcvCoberturasIfEmpty(cnpoliza);
+    // El repair recotiza la póliza: con cotización las primas deben quedar las cotizadas.
+    if (cprocesCotizacion == null) {
+      await this.repairRcvCoberturasIfEmpty(cnpoliza);
+    }
 
     if (this.extractBeneficiario(b)) {
       try {
@@ -1841,17 +1866,19 @@ export class EmissionsService {
     const cscanalalt = this.intField(this.pick(b, 'cscanalalt', 'cscanalalt_in'));
 
     if (cgestor || ccanalalt != null || cproductor != null || cscanalalt != null) {
-      try {
-        await this.applyPolicyGestorAndCanal(
-          cnpoliza,
-          cgestor,
-          ccanalalt,
-          cscanalalt,
-          cproductor,
-        );
-      } catch (err) {
-        const msg = err instanceof Error ? err.message : String(err);
-        this.logger.warn(`applyPolicyGestorAndCanal falló cnpoliza=${cnpoliza}: ${msg}`);
+      for (const poliza of polizaRcv ? [cnpoliza, polizaRcv.cnpoliza] : [cnpoliza]) {
+        try {
+          await this.applyPolicyGestorAndCanal(
+            poliza,
+            cgestor,
+            ccanalalt,
+            cscanalalt,
+            cproductor,
+          );
+        } catch (err) {
+          const msg = err instanceof Error ? err.message : String(err);
+          this.logger.warn(`applyPolicyGestorAndCanal falló cnpoliza=${poliza}: ${msg}`);
+        }
       }
     }
 
@@ -1868,6 +1895,8 @@ export class EmissionsService {
       ncuota,
       fanopol,
       fmespol,
+      cproces: cprocesCotizacion ?? undefined,
+      poliza_rcv: polizaRcv,
       ...tarjetaKeys,
     };
   }

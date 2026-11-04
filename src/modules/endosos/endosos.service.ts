@@ -12,8 +12,8 @@ import { AsientoContableEndosoDto } from './dto/asiento-contable.dto';
 import { CalcularPrimaEndosoDto } from './dto/calcular-prima-endoso.dto';
 import {
   AUTO_IFRECUENCIA_CUOTAS,
-  AUTO_IFRECUENCIA_VALUES,
-  AutoIfrecuenciaCode,
+  AUTO_IFRECUENCIA_ENDOSO_VALUES,
+  AutoIfrecuenciaEndosoCode,
 } from '../valrep/constants/auto-ifrecuencia.constants';
 import { RmsGatewayService } from '../rms-gateway/rms-gateway.service';
 import { RmsSyncService } from '../rms-gateway/rms-sync.service';
@@ -136,7 +136,7 @@ export class EndososService {
   private resolveIfrecuencia(
     dto: CrearReciboEndosoDto,
     ncuotas?: number | null,
-  ): AutoIfrecuenciaCode {
+  ): AutoIfrecuenciaEndosoCode {
     const dtoAny = dto as CrearReciboEndosoDto & {
       cfrecuencia?: string;
       xfrecuencia?: string;
@@ -147,8 +147,8 @@ export class EndososService {
       dtoAny.cfrecuencia ??
       dtoAny.xfrecuencia;
     if (raw != null && String(raw).trim() !== '') {
-      const code = String(raw).trim().toUpperCase().charAt(0) as AutoIfrecuenciaCode;
-      if (AUTO_IFRECUENCIA_VALUES.includes(code)) return code;
+      const code = String(raw).trim().toUpperCase().charAt(0) as AutoIfrecuenciaEndosoCode;
+      if (AUTO_IFRECUENCIA_ENDOSO_VALUES.includes(code)) return code;
     }
     const n = ncuotas ?? this.resolveNcuotas(dto);
     if (n != null && n >= 12) return 'M';
