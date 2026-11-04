@@ -20,7 +20,14 @@ export interface CoberturaTarifa {
 
 export interface CoberturaPedida {
   ccober: string;
-  suma: number;
+  /** Suma de la cobertura. Opcional si viene `calculo` (se ignora y se reemplaza por unidades × valor_unidad). */
+  suma?: number;
+}
+
+/** Cálculo genérico de la suma: unidades × valor_unidad, aplicado a todas las coberturas pedidas. */
+export interface CalculoSuma {
+  unidades: number;
+  valor_unidad: number;
 }
 
 export interface CoberturaCalculada {
@@ -104,14 +111,52 @@ export function mapRamoPatrimonial(r: Record<string, unknown>): RamoPatrimonial 
   };
 }
 
+/** Suma asegurada a partir del cálculo genérico: unidades × valor_unidad, redondeada a 2 decimales. */
+export const sumaPorCalculo = (c: CalculoSuma) => r2(c.unidades * c.valor_unidad);
+
+/**
+ * Resuelve la suma de cada cobertura pedida: con `calculo` todas valen unidades × valor_unidad (se ignora `suma`);
+ * sin `calculo` cada cobertura debe traer su `suma`. Devuelve errores legibles por cobertura sin suma.
+ */
+export function resolverSumas(
+  pedidas: CoberturaPedida[],
+  calculo?: CalculoSuma,
+): { pedidas: { ccober: string; suma: number }[]; errores: string[] } {
+  if (calculo) {
+    const suma = sumaPorCalculo(calculo);
+    return { pedidas: pedidas.map((p) => ({ ccober: p.ccober, suma })), errores: [] };
+  }
+  const errores: string[] = [];
+  const resueltas = pedidas.map((p) => {
+    if (p.suma == null) errores.push(`La cobertura ${p.ccober} no tiene suma: envíe suma o calculo.`);
+    return { ccober: p.ccober, suma: Number(p.suma ?? 0) };
+  });
+  return { pedidas: resueltas, errores };
+}
+
+/**
+ * Suma meses a una fecha (UTC) respetando el fin de mes: 31-ago + 6 = 28-feb (29 en bisiesto).
+ * Evita el desborde de setMonth (31-ago + 6 → 3-mar).
+ */
+export function sumarMeses(fecha: Date, meses: number): Date {
+  const y = fecha.getUTCFullYear();
+  const m = fecha.getUTCMonth() + meses;
+  const ultimoDia = new Date(Date.UTC(y, m + 1, 0)).getUTCDate();
+  return new Date(Date.UTC(y, m, Math.min(fecha.getUTCDate(), ultimoDia)));
+}
+
 /**
  * Valida y calcula las coberturas pedidas contra la tarifa del plan.
  * Devuelve errores legibles en lugar de lanzar, para que el controlador responda 400 con todos juntos.
+ * Con `calculo`, la suma de cada cobertura es unidades × valor_unidad (se ignora cualquier `suma` enviada).
  */
 export function calcularCoberturas(
   tarifa: CoberturaTarifa[],
-  pedidas: CoberturaPedida[],
+  pedidasEntrada: CoberturaPedida[],
+  calculo?: CalculoSuma,
 ): { cotizacion: CotizacionCalculada | null; errores: string[] } {
+  const { pedidas, errores: erroresSuma } = resolverSumas(pedidasEntrada, calculo);
+  if (erroresSuma.length) return { cotizacion: null, errores: erroresSuma };
   const errores: string[] = [];
   const porCob = new Map(tarifa.map((t) => [t.ccober, t]));
   const vistas = new Set<string>();
@@ -122,7 +167,7 @@ export function calcularCoberturas(
     if (vistas.has(p.ccober)) errores.push(`La cobertura ${p.ccober} está repetida.`);
     vistas.add(p.ccober);
     if (!t) continue;
-    if (!(Number(p.suma) > 0)) errores.push(`${t.xcobertura}: la suma debe ser mayor a 0.`);
+    if (!(p.suma > 0)) errores.push(`${t.xcobertura}: la suma debe ser mayor a 0.`);
     if (t.msumamin > 0 && p.suma < t.msumamin) errores.push(`${t.xcobertura}: la suma mínima es ${t.msumamin}.`);
     if (t.msumamax > 0 && p.suma > t.msumamax) errores.push(`${t.xcobertura}: la suma máxima es ${t.msumamax}.`);
     if (!(t.pprima > 0)) errores.push(`${t.xcobertura}: no tiene tasa vigente en matarifa_d.`);

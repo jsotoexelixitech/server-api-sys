@@ -1,11 +1,15 @@
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
 import { Type } from 'class-transformer';
 import {
-  ArrayMinSize, IsArray, IsIn, IsInt, IsNotEmpty, IsNumber, IsOptional, IsString, MaxLength, Min, ValidateNested,
+  ArrayMinSize, IsArray, IsIn, IsInt, IsNotEmpty, IsNumber, IsOptional, IsPositive, IsString, Max, MaxLength, Min,
+  ValidateNested,
 } from 'class-validator';
 
-/** Ramos con tarifa por cobertura en matarifa_d: 16 = Combinado Empresarial, 38 = Combinado Residencial. */
-export const RAMOS_COBERTURAS = [16, 38] as const;
+/**
+ * Ramos con tarifa por cobertura en matarifa_d: 16 = Combinado Empresarial, 25 = Riesgos Especiales,
+ * 38 = Combinado Residencial.
+ */
+export const RAMOS_COBERTURAS = [16, 25, 38] as const;
 
 export class TarifaPlanDto {
   @ApiProperty({ example: 38 })
@@ -36,19 +40,48 @@ export class CoberturaPedidaDto {
   @MaxLength(4)
   ccober: string;
 
-  @ApiProperty({ example: 140000, description: 'Suma asegurada de la cobertura en la moneda del plan.' })
+  @ApiPropertyOptional({
+    example: 140000,
+    description: 'Suma asegurada de la cobertura en la moneda del plan. Obligatoria si no se envía `calculo`; con `calculo` se ignora.',
+  })
+  @IsOptional()
   @IsNumber({ maxDecimalPlaces: 2 })
   @Min(0)
-  suma: number;
+  suma?: number;
+}
+
+/** Cálculo genérico de la suma asegurada: unidades × valor_unidad, aplicado a todas las coberturas pedidas. */
+export class CalculoSumaDto {
+  @ApiProperty({ example: 20000, description: 'Cantidad de unidades (hasta 4 decimales).' })
+  @IsNumber({ maxDecimalPlaces: 4 })
+  @IsPositive()
+  unidades: number;
+
+  @ApiProperty({ example: 2.5, description: 'Valor por unidad en la moneda del plan (hasta 2 decimales).' })
+  @IsNumber({ maxDecimalPlaces: 2 })
+  @IsPositive()
+  valor_unidad: number;
 }
 
 export class CotizarCoberturasDto extends TarifaPlanDto {
-  @ApiProperty({ type: [CoberturaPedidaDto], description: 'Coberturas elegidas con su suma. La básica es obligatoria.' })
+  @ApiProperty({
+    type: [CoberturaPedidaDto],
+    description: 'Coberturas elegidas con su suma (o sin suma si se envía `calculo`). La básica es obligatoria.',
+  })
   @IsArray()
   @ArrayMinSize(1)
   @ValidateNested({ each: true })
   @Type(() => CoberturaPedidaDto)
   coberturas: CoberturaPedidaDto[];
+
+  @ApiPropertyOptional({
+    type: CalculoSumaDto,
+    description: 'Suma calculada = unidades × valor_unidad para todas las coberturas pedidas (ignora `suma`).',
+  })
+  @IsOptional()
+  @ValidateNested()
+  @Type(() => CalculoSumaDto)
+  calculo?: CalculoSumaDto;
 }
 
 export class PersonaRiesgoDto {
@@ -96,4 +129,12 @@ export class EmitirCoberturasDto extends CotizarCoberturasDto {
   @Type(() => Number)
   @IsInt()
   productor?: number;
+
+  @ApiPropertyOptional({ example: 6, description: 'Meses de vigencia (1 a 60); fhasta = fdesde + meses. Sin enviar: 1 año.' })
+  @IsOptional()
+  @Type(() => Number)
+  @IsInt()
+  @Min(1)
+  @Max(60)
+  meses?: number;
 }
