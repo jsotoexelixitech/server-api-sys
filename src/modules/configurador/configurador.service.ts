@@ -99,6 +99,9 @@ export class ConfiguradorService {
     if (dto.xabreviatura !== undefined) { sets.push('xabreviatura = @xab'); req.input('xab', sql.Char(5), dto.xabreviatura.trim()); }
     if (dto.bobligatoria !== undefined) { sets.push('bobligatoria = @oblig'); req.input('oblig', sql.Bit, dto.bobligatoria); }
     if (dto.iestado !== undefined) { sets.push('iestado = @iestado'); req.input('iestado', sql.Char(1), dto.iestado); }
+    if (dto.ccontrea !== undefined) { sets.push('ccontrea = @ccontrea'); req.input('ccontrea', sql.SmallInt, dto.ccontrea); }
+    if (dto.cramorea !== undefined) { sets.push('cramorea = @cramorea'); req.input('cramorea', sql.SmallInt, dto.cramorea); }
+    if (dto.cramopcnd !== undefined) { sets.push('cramopcnd = @cramopcnd'); req.input('cramopcnd', sql.SmallInt, dto.cramopcnd); }
     if (!sets.length) throw new BadRequestException('No hay campos para actualizar.');
     req.input('cramo', sql.SmallInt, cramo);
     req.input('ccob', sql.Char(4), ccobertura.trim());

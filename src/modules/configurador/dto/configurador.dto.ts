@@ -121,6 +121,10 @@ export class EditarCoberturaDto {
   @IsOptional()
   @IsIn(['V', 'I'])
   iestado?: 'V' | 'I';
+
+  @ApiPropertyOptional({ example: 6016, description: 'Contrato de reaseguro.' }) @IsOptional() @IsInt() ccontrea?: number;
+  @ApiPropertyOptional({ example: 108, description: 'Ramo de reaseguro.' }) @IsOptional() @IsInt() cramorea?: number;
+  @ApiPropertyOptional({ example: 125 }) @IsOptional() @IsInt() cramopcnd?: number;
 }
 
 // ── Tarifas (matarifa / matarifa_d) ─────────────────────────────────────────
