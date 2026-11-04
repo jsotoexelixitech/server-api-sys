@@ -556,7 +556,10 @@ export class CondominioService {
 
     const tasas = await this.getTarificadorTasas({ cramo } as GetTarificadorDto);
     const porCob = new Map(tasas.tasas.map((t) => [`${t.ccober}|${t.ctarifa}`, t]));
-    const partes = await this.partesPorAntiguedad(cramo, cot, errors);
+    // Cotización vigente: el precio ya aprobado se respeta aunque las tarifas hayan cambiado; solo se comprueba que cuadre.
+    const vence = cot.vigencia?.vence_el ? new Date(cot.vigencia.vence_el).getTime() : 0;
+    const vigente = vence > Date.now();
+    const partes = vigente ? new Map<string, number>() : await this.partesPorAntiguedad(cramo, cot, errors);
 
     const descRes = dispositivos.length
       ? await this.db.request().input('cramo', T.Int, cramo)
@@ -568,8 +571,8 @@ export class CondominioService {
       : null;
     const descPct = Number(descRes?.recordset?.[0]?.pct ?? 0);
     const recPct = Number(recRes?.recordset?.[0]?.pct ?? 0);
-    if (!near(cot.descuento_pct ?? 0, descPct)) errors.push(`descuento_pct (${cot.descuento_pct ?? 0}) no coincide con los dispositivos (${descPct}).`);
-    if (!near(cot.recargo_pct ?? 0, recPct)) errors.push(`recargo_pct (${cot.recargo_pct ?? 0}) no coincide con las sustancias (${recPct}).`);
+    if (!vigente && !near(cot.descuento_pct ?? 0, descPct)) errors.push(`descuento_pct (${cot.descuento_pct ?? 0}) no coincide con los dispositivos (${descPct}).`);
+    if (!vigente && !near(cot.recargo_pct ?? 0, recPct)) errors.push(`recargo_pct (${cot.recargo_pct ?? 0}) no coincide con las sustancias (${recPct}).`);
 
     let sumaPrimas = 0;
     let sumaBasica: number | null = null;
@@ -586,11 +589,11 @@ export class CondominioService {
       const bruta = parte != null ? (cot.suma_asegurada * parte) / 100 : (c.suma_asegurada * t.pprima) / 100;
       const desc = (c.prima_bruta * descPct) / 100;
       const rec = (c.prima_bruta * recPct) / 100;
-      if (!near(c.prima_bruta, bruta)) errors.push(`Cobertura ${key}: prima bruta ${c.prima_bruta} no coincide con suma × tasa (${bruta.toFixed(2)}).`);
-      if (!near(c.descuento, desc)) errors.push(`Cobertura ${key}: descuento ${c.descuento} no coincide (${desc.toFixed(2)}).`);
-      if (!near(c.recargo, rec)) errors.push(`Cobertura ${key}: recargo ${c.recargo} no coincide (${rec.toFixed(2)}).`);
+      if (!vigente && !near(c.prima_bruta, bruta)) errors.push(`Cobertura ${key}: prima bruta ${c.prima_bruta} no coincide con suma × tasa (${bruta.toFixed(2)}).`);
+      if (!vigente && !near(c.descuento, desc)) errors.push(`Cobertura ${key}: descuento ${c.descuento} no coincide (${desc.toFixed(2)}).`);
+      if (!vigente && !near(c.recargo, rec)) errors.push(`Cobertura ${key}: recargo ${c.recargo} no coincide (${rec.toFixed(2)}).`);
       if (!near(c.prima, c.prima_bruta - c.descuento + c.recargo)) errors.push(`Cobertura ${key}: prima neta no cuadra con bruta - descuento + recargo.`);
-      const pcom = t.pcomision ?? 0;
+      const pcom = vigente ? c.pcomision ?? 0 : t.pcomision ?? 0;
       if (!near(c.pcomision ?? 0, pcom)) errors.push(`Cobertura ${key}: pcomision ${c.pcomision ?? 0} no coincide con el Core (${pcom}).`);
       if (!near(c.comision ?? 0, (c.prima * pcom) / 100)) errors.push(`Cobertura ${key}: comisión no cuadra con prima × pcomision.`);
       sumaPrimas += c.prima;

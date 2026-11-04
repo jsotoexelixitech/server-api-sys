@@ -1,6 +1,8 @@
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
 import { Type } from 'class-transformer';
-import { ArrayMinSize, IsArray, IsIn, IsInt, IsNotEmpty, IsNumber, IsOptional, IsString, Max, MaxLength, Min, ValidateNested } from 'class-validator';
+import { ArrayMinSize, IsArray, IsIn, IsInt, IsNotEmpty, IsNumber, IsOptional, IsString, Max, MaxLength, Min, ValidateNested,
+  IsISO8601,
+} from 'class-validator';
 
 /** Una cobertura ya calculada (valores ANUALES; el Core los reparte entre las cuotas al emitir). */
 export class CotizacionCoberturaDto {
@@ -67,6 +69,17 @@ export class TarifaAntiguedadDto {
   iuso: string;
 }
 
+/** Vigencia de una cotización aprobada: mientras dure, el precio cotizado se respeta. */
+export class VigenciaCotizacionDto {
+  @ApiProperty({ example: '2026-11-04T18:00:00.000Z' })
+  @IsISO8601()
+  cotizada_el: string;
+
+  @ApiProperty({ example: '2026-11-19T18:00:00.000Z' })
+  @IsISO8601()
+  vence_el: string;
+}
+
 /**
  * Cotización calculada por el producto (Condominio u Hogar) con el tarificador.
  * Si se envía en la emisión, el Core NO recalcula: valida que cuadre con sus tarifas y emite estos valores.
@@ -99,6 +112,12 @@ export class CotizacionPreestablecidaDto {
   @ValidateNested()
   @Type(() => TarifaAntiguedadDto)
   tarifa_antiguedad?: TarifaAntiguedadDto;
+
+  @ApiPropertyOptional({ type: VigenciaCotizacionDto, description: 'Vigente: se emite con el precio cotizado aunque las tarifas hayan cambiado.' })
+  @IsOptional()
+  @ValidateNested()
+  @Type(() => VigenciaCotizacionDto)
+  vigencia?: VigenciaCotizacionDto;
 
   @ApiProperty({ type: [CotizacionCoberturaDto] })
   @IsArray()
