@@ -374,6 +374,18 @@ export class CreateEmissionAutoDto {
   @IsNumber()
   tasaPp?: number;
 
+  @ApiPropertyOptional({
+    example: '2026000236751',
+    description:
+      'Número de cotización del cotizador de SysIP (sopoliza.cproces). Con él se emite con el plan, la suma y las ' +
+      'primas cotizadas (USD, con su recargo/descuento), sin recalcular; `plan` pasa a ser opcional y, si viene, debe ' +
+      'ser el de la cotización. El vehículo y la vigencia deben coincidir. También se acepta como `cproces_cotizacion`. ' +
+      'Errores 400, según `code`: COTIZACION_NO_EXISTE, COTIZACION_EMITIDA, COTIZACION_NO_COINCIDE.',
+  })
+  @IsOptional()
+  @IsString()
+  cproces?: string;
+
   @ApiPropertyOptional({ description: 'Canal alterno (Marketplace / SSO).' })
   @IsOptional()
   @IsInt()

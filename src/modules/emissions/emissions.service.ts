@@ -17,6 +17,7 @@ import {
   SP_VALIDATE_AUTOMOVIL_LEGACY,
 } from '../../config/sis2000-sp.constants';
 import { esTipoCedulaJuridica } from './constants/persona-juridica.constants';
+import { cotizacionErrorFromMessage, parseCprocesCotizacion } from './cotizacion-emision';
 import { SearchProprietaryDto } from './dto/search-proprietary.dto';
 import { SearchVehicleByPlateDto, SearchVehicleBySerialDto } from './dto/search-vehicle.dto';
 import { ArysService } from '../arys/arys.service';
@@ -854,6 +855,12 @@ export class EmissionsService {
 
       const b: Record<string, unknown> = { ...body };
 
+      // Cotización de SysIP: el plan, la suma y las primas los toma el SP de sopoltar.
+      const cprocesCotizacion = parseCprocesCotizacion(b);
+      delete b['cproces'];
+      delete b['cproces_cotizacion'];
+      if (cprocesCotizacion != null) b['cproces_cotizacion'] = cprocesCotizacion;
+
       // cnpoliza lo genera Sis2000; string vacío bloquea el SP (no entra a IF @cnpoliza IS NULL)
       if (b['cnpoliza'] == null || String(b['cnpoliza']).trim() === '') {
         delete b['cnpoliza'];
@@ -940,7 +947,8 @@ export class EmissionsService {
       ];
 
       const requiredFields: Array<[string, unknown]> = [
-        ['plan', b['cplan'] ?? b['plan']],
+        // Con cotización el plan es el de la cotización (si viene, el SP valida que coincida).
+        ...(cprocesCotizacion != null ? [] : ([['plan', b['cplan'] ?? b['plan']]] as Array<[string, unknown]>)),
         ['fecha_emision', b['fecha_emision'] ?? b['femision']],
         ['fdesde', b['fdesde']],
         ['fhasta', b['fhasta']],
@@ -982,12 +990,17 @@ export class EmissionsService {
       ).toLowerCase();
 
       if (emissionSource === 'external') {
+        if (cprocesCotizacion != null) {
+          throw new BadRequestException('La emisión desde cotización (cproces) solo está disponible con emisión local.');
+        }
         return await this.createEmissionAutoExternal(b, canal, apikey);
       }
       return await this.emitLocalAutomobile(b, canal);
     } catch (err) {
       if (err instanceof BadRequestException) throw err;
       const msg = parseSPError(err);
+      const cotizacionError = cotizacionErrorFromMessage(msg);
+      if (cotizacionError) throw cotizacionError;
       const lower = msg.toLowerCase();
       if (
         lower.includes('poliza vigente') ||
@@ -1748,6 +1761,12 @@ export class EmissionsService {
       }
     }
 
+    // Solo con cotización: el SP sin @cproces_cotizacion (antes de docs/sql/emision-auto-cotizacion) sigue funcionando.
+    const cprocesCotizacion = this.intField(b['cproces_cotizacion']);
+    if (cprocesCotizacion != null) {
+      params['cproces_cotizacion'] = { type: T.Numeric(13, 0), value: cprocesCotizacion };
+    }
+
     Object.entries(params).forEach(([key, field]) =>
       req.input(key, (field as { type: unknown }).type, (field as { value: unknown }).value),
     );
@@ -1816,9 +1835,14 @@ export class EmissionsService {
     const urlpoliza = buildPolicyPdfUrl(pdfBase, cnpoliza, fanopol, fmespol);
     const url_club_arys = await this.resolveClubArysPdfForEmission(cnpoliza, b);
 
-    this.logger.log(`emitLocal OK cnpoliza=${cnpoliza} cnrecibo=${cnrecibo}`);
+    this.logger.log(
+      `emitLocal OK cnpoliza=${cnpoliza} cnrecibo=${cnrecibo}${cprocesCotizacion != null ? ` cotizacion=${cprocesCotizacion}` : ''}`,
+    );
 
-    await this.repairRcvCoberturasIfEmpty(cnpoliza);
+    // El repair recotiza la póliza: con cotización las primas deben quedar las cotizadas.
+    if (cprocesCotizacion == null) {
+      await this.repairRcvCoberturasIfEmpty(cnpoliza);
+    }
 
     if (this.extractBeneficiario(b)) {
       try {
@@ -1868,6 +1892,7 @@ export class EmissionsService {
       ncuota,
       fanopol,
       fmespol,
+      cproces: cprocesCotizacion ?? undefined,
       ...tarjetaKeys,
     };
   }

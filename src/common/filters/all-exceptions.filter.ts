@@ -34,6 +34,7 @@ export class AllExceptionsFilter implements ExceptionFilter {
 
     // ── Extraer mensaje limpio (nunca SQL ni stack) ───────────────────────────
     let message: string | string[];
+    let code: string | undefined;
 
     if (isHttp) {
       const payload = exception.getResponse();
@@ -43,6 +44,8 @@ export class AllExceptionsFilter implements ExceptionFilter {
         const p = payload as Record<string, unknown>;
         // ValidationPipe genera { message: string[] }; HttpException propios { message: string }
         message = (p.message as string | string[]) ?? 'Error en la solicitud.';
+        // Código de negocio del HttpException (p. ej. COTIZACION_EMITIDA): el cliente lo necesita para distinguir el caso.
+        if (typeof p.code === 'string') code = p.code;
       }
     } else if (
       exception &&
@@ -97,6 +100,7 @@ export class AllExceptionsFilter implements ExceptionFilter {
       status:    false,
       statusCode,
       message,
+      ...(code ? { code } : {}),
       path:      req.url,
       timestamp: new Date().toISOString(),
     });
