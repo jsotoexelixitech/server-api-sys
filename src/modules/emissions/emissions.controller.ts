@@ -267,6 +267,8 @@ export class EmissionsController {
     description:
       'Registra la emisión de la póliza y genera recibo. ' +
       'Devuelve `cnpoliza`, `cnrecibo`, `fanopol`, `fmespol` y URL del PDF.\n\n' +
+      'Si el plan emite el RCV aparte (p. ej. LARA), `poliza_rcv` trae la segunda póliza con su propio `cnrecibo`, ' +
+      'que se cobra por separado.\n\n' +
       '**Siguiente paso:** `POST /external/collection/activate` con el `cnrecibo` y datos del pago.',
     operationId: 'rcvCreateEmissionAuto',
   })
