@@ -7,7 +7,11 @@ import {
   IsNumber,
   IsOptional,
   IsString,
+  Matches,
+  MaxLength,
 } from 'class-validator';
+import { Transform } from 'class-transformer';
+import { CID_PASAPORTE_MSG, CID_PASAPORTE_RE, blankToUndefined } from '../personas-identidad.rules';
 
 /**
  * Payload de emisión de póliza de personas (ramo 9 = Funerario).
@@ -65,11 +69,14 @@ export class CreateEmissionPersonDto {
   @ApiPropertyOptional({ example: 'V' }) @IsOptional() @IsString() @IsNotEmpty() tipo_cedula_tomador?: string;
   @ApiPropertyOptional({ example: 'V' }) @IsOptional() @IsString() @IsNotEmpty() cedula_tomador?: string;
   @ApiProperty({ example: 25221952 }) @IsNotEmpty() rif_tomador: number | string;
+  @ApiPropertyOptional({ example: 'P-EM2849387', description: 'Pasaporte alfanumérico completo (maclient.cid); rif_tomador = solo los dígitos.' })
+  @Transform(blankToUndefined) @IsOptional() @IsString() @MaxLength(15) @Matches(CID_PASAPORTE_RE, { message: `cid_tomador: ${CID_PASAPORTE_MSG}` })
+  cid_tomador?: string;
   @ApiPropertyOptional({ example: 'JUAN' }) @IsOptional() @IsString() nombre_tomador?: string;
   @ApiPropertyOptional({ example: 'PEREZ' }) @IsOptional() @IsString() apellido_tomador?: string;
-  @ApiPropertyOptional({ example: 'M' }) @IsOptional() @IsString() sexo_tomador?: string;
-  @ApiPropertyOptional({ example: 'S' }) @IsOptional() @IsString() estado_civil_tomador?: string;
-  @ApiPropertyOptional({ example: '1990-01-01' }) @IsOptional() @IsDateString() fnac_tomador?: string;
+  @ApiPropertyOptional({ example: 'M' }) @Transform(blankToUndefined) @IsOptional() @IsString() sexo_tomador?: string;
+  @ApiPropertyOptional({ example: 'S' }) @Transform(blankToUndefined) @IsOptional() @IsString() estado_civil_tomador?: string;
+  @ApiPropertyOptional({ example: '1990-01-01' }) @Transform(blankToUndefined) @IsOptional() @IsDateString() fnac_tomador?: string;
   @ApiPropertyOptional({ example: 1 }) @IsOptional() estado_tomador?: number | string;
   @ApiPropertyOptional({ example: 128 }) @IsOptional() ciudad_tomador?: number | string;
   @ApiPropertyOptional({ example: 'Av. Principal' }) @IsOptional() @IsString() direccion_tomador?: string;
@@ -80,11 +87,14 @@ export class CreateEmissionPersonDto {
   @ApiPropertyOptional({ example: 'V' }) @IsOptional() @IsString() @IsNotEmpty() tipo_cedula_titular?: string;
   @ApiPropertyOptional({ example: 'V' }) @IsOptional() @IsString() @IsNotEmpty() cedula_titular?: string;
   @ApiProperty({ example: 25221952 }) @IsNotEmpty() rif_titular: number | string;
+  @ApiPropertyOptional({ example: 'P-EM2849387', description: 'Pasaporte alfanumérico completo (maclient.cid); rif_titular = solo los dígitos.' })
+  @Transform(blankToUndefined) @IsOptional() @IsString() @MaxLength(15) @Matches(CID_PASAPORTE_RE, { message: `cid_titular: ${CID_PASAPORTE_MSG}` })
+  cid_titular?: string;
   @ApiPropertyOptional({ example: 'JUAN' }) @IsOptional() @IsString() nombre_titular?: string;
   @ApiPropertyOptional({ example: 'PEREZ' }) @IsOptional() @IsString() apellido_titular?: string;
-  @ApiPropertyOptional({ example: 'M' }) @IsOptional() @IsString() sexo_titular?: string;
-  @ApiPropertyOptional({ example: 'S' }) @IsOptional() @IsString() estado_civil_titular?: string;
-  @ApiPropertyOptional({ example: '1990-01-01' }) @IsOptional() @IsDateString() fnac_titular?: string;
+  @ApiPropertyOptional({ example: 'M' }) @Transform(blankToUndefined) @IsOptional() @IsString() sexo_titular?: string;
+  @ApiPropertyOptional({ example: 'S' }) @Transform(blankToUndefined) @IsOptional() @IsString() estado_civil_titular?: string;
+  @ApiPropertyOptional({ example: '1990-01-01' }) @Transform(blankToUndefined) @IsOptional() @IsDateString() fnac_titular?: string;
   @ApiPropertyOptional({ example: 1 }) @IsOptional() estado_titular?: number | string;
   @ApiPropertyOptional({ example: 128 }) @IsOptional() ciudad_titular?: number | string;
   @ApiPropertyOptional({ example: 'Av. Principal' }) @IsOptional() @IsString() direccion_titular?: string;
