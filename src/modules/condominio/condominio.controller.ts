@@ -5,7 +5,12 @@ import { GetPlanesCondominioDto } from './dto/get-planes-condominio.dto';
 import { CotizacionCondominioDto } from './dto/cotizacion-condominio.dto';
 import { CreateEmissionCondominioDto } from './dto/create-emission-condominio.dto';
 import { GetByRamoDto } from './dto/get-by-ramo.dto';
-import { GetTarificadorDto, UpdateTarificadorFrecuenciaDto, UpdateTarificadorTasaDto } from './dto/tarificador.dto';
+import {
+  GetTarificadorDto,
+  UpdateTarificadorAntiguedadDto,
+  UpdateTarificadorFrecuenciaDto,
+  UpdateTarificadorTasaDto,
+} from './dto/tarificador.dto';
 import { NestProtected } from '../auth/decorators/nest-protected.decorator';
 import { NestApiKey } from '../auth/decorators/nest-api-key.decorator';
 import { NEST_AUTH_SCOPES } from '../auth/scopes/nest-auth-scopes.constants';
@@ -450,6 +455,27 @@ export class CondominioController {
   })
   async updateTarificadorFrecuencia(@Body() dto: UpdateTarificadorFrecuenciaDto) {
     const data = await this.condominioService.updateTarificadorFrecuencia(dto);
+    return { status: true, data };
+  }
+
+  @Get('tarificador/antiguedad')
+  @ApiOperation({
+    summary: 'Tasas de Condominio por antigüedad y uso, y su reparto por cobertura',
+    description: 'Tasa global por tramo de antigüedad y uso del edificio, y cómo se reparte entre las coberturas (partes fijas y porcentajes del resto).',
+  })
+  async getTarificadorAntiguedad() {
+    const data = await this.condominioService.getTarificadorAntiguedad(16);
+    return { status: true, data };
+  }
+
+  @Put('tarificador/antiguedad')
+  @NestProtected(NEST_AUTH_SCOPES.TARIFAS_CONDOMINIO)
+  @ApiOperation({
+    summary: 'Guardar las tasas por antigüedad y el reparto de Condominio',
+    description: 'Reemplaza las 8 tasas (uso × tramo) y el reparto por cobertura; registra el usuario en cusuariomod. Requiere el scope tarifas:condominio.',
+  })
+  async updateTarificadorAntiguedad(@Body() dto: UpdateTarificadorAntiguedadDto) {
+    const data = await this.condominioService.updateTarificadorAntiguedad(dto);
     return { status: true, data };
   }
 }

@@ -33,6 +33,15 @@ import {
   isViajeroPlan,
   isViajeroProrrataPlan,
 } from './viajero-emission.rules';
+import {
+  MSG_PASAPORTE_CHOQUE,
+  PasaporteAlfanumerico,
+  aplicarPasaportesAlfanumericos,
+  assertIdentidadesPersonas,
+  blankToNull,
+  cidPasaporte,
+  pasaporteSinChoque,
+} from './personas-identidad.rules';
 
 class Mutex {
   private queue: Array<(release: () => void) => void> = [];
@@ -708,8 +717,11 @@ export class PersonasService {
         });
         for (const row of raw ?? []) {
           const mapped = this.mapCanalPlanToPer(row as Record<string, unknown>, null);
-          if (!mapped || seen.has(mapped.cplan)) continue;
-          seen.add(mapped.cplan);
+          // Ramo + plan, como spBuscaPlanProducto: el mismo código existe en varios ramos
+          // (producto 76: plan 1 de Vida Individual y plan 1 de Masivo Vida Temporal).
+          const planKey = mapped ? `${mapped.cramo}|${mapped.cplan}` : '';
+          if (!mapped || seen.has(planKey)) continue;
+          seen.add(planKey);
           planes.push(mapped);
         }
       } catch (err) {
@@ -731,10 +743,11 @@ export class PersonasService {
     const ramos = [...new Set(planes.map((p) => p.cramo).filter((n) => Number.isFinite(n)))];
     for (const ramo of ramos) {
       const byRamo = await this.loadNmaxDepByPlan(ramo);
-      byRamo.forEach((value, key) => limits.set(key, value));
+      byRamo.forEach((value, key) => limits.set(`${ramo}|${key}`, value));
     }
     return planes.map((p) => {
-      const nmax = limits.has(p.cplan) ? limits.get(p.cplan) ?? null : (p.nmax_dep ?? null);
+      const key = `${p.cramo}|${p.cplan}`;
+      const nmax = limits.has(key) ? limits.get(key) ?? null : (p.nmax_dep ?? null);
       const maxAsegurados = nmax == null ? undefined : Math.max(1, 1 + nmax);
       return { ...p, nmax_dep: nmax, maxAsegurados };
     });
@@ -1148,8 +1161,88 @@ export class PersonasService {
     }
   }
 
+  // ── Pasaporte alfanumérico (titular/tomador) ───────────────────────────────
+
+  /**
+   * 400 si el pasaporte choca con otro cliente de Sis2000: OK si no hay filas, o una sola con el
+   * mismo cci_rif y cid igual (o vacío/'0'). maclient.cci_rif es la clave real; cid es único.
+   */
+  async assertPasaporteSinChoque(cid: string, digitos: number): Promise<void> {
+    const T = this.db.types;
+    const req = this.db.request();
+    req.input('dig', T.Numeric(13, 0), digitos);
+    req.input('cid', T.VarChar(30), cid);
+    const r = await req.query(
+      'SELECT cci_rif, RTRIM(cid) AS cid FROM maclient WHERE cci_rif = @dig OR RTRIM(cid) = @cid',
+    );
+    const rows = (r.recordset ?? []) as { cci_rif: unknown; cid: unknown }[];
+    if (!pasaporteSinChoque(rows, cid, digitos)) {
+      this.logger.warn(
+        `Pasaporte ${cid} (${digitos}) choca en maclient: ${JSON.stringify(rows.slice(0, 3))}`,
+      );
+      throw new BadRequestException(MSG_PASAPORTE_CHOQUE);
+    }
+  }
+
+  /** Titular y tomador con el mismo pasaporte se revisan/crean una sola vez. */
+  private pasaportesUnicos(lista: PasaporteAlfanumerico[]): PasaporteAlfanumerico[] {
+    const vistos = new Set<string>();
+    return lista.filter((p) => (vistos.has(p.cid) ? false : (vistos.add(p.cid), true)));
+  }
+
+  /**
+   * Crea/actualiza el cliente en Sis2000 con cid = pasaporte completo antes de emitir (como SysIP).
+   * Luego el SP de emisión llama a sp_create_maclient_nexus con @cid NULL: el cliente ya existe por
+   * cci_rif y su cid no se reemplaza.
+   */
+  private async crearClientePasaporte(
+    b: Record<string, unknown>,
+    p: PasaporteAlfanumerico,
+    canal: Record<string, unknown>,
+  ): Promise<void> {
+    const T = this.db.types;
+    const rol = p.rol;
+    const txt = (v: unknown, max: number): string | null => {
+      const s = v == null ? '' : String(v).trim();
+      return s ? s.slice(0, max) : null;
+    };
+    const nombre = txt(b[`nombre_${rol}`], 120);
+    const apellido = txt(b[`apellido_${rol}`], 120);
+    const tel = b[`telefono_${rol}`] != null ? String(b[`telefono_${rol}`]).replace(/\D/g, '').slice(0, 20) : '';
+    const req = this.db.request();
+    req.input('icedula', T.Char(1), 'P');
+    req.input('cci_rif', T.Numeric(13, 0), p.digitos);
+    req.input('xnombre', T.VarChar(120), nombre);
+    req.input('xapellido', T.VarChar(120), apellido);
+    req.input('xcliente', T.VarChar(250), txt([nombre, apellido].filter(Boolean).join(' '), 250));
+    req.input('isexo', T.Char(1), blankToNull(b[`sexo_${rol}`]));
+    req.input('iestado_civil', T.Char(1), blankToNull(b[`estado_civil_${rol}`]));
+    req.input('fnac', T.DateTime, blankToNull(b[`fnac_${rol}`]));
+    req.input('xcorreo', T.VarChar(100), txt(b[`correo_${rol}`], 100));
+    req.input('cpais', T.SmallInt, 58);
+    req.input('cestado', T.SmallInt, this.intField(b[`estado_${rol}`]));
+    req.input('cciudad', T.SmallInt, this.intField(b[`ciudad_${rol}`]));
+    req.input('xdireccion', T.VarChar(250), txt(b[`direccion_${rol}`], 250));
+    req.input('czonapos', T.VarChar(10), null);
+    req.input('xtelefono', T.VarChar(20), tel || null);
+    req.input('ifuente', T.VarChar(10), String(canal['ifuente_api'] ?? canal['ifuente'] ?? 'API').slice(0, 10));
+    req.input('cid', T.VarChar(15), p.cid);
+    this.logger.log(`createEmissionPerson: sp_create_maclient_nexus pasaporte ${p.cid} cci_rif=${p.digitos} (${rol})`);
+    try {
+      await req.execute('sp_create_maclient_nexus');
+    } catch (err) {
+      const msg = parseSPError(err);
+      this.logger.error(`sp_create_maclient_nexus pasaporte ${p.cid}: ${msg}`);
+      throw new BadRequestException(/cid|99002|duplicate/i.test(msg) ? MSG_PASAPORTE_CHOQUE : msg);
+    }
+  }
+
   // ── Validación de persona (speeValidatePersonGeneral) ──────────────────────
   async validateEmissionPerson(body: Record<string, unknown>) {
+    // Pasaporte alfanumérico de titular/tomador: rif_* = dígitos y revisión de choque ANTES de pagar.
+    for (const p of this.pasaportesUnicos(aplicarPasaportesAlfanumericos(body))) {
+      await this.assertPasaporteSinChoque(p.cid, p.digitos);
+    }
     const req = this.db.request();
     const T = this.db.types;
     const femision =
@@ -1301,6 +1394,26 @@ export class PersonasService {
         beneficiarios,
       );
       assertViajeLocalEmission(
+        b,
+        asegurados as Record<string, unknown>[],
+        beneficiarios,
+      );
+      // Pasaporte alfanumérico SOLO titular/tomador (cid_*): rif_* pasa a los dígitos.
+      const pasaportes = this.pasaportesUnicos(aplicarPasaportesAlfanumericos(b));
+      // El titular repetido como asegurado (parentesco 1) con su pasaporte completo → mismos dígitos.
+      const cidTitular = b['cid_titular'] as string | undefined;
+      if (cidTitular) {
+        for (const a of asegurados as Record<string, unknown>[]) {
+          const id = a?.['xrif_asegurado'] ?? a?.['identificacion'];
+          if (typeof id === 'string' && /[A-Za-z]/.test(id) && cidPasaporte(id) === cidTitular) {
+            a['xrif_asegurado'] = b['rif_titular'];
+            if ('identificacion' in a) a['identificacion'] = b['rif_titular'];
+          }
+        }
+      }
+      // Tomador J/G/C permitido; titular/asegurados/beneficiarios solo persona natural.
+      // Identificación alfanumérica → 400, salvo pasaporte de titular/tomador con cid_*.
+      assertIdentidadesPersonas(
         b,
         asegurados as Record<string, unknown>[],
         beneficiarios,
@@ -1477,6 +1590,12 @@ export class PersonasService {
         }
 
         // Emisión local vía SP de producción (SysIP fb_organizacion_swagger / main actual).
+        // Pasaporte alfanumérico: revisar choque otra vez y crear el cliente con cid completo.
+        for (const p of pasaportes) {
+          await this.assertPasaporteSinChoque(p.cid, p.digitos);
+          await this.crearClientePasaporte(b, p, canal);
+        }
+
         const preEmisionSp = SP_PRE_EMISION_PERSONAS;
         this.logger.log(`=== INICIO EMISION LOCAL SP ${preEmisionSp} ===`);
 
@@ -1492,9 +1611,9 @@ export class PersonasService {
           xrif_tomador: { type: T.Numeric(11, 0), value: this.intField(b['rif_tomador']) },
           xnombre_tomador: { type: T.NVarChar(250), value: b['nombre_tomador'] ?? null },
           xapellido_tomador: { type: T.NVarChar(250), value: b['apellido_tomador'] ?? null },
-          isexo_tomador: { type: T.Char(1), value: b['sexo_tomador'] ?? null },
-          iestado_civil_tomador: { type: T.Char(1), value: b['estado_civil_tomador'] ?? null },
-          fnac_tomador: { type: T.Date, value: b['fnac_tomador'] ?? null },
+          isexo_tomador: { type: T.Char(1), value: blankToNull(b['sexo_tomador']) },
+          iestado_civil_tomador: { type: T.Char(1), value: blankToNull(b['estado_civil_tomador']) },
+          fnac_tomador: { type: T.Date, value: blankToNull(b['fnac_tomador']) },
           cestado_tomador: { type: T.SmallInt, value: this.intField(b['estado_tomador']) },
           cciudad_tomador: { type: T.SmallInt, value: this.intField(b['ciudad_tomador']) },
           xdireccion_tomador: { type: T.NVarChar(1000), value: b['direccion_tomador'] ?? null },
@@ -1507,9 +1626,9 @@ export class PersonasService {
           xrif_titular: { type: T.Numeric(11, 0), value: this.intField(b['rif_titular']) },
           xnombre_titular: { type: T.NVarChar(250), value: b['nombre_titular'] ?? null },
           xapellido_titular: { type: T.NVarChar(250), value: b['apellido_titular'] ?? null },
-          isexo_titular: { type: T.Char(1), value: b['sexo_titular'] ?? null },
-          iestado_civil_titular: { type: T.Char(1), value: b['estado_civil_titular'] ?? null },
-          fnac_titular: { type: T.DateTime, value: b['fnac_titular'] ?? null },
+          isexo_titular: { type: T.Char(1), value: blankToNull(b['sexo_titular']) },
+          iestado_civil_titular: { type: T.Char(1), value: blankToNull(b['estado_civil_titular']) },
+          fnac_titular: { type: T.DateTime, value: blankToNull(b['fnac_titular']) },
           cestado_titular: { type: T.SmallInt, value: this.intField(b['estado_titular']) },
           cciudad_titular: { type: T.SmallInt, value: this.intField(b['ciudad_titular']) },
           xdireccion_titular: { type: T.NVarChar(1000), value: b['direccion_titular'] ?? null },

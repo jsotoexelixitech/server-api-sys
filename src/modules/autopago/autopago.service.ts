@@ -32,7 +32,10 @@ export interface SkuInfo {
   xproducto: string | null;
   xplan: string | null;
   tipo_formulario: string;
+  /** Precio del plan (prima en la moneda del plan). */
   mmonto: number | null;
+  /** Moneda del plan en Sis2000 (`maplanes` / `maplanes_per`); `$` si no se conoce. La conversión a Bs la hace el integrador (TCR). */
+  cmoneda: string;
   origen: 'taprodsku' | 'env';
 }
 
@@ -43,7 +46,7 @@ export interface CanalCtx {
 
 type SkuEnvMap = Record<
   string,
-  { cproducto?: string; cramo?: number; cplan?: string; xproducto?: string; xplan?: string; tipo_formulario?: string; mmonto?: number }
+  { cproducto?: string; cramo?: number; cplan?: string; xproducto?: string; xplan?: string; tipo_formulario?: string; mmonto?: number; cmoneda?: string }
 >;
 
 function tipoFormularioDeRamo(cramo: number | null, explicito?: string | null): string {
@@ -132,6 +135,7 @@ export class AutopagoService {
       xplan: entry.xplan ?? null,
       tipo_formulario: tipoFormularioDeRamo(cramo, entry.tipo_formulario),
       mmonto: entry.mmonto != null && Number.isFinite(Number(entry.mmonto)) ? Number(entry.mmonto) : null,
+      cmoneda: String(entry.cmoneda ?? '$').trim() || '$',
       origen: 'env',
     };
   }
@@ -154,7 +158,13 @@ export class AutopagoService {
                  WHERE p.cramo = s.cramo AND RTRIM(p.cplan) = RTRIM(s.cplan)),
                (SELECT TOP 1 RTRIM(pp.xplan) FROM maplanes_per pp WITH (NOLOCK)
                  WHERE pp.cramo = s.cramo AND RTRIM(pp.cplan) = RTRIM(s.cplan))
-             ) AS xplan
+             ) AS xplan,
+             COALESCE(
+               (SELECT TOP 1 RTRIM(p.cmoneda) FROM maplanes p WITH (NOLOCK)
+                 WHERE p.cramo = s.cramo AND RTRIM(p.cplan) = RTRIM(s.cplan)),
+               (SELECT TOP 1 RTRIM(pp.cmoneda) FROM maplanes_per pp WITH (NOLOCK)
+                 WHERE pp.cramo = s.cramo AND RTRIM(pp.cplan) = RTRIM(s.cplan))
+             ) AS cmoneda
       FROM taprodsku s WITH (NOLOCK)
       WHERE (@ccanalalt IS NULL OR s.ccanalalt = @ccanalalt)
         ${csku != null ? 'AND s.csku = @csku' : ''}
@@ -174,6 +184,7 @@ export class AutopagoService {
         xplan: r.xplan != null ? String(r.xplan) : (extra?.xplan ?? null),
         tipo_formulario: tipoFormularioDeRamo(cramo, extra?.tipo_formulario),
         mmonto: extra?.mmonto != null && Number.isFinite(Number(extra.mmonto)) ? Number(extra.mmonto) : null,
+        cmoneda: String(r.cmoneda ?? extra?.cmoneda ?? '$').trim() || '$',
         origen: 'taprodsku' as const,
       };
     });

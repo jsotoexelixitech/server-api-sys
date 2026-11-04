@@ -26,6 +26,7 @@ import { Public } from '../auth/decorators/public.decorator';
 import { NEST_AUTH_SCOPES } from '../auth/scopes/nest-auth-scopes.constants';
 import { AutopagoService } from './autopago.service';
 import { MarcarEmitidaDto } from './dto/marcar-emitida.dto';
+import { monedaIso } from './moneda-iso';
 import { RegistrarVentaDto } from './dto/registrar-venta.dto';
 
 @ApiTags(SWAGGER_TAGS.AUTOPAGO)
@@ -40,7 +41,9 @@ export class AutopagoController {
     summary: 'API 1 · Catálogo de productos (SKU) del canal',
     description:
       'SKU comerciales habilitados para el canal de la API key (Sis2000 `taprodsku` → producto, ramo y plan). ' +
-      'El POS solo necesita el `csku`; la homologación a ramo/plan la hace La Mundial.',
+      'El POS solo necesita el `csku`; la homologación a ramo/plan la hace La Mundial. ' +
+      '`mmonto` = precio en la moneda del plan indicada en `cmoneda` (ISO 4217: `USD` o `EUR`); ' +
+      'la conversión a Bs la hace el integrador (TCR). La API no convierte montos.',
     operationId: 'autopagoProductos',
   })
   @ApiQuery({ name: 'ccanalalt', required: false, description: 'Solo pruebas: canal si la API key no tiene uno.' })
@@ -52,7 +55,10 @@ export class AutopagoController {
         data: {
           ccanalalt: 8,
           productos: [
-            { csku: '12444564', cproducto: '23', cramo: 18, cplan: 'FARMPA', xproducto: 'RCV Particular', xplan: 'Plan Farmatodo', tipo_formulario: 'rcv', mmonto: null },
+            {
+              csku: '12444564', cproducto: '23', cramo: 18, cplan: 'FARMPA', xproducto: 'RCV Particular', xplan: 'Plan Farmatodo',
+              tipo_formulario: 'rcv', mmonto: 33, cmoneda: 'USD',
+            },
           ],
         },
       },
@@ -61,7 +67,10 @@ export class AutopagoController {
   @ApiCommonErrors()
   async productos(@NestApiKey() apikey: string, @Query('ccanalalt') ccanalalt?: string) {
     const canal = await this.autopago.resolveCanal(apikey, ccanalalt ? Number(ccanalalt) : null);
-    const productos = await this.autopago.listarProductos(canal.ccanalalt);
+    const productos = (await this.autopago.listarProductos(canal.ccanalalt)).map((p) => ({
+      ...p,
+      cmoneda: monedaIso(p.cmoneda),
+    }));
     return { status: true, data: { ccanalalt: canal.ccanalalt, cantidad: productos.length, productos } };
   }
 

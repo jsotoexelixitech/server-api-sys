@@ -1,6 +1,6 @@
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
 import { Type } from 'class-transformer';
-import { ArrayMinSize, IsArray, IsNotEmpty, IsNumber, IsOptional, IsString, MaxLength, Min, ValidateNested } from 'class-validator';
+import { ArrayMinSize, IsArray, IsIn, IsInt, IsNotEmpty, IsNumber, IsOptional, IsString, Max, MaxLength, Min, ValidateNested } from 'class-validator';
 
 /** Una cobertura ya calculada (valores ANUALES; el Core los reparte entre las cuotas al emitir). */
 export class CotizacionCoberturaDto {
@@ -54,6 +54,19 @@ export class CotizacionCoberturaDto {
   comision?: number;
 }
 
+/** Datos del edificio con los que se eligió la tasa global de Condominio (ramo 16). */
+export class TarifaAntiguedadDto {
+  @ApiProperty({ example: 1985, description: 'Año de construcción del edificio.' })
+  @IsInt()
+  @Min(1800)
+  @Max(2100)
+  anio_construccion: number;
+
+  @ApiProperty({ example: 'R', enum: ['R', 'C'], description: 'R = Residencial, C = Comercial, oficinas y centros comerciales.' })
+  @IsIn(['R', 'C'])
+  iuso: string;
+}
+
 /**
  * Cotización calculada por el producto (Condominio u Hogar) con el tarificador.
  * Si se envía en la emisión, el Core NO recalcula: valida que cuadre con sus tarifas y emite estos valores.
@@ -80,6 +93,12 @@ export class CotizacionPreestablecidaDto {
   @IsNumber({ maxDecimalPlaces: 6 })
   @Min(0)
   recargo_pct?: number;
+
+  @ApiPropertyOptional({ type: TarifaAntiguedadDto, description: 'Condominio: año y uso con los que se calculó la tasa global.' })
+  @IsOptional()
+  @ValidateNested()
+  @Type(() => TarifaAntiguedadDto)
+  tarifa_antiguedad?: TarifaAntiguedadDto;
 
   @ApiProperty({ type: [CotizacionCoberturaDto] })
   @IsArray()

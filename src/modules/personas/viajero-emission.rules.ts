@@ -220,7 +220,12 @@ export function assertViajeroEmission(
     ['correo_titular', 'correo del titular/asegurado'],
   ];
 
+  // Tomador jurídico (J/G/C): razón social sin apellido ni fecha de nacimiento.
+  const tomadorJuridico = ['J', 'G', 'C'].includes(
+    String(body['tipo_cedula_tomador'] ?? '').trim().charAt(0).toUpperCase(),
+  );
   for (const [key, label] of tomadorFields) {
+    if (tomadorJuridico && (key === 'apellido_tomador' || key === 'fnac_tomador')) continue;
     requireNonEmpty(body[key], label);
   }
   for (const [key, label] of titularFields) {
