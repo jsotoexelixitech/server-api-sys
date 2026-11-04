@@ -4,7 +4,8 @@
 -- La tasa global incluye terremoto. Reparto de la tasa global entre las coberturas:
 --   itipo 'F' = parte fija de la tasa (terremoto 0,12), no depende de la antigüedad.
 --   itipo 'P' = porcentaje de lo que queda tras restar las partes fijas (Básica y RC; deben sumar 100).
--- Los porcentajes 'P' los configura Técnica en el panel: hasta entonces Condominio no cotiza con esta tarifa.
+-- Porcentajes 'P' por defecto: Básica 80 y RC General 20 (el Excel no los define; 20 % es el límite de RC sobre la suma).
+-- Son provisionales: Técnica los ajusta en el panel. Solo se cargan si aún no hay ninguno.
 --
 -- Tasas en porcentaje, igual que matarifa_d.pprima (0,25125 = 0,25125 %).
 -- Tramos (itramo): 1 = 1967 o antes · 2 = 1968-1993 · 3 = 1994-2018 · 4 = 2019 en adelante.
@@ -67,6 +68,16 @@ WHERE d.cramo = 16
   AND d.fdesde <= GETDATE()
   AND (d.fhasta IS NULL OR d.fhasta >= GETDATE())
   AND NOT EXISTS (SELECT 1 FROM dbo.MATARIFA_REPARTO_NEXUS r WHERE r.cramo = 16 AND r.itipo = 'F');
+
+INSERT INTO dbo.MATARIFA_REPARTO_NEXUS (cramo, ccober, ctarifa, itipo, pvalor, fultmod)
+SELECT 16, RTRIM(d.ccober), RTRIM(d.ctarifa), 'P', CASE WHEN RTRIM(d.ccober) = '1' THEN 80 ELSE 20 END, GETDATE()
+FROM dbo.matarifa_d d
+WHERE d.cramo = 16
+  AND RTRIM(d.ccober) IN ('1', '19')
+  AND d.iestado = 'V'
+  AND d.fdesde <= GETDATE()
+  AND (d.fhasta IS NULL OR d.fhasta >= GETDATE())
+  AND NOT EXISTS (SELECT 1 FROM dbo.MATARIFA_REPARTO_NEXUS r WHERE r.cramo = 16 AND r.itipo = 'P');
 
 SELECT 'tasas' AS tabla, iuso, itramo, pprima FROM dbo.MATARIFA_ANTIGUEDAD_NEXUS WHERE cramo = 16 ORDER BY iuso DESC, itramo;
 SELECT 'reparto' AS tabla, ccober, ctarifa, itipo, pvalor FROM dbo.MATARIFA_REPARTO_NEXUS WHERE cramo = 16;
