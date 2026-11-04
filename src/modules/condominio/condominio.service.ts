@@ -7,6 +7,7 @@ import { CreateEmissionCondominioDto } from './dto/create-emission-condominio.dt
 import {
   FRECUENCIAS_CONFIGURABLES,
   GetTarificadorDto,
+  UpdateTarificadorAntiguedadDto,
   UpdateTarificadorFrecuenciaDto,
   UpdateTarificadorTasaDto,
 } from './dto/tarificador.dto';
@@ -555,6 +556,7 @@ export class CondominioService {
 
     const tasas = await this.getTarificadorTasas({ cramo } as GetTarificadorDto);
     const porCob = new Map(tasas.tasas.map((t) => [`${t.ccober}|${t.ctarifa}`, t]));
+    const partes = await this.partesPorAntiguedad(cramo, cot, errors);
 
     const descRes = dispositivos.length
       ? await this.db.request().input('cramo', T.Int, cramo)
@@ -579,7 +581,9 @@ export class CondominioService {
         continue;
       }
       if (c.ccober.trim() === '1') sumaBasica = c.suma_asegurada;
-      const bruta = (c.suma_asegurada * t.pprima) / 100;
+      // Condominio: las coberturas del reparto cobran su parte de la tasa global sobre la suma asegurada de la póliza.
+      const parte = partes.get(key);
+      const bruta = parte != null ? (cot.suma_asegurada * parte) / 100 : (c.suma_asegurada * t.pprima) / 100;
       const desc = (c.prima_bruta * descPct) / 100;
       const rec = (c.prima_bruta * recPct) / 100;
       if (!near(c.prima_bruta, bruta)) errors.push(`Cobertura ${key}: prima bruta ${c.prima_bruta} no coincide con suma × tasa (${bruta.toFixed(2)}).`);
@@ -590,6 +594,11 @@ export class CondominioService {
       if (!near(c.pcomision ?? 0, pcom)) errors.push(`Cobertura ${key}: pcomision ${c.pcomision ?? 0} no coincide con el Core (${pcom}).`);
       if (!near(c.comision ?? 0, (c.prima * pcom) / 100)) errors.push(`Cobertura ${key}: comisión no cuadra con prima × pcomision.`);
       sumaPrimas += c.prima;
+    }
+    for (const key of partes.keys()) {
+      if (!cot.coberturas.some((c) => `${c.ccober.trim()}|${c.ctarifa.trim()}` === key)) {
+        errors.push(`La cotización debe incluir la cobertura ${key} del reparto de la tasa global.`);
+      }
     }
     if (sumaBasica === null) errors.push('La cotización debe incluir la cobertura básica (ccober 1).');
     else if (!near(sumaBasica, cot.suma_asegurada)) errors.push('La suma asegurada de la cobertura básica no coincide con suma_asegurada.');
@@ -851,5 +860,171 @@ export class CondominioService {
       `tarificador frecuencia: ramo=${dto.cramo} plan=${plan} ${codigo} ${antes ? 'V' : 'N'} -> ${estado} usuario=${dto.cusuario} (${dto.xusuario ?? 's/n'})`,
     );
     return { before: { habilitada: antes }, after: { habilitada: dto.habilitada, cusuariomod: dto.cusuario } };
+  }
+
+  private static readonly TRAMOS_ANTIGUEDAD = [
+    { itramo: 1, etiqueta: '1967 o antes', desde: null, hasta: 1967 },
+    { itramo: 2, etiqueta: '1968 - 1993', desde: 1968, hasta: 1993 },
+    { itramo: 3, etiqueta: '1994 - 2018', desde: 1994, hasta: 2018 },
+    { itramo: 4, etiqueta: '2019 en adelante', desde: 2019, hasta: null },
+  ];
+
+  private tramoPorAnio(anio: number): number {
+    if (anio <= 1967) return 1;
+    if (anio <= 1993) return 2;
+    if (anio <= 2018) return 3;
+    return 4;
+  }
+
+  /**
+   * Tasas de Condominio por antigüedad y uso, y su reparto por cobertura. El reparto queda listo cuando los
+   * porcentajes (itipo P) suman 100. Si las tablas aún no existen responde disponible = false.
+   */
+  async getTarificadorAntiguedad(cramo = 16) {
+    const T = this.db.types;
+    const existe = await this.db.request().query(
+      `SELECT OBJECT_ID('dbo.MATARIFA_ANTIGUEDAD_NEXUS', 'U') AS tasas, OBJECT_ID('dbo.MATARIFA_REPARTO_NEXUS', 'U') AS reparto`,
+    );
+    const base = { cramo, tramos: CondominioService.TRAMOS_ANTIGUEDAD };
+    if (!existe.recordset[0]?.tasas || !existe.recordset[0]?.reparto) {
+      return { ...base, disponible: false, configurado: false, tasas: [], reparto: [] };
+    }
+    const tasas = await this.db
+      .request()
+      .input('cramo', T.Int, cramo)
+      .query(`SELECT iuso, itramo, pprima, fultmod, cusuariomod FROM dbo.MATARIFA_ANTIGUEDAD_NEXUS WHERE cramo = @cramo`);
+    const reparto = await this.db
+      .request()
+      .input('cramo', T.Int, cramo)
+      .query(`
+        SELECT RTRIM(r.ccober) AS ccober, RTRIM(r.ctarifa) AS ctarifa, RTRIM(c.xdescripcion_l) AS xcobertura,
+               r.itipo, r.pvalor, r.fultmod, r.cusuariomod
+        FROM dbo.MATARIFA_REPARTO_NEXUS r
+        LEFT JOIN macoberturas c ON c.cramo = r.cramo AND RTRIM(c.ccobertura) = RTRIM(r.ccober)
+        WHERE r.cramo = @cramo
+        ORDER BY CASE WHEN r.itipo = 'F' THEN 1 ELSE 0 END, TRY_CAST(RTRIM(r.ccober) AS INT)
+      `);
+    const filas = (reparto.recordset as any[]).map((r) => ({
+      ccober: r.ccober,
+      ctarifa: r.ctarifa,
+      xcobertura: r.xcobertura ?? null,
+      itipo: String(r.itipo).trim(),
+      pvalor: Number(r.pvalor),
+      fultmod: r.fultmod,
+      cusuariomod: r.cusuariomod == null ? null : Number(r.cusuariomod),
+    }));
+    const lista = (tasas.recordset as any[]).map((t) => ({
+      iuso: String(t.iuso).trim(),
+      itramo: Number(t.itramo),
+      pprima: Number(t.pprima),
+      fultmod: t.fultmod,
+      cusuariomod: t.cusuariomod == null ? null : Number(t.cusuariomod),
+    }));
+    const sumaPct = filas.filter((r) => r.itipo === 'P').reduce((acc, r) => acc + r.pvalor, 0);
+    return {
+      ...base,
+      disponible: true,
+      configurado: lista.length === 8 && Math.abs(sumaPct - 100) < 0.0001,
+      tasas: lista,
+      reparto: filas,
+    };
+  }
+
+  /** Reemplaza las tasas por antigüedad y el reparto por cobertura de Condominio, en una sola transacción. */
+  async updateTarificadorAntiguedad(dto: UpdateTarificadorAntiguedadDto) {
+    const claves = new Set(dto.tasas.map((t) => `${t.iuso}|${t.itramo}`));
+    if (claves.size !== 8 || dto.tasas.length !== 8) {
+      throw new BadRequestException('Envía una tasa por cada uso y tramo de antigüedad (8 en total).');
+    }
+    const repetidas = new Set(dto.reparto.map((r) => `${r.ccober.trim()}|${r.ctarifa.trim()}`));
+    if (repetidas.size !== dto.reparto.length) {
+      throw new BadRequestException('Cada cobertura solo puede aparecer una vez en el reparto.');
+    }
+    const fijas = dto.reparto.filter((r) => r.itipo === 'F').reduce((acc, r) => acc + r.pvalor, 0);
+    const pct = dto.reparto.filter((r) => r.itipo === 'P').reduce((acc, r) => acc + r.pvalor, 0);
+    if (dto.reparto.some((r) => r.itipo === 'P') && Math.abs(pct - 100) >= 0.0001) {
+      throw new BadRequestException(`Los porcentajes del reparto deben sumar 100 (suman ${pct}).`);
+    }
+    const minima = Math.min(...dto.tasas.map((t) => t.pprima));
+    if (fijas >= minima) {
+      throw new BadRequestException(`La parte fija (${fijas}) debe ser menor que la tasa global más baja (${minima}).`);
+    }
+    const vigentes = await this.getTarificadorTasas({ cramo: dto.cramo } as GetTarificadorDto);
+    const enCore = new Set(vigentes.tasas.map((t) => `${t.ccober}|${t.ctarifa}`));
+    const faltan = dto.reparto.filter((r) => !enCore.has(`${r.ccober.trim()}|${r.ctarifa.trim()}`));
+    if (faltan.length) {
+      throw new BadRequestException(`Sin tarifa vigente en el Core: ${faltan.map((r) => r.ccober).join(', ')}.`);
+    }
+
+    const T = this.db.types;
+    const tx = this.db.transaction();
+    await tx.begin();
+    try {
+      for (const t of dto.tasas) {
+        await new T.Request(tx)
+          .input('cramo', T.Int, dto.cramo)
+          .input('iuso', T.Char(1), t.iuso)
+          .input('itramo', T.TinyInt, t.itramo)
+          .input('pprima', T.Numeric(9, 6), t.pprima)
+          .input('cusuario', T.Numeric(18, 0), dto.cusuario)
+          .query(`
+            UPDATE dbo.MATARIFA_ANTIGUEDAD_NEXUS SET pprima = @pprima, fultmod = GETDATE(), cusuariomod = @cusuario
+            WHERE cramo = @cramo AND iuso = @iuso AND itramo = @itramo;
+            IF @@ROWCOUNT = 0
+              INSERT INTO dbo.MATARIFA_ANTIGUEDAD_NEXUS (cramo, iuso, itramo, pprima, fultmod, cusuariomod)
+              VALUES (@cramo, @iuso, @itramo, @pprima, GETDATE(), @cusuario);
+          `);
+      }
+      await new T.Request(tx).input('cramo', T.Int, dto.cramo).query(`DELETE FROM dbo.MATARIFA_REPARTO_NEXUS WHERE cramo = @cramo`);
+      for (const r of dto.reparto) {
+        await new T.Request(tx)
+          .input('cramo', T.Int, dto.cramo)
+          .input('ccober', T.VarChar(4), r.ccober.trim())
+          .input('ctarifa', T.VarChar(4), r.ctarifa.trim())
+          .input('itipo', T.Char(1), r.itipo)
+          .input('pvalor', T.Numeric(9, 6), r.pvalor)
+          .input('cusuario', T.Numeric(18, 0), dto.cusuario)
+          .query(`
+            INSERT INTO dbo.MATARIFA_REPARTO_NEXUS (cramo, ccober, ctarifa, itipo, pvalor, fultmod, cusuariomod)
+            VALUES (@cramo, @ccober, @ctarifa, @itipo, @pvalor, GETDATE(), @cusuario)
+          `);
+      }
+      await tx.commit();
+    } catch (err) {
+      await tx.rollback().catch(() => undefined);
+      throw err;
+    }
+    this.logger.warn(
+      `tarificador antigüedad: ramo=${dto.cramo} tasas y reparto actualizados usuario=${dto.cusuario} (${dto.xusuario ?? 's/n'})`,
+    );
+    return this.getTarificadorAntiguedad(dto.cramo);
+  }
+
+  /**
+   * Parte de la tasa global (en %) de cada cobertura del reparto, según el año y uso de la cotización.
+   * Solo aplica a Condominio con la tarifa configurada; si lo está, la cotización debe traer año y uso.
+   */
+  private async partesPorAntiguedad(cramo: number, cot: CotizacionPreestablecidaDto, errors: string[]) {
+    const partes = new Map<string, number>();
+    if (cramo !== 16) return partes;
+    const config = await this.getTarificadorAntiguedad(cramo);
+    if (!config.configurado) return partes;
+    if (!cot.tarifa_antiguedad) {
+      errors.push('La cotización de Condominio debe indicar el año de construcción y el uso del edificio.');
+      return partes;
+    }
+    const { anio_construccion: anio, iuso } = cot.tarifa_antiguedad;
+    const itramo = this.tramoPorAnio(anio);
+    const global = config.tasas.find((t) => t.iuso === iuso && t.itramo === itramo)?.pprima;
+    if (global == null) {
+      errors.push(`No hay tasa para el uso ${iuso} y el tramo ${itramo}.`);
+      return partes;
+    }
+    const fijas = config.reparto.filter((r) => r.itipo === 'F').reduce((acc, r) => acc + r.pvalor, 0);
+    const resto = global - fijas;
+    for (const r of config.reparto) {
+      partes.set(`${r.ccober}|${r.ctarifa}`, r.itipo === 'F' ? r.pvalor : (resto * r.pvalor) / 100);
+    }
+    return partes;
   }
 }
