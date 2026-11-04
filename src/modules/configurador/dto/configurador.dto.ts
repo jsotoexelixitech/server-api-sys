@@ -7,6 +7,14 @@ import {
 
 const FECHA = /^\d{4}-\d{2}-\d{2}$/;
 
+export class ProductoresQueryDto {
+  @ApiPropertyOptional({ example: '80080', description: 'Filtro por nombre o código de productor' })
+  @IsOptional()
+  @IsString()
+  @MaxLength(60)
+  q?: string;
+}
+
 export class RamoQueryDto {
   @ApiProperty({ example: 28 })
   @Type(() => Number)

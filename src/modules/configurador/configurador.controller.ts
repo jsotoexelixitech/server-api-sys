@@ -3,7 +3,7 @@ import { ApiBody, ApiHeader, ApiOperation, ApiTags } from '@nestjs/swagger';
 import { ConfiguradorService } from './configurador.service';
 import {
   CrearCoberturaDto, CrearDetalleTarifaDto, CrearTablaEdadDto, CrearTarifaDto, EditarCoberturaDto, EditarTarifaDto, PlanDto,
-  RamoQueryDto, TarifasQueryDto, TramosEdadDto,
+  ProductoresQueryDto, RamoQueryDto, TarifasQueryDto, TramosEdadDto,
 } from './dto/configurador.dto';
 import { NestProtected } from '../auth/decorators/nest-protected.decorator';
 import { NEST_AUTH_SCOPES } from '../auth/scopes/nest-auth-scopes.constants';
@@ -20,6 +20,15 @@ const SCOPE = NEST_AUTH_SCOPES.CONFIGURADOR_WRITE;
 @Controller('v1/configurador')
 export class ConfiguradorController {
   constructor(private readonly service: ConfiguradorService) {}
+
+  // ── Productores ────────────────────────────────────────────────────────────
+
+  @Get('productores')
+  @NestProtected(SCOPE)
+  @ApiOperation({ summary: 'Productores (maproduc) para asignar a un plan; filtro por nombre o código', operationId: 'configuradorProductores' })
+  async productores(@Query() q: ProductoresQueryDto) {
+    return { status: true, data: await this.service.listarProductores(q.q ?? '') };
+  }
 
   // ── Coberturas ─────────────────────────────────────────────────────────────
 

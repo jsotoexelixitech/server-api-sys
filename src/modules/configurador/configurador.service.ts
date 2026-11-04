@@ -31,6 +31,22 @@ export class ConfiguradorService {
 
   constructor(private readonly db: MssqlService) {}
 
+  // ── Productores ────────────────────────────────────────────────────────────
+
+  /** Productores (maproduc) — solo lectura; TOP 30 filtrados por nombre o código. */
+  async listarProductores(q: string) {
+    const texto = (q ?? '').trim().slice(0, 60);
+    const req = this.db.request();
+    req.input('q', sql.VarChar(60), texto);
+    req.input('q2', sql.VarChar(62), `%${texto}%`);
+    const r = await req.query(`
+      SELECT TOP (30) cproductor, LTRIM(RTRIM(xproductor)) AS xproductor
+      FROM maproduc WITH (NOLOCK)
+      WHERE (@q = '' OR xproductor LIKE @q2 OR CONVERT(VARCHAR(20), cproductor) LIKE @q2)
+      ORDER BY xproductor`);
+    return r.recordset ?? [];
+  }
+
   // ── Coberturas ─────────────────────────────────────────────────────────────
 
   async listarCoberturas(cramo: number) {
