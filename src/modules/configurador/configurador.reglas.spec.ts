@@ -44,6 +44,14 @@ describe('validarPlan', () => {
     expect(errores.join(' ')).toMatch(/prima \(mprima\) o tasa/);
   });
 
+  it('con suma_calculada acepta cosas con msumamax 0 y sin prima ni tasa; sin el flag las rechaza', () => {
+    const calculada = { ccobertura: '980', ctarifa: '1', msumamin: 0, msumamax: 0, mprima: 0, pprima: 0 };
+    expect(validarPlan({ ...cosas, coberturas: [{ ...calculada, suma_calculada: true }] })).toEqual([]);
+    expect(validarPlan({ ...cosas, coberturas: [{ ...calculada, suma_calculada: false }] }).join(' ')).toMatch(/msumamax/);
+    expect(validarPlan({ ...cosas, coberturas: [calculada] }).join(' ')).toMatch(/prima \(mprima\) o tasa/);
+    expect(validarPlan({ ...cosas, coberturas: [{ ...calculada, suma_calculada: true, msumamin: 10 }] }).join(' ')).toMatch(/msumamin/);
+  });
+
   it('exige parentescos con edades válidas en personas', () => {
     const personas: PlanRegla = {
       type: 'personas', fdesde: '2026-01-01', fhasta: '2099-12-31', all_productor: true,

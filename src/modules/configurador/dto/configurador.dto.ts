@@ -280,6 +280,16 @@ export class CoberturaPlanDto {
   @Min(0)
   pprima?: number;
 
+  @ApiPropertyOptional({
+    default: false,
+    description:
+      'Cosas: la suma asegurada se calcula al emitir (unidades × valor por unidad). Permite msumamax 0 y sin mprima/pprima. ' +
+      'No se envía a spMantPlanes.',
+  })
+  @IsOptional()
+  @IsBoolean()
+  suma_calculada?: boolean;
+
   @ApiPropertyOptional({ default: true, description: 'Personas: cobertura obligatoria.' }) @IsOptional() @IsBoolean() bobligatoria?: boolean;
 
   @ApiPropertyOptional({ type: [ParentescoPlanDto], description: 'Personas: parentescos con edades y tabla de tasas.' })

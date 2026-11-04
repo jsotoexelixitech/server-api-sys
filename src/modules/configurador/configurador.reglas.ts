@@ -20,6 +20,8 @@ interface ParentescoRegla { cparen: number; csexo: string; nedad_min: number; ne
 interface CoberturaRegla {
   ccobertura: string; ctarifa: string;
   msumamin?: number; msumamax?: number; mprima?: number; pprima?: number;
+  /** Cosas: la suma se calcula al emitir (unidades × valor por unidad): no exige msumamax ni prima/tasa. */
+  suma_calculada?: boolean;
   parentescos?: ParentescoRegla[];
 }
 export interface PlanRegla {
@@ -30,7 +32,7 @@ export interface PlanRegla {
   frecuencias: { ifrecuencia: string }[];
 }
 
-/** Un plan que se pueda cotizar: en cosas suma y prima o tasa; en personas parentescos con edades. */
+/** Un plan que se pueda cotizar: en cosas suma y prima o tasa (salvo suma_calculada); en personas parentescos con edades. */
 export function validarPlan(plan: PlanRegla): string[] {
   const errores: string[] = [];
   if (plan.fdesde > plan.fhasta) errores.push('fdesde es posterior a fhasta.');
@@ -47,8 +49,9 @@ export function validarPlan(plan: PlanRegla): string[] {
   for (const c of plan.coberturas) {
     const n = `Cobertura ${c.ccobertura.trim()}`;
     if (plan.type === 'cosas') {
-      if (!((c.msumamax ?? 0) > 0)) errores.push(`${n}: msumamax debe ser mayor a 0.`);
       if ((c.msumamin ?? 0) > (c.msumamax ?? 0)) errores.push(`${n}: msumamin es mayor que msumamax.`);
+      if (c.suma_calculada === true) continue;
+      if (!((c.msumamax ?? 0) > 0)) errores.push(`${n}: msumamax debe ser mayor a 0.`);
       if (!((c.mprima ?? 0) > 0) && !((c.pprima ?? 0) > 0)) errores.push(`${n}: necesita prima (mprima) o tasa (pprima).`);
       continue;
     }
