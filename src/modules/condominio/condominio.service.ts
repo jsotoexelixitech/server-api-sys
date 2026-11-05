@@ -586,7 +586,12 @@ export class CondominioService {
       if (c.ccober.trim() === '1') sumaBasica = c.suma_asegurada;
       // Condominio: las coberturas del reparto cobran su parte de la tasa global sobre la suma asegurada de la póliza.
       const parte = partes.get(key);
-      const bruta = parte != null ? (cot.suma_asegurada * parte) / 100 : (c.suma_asegurada * t.pprima) / 100;
+      const conRango = t.ptasa_min != null && t.ptasa_max != null && c.tasa != null;
+      if (!vigente && conRango && (c.tasa! < t.ptasa_min! - 1e-9 || c.tasa! > t.ptasa_max! + 1e-9)) {
+        errors.push(`Cobertura ${key}: tasa ${c.tasa} fuera del rango (${t.ptasa_min} a ${t.ptasa_max}).`);
+      }
+      const tasa = conRango ? c.tasa! : t.pprima;
+      const bruta = parte != null ? (cot.suma_asegurada * parte) / 100 : (c.suma_asegurada * tasa) / 100;
       const desc = (c.prima_bruta * descPct) / 100;
       const rec = (c.prima_bruta * recPct) / 100;
       if (!vigente && !near(c.prima_bruta, bruta)) errors.push(`Cobertura ${key}: prima bruta ${c.prima_bruta} no coincide con suma × tasa (${bruta.toFixed(2)}).`);
@@ -703,6 +708,7 @@ export class CondominioService {
           AND d.fdesde <= GETDATE() AND (d.fhasta IS NULL OR d.fhasta >= GETDATE())
         ORDER BY TRY_CAST(RTRIM(d.ccober) AS INT), d.ccober
       `);
+    const rangos = await this.rangosDeTasa(dto.cramo);
     return {
       cramo: dto.cramo,
       tasas: result.recordset.map((r) => ({
@@ -713,13 +719,76 @@ export class CondominioService {
         pcomision: Number(r.pcomision),
         fultmod: r.fultmod,
         cusuariomod: r.cusuariomod == null ? null : Number(r.cusuariomod),
+        ...(rangos.get(`${r.ccober}|${r.ctarifa}`) ?? {}),
       })),
     };
+  }
+
+  private async tablaRangoExiste(): Promise<boolean> {
+    const existe = await this.db.request().query(`SELECT OBJECT_ID('dbo.MATARIFA_RANGO_NEXUS', 'U') AS tabla`);
+    return Boolean(existe.recordset[0]?.tabla);
+  }
+
+  /** Rango de tasa por cobertura. Sin la tabla no hay rangos y cada cobertura cotiza con su tasa única. */
+  private async rangosDeTasa(cramo: number) {
+    const rangos = new Map<string, { ptasa_min: number; ptasa_max: number }>();
+    if (!(await this.tablaRangoExiste())) return rangos;
+    const filas = await this.db
+      .request()
+      .input('cramo', this.db.types.Int, cramo)
+      .query(`SELECT RTRIM(ccober) AS ccober, RTRIM(ctarifa) AS ctarifa, ptasa_min, ptasa_max
+              FROM dbo.MATARIFA_RANGO_NEXUS WHERE cramo = @cramo`);
+    for (const f of filas.recordset as any[]) {
+      rangos.set(`${f.ccober}|${f.ctarifa}`, { ptasa_min: Number(f.ptasa_min), ptasa_max: Number(f.ptasa_max) });
+    }
+    return rangos;
+  }
+
+  private validarRangoTasa(dto: UpdateTarificadorTasaDto) {
+    const { ptasa_min: min, ptasa_max: max, pprima } = dto;
+    if (min === undefined && max === undefined) return;
+    if (min === undefined || max === undefined) {
+      throw new BadRequestException('Envía la tasa mínima y la máxima.');
+    }
+    if (min > max) throw new BadRequestException('La tasa mínima no puede ser mayor que la máxima.');
+    if (pprima < min || pprima > max) throw new BadRequestException('La tasa vigente debe estar dentro del rango.');
+  }
+
+  /** Mínima igual a máxima significa tasa única: se retira el rango. */
+  private async guardarRangoTasa(dto: UpdateTarificadorTasaDto) {
+    const T = this.db.types;
+    const req = this.db
+      .request()
+      .input('cramo', T.Int, dto.cramo)
+      .input('ccober', T.Char(4), dto.ccober)
+      .input('ctarifa', T.Char(4), dto.ctarifa);
+    const clave = 'cramo = @cramo AND RTRIM(ccober) = RTRIM(@ccober) AND RTRIM(ctarifa) = RTRIM(@ctarifa)';
+    if (dto.ptasa_min === dto.ptasa_max) {
+      await req.query(`DELETE FROM dbo.MATARIFA_RANGO_NEXUS WHERE ${clave}`);
+      return;
+    }
+    await req
+      .input('min', T.Numeric(9, 6), dto.ptasa_min)
+      .input('max', T.Numeric(9, 6), dto.ptasa_max)
+      .input('cusuario', T.Numeric(18, 0), dto.cusuario)
+      .query(`
+        UPDATE dbo.MATARIFA_RANGO_NEXUS
+           SET ptasa_min = @min, ptasa_max = @max, fultmod = GETDATE(), cusuariomod = @cusuario
+         WHERE ${clave};
+        IF @@ROWCOUNT = 0
+          INSERT INTO dbo.MATARIFA_RANGO_NEXUS (cramo, ccober, ctarifa, ptasa_min, ptasa_max, fultmod, cusuariomod)
+          VALUES (@cramo, @ccober, @ctarifa, @min, @max, GETDATE(), @cusuario);
+      `);
   }
 
   /** Replica la tasa (pprima) de una cobertura en matarifa_d dejando constancia del usuario que la modificó. */
   async updateTarificadorTasa(dto: UpdateTarificadorTasaDto) {
     const T = this.db.types;
+    const conRango = dto.ptasa_min !== undefined || dto.ptasa_max !== undefined;
+    this.validarRangoTasa(dto);
+    if (conRango && !(await this.tablaRangoExiste())) {
+      throw new BadRequestException('Falta crear la tabla de rangos en el Core (script hogar-tasas-rango.sql).');
+    }
     const keyReq = () =>
       this.db
         .request()
@@ -746,6 +815,7 @@ export class CondominioService {
     if ((upd.rowsAffected?.[0] ?? 0) !== 1) {
       throw new ConflictException('No se actualizó exactamente un registro; el cambio no se aplicó.');
     }
+    if (conRango) await this.guardarRangoTasa(dto);
     this.logger.warn(
       `tarificador: ramo=${dto.cramo} cober=${dto.ccober} pprima ${before.pprima} -> ${dto.pprima} usuario=${dto.cusuario} (${dto.xusuario ?? 's/n'})`,
     );

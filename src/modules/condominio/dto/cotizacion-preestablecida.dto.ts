@@ -23,6 +23,13 @@ export class CotizacionCoberturaDto {
   @Min(0)
   suma_asegurada: number;
 
+  @ApiPropertyOptional({ example: 0.3, description: 'Tasa elegida dentro del rango de la cobertura (%). Sin rango se ignora.' })
+  @IsOptional()
+  @IsNumber({ maxDecimalPlaces: 6 })
+  @Min(0)
+  @Max(100)
+  tasa?: number;
+
   @ApiProperty({ example: 6, description: 'Prima bruta = suma × tasa / 100.' })
   @IsNumber({ maxDecimalPlaces: 2 })
   @Min(0)

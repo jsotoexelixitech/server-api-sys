@@ -44,6 +44,22 @@ export class UpdateTarificadorTasaDto {
   @Max(100)
   pprima: number;
 
+  @ApiPropertyOptional({ example: 0.2, description: 'Tasa mínima del rango (%). Va junto con ptasa_max.' })
+  @IsOptional()
+  @Type(() => Number)
+  @IsNumber({ maxDecimalPlaces: 6 })
+  @Min(0)
+  @Max(100)
+  ptasa_min?: number;
+
+  @ApiPropertyOptional({ example: 0.5, description: 'Tasa máxima del rango (%). Igual a la mínima retira el rango.' })
+  @IsOptional()
+  @Type(() => Number)
+  @IsNumber({ maxDecimalPlaces: 6 })
+  @Min(0)
+  @Max(100)
+  ptasa_max?: number;
+
   @ApiProperty({ example: 20364172, description: 'Código de usuario Sis2000 de quien modifica (auditoría cusuariomod).' })
   @Type(() => Number)
   @IsInt()
