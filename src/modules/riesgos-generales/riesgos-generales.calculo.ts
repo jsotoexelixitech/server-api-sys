@@ -77,6 +77,22 @@ export interface RamoPatrimonial {
   qcoberturas: number;
 }
 
+/** Dato del bien asegurado: se imprime como "etiqueta: valor". */
+export interface DatoBien {
+  etiqueta: string;
+  valor: string;
+}
+
+export interface DatosBienCompuestos {
+  xdescrip3: string | null;
+  xdescrip4: string | null;
+  /** Etiquetas de los datos que no cupieron. */
+  omitidos: string[];
+}
+
+/** xdescrip3 y xdescrip4 son VARCHAR(250). */
+export const LIMITE_XDESCRIP = 250;
+
 export const COBERTURA_BASICA = '1';
 
 const r2 = (n: number) => Math.round((n + Number.EPSILON) * 100) / 100;
@@ -143,6 +159,29 @@ export function sumarMeses(fecha: Date, meses: number): Date {
   const m = fecha.getUTCMonth() + meses;
   const ultimoDia = new Date(Date.UTC(y, m + 1, 0)).getUTCDate();
   return new Date(Date.UTC(y, m, Math.min(fecha.getUTCDate(), ultimoDia)));
+}
+
+/**
+ * Reparte los datos del bien en xdescrip3 y xdescrip4 sin partir ninguno y conservando el orden. Lo que no cabe
+ * se devuelve en `omitidos`, nunca se corta a medias.
+ */
+export function componerDatosBien(datos: DatoBien[], limite = LIMITE_XDESCRIP): DatosBienCompuestos {
+  const campos = ['', ''];
+  const omitidos: string[] = [];
+  let i = 0;
+  for (const d of datos) {
+    const limpio = (t: string) => t.replace(/\s+/g, ' ').trim();
+    const texto = `${limpio(d.etiqueta)}: ${limpio(d.valor)}`;
+    const cabe = (c: string) => (c ? c.length + 2 : 0) + texto.length <= limite;
+    if (texto.length > limite) {
+      omitidos.push(d.etiqueta);
+      continue;
+    }
+    if (!cabe(campos[i])) i = 1;
+    if (cabe(campos[i])) campos[i] += (campos[i] ? '; ' : '') + texto;
+    else omitidos.push(d.etiqueta);
+  }
+  return { xdescrip3: campos[0] || null, xdescrip4: campos[1] || null, omitidos };
 }
 
 /**

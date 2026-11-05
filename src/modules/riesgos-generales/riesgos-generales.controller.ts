@@ -64,7 +64,9 @@ export class RiesgosGeneralesController {
     summary: 'Cotizar coberturas elegidas',
     description:
       'Prima de cada cobertura = suma × tasa de matarifa_d / 100. Valida obligatorias, topes y tasas vigentes. ' +
-      'Con `calculo` (unidades × valor_unidad) la suma de todas las coberturas pedidas se calcula en el servidor y se ignora `suma`.',
+      'Con `calculo` (unidades × valor_unidad) la suma de todas las coberturas pedidas se calcula en el servidor y se ignora `suma`. ' +
+      '`datos_bien` devuelve el texto de xdescrip3 y xdescrip4 y lo que no cupo; `biomasa` (ramo 25) devuelve además la curva, ' +
+      'los días, Gv, Gi, el engorde y la biomasa esperados y la retención de A.',
     operationId: 'riesgosGeneralesCotizacion',
   })
   @ApiHeader(APIKEY_HEADER)
@@ -73,6 +75,16 @@ export class RiesgosGeneralesController {
     examples: {
       hogar: { value: { cramo: 38, cplan: '2', coberturas: [{ ccober: '1', suma: 140000 }, { ccober: '5', suma: 24000 }] } },
       calculo: { value: { cramo: 25, cplan: '1', coberturas: [{ ccober: '1' }], calculo: { unidades: 20000, valor_unidad: 2.5 } } },
+      biomasa: {
+        value: {
+          cramo: 25, cplan: 'PAS06', coberturas: [{ ccober: '901' }, { ccober: '902' }, { ccober: '903' }],
+          calculo: { unidades: 20000, valor_unidad: 2.5 },
+          biomasa: {
+            cantidad_animales: 100, peso_promedio: 200, fecha_inicio: '2026-11-05', horizonte_meses: 6,
+            lote: 'LT-2026-001', ihl: '0,92',
+          },
+        },
+      },
     },
   })
   @ApiCommonErrors()
@@ -88,7 +100,8 @@ export class RiesgosGeneralesController {
     description:
       'Recalcula la cotización en el servidor (no acepta primas del cliente) y emite cobertura por cobertura con ' +
       'sp_pre_emision_condominio_nexus. Recibo pendiente de cobro. Acepta `calculo` (suma = unidades × valor_unidad) y ' +
-      '`meses` de vigencia (1 a 60; sin enviar, 1 año). Requiere el scope `emissions:riesgos-generales`.',
+      '`meses` de vigencia (1 a 60; sin enviar, 1 año, o el horizonte si viene `biomasa`), `datos_bien` (xdescrip3 y xdescrip4) ' +
+      'y `biomasa`, que exige lote e ihl. Requiere el scope `emissions:riesgos-generales`.',
     operationId: 'riesgosGeneralesEmision',
   })
   @ApiHeader(APIKEY_HEADER)
