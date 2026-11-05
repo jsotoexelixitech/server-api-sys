@@ -13,6 +13,8 @@ export interface ArysMonitorEvent {
   notify?: boolean;
   /** dedupeKeys de eventos previos cuyo incidente en el monitor queda resuelto. */
   resolves?: string[];
+  /** El incidente se resuelve solo tras este tiempo sin repetirse (minutos). */
+  autoResolveMinutes?: number;
 }
 
 const TIMEOUT_MS = 4000;
