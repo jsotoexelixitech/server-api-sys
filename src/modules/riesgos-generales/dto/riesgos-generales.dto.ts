@@ -1,8 +1,8 @@
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
 import { Type } from 'class-transformer';
 import {
-  ArrayMinSize, IsArray, IsIn, IsInt, IsNotEmpty, IsNumber, IsOptional, IsPositive, IsString, Max, MaxLength, Min,
-  ValidateNested,
+  ArrayMaxSize, ArrayMinSize, IsArray, IsDateString, IsIn, IsInt, IsNotEmpty, IsNumber, IsOptional, IsPositive, IsString,
+  Matches, Max, MaxLength, Min, ValidateNested,
 } from 'class-validator';
 
 /**
@@ -10,6 +10,12 @@ import {
  * 38 = Combinado Residencial.
  */
 export const RAMOS_COBERTURAS = [16, 25, 38] as const;
+
+/** Ramos que aceptan el bloque `biomasa`. */
+export const RAMOS_BIOMASA = [25] as const;
+
+/** Horizontes contractuales de engorde (condicionado 2.14). */
+export const HORIZONTES_BIOMASA = [6, 12, 18, 24] as const;
 
 export class TarifaPlanDto {
   @ApiProperty({ example: 38 })
@@ -63,6 +69,56 @@ export class CalculoSumaDto {
   valor_unidad: number;
 }
 
+/** Dato libre del bien: se imprime como "etiqueta: valor" en xdescrip3 y xdescrip4. */
+export class DatoBienDto {
+  @ApiProperty({ example: 'Serial del equipo' })
+  @IsString()
+  @Matches(/\S/, { message: 'etiqueta no puede estar vacía' })
+  @MaxLength(60)
+  etiqueta: string;
+
+  @ApiProperty({ example: 'AB-1234' })
+  @IsString()
+  @Matches(/\S/, { message: 'valor no puede estar vacío' })
+  @MaxLength(190)
+  valor: string;
+}
+
+/** Lote para la proyección contractual de biomasa. B0 y PKC salen de `calculo` (unidades y valor_unidad). */
+export class BiomasaDto {
+  @ApiProperty({ example: 100, description: 'Cantidad de animales (Unidades Computables).' })
+  @IsInt()
+  @IsPositive()
+  @Max(1000000)
+  cantidad_animales: number;
+
+  @ApiProperty({ example: 200, description: 'Peso promedio inicial certificado en kg; debe coincidir con B0 / animales.' })
+  @IsNumber({ maxDecimalPlaces: 4 })
+  @IsPositive()
+  peso_promedio: number;
+
+  @ApiProperty({ example: '2026-11-05', description: 'Fecha de certificación inicial (YYYY-MM-DD).' })
+  @Matches(/^\d{4}-\d{2}-\d{2}$/, { message: 'fecha_inicio debe tener el formato YYYY-MM-DD' })
+  @IsDateString({ strict: true })
+  fecha_inicio: string;
+
+  @ApiProperty({ example: 6, enum: HORIZONTES_BIOMASA, description: 'Horizonte Contractual de Engorde en meses.' })
+  @IsIn(HORIZONTES_BIOMASA as unknown as number[])
+  horizonte_meses: number;
+
+  @ApiPropertyOptional({ example: 'LT-2026-001', description: 'Lote Ganadero Certificado. Obligatorio al emitir.' })
+  @IsOptional()
+  @IsString()
+  @MaxLength(30)
+  lote?: string;
+
+  @ApiPropertyOptional({ example: '0,92', description: 'Índice de Homogeneidad del Lote, como lo entrega la certificadora. Obligatorio al emitir.' })
+  @IsOptional()
+  @IsString()
+  @MaxLength(20)
+  ihl?: string;
+}
+
 export class CotizarCoberturasDto extends TarifaPlanDto {
   @ApiProperty({
     type: [CoberturaPedidaDto],
@@ -82,6 +138,26 @@ export class CotizarCoberturasDto extends TarifaPlanDto {
   @ValidateNested()
   @Type(() => CalculoSumaDto)
   calculo?: CalculoSumaDto;
+
+  @ApiPropertyOptional({
+    type: [DatoBienDto],
+    description: 'Datos del bien para la póliza (xdescrip3 y xdescrip4, 250 caracteres cada uno). Lo que no cabe se informa en `datos_bien.omitidos`.',
+  })
+  @IsOptional()
+  @IsArray()
+  @ArrayMaxSize(20)
+  @ValidateNested({ each: true })
+  @Type(() => DatoBienDto)
+  datos_bien?: DatoBienDto[];
+
+  @ApiPropertyOptional({
+    type: BiomasaDto,
+    description: 'Ramo 25: proyecta la curva contractual y agrega los datos del lote antes de `datos_bien`. Requiere `calculo` con B0 y PKC.',
+  })
+  @IsOptional()
+  @ValidateNested()
+  @Type(() => BiomasaDto)
+  biomasa?: BiomasaDto;
 }
 
 export class PersonaRiesgoDto {

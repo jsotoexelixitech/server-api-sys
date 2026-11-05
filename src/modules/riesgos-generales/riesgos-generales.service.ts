@@ -5,15 +5,18 @@ import { parseSPError, toUserFacingError } from '../../common/helpers/sp-error.h
 import { buildPolicyPdfUrl } from '../../common/helpers/policy-url.helper';
 import { SP_PRE_EMISION_CONDOMINIO } from '../../config/sis2000-sp.constants';
 import {
-  calcularCoberturas, esObligatoria, mapCoberturaRamo, mapRamoPatrimonial, sumarMeses, type CoberturaTarifa,
-  type CotizacionCalculada,
+  calcularCoberturas, componerDatosBien, esObligatoria, mapCoberturaRamo, mapRamoPatrimonial, sumarMeses,
+  type CoberturaTarifa, type CotizacionCalculada, type DatoBien, type DatosBienCompuestos,
 } from './riesgos-generales.calculo';
+import { calcularBiomasa, datosBienBiomasa, type ResultadoBiomasa } from './riesgos-generales.biomasa';
 import {
-  CoberturasRamoDto, CotizarCoberturasDto, EmitirCoberturasDto, PersonaRiesgoDto, TarifaPlanDto,
+  CoberturasRamoDto, CotizarCoberturasDto, EmitirCoberturasDto, PersonaRiesgoDto, RAMOS_BIOMASA, TarifaPlanDto,
 } from './dto/riesgos-generales.dto';
 
 /** Usuario Sis2000 de las emisiones Nexus de riesgos generales (mismo que condominio). */
 const CUSUARIO_NEXUS = 20364172;
+
+type CotizacionConBien = CotizacionCalculada & { biomasa?: ResultadoBiomasa; datos_bien?: DatosBienCompuestos };
 
 /**
  * Riesgos generales por cobertura (cotizador RC): tarifa del plan, cotización y emisión con las coberturas
@@ -135,22 +138,47 @@ export class RiesgosGeneralesService {
     return ((result.recordset ?? []) as Record<string, unknown>[]).map((r) => mapRamoPatrimonial(r));
   }
 
-  async cotizar(dto: CotizarCoberturasDto): Promise<CotizacionCalculada> {
+  async cotizar(dto: CotizarCoberturasDto): Promise<CotizacionConBien> {
     const tarifa = await this.getTarifa(dto);
     const { cotizacion, errores } = calcularCoberturas(tarifa.coberturas, dto.coberturas, dto.calculo);
     if (!cotizacion) throw new BadRequestException(errores.join(' '));
-    return cotizacion;
+    const biomasa = dto.biomasa ? this.proyectarBiomasa(dto) : undefined;
+    const datos: DatoBien[] = [...(biomasa ? datosBienBiomasa(biomasa, tarifa.cmoneda) : []), ...(dto.datos_bien ?? [])];
+    if (!datos.length) return cotizacion;
+    return { ...cotizacion, ...(biomasa ? { biomasa } : {}), datos_bien: componerDatosBien(datos) };
+  }
+
+  private proyectarBiomasa(dto: CotizarCoberturasDto): ResultadoBiomasa {
+    if (!(RAMOS_BIOMASA as readonly number[]).includes(dto.cramo)) {
+      throw new BadRequestException(`El ramo ${dto.cramo} no admite el bloque biomasa.`);
+    }
+    if (!dto.calculo) throw new BadRequestException('El bloque biomasa requiere calculo con B0 (unidades) y precio por kg (valor_unidad).');
+    const { biomasa, errores } = calcularBiomasa({
+      ...dto.biomasa!, b0: dto.calculo.unidades, precio_kg: dto.calculo.valor_unidad,
+    });
+    if (!biomasa) throw new BadRequestException(errores.join(' '));
+    return biomasa;
   }
 
   async emitir(dto: EmitirCoberturasDto) {
+    if (dto.biomasa && (!dto.biomasa.lote?.trim() || !dto.biomasa.ihl?.trim())) {
+      throw new BadRequestException('Para emitir, el bloque biomasa debe traer lote e ihl.');
+    }
+    if (dto.biomasa && dto.meses && dto.meses !== dto.biomasa.horizonte_meses) {
+      throw new BadRequestException(`meses (${dto.meses}) no coincide con horizonte_meses (${dto.biomasa.horizonte_meses}).`);
+    }
     const cot = await this.cotizar(dto);
+    if (cot.datos_bien?.omitidos.length) {
+      this.logger.warn(`emitir: datos del bien sin espacio en xdescrip3/4: ${cot.datos_bien.omitidos.join(', ')}`);
+    }
     const T = this.db.types;
     const hoy = new Date();
     const ymd = (d: Date) => d.toISOString().split('T')[0];
     const fdesde = ymd(hoy);
     // Vigencia: `meses` (respeta el fin de mes) o 1 año como hasta ahora.
     const hasta = new Date(hoy);
-    if (dto.meses) hasta.setTime(sumarMeses(hoy, dto.meses).getTime());
+    const meses = dto.meses ?? dto.biomasa?.horizonte_meses;
+    if (meses) hasta.setTime(sumarMeses(hoy, meses).getTime());
     else hasta.setFullYear(hasta.getFullYear() + 1);
 
     const tasaRes = await this.db.request()
@@ -194,8 +222,8 @@ export class RiesgosGeneralesService {
     req.input('xdireccion', T.VarChar(60), this.dir60(dto.direccion_riesgo));
     req.input('xdescrip1', T.VarChar(250), dto.bien.slice(0, 250));
     req.input('xdescrip2', T.VarChar(250), dto.direccion_riesgo.slice(0, 250));
-    req.input('xdescrip3', T.VarChar(250), null);
-    req.input('xdescrip4', T.VarChar(250), null);
+    req.input('xdescrip3', T.VarChar(250), cot.datos_bien?.xdescrip3 ?? null);
+    req.input('xdescrip4', T.VarChar(250), cot.datos_bien?.xdescrip4 ?? null);
     if (dto.apartamento) {
       req.input('ncertificado', T.Int, dto.apartamento);
       req.input('napartamento', T.Int, dto.apartamento);
