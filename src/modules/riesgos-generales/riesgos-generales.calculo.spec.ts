@@ -4,7 +4,7 @@ import { validate } from 'class-validator';
 import { BiomasaDto, DatoBienDto } from './dto/riesgos-generales.dto';
 import { RiesgosGeneralesService } from './riesgos-generales.service';
 import {
-  calcularBiomasa, datosBienBiomasa, numeroVe, type EntradaBiomasa,
+  calcularBiomasa, datosBienBiomasa, normalizarLote, numeroVe, patronLote, type EntradaBiomasa,
 } from './riesgos-generales.biomasa';
 import {
   calcularCoberturas, componerDatosBien, mapCoberturaRamo, mapRamoPatrimonial, resolverSumas, sumaPorCalculo, sumarMeses, type CoberturaTarifa,
@@ -260,6 +260,18 @@ describe('datosBienBiomasa', () => {
   });
 });
 
+describe('normalizarLote y patronLote', () => {
+  it('normaliza espacios y mayúsculas', () => {
+    expect(normalizarLote('  lt  -1 \n')).toBe('LT -1');
+    expect(normalizarLote(undefined)).toBe('');
+  });
+
+  it('escapa los comodines y su propio escape, anclado y con el ; final', () => {
+    expect(patronLote('lt-1')).toBe('LOTE GAN. CERT.: LT-1;%');
+    expect(patronLote('A_B%C[D]!')).toBe('LOTE GAN. CERT.: A!_B!%C![D]!!;%');
+  });
+});
+
 describe('numeroVe', () => {
   it('agrupa miles con punto, usa coma decimal y quita ceros', () => {
     expect([numeroVe(20000), numeroVe(3511.4), numeroVe(2.5, 2, true), numeroVe(0.28, 3, true), numeroVe(1404.56)]).toEqual([
@@ -275,17 +287,33 @@ describe('RiesgosGeneralesService (datos del bien)', () => {
     cnpoliza: '25-1-1100016178', cpoliza: '1',
   };
 
-  function crear() {
+  /** LIKE de SQL Server con ESCAPE '!' sobre un texto ya en mayúsculas. */
+  const like = (texto: string, patron: string) => {
+    const lit = (c: string) => c.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+    const re = [...patron.matchAll(/!(.)|./gs)].map(([m, esc]) => (esc ? lit(esc) : m === '%' ? '.*' : m === '_' ? '.' : lit(m))).join('');
+    return new RegExp(`^${re}$`, 's').test(texto);
+  };
+
+  /** `xdescrip3`: pólizas vigentes del ramo 25 en rgcerti; `errorLote`: la consulta del lote falla. */
+  function crear({ xdescrip3 = [] as string[], errorLote = false } = {}) {
     const inputs: Record<string, unknown> = {};
+    const sql: string[] = [];
+    const execute = jest.fn(async () => ({ recordset: [fila] }));
     const req = {
       input(k: string, ...v: unknown[]) { inputs[k] = v[v.length - 1]; return req; },
-      query: async () => ({ recordset: [fila] }),
-      execute: async () => ({ recordset: [fila] }),
+      query: async (texto: string) => {
+        if (!texto.includes('rgcerti')) return { recordset: [fila] };
+        sql.push(texto);
+        if (errorLote) throw new Error('timeout');
+        const hit = xdescrip3.find((x) => like(x.trim().toUpperCase(), String(inputs.patron)));
+        return { recordset: hit ? [{ cnpoliza: '25-1-1100016190   ' }] : [] };
+      },
+      execute,
     };
     const T: any = new Proxy(function () {}, { get: () => T, apply: () => T });
     const db = { types: T, request: () => req };
     const config = { get: () => 'http://pdf' };
-    return { inputs, service: new RiesgosGeneralesService(db as never, config as never) };
+    return { inputs, sql, execute, service: new RiesgosGeneralesService(db as never, config as never) };
   }
 
   const persona = { tipo_cedula: 'V', rif: '12345678', nombre: 'JUAN' };
@@ -342,6 +370,77 @@ describe('RiesgosGeneralesService (datos del bien)', () => {
     await expect(service.emitir({ ...actual, biomasa: sinLote })).rejects.toThrow('lote e ihl');
   });
 
+  describe('un lote, una póliza vigente', () => {
+    const emision = { ...actual, biomasa };
+    const texto = (lote: string) => `Lote Gan. Cert.: ${lote}; Ind. Homog. Lote (IHL): 0,92; Unid. Computables: 100 animales`;
+
+    it('rechaza con 409 el mismo lote y no llama al SP, aunque cambien tomador, asegurado y plan', async () => {
+      const { service, execute } = crear({ xdescrip3: [texto('LT-1')] });
+      const otro = { ...persona, rif: '99999999', nombre: 'PEDRO' };
+      const err = await service.emitir({ ...emision, cplan: 'PAS12', tomador: otro, asegurado: otro }).catch((e) => e);
+      expect(err.getStatus()).toBe(409);
+      expect(err.message).toContain('LT-1');
+      expect(err.message).toContain('25-1-1100016190');
+      expect(execute).not.toHaveBeenCalled();
+    });
+
+    it('normaliza mayúsculas y espacios, y graba la forma normalizada', async () => {
+      const dup = crear({ xdescrip3: [texto('LT-1')] });
+      await expect(dup.service.emitir({ ...emision, biomasa: { ...biomasa, lote: '  lt-1 ' } })).rejects.toThrow('ya está asegurado');
+      const viejo = crear({ xdescrip3: [texto('lt-1')] });
+      await expect(viejo.service.emitir(emision)).rejects.toThrow('ya está asegurado');
+      const { service, inputs } = crear();
+      await service.emitir({ ...emision, biomasa: { ...biomasa, lote: ' lt-7 ' } });
+      expect(String(inputs.xdescrip3).startsWith('Lote Gan. Cert.: LT-7; ')).toBe(true);
+    });
+
+    it('coincide exacto: LT-1 no choca con LT-10, ni con el texto dentro de otro dato', async () => {
+      const { service, execute } = crear({ xdescrip3: [texto('LT-10'), texto('XLT-1'), `Serial: ${texto('LT-1')}`] });
+      await service.emitir(emision);
+      expect(execute).toHaveBeenCalledTimes(1);
+    });
+
+    it('los comodines del lote son literales y van por parámetro', async () => {
+      const { service, execute, inputs, sql } = crear({ xdescrip3: [texto('LTX1'), texto('LT-ABC')] });
+      await service.emitir({ ...emision, biomasa: { ...biomasa, lote: 'LT_1' } });
+      await service.emitir({ ...emision, biomasa: { ...biomasa, lote: 'LT-%' } });
+      expect(execute).toHaveBeenCalledTimes(2);
+      expect(inputs.patron).toBe('LOTE GAN. CERT.: LT-!%;%');
+      expect(sql[0]).toContain("LIKE @patron ESCAPE '!'");
+      expect(sql[0]).not.toContain('LT-');
+    });
+
+    it('la consulta mira el ramo y la vigencia, no al tomador ni el plan', async () => {
+      const { service, sql, inputs } = crear();
+      await service.emitir(emision);
+      expect(sql[0]).toContain("p.iestado = 'V' AND p.fhasta > @fdesde");
+      expect(sql[0]).not.toMatch(/casegurado|ctenedor|cplan/);
+      expect(inputs.cramo).toBe(25);
+      expect(inputs.fdesde).toBe(inputs.femision);
+    });
+
+    it('sin biomasa no consulta el lote', async () => {
+      const { service, sql } = crear({ xdescrip3: [texto('LT-1')] });
+      await service.emitir(actual);
+      await service.emitir({ ...actual, cramo: 38, apartamento: 1 });
+      expect(sql).toEqual([]);
+    });
+
+    it('si la consulta falla al emitir, no emite', async () => {
+      const { service, execute } = crear({ errorLote: true });
+      await expect(service.emitir(emision)).rejects.toThrow('timeout');
+      expect(execute).not.toHaveBeenCalled();
+    });
+
+    it('cotizar no rechaza: avisa sin revelar la póliza, y sin aviso si está libre o la consulta falla', async () => {
+      const dup = await crear({ xdescrip3: [texto('LT-1')] }).service.cotizar(emision);
+      expect(dup.aviso_lote).toContain('LT-1');
+      expect(dup.aviso_lote).not.toContain('25-1-');
+      expect((await crear().service.cotizar(emision)).aviso_lote).toBeUndefined();
+      expect((await crear({ errorLote: true }).service.cotizar(emision)).aviso_lote).toBeUndefined();
+    });
+  });
+
   it('rechaza biomasa fuera del ramo 25, sin calculo o con meses distinto al horizonte', async () => {
     const { service } = crear();
     await expect(service.cotizar({ ...actual, cramo: 38, biomasa })).rejects.toThrow('no admite');
@@ -356,6 +455,11 @@ describe('BiomasaDto y DatoBienDto', () => {
 
   it('acepta lote e IHL opcionales', async () => {
     expect(await v(BiomasaDto, ok)).toEqual([]);
+  });
+
+  it('rechaza punto y coma en el lote', async () => {
+    expect(await v(BiomasaDto, { ...ok, lote: 'LT;1' })).toEqual(['lote']);
+    expect(await v(BiomasaDto, { ...ok, lote: 'LT-1' })).toEqual([]);
   });
 
   it('rechaza horizonte, fecha y cantidad inválidos', async () => {

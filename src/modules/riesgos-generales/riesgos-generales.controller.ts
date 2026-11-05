@@ -66,7 +66,7 @@ export class RiesgosGeneralesController {
       'Prima de cada cobertura = suma × tasa de matarifa_d / 100. Valida obligatorias, topes y tasas vigentes. ' +
       'Con `calculo` (unidades × valor_unidad) la suma de todas las coberturas pedidas se calcula en el servidor y se ignora `suma`. ' +
       '`datos_bien` devuelve el texto de xdescrip3 y xdescrip4 y lo que no cupo; `biomasa` (ramo 25) devuelve además la curva, ' +
-      'los días, Gv, Gi, el engorde y la biomasa esperados y la retención de A.',
+      'los días, Gv, Gi, el engorde y la biomasa esperados y la retención de A. Si el lote ya tiene póliza vigente no rechaza: agrega `aviso_lote`.',
     operationId: 'riesgosGeneralesCotizacion',
   })
   @ApiHeader(APIKEY_HEADER)
@@ -101,7 +101,8 @@ export class RiesgosGeneralesController {
       'Recalcula la cotización en el servidor (no acepta primas del cliente) y emite cobertura por cobertura con ' +
       'sp_pre_emision_condominio_nexus. Recibo pendiente de cobro. Acepta `calculo` (suma = unidades × valor_unidad) y ' +
       '`meses` de vigencia (1 a 60; sin enviar, 1 año, o el horizonte si viene `biomasa`), `datos_bien` (xdescrip3 y xdescrip4) ' +
-      'y `biomasa`, que exige lote e ihl. Requiere el scope `emissions:riesgos-generales`.',
+      'y `biomasa`, que exige lote e ihl. Con `biomasa`, responde 409 si el lote ya tiene póliza vigente en el ramo, sea cual sea ' +
+      'el tomador, el asegurado o el plan. Requiere el scope `emissions:riesgos-generales`.',
     operationId: 'riesgosGeneralesEmision',
   })
   @ApiHeader(APIKEY_HEADER)

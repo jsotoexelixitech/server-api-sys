@@ -106,10 +106,14 @@ export class BiomasaDto {
   @IsIn(HORIZONTES_BIOMASA as unknown as number[])
   horizonte_meses: number;
 
-  @ApiPropertyOptional({ example: 'LT-2026-001', description: 'Lote Ganadero Certificado. Obligatorio al emitir.' })
+  @ApiPropertyOptional({
+    example: 'LT-2026-001',
+    description: 'Lote Ganadero Certificado. Obligatorio al emitir y único entre pólizas vigentes del ramo. Sin punto y coma; se guarda en mayúsculas.',
+  })
   @IsOptional()
   @IsString()
   @MaxLength(30)
+  @Matches(/^[^;]*$/, { message: 'lote no puede contener punto y coma' })
   lote?: string;
 
   @ApiPropertyOptional({ example: '0,92', description: 'Índice de Homogeneidad del Lote, como lo entrega la certificadora. Obligatorio al emitir.' })

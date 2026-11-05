@@ -96,6 +96,7 @@ export interface ResultadoBiomasa {
 }
 
 const DIA_MS = 86400000;
+const ETIQUETA_LOTE = 'Lote Gan. Cert.';
 const r3 = (n: number) => Math.round((n + Number.EPSILON) * 1000) / 1000;
 const r6 = (n: number) => Math.round((n + Number.EPSILON) * 1e6) / 1e6;
 const ymd = (d: Date) => d.toISOString().split('T')[0];
@@ -161,7 +162,7 @@ export function calcularBiomasa(
   return {
     errores: [],
     biomasa: {
-      lote: e.lote?.trim() || null,
+      lote: normalizarLote(e.lote) || null,
       ihl: e.ihl?.trim() || null,
       cantidad_animales: e.cantidad_animales,
       peso_promedio: e.peso_promedio,
@@ -196,6 +197,19 @@ export function numeroVe(n: number, decimales = 2, fijo = false): string {
   return fraccion ? `${miles},${fraccion}` : miles;
 }
 
+/** Forma canónica del lote: la que se graba y la que se compara. Trata los espacios igual que componerDatosBien. */
+export function normalizarLote(lote: string | null | undefined): string {
+  return String(lote ?? '').replace(/\s+/g, ' ').trim().toUpperCase();
+}
+
+/**
+ * Patrón LIKE (ESCAPE '!') del lote en xdescrip3, en mayúsculas. datosBienBiomasa lo pone siempre de primero y al emitir
+ * le sigue el IHL, así que se ancla al inicio y exige el `;` final: LT-1 no coincide con LT-10.
+ */
+export function patronLote(lote: string): string {
+  return `${ETIQUETA_LOTE.toUpperCase()}: ${normalizarLote(lote).replace(/[!%_[]/g, '!$&')};%`;
+}
+
 /** Datos del bien para la póliza, en orden de prioridad: si no caben en 500 caracteres, se pierden los últimos. */
 export function datosBienBiomasa(b: ResultadoBiomasa, cmoneda: string): DatoBien[] {
   const retencion = `40% Gv ${numeroVe(b.engorde_verano)} + 20% Gi ${numeroVe(b.engorde_invierno)} = ${numeroVe(b.retencion_a)} kg`;
@@ -211,6 +225,6 @@ export function datosBienBiomasa(b: ResultadoBiomasa, cmoneda: string): DatoBien
     { etiqueta: 'Biomasa esperada', valor: `${numeroVe(b.biomasa_esperada)} kg` },
   ];
   if (b.ihl) datos.unshift({ etiqueta: 'Ind. Homog. Lote (IHL)', valor: b.ihl });
-  if (b.lote) datos.unshift({ etiqueta: 'Lote Gan. Cert.', valor: b.lote });
+  if (b.lote) datos.unshift({ etiqueta: ETIQUETA_LOTE, valor: b.lote });
   return datos;
 }
