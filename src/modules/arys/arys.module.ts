@@ -11,6 +11,6 @@ import { ArysService } from './arys.service';
 @Module({
   controllers: [ArysController],
   providers: [ArysClient, ArysRepository, ArysMembershipConfigService, ArysMembershipJobService, ArysMonitorReporterService, ArysService, ArysRetryScheduler],
-  exports: [ArysService, ArysClient, ArysMembershipConfigService],
+  exports: [ArysService, ArysClient, ArysMembershipConfigService, ArysMonitorReporterService],
 })
 export class ArysModule {}

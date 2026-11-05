@@ -8,6 +8,11 @@ export interface BcvRateRow {
   source: Exclude<BcvRateSource, 'mamonedas'>;
 }
 
+export interface TasaIncompleta {
+  cmoneda: string;
+  tabla: 'mamonedas' | 'mavamoneda';
+}
+
 @Injectable()
 export class BcvRateRepository {
   private readonly logger = new Logger(BcvRateRepository.name);
@@ -37,6 +42,20 @@ export class BcvRateRepository {
     );
     const ptasamon = Number(result.recordset?.[0]?.ptasamon ?? 0);
     return Number.isFinite(ptasamon) && ptasamon > 0 ? ptasamon : null;
+  }
+
+  /** Monedas vigentes sin tasa válida en la tasa actual o en el histórico de hoy. */
+  async findTasasIncompletas(): Promise<TasaIncompleta[]> {
+    const result = await this.db.request().query(`
+      SELECT TRIM(cmoneda) AS cmoneda, 'mamonedas' AS tabla
+      FROM mamonedas WITH (NOLOCK)
+      WHERE iestado = 'V' AND TRIM(cmoneda) <> 'BS' AND ISNULL(ptasamon, 0) <= 0
+      UNION ALL
+      SELECT TRIM(cmoneda), 'mavamoneda'
+      FROM mavamoneda WITH (NOLOCK)
+      WHERE fmoneda = CAST(GETDATE() AS DATE) AND TRIM(cmoneda) <> 'BS' AND ISNULL(ptasamon, 0) <= 0
+    `);
+    return (result.recordset ?? []) as TasaIncompleta[];
   }
 
   private async queryPtasamonFromTable(
