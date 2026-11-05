@@ -1,4 +1,4 @@
-import { BadRequestException, Injectable, InternalServerErrorException, Logger, NotFoundException } from '@nestjs/common';
+import { BadRequestException, ConflictException, Injectable, InternalServerErrorException, Logger, NotFoundException } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { MssqlService } from '../../database/mssql.service';
 import { parseSPError, toUserFacingError } from '../../common/helpers/sp-error.helper';
@@ -8,7 +8,7 @@ import {
   calcularCoberturas, componerDatosBien, esObligatoria, mapCoberturaRamo, mapRamoPatrimonial, sumarMeses,
   type CoberturaTarifa, type CotizacionCalculada, type DatoBien, type DatosBienCompuestos,
 } from './riesgos-generales.calculo';
-import { calcularBiomasa, datosBienBiomasa, type ResultadoBiomasa } from './riesgos-generales.biomasa';
+import { calcularBiomasa, datosBienBiomasa, patronLote, type ResultadoBiomasa } from './riesgos-generales.biomasa';
 import {
   CoberturasRamoDto, CotizarCoberturasDto, EmitirCoberturasDto, PersonaRiesgoDto, RAMOS_BIOMASA, TarifaPlanDto,
 } from './dto/riesgos-generales.dto';
@@ -16,7 +16,7 @@ import {
 /** Usuario Sis2000 de las emisiones Nexus de riesgos generales (mismo que condominio). */
 const CUSUARIO_NEXUS = 20364172;
 
-type CotizacionConBien = CotizacionCalculada & { biomasa?: ResultadoBiomasa; datos_bien?: DatosBienCompuestos };
+type CotizacionConBien = CotizacionCalculada & { biomasa?: ResultadoBiomasa; datos_bien?: DatosBienCompuestos; aviso_lote?: string };
 
 /**
  * Riesgos generales por cobertura (cotizador RC): tarifa del plan, cotización y emisión con las coberturas
@@ -139,6 +139,20 @@ export class RiesgosGeneralesService {
   }
 
   async cotizar(dto: CotizarCoberturasDto): Promise<CotizacionConBien> {
+    const cot = await this.calcular(dto);
+    const lote = cot.biomasa?.lote;
+    if (!lote) return cot;
+    // Solo informa: sin el número de póliza, y si la consulta falla la cotización sale igual.
+    try {
+      const poliza = await this.polizaVigentePorLote(dto.cramo, lote, new Date().toISOString().split('T')[0]);
+      return poliza ? { ...cot, aviso_lote: `El lote ${lote} ya está asegurado en una póliza vigente; no se podrá emitir otra.` } : cot;
+    } catch (err) {
+      this.logger.warn(`cotizar: no se pudo consultar el lote: ${parseSPError(err)}`);
+      return cot;
+    }
+  }
+
+  private async calcular(dto: CotizarCoberturasDto): Promise<CotizacionConBien> {
     const tarifa = await this.getTarifa(dto);
     const { cotizacion, errores } = calcularCoberturas(tarifa.coberturas, dto.coberturas, dto.calculo);
     if (!cotizacion) throw new BadRequestException(errores.join(' '));
@@ -146,6 +160,28 @@ export class RiesgosGeneralesService {
     const datos: DatoBien[] = [...(biomasa ? datosBienBiomasa(biomasa, tarifa.cmoneda) : []), ...(dto.datos_bien ?? [])];
     if (!datos.length) return cotizacion;
     return { ...cotizacion, ...(biomasa ? { biomasa } : {}), datos_bien: componerDatosBien(datos) };
+  }
+
+  /**
+   * Póliza vigente con ese lote en rgcerti.xdescrip3, sin importar tomador, asegurado ni plan. Vigencia igual a la del
+   * SP de pre-emisión; adAnulaPoliza deja iestado en 'N'. El patrón va por parámetro: ver patronLote.
+   */
+  private async polizaVigentePorLote(cramo: number, lote: string, fdesde: string): Promise<string | null> {
+    const T = this.db.types;
+    const result = await this.db.request()
+      .input('cramo', T.Int, cramo)
+      .input('fdesde', T.Date, fdesde)
+      .input('patron', T.VarChar(100), patronLote(lote))
+      .query(`
+        SELECT TOP 1 RTRIM(p.cnpoliza) AS cnpoliza
+        FROM adpoliza p WITH (NOLOCK)
+        INNER JOIN rgcerti r WITH (NOLOCK)
+          ON r.cramo = p.cramo AND r.cpoliza = p.cpoliza AND r.fanopol = p.fanopol AND r.fmespol = p.fmespol
+        WHERE p.cramo = @cramo AND p.iestado = 'V' AND p.fhasta > @fdesde
+          AND UPPER(LTRIM(r.xdescrip3)) LIKE @patron ESCAPE '!'
+        ORDER BY p.fhasta DESC`);
+    const fila = result.recordset?.[0] as { cnpoliza?: string } | undefined;
+    return fila ? String(fila.cnpoliza ?? '').trim() : null;
   }
 
   private proyectarBiomasa(dto: CotizarCoberturasDto): ResultadoBiomasa {
@@ -167,7 +203,7 @@ export class RiesgosGeneralesService {
     if (dto.biomasa && dto.meses && dto.meses !== dto.biomasa.horizonte_meses) {
       throw new BadRequestException(`meses (${dto.meses}) no coincide con horizonte_meses (${dto.biomasa.horizonte_meses}).`);
     }
-    const cot = await this.cotizar(dto);
+    const cot = await this.calcular(dto);
     if (cot.datos_bien?.omitidos.length) {
       this.logger.warn(`emitir: datos del bien sin espacio en xdescrip3/4: ${cot.datos_bien.omitidos.join(', ')}`);
     }
@@ -195,6 +231,15 @@ export class RiesgosGeneralesService {
     if (!rifTomador || !rifAsegurado) throw new BadRequestException('El RIF o la cédula del tomador y del asegurado son obligatorios.');
     if (dto.cramo === 38 && !dto.apartamento) {
       throw new BadRequestException('El número de apartamento es obligatorio en el ramo 38 (clave cédula + plan + unidad).');
+    }
+
+    // Un lote, una póliza vigente. La validación del SP (asegurado + plan) sigue aparte y no cambia.
+    const lote = cot.biomasa?.lote;
+    if (lote) {
+      const poliza = await this.polizaVigentePorLote(dto.cramo, lote, fdesde);
+      if (poliza !== null) {
+        throw new ConflictException(`El lote ${lote} ya está asegurado en la póliza vigente ${poliza}. Un lote no puede tener dos pólizas vigentes, aunque cambien el tomador o el plan.`);
+      }
     }
 
     const coberturasJson = JSON.stringify(cot.coberturas.map((c) => ({
