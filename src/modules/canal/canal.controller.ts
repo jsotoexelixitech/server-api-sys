@@ -1,5 +1,6 @@
-import { Controller, Get, Query } from '@nestjs/common';
+import { Controller, Get, Query, Req } from '@nestjs/common';
 import { ApiOperation, ApiResponse, ApiTags } from '@nestjs/swagger';
+import type { Request } from 'express';
 import { ApiCommonErrors } from '../../common/swagger/api-error-responses';
 import { CanalService } from './canal.service';
 import { GetCanalVisibilityDto } from './dto/get-canal-visibility.dto';
@@ -41,6 +42,33 @@ export class CanalController {
   @ApiCommonErrors()
   async getVisibility(@Query() query: GetCanalVisibilityDto) {
     const data = await this.canalService.getVisibility(query);
+    return { status: true, data };
+  }
+
+  @Get('actores')
+  @ApiOperation({
+    summary: 'Catálogo de canales alternos y gestores activos',
+    description:
+      'Requiere una apikey registrada (nest_ o maclient_api). ' +
+      'Lista macanalalt y magestor con bactivo = 1. Lo consumen los parametrizadores Exelixi ' +
+      '(p. ej. módulo OCR, para marcar por canal/gestor si el OCR es obligatorio u opcional).',
+    operationId: 'canalActores',
+  })
+  @ApiResponse({
+    status: 200,
+    schema: {
+      example: {
+        status: true,
+        data: {
+          canales: [{ ccanalalt: 1, xcanalalt: 'CANAL DIGITAL', ctipocanal: 'A' }],
+          gestores: [{ cgestor: '215', xgestor: 'GESTOR MARKETPLACE', ccanalalt: 1, cscanalalt: 28 }],
+        },
+      },
+    },
+  })
+  @ApiCommonErrors()
+  async getActores(@Req() req: Request) {
+    const data = await this.canalService.getActores(req.nestAuth?.apikey);
     return { status: true, data };
   }
 }
