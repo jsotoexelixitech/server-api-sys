@@ -43,4 +43,30 @@ export class CanalController {
     const data = await this.canalService.getVisibility(query);
     return { status: true, data };
   }
+
+  @Get('actores')
+  @ApiOperation({
+    summary: 'Catálogo de canales alternos y gestores activos',
+    description:
+      'Lista macanalalt y magestor con bactivo = 1. Lo consumen los parametrizadores Exelixi ' +
+      '(p. ej. módulo OCR, para marcar por canal/gestor si el OCR es obligatorio u opcional).',
+    operationId: 'canalActores',
+  })
+  @ApiResponse({
+    status: 200,
+    schema: {
+      example: {
+        status: true,
+        data: {
+          canales: [{ ccanalalt: 1, xcanalalt: 'CANAL DIGITAL', ctipocanal: 'A' }],
+          gestores: [{ cgestor: '215', xgestor: 'GESTOR MARKETPLACE', ccanalalt: 1, cscanalalt: 28 }],
+        },
+      },
+    },
+  })
+  @ApiCommonErrors()
+  async getActores() {
+    const data = await this.canalService.getActores();
+    return { status: true, data };
+  }
 }
