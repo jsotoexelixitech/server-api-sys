@@ -126,6 +126,18 @@ export const envValidationSchema = Joi.object({
   /** Login de Sis2000 del ambiente: botón "Ingresar a Sis2000" del correo de alta de intermediarios (sin él, no hay botón). */
   SIS2000_LOGIN_URL: Joi.string().uri().optional(),
 
+  /**
+   * Verificación del pago en `/external/collection/activate`: antes de registrar
+   * la referencia en `pago_movil`, se consulta la BD de Pagos (`PAGOS_DATABASE_URL`,
+   * tabla `pagos.registros_pago`) para confirmar que el pago fue verificado.
+   * `off` = sin verificar; `warn` = avisa sin bloquear; `enforce` = rechaza (402).
+   */
+  COLLECTION_VERIFY_PAYMENT: Joi.string()
+    .valid('off', 'warn', 'enforce')
+    .default('warn'),
+  /** Cadena de conexión a la BD `exelixi_nexus` de Pagos (solo lectura para verificar). */
+  PAGOS_DATABASE_URL: Joi.string().optional(),
+
   /** Reportes ET — PostgreSQL DB `reportes` (independiente de Sis2000 MSSQL). */
   REPORTES_ENABLED: Joi.boolean().default(false),
   REPORTES_PG_HOST: Joi.string().when('REPORTES_ENABLED', {
