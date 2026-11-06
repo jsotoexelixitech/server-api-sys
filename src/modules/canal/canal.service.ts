@@ -1,5 +1,6 @@
-import { BadRequestException, Injectable } from '@nestjs/common';
+import { BadRequestException, ForbiddenException, Injectable } from '@nestjs/common';
 import { MssqlService } from '../../database/mssql.service';
+import { ApiChannelService } from '../auth/api-channel.service';
 import { ValrepService } from '../valrep/valrep.service';
 import { GetCanalVisibilityDto } from './dto/get-canal-visibility.dto';
 import { mapCanalVisibility } from './canal-visibility.mapper';
@@ -55,14 +56,30 @@ export class CanalService {
   constructor(
     private readonly valrepService: ValrepService,
     private readonly db: MssqlService,
+    private readonly channels: ApiChannelService,
   ) {}
+
+  /**
+   * xgestor contiene cédula y nombre. Sin NEST_AUTH_STRICT_APIKEY el guard global
+   * acepta cualquier clave sin prefijo nest_ y le da scopes ['*'], así que un
+   * scope no protege esta ruta: la clave debe estar registrada.
+   */
+  private async assertRegisteredKey(apikey: string | undefined): Promise<void> {
+    try {
+      await this.channels.assertApiKeyRegistered(apikey ?? '');
+    } catch {
+      throw new ForbiddenException('Este catálogo requiere una apikey registrada.');
+    }
+  }
 
   /**
    * Catálogo de canales alternos (macanalalt) y gestores (magestor) activos.
    * Solo lectura; lo consumen los módulos Exelixi (p. ej. parametrizador OCR)
    * para listar actores sin replicar el mantenimiento de SysIP.
    */
-  async getActores(): Promise<CanalActoresResult> {
+  async getActores(apikey: string | undefined): Promise<CanalActoresResult> {
+    await this.assertRegisteredKey(apikey);
+
     const [canalesRes, gestoresRes] = await Promise.all([
       this.db.request().query(`
         SELECT ccanalalt,
