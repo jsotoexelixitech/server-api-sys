@@ -123,6 +123,18 @@ export const envValidationSchema = Joi.object({
   /** Endpoint PHP sendmail_sisip (modo sisip). Mismo contrato que SysIP email_php.service.js */
   URL_API_EMAIL: Joi.string().uri().optional(),
 
+  /**
+   * Verificación del pago en `/external/collection/activate`: antes de registrar
+   * la referencia en `pago_movil`, se consulta la BD de Pagos (`PAGOS_DATABASE_URL`,
+   * tabla `pagos.registros_pago`) para confirmar que el pago fue verificado.
+   * `off` = sin verificar; `warn` = avisa sin bloquear; `enforce` = rechaza (402).
+   */
+  COLLECTION_VERIFY_PAYMENT: Joi.string()
+    .valid('off', 'warn', 'enforce')
+    .default('warn'),
+  /** Cadena de conexión a la BD `exelixi_nexus` de Pagos (solo lectura para verificar). */
+  PAGOS_DATABASE_URL: Joi.string().optional(),
+
   /** Reportes ET — PostgreSQL DB `reportes` (independiente de Sis2000 MSSQL). */
   REPORTES_ENABLED: Joi.boolean().default(false),
   REPORTES_PG_HOST: Joi.string().when('REPORTES_ENABLED', {

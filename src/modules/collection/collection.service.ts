@@ -1,11 +1,14 @@
 import {
   BadRequestException,
+  HttpException,
+  HttpStatus,
   Injectable,
   InternalServerErrorException,
   Logger,
 } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { MssqlService } from '../../database/mssql.service';
+import { PaymentVerificationService } from './payment-verification.service';
 import { CollectionPaymentDto } from './dto/collection-payment.dto';
 import {
   hasPagoMovilDuplicateLookupFields,
@@ -85,6 +88,7 @@ export class CollectionService {
   constructor(
     private readonly db: MssqlService,
     private readonly config: ConfigService,
+    private readonly paymentVerification: PaymentVerificationService,
   ) {}
 
   /** Rechaza referencias internas Exélixi; exige ref. bancaria del pago verificado. */
@@ -220,12 +224,55 @@ export class CollectionService {
    * (instancia distinta o registro solo en el gateway). Inserta en pago_movil si falta.
    * Se compara la referencia exacta: un LIKE que coincida con otra fila no debe omitir el registro.
    */
+  /**
+   * Exige que la referencia corresponda a un pago verificado por el módulo de Pagos
+   * (`pagos.registros_pago`) antes de registrarla en `pago_movil`. En modo `warn`
+   * solo deja aviso en el log; en `enforce` rechaza con 402. Una caída de la BD de
+   * Pagos nunca bloquea el cobro (fail-open con aviso).
+   */
+  private async assertPagoVerificadoPorPagos(body: CollectionPaymentDto): Promise<void> {
+    const mode = this.paymentVerification.mode;
+    if (mode === 'off') return;
+
+    const ref = body.xreferencia.trim();
+    const check = await this.paymentVerification.verify(ref, Number(body.mpago));
+    if (check.verified) return;
+
+    const detalle = `ref=${ref} cnrecibo=${body.cnrecibo} motivo=${check.reason} mpago=${body.mpago}`;
+
+    if (check.reason === 'db_unavailable') {
+      this.logger.warn(
+        `assertPagoVerificado: BD de Pagos no disponible, se deja pasar (${detalle})`,
+      );
+      return;
+    }
+
+    if (mode === 'enforce') {
+      this.logger.warn(`assertPagoVerificado (BLOQUEO): ${detalle}`);
+      throw new HttpException(
+        {
+          status: false,
+          code: 'PAYMENT_NOT_VERIFIED',
+          message:
+            'La referencia no corresponde a un pago verificado. No se puede cobrar el recibo.',
+        },
+        HttpStatus.PAYMENT_REQUIRED,
+      );
+    }
+
+    this.logger.warn(`assertPagoVerificado (AVISO, sin bloquear): ${detalle} modo=${mode}`);
+  }
+
   private async ensureMobilePaymentRegistered(body: CollectionPaymentDto): Promise<void> {
     const ref = body.xreferencia.trim();
     if (await this.hasExactPagoMovilReference(ref)) {
       await this.syncPagoMovilPagadorFromBody(ref, body);
       return;
     }
+
+    // La referencia no está en pago_movil: solo se registra si Pagos la verificó.
+    // Evita que /activate (público) cobre un recibo con una referencia no verificada.
+    await this.assertPagoVerificadoPorPagos(body);
 
     const bankRef = body.cbanco_ref?.trim();
     if (!bankRef) {
