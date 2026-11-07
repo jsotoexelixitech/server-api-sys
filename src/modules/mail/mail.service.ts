@@ -11,6 +11,11 @@ import { buildFuneralPaymentLinkEmail } from './templates/funeral-payment-link.t
 import { buildFuneralReviewAlertEmail } from './templates/funeral-review-alert.template';
 import { buildFuneralRejectedEmail } from './templates/funeral-rejected.template';
 import { buildLamundialBrandedEmail } from './templates/lamundial-branded.template';
+import {
+  buildExpedienteDocumentosEmail,
+  normalizarDocumentos,
+  type ExpedienteTipoCorreo,
+} from './templates/expediente-documentos.template';
 import type { SendTemplatedMailDto } from './dto/send-templated-mail.dto';
 
 export type PolicyEmissionMailResult = {
@@ -186,6 +191,25 @@ export class MailService {
         planName: str('planName', 'Funerario'),
         productLabel: str('productLabel', 'Funerario'),
         reason: str('reason'),
+        callCenterPhone: phone,
+      });
+    }
+
+    if (dto.template === 'expediente-documentos') {
+      const notas = Array.isArray(data.notas)
+        ? (data.notas as unknown[]).map((n) => String(n ?? '')).filter((n) => n.trim())
+        : [];
+      return buildExpedienteDocumentosEmail({
+        tipo: str('tipo', 'solicitud') as ExpedienteTipoCorreo,
+        subject: str('subject') || undefined,
+        nombre: str('nombre') || undefined,
+        poliza: str('poliza') || undefined,
+        documentos: normalizarDocumentos(data.documentos),
+        enlace: str('enlace') || undefined,
+        venceEn: str('venceEn') || undefined,
+        title: str('title') || undefined,
+        intro: str('intro') || undefined,
+        notas,
         callCenterPhone: phone,
       });
     }

@@ -17,6 +17,7 @@ export const MAIL_TEMPLATE_IDS = [
   'funeral-review-alert',
   'funeral-rejected',
   'branded',
+  'expediente-documentos',
 ] as const;
 
 export type MailTemplateId = (typeof MAIL_TEMPLATE_IDS)[number];
@@ -60,7 +61,9 @@ export class SendTemplatedMailDto {
       'Variables de la plantilla. funeral-review-alert: tomadorNombre, planName, scoreTotal. ' +
       'funeral-payment-link: name, planName, paymentUrl, expiresAt. ' +
       'funeral-rejected: tomadorNombre, planName, reason. ' +
-      'branded: subject, eyebrow, title, intro, fields[], ctaLabel, ctaUrl, extraNote.',
+      'branded: subject, eyebrow, title, intro, fields[], ctaLabel, ctaUrl, extraNote. ' +
+      'expediente-documentos: tipo (solicitud|recordatorio|observado|recibido|completo), subject, nombre, poliza, ' +
+      'documentos[] { nombre, estado (pendiente|corregir|en_revision|recibido|aprobado), motivo, poliza }, enlace, venceEn, title, intro, notas[].',
     example: { tomadorNombre: 'Joel Yepes', planName: 'Funerario Individual', scoreTotal: '25.5' },
   })
   @IsObject()
