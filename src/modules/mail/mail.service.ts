@@ -17,6 +17,7 @@ import {
   normalizarPolizas,
   type ExpedienteTipoCorreo,
 } from './templates/expediente-documentos.template';
+import { buildExpedienteCodigoEmail, codigoSeguro } from './templates/expediente-codigo.template';
 import type { SendTemplatedMailDto } from './dto/send-templated-mail.dto';
 
 export type PolicyEmissionMailResult = {
@@ -192,6 +193,18 @@ export class MailService {
         planName: str('planName', 'Funerario'),
         productLabel: str('productLabel', 'Funerario'),
         reason: str('reason'),
+        callCenterPhone: phone,
+      });
+    }
+
+    if (dto.template === 'expediente-codigo') {
+      const codigo = codigoSeguro(data.codigo);
+      if (!codigo) return { error: 'data.codigo es obligatorio (solo dígitos).' };
+      return buildExpedienteCodigoEmail({
+        subject: str('subject') || undefined,
+        nombre: str('nombre') || undefined,
+        codigo,
+        minutos: Number(data.minutos),
         callCenterPhone: phone,
       });
     }
