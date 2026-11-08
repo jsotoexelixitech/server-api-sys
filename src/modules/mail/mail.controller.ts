@@ -91,7 +91,7 @@ export class MailController {
   @ApiOperation({
     summary: 'Enviar correo con plantilla registrada (reutilizable)',
     description:
-      'No acepta HTML libre. `template` elige el diseño (funeral-payment-link, funeral-review-alert, funeral-rejected, branded o expediente-documentos). ' +
+      'No acepta HTML libre. `template` elige el diseño (funeral-payment-link, funeral-review-alert, funeral-rejected, branded, expediente-documentos o expediente-codigo). ' +
       'Los endpoints específicos de funerario siguen vigentes.',
     operationId: 'sendTemplatedEmail',
   })
