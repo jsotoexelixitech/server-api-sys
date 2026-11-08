@@ -144,11 +144,16 @@ export class CreateEmissionAutoDto {
   @IsDateString()
   fnac_titular?: string;
 
-  @ApiProperty({ example: 1, description: 'Código de estado del titular' })
+  @ApiProperty({
+    example: 1,
+    description:
+      'Código de estado del titular (> 0). Obligatorio si el titular no es el tomador; ' +
+      'si es la misma persona y no se envía, se usa el del tomador.',
+  })
   @IsInt()
   estado_titular: number;
 
-  @ApiProperty({ example: 128, description: 'Código de ciudad del titular' })
+  @ApiProperty({ example: 128, description: 'Código de ciudad del titular (> 0); misma regla que estado_titular.' })
   @IsInt()
   ciudad_titular: number;
 
