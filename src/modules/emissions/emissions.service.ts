@@ -62,6 +62,38 @@ export class EmissionsService {
     return undefined;
   }
 
+  /**
+   * Estado y ciudad del titular son obligatorios: sin ellos el cliente queda sin dirección en Sis2000
+   * y la membresía Arys falla ("Estado no encontrado: null"; 36 pólizas RCV del 1 al 8-nov-2026).
+   * Si el titular es el tomador (misma cédula o sin cédula propia) y no trae dirección, se usa la del
+   * tomador. Devuelve los campos que siguen faltando (código 0 cuenta como vacío).
+   */
+  private completarDireccionTitular(b: Record<string, unknown>): string[] {
+    const valido = (v: unknown) => Number(v) > 0;
+    const estado = this.pick(b, 'cestado_titular', 'estado_titular');
+    const ciudad = this.pick(b, 'cciudad_titular', 'ciudad_titular');
+    if (valido(estado) && valido(ciudad)) return [];
+
+    const digitos = (v: unknown) => String(v ?? '').replace(/\D/g, '');
+    const rifTitular = digitos(this.pick(b, 'xrif_titular', 'rif_titular'));
+    const rifTomador = digitos(this.pick(b, 'xrif_tomador', 'rif_tomador'));
+    const estadoTom = this.pick(b, 'cestado_tomador', 'estado_tomador');
+    const ciudadTom = this.pick(b, 'cciudad_tomador', 'ciudad_tomador');
+    if ((!rifTitular || rifTitular === rifTomador) && valido(estadoTom) && valido(ciudadTom)) {
+      b['cestado_titular'] = b['estado_titular'] = estadoTom;
+      b['cciudad_titular'] = b['ciudad_titular'] = ciudadTom;
+      if (!this.pick(b, 'xdireccion_titular', 'direccion_titular')) {
+        const dirTom = this.pick(b, 'xdireccion_tomador', 'direccion_tomador');
+        if (dirTom) b['xdireccion_titular'] = b['direccion_titular'] = dirTom;
+      }
+      return [];
+    }
+    return [
+      ...(valido(estado) ? [] : ['cestado_titular']),
+      ...(valido(ciudad) ? [] : ['cciudad_titular']),
+    ];
+  }
+
   /** Entero Sis2000 (estado/ciudad/ramo); null si vacío. */
   private intField(value: unknown): number | null {
     if (value == null || String(value).trim() === '') return null;
@@ -973,7 +1005,8 @@ export class EmissionsService {
       ];
       const missing = requiredFields
         .filter(([, value]) => value == null || String(value).trim() === '')
-        .map(([name]) => name);
+        .map(([name]) => name)
+        .concat(this.completarDireccionTitular(b));
       if (missing.length > 0) {
         throw new BadRequestException(
           `Parámetros de entrada inválidos. Faltan: ${missing.join(', ')}`,
