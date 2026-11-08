@@ -36,7 +36,9 @@ describe('MailService: plantilla expediente-documentos', () => {
 
   it('acepta poliza en texto (compatibilidad)', () => {
     const r = build({ tipo: 'completo', nombre: 'Ana', poliza: 'P-9' });
-    expect('error' in r ? r.error : r.html).toMatch(/<strong[^>]*>N\.º P-9<\/strong>/);
+    expect('error' in r ? r.error : r.html).toMatch(
+      /<strong[^>]*><span style="white-space:nowrap">N\.º P-9<\/span><\/strong>/,
+    );
   });
 
   it('sin asunto usa el del tipo', () => {

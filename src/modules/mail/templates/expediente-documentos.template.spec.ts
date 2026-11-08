@@ -67,14 +67,16 @@ describe('plantilla expediente-documentos (texto oficial La Mundial)', () => {
 
   it('la póliza y «ha sido emitida exitosamente» van en negrita', () => {
     const r = solicitud();
+    const num = `<span style="white-space:nowrap">N\\.º ${POLIZA}</span>`;
     expect(r.html).toMatch(
-      new RegExp(`<(strong|b)[^>]*>N\\.º ${POLIZA} ha sido emitida exitosamente</(strong|b)>`),
+      new RegExp(`<(strong|b)[^>]*>${num} ha sido emitida exitosamente</(strong|b)>`),
     );
     expect(r.html).toMatch(
       /<(strong|b)[^>]*>Es importante que complete este proceso a la brevedad<\//,
     );
     for (const r2 of todos(ENLACE)) {
-      expect(r2.html).toMatch(new RegExp(`<(strong|b)[^>]*>N\\.º ${POLIZA}[^<]*</(strong|b)>`));
+      // En los 5 correos la póliza va en negrita y el número no se parte.
+      expect(r2.html).toMatch(new RegExp(`<(strong|b)[^>]*>${num}[^<]*</(strong|b)>`));
     }
   });
 

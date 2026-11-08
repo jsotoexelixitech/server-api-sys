@@ -266,10 +266,15 @@ function cuerpo(
   ];
 }
 
+/** El número de póliza («N.º 18-27-…») no se parte en el guion en pantallas angostas. */
+function sinCorte(html: string): string {
+  return html.replace(/N\.º [^\s,<]+/g, (m) => `<span style="white-space:nowrap">${m}</span>`);
+}
+
 function parrafoHtml(p: Seg[]): string {
   const inner = p
     .map(([t, b]) =>
-      b ? `<strong style="color:${BRAND_BLUE};">${escapeHtml(t)}</strong>` : escapeHtml(t),
+      b ? `<strong style="color:${BRAND_BLUE};">${sinCorte(escapeHtml(t))}</strong>` : escapeHtml(t),
     )
     .join('');
   return `<p style="margin:0 0 14px;font-family:${FONT};font-size:15px;line-height:23px;color:${TEXT};">${inner}</p>`;
