@@ -62,7 +62,7 @@ export class SendTemplatedMailDto {
       'Variables de la plantilla. funeral-review-alert: tomadorNombre, planName, scoreTotal. ' +
       'funeral-payment-link: name, planName, paymentUrl, expiresAt. ' +
       'funeral-rejected: tomadorNombre, planName, reason. ' +
-      'branded: subject, eyebrow, title, intro, fields[], ctaLabel, ctaUrl, extraNote. ' +
+      'branded: subject, eyebrow, title, intro, fields[], ctaLabel, ctaUrl, extraNote, introArriba (false = intro solo dentro de la tarjeta). ' +
       'expediente-documentos: tipo (solicitud|recordatorio|observado|recibido|completo), subject, nombre, polizas[], ' +
       'documentos[] { nombre, estado (pendiente|corregir|en_revision|recibido|aprobado), motivo, poliza }, enlace. ' +
       'expediente-codigo: subject, nombre, codigo (6 dígitos), minutos.',
