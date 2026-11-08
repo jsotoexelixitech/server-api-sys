@@ -1,5 +1,6 @@
 import { ArysHttpError } from './arys.client';
-import { ArysMembershipJobService } from './arys-membership-job.service';
+import { ArysMembershipJobService, isPermanentArysError } from './arys-membership-job.service';
+import { ArysDataError } from './arys.utils';
 import { ArysMonitorReporterService } from './arys-monitor-reporter.service';
 
 const enabledConfig = {
@@ -57,7 +58,7 @@ describe('ArysMembershipJobService → monitor', () => {
     };
     const reporter = { report: jest.fn().mockResolvedValue(undefined) };
     const svc = new ArysMembershipJobService(prisma as never, config as never, reporter as never);
-    return { svc, reporter };
+    return { svc, reporter, prisma };
   }
   const job = (attempts: number) =>
     ({ id: 'j', cnpoliza: 'N1', attempts, maxAttempts: 5, personaId: 1, vehiculoId: 2 }) as never;
@@ -94,8 +95,51 @@ describe('ArysMembershipJobService → monitor', () => {
         type: 'arys.membership.recovered',
         severity: 'info',
         notify: true,
-        resolves: ['arys-membership:N1:failed', 'arys-membership:N1:dead'],
+        resolves: [
+          'arys-membership:N1:failed',
+          'arys-membership:N1:dead',
+          'arys-membership:N1:needs_data',
+        ],
       }),
     );
+  });
+
+  it('un error de datos queda en NEEDS_DATA desde el primer intento, sin reintento, y guarda body y respuesta', async () => {
+    const { svc, reporter, prisma } = build();
+    await svc.markFailure(
+      job(1),
+      'propietario',
+      new ArysDataError('Arys rechazó el registro del propietario.', { rif: '1' }, '{"result":0}'),
+    );
+    expect(prisma.arysMembershipJob.update.mock.calls[0][0].data).toMatchObject({
+      status: 'NEEDS_DATA',
+      nextRetryAt: null,
+    });
+    expect(prisma.arysMembershipAttempt.create.mock.calls[0][0].data).toMatchObject({
+      requestBody: { rif: '1' },
+      responseBody: '{"result":0}',
+    });
+    expect(reporter.report).toHaveBeenCalledWith(
+      expect.objectContaining({ type: 'arys.membership.needs_data', notify: true }),
+    );
+  });
+
+  it('un 500 de Arys sigue reintentándose', async () => {
+    const { svc, prisma } = build();
+    await svc.markFailure(job(1), 'subscripcion', new ArysHttpError('HTTP 500', 500, {}, 'boom'));
+    expect(prisma.arysMembershipJob.update.mock.calls[0][0].data.status).toBe('FAILED');
+  });
+});
+
+describe('isPermanentArysError', () => {
+  it.each([
+    [new ArysDataError('Estado no encontrado', {}), true],
+    [new ArysDataError('isSuccess=false', {}, '{}', false), false],
+    [new ArysHttpError('400', 400, {}, ''), true],
+    [new ArysHttpError('429', 429, {}, ''), false],
+    [new ArysHttpError('503', 503, {}, ''), false],
+    [new Error('timeout'), false],
+  ])('%s → %s', (error, expected) => {
+    expect(isPermanentArysError(error)).toBe(expected);
   });
 });

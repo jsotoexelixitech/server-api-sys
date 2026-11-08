@@ -19,7 +19,9 @@ export function buildPropietarioRequest(
 ): ArysPropietarioRequest {
   const telefono = propietary.xtelefono?.trim();
   if (!telefono) {
-    throw new Error('El teléfono del titular es obligatorio para Arys');
+    throw new ArysDataError('El teléfono del titular es obligatorio para Arys', {
+      _sis2000: { xtelefono: null },
+    });
   }
 
   const rif = onlyDigits(casegurado) || onlyDigits(propietary.cci_rif);

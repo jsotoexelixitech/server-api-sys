@@ -87,7 +87,7 @@ export class ArysController {
   @Get('membership/jobs')
   @ApiOperation({
     summary: 'Respaldo de membresías Arys',
-    description: 'Lista trabajos con su estado (PENDING | RETRYING | SUCCESS | FAILED | DEAD) y últimos intentos.',
+    description: 'Lista trabajos con su estado (PENDING | RETRYING | SUCCESS | FAILED | DEAD | NEEDS_DATA) y últimos intentos.',
   })
   async listJobs(@Query('status') status?: string, @Query('limit') limit?: string) {
     const result = await this.jobs.list({ status, limit: limit ? Number(limit) : undefined });
@@ -110,7 +110,7 @@ export class ArysController {
   @Post('membership/:cnpoliza/retry')
   @ApiOperation({
     summary: 'Reintentar la membresía Arys de una póliza',
-    description: 'Retoma desde lo ya creado en Arys. Aplica también a trabajos DEAD.',
+    description: 'Retoma desde lo ya creado en Arys. Aplica también a trabajos DEAD y NEEDS_DATA (tras corregir el dato).',
   })
   @ApiParam({ name: 'cnpoliza', type: String })
   async retryOne(@Param('cnpoliza') cnpoliza: string) {

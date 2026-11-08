@@ -16,7 +16,18 @@ export type ArysJobStage =
   | 'coberturas'
   | 'subscripcion';
 
-export type ArysJobStatus = 'PENDING' | 'RETRYING' | 'SUCCESS' | 'FAILED' | 'DEAD';
+/** NEEDS_DATA: falló por datos (catálogo, Sis2000 o rechazo de Arys); no se reintenta solo. */
+export type ArysJobStatus = 'PENDING' | 'RETRYING' | 'SUCCESS' | 'FAILED' | 'DEAD' | 'NEEDS_DATA';
+
+/** Reintentar no arregla: datos que faltan o no tienen equivalente, rechazos de Arys y HTTP 4xx. */
+export function isPermanentArysError(error: unknown): boolean {
+  if (error instanceof ArysDataError) return error.permanent;
+  if (error instanceof ArysHttpError) {
+    const s = error.httpStatus;
+    return s >= 400 && s < 500 && s !== 408 && s !== 429;
+  }
+  return false;
+}
 
 /** Un trabajo RETRYING sin actividad por este tiempo se considera abandonado (proceso caído). */
 const STALE_RETRYING_MS = 10 * 60 * 1000;
@@ -134,6 +145,7 @@ export class ArysMembershipJobService {
         resolves: [
           `arys-membership:${job.cnpoliza}:failed`,
           `arys-membership:${job.cnpoliza}:dead`,
+          `arys-membership:${job.cnpoliza}:needs_data`,
         ],
       });
     }
@@ -147,20 +159,22 @@ export class ArysMembershipJobService {
     if (!job) return;
     const msg = error instanceof Error ? error.message : String(error);
     const http = error instanceof ArysHttpError ? error : null;
-    const requestBody =
-      http?.requestBody ?? (error instanceof ArysDataError ? error.requestBody : undefined);
-    const dead = job.attempts >= job.maxAttempts;
+    const data = error instanceof ArysDataError ? error : null;
+    const requestBody = http?.requestBody ?? data?.requestBody;
+    const needsData = isPermanentArysError(error);
+    const dead = !needsData && job.attempts >= job.maxAttempts;
+    const status: ArysJobStatus = needsData ? 'NEEDS_DATA' : dead ? 'DEAD' : 'FAILED';
     try {
       const cfg = await this.config.get();
       await this.prisma.$transaction([
         this.prisma.arysMembershipJob.update({
           where: { id: job.id },
           data: {
-            status: dead ? 'DEAD' : 'FAILED',
+            status,
             lastStage: stage,
             lastError: msg.slice(0, 2000),
             lastHttpStatus: http?.httpStatus ?? null,
-            nextRetryAt: dead ? null : this.nextRetryAt(job.attempts, cfg),
+            nextRetryAt: status === 'FAILED' ? this.nextRetryAt(job.attempts, cfg) : null,
           },
         }),
         this.prisma.arysMembershipAttempt.create({
@@ -172,22 +186,29 @@ export class ArysMembershipJobService {
             httpStatus: http?.httpStatus ?? null,
             error: msg.slice(0, 2000),
             requestBody: this.toJson(requestBody),
-            responseBody: http?.responseBody ?? null,
+            responseBody: http?.responseBody ?? data?.responseBody ?? null,
           },
         }),
       ]);
     } catch (err) {
       this.logWarn('markFailure', job.cnpoliza, err);
     }
+    const kind = needsData ? 'needs_data' : dead ? 'dead' : 'failed';
     void this.reporter.report({
-      type: dead ? 'arys.membership.dead' : 'arys.membership.failed',
+      type: `arys.membership.${kind}`,
       severity: dead ? 'critical' : 'warning',
-      title: dead
-        ? `Membresía Arys sin recuperar · ${job.cnpoliza}`
-        : `Membresía Arys falló · ${job.cnpoliza}`,
+      title: needsData
+        ? `Membresía Arys requiere corregir datos · ${job.cnpoliza}`
+        : dead
+          ? `Membresía Arys sin recuperar · ${job.cnpoliza}`
+          : `Membresía Arys falló · ${job.cnpoliza}`,
       message:
         `Etapa ${stage}${http ? ` (HTTP ${http.httpStatus})` : ''}: ${msg.slice(0, 500)}` +
-        (dead ? ` — agotó ${job.maxAttempts} intentos, requiere revisión manual.` : ''),
+        (needsData
+          ? ' — no se reintenta: corregir el dato (Sis2000 o homologación) y relanzar con retry.'
+          : dead
+            ? ` — agotó ${job.maxAttempts} intentos, requiere revisión manual.`
+            : ''),
       entity: job.cnpoliza,
       details: {
         stage,
@@ -196,10 +217,10 @@ export class ArysMembershipJobService {
         httpStatus: http?.httpStatus ?? null,
         personaId: job.personaId,
         vehiculoId: job.vehiculoId,
-        willRetry: !dead,
+        willRetry: status === 'FAILED',
       },
-      dedupeKey: `arys-membership:${job.cnpoliza}:${dead ? 'dead' : 'failed'}`,
-      notify: dead || job.attempts === 1,
+      dedupeKey: `arys-membership:${job.cnpoliza}:${kind}`,
+      notify: needsData || dead || job.attempts === 1,
     });
   }
 
@@ -235,7 +256,7 @@ export class ArysMembershipJobService {
     return res.count === 1;
   }
 
-  /** Vuelve a poner en cola trabajos FAILED/DEAD (reintento manual desde el endpoint). */
+  /** Vuelve a poner en cola trabajos FAILED/DEAD/NEEDS_DATA (reintento manual desde el endpoint). */
   async requeue(cnpoliza: string): Promise<ArysMembershipJob | null> {
     if (!this.isEnabled()) return null;
     const job = await this.get(cnpoliza);

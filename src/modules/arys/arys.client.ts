@@ -13,6 +13,7 @@ import {
   ArysVehiculoRequest,
 } from './arys.types';
 import {
+  ArysDataError,
   extractNumericResult,
   findBestByLabel,
   findByLabel,
@@ -70,7 +71,7 @@ export class ArysClient {
   async addPropietario(body: ArysPropietarioRequest): Promise<number> {
     const payload = await this.request<unknown>('POST', '/api/v1/Propetario/AddPropetario', body);
     if (isZeroArysResult(payload)) {
-      throw new BadGatewayException('Arys rechazó el registro del propietario.');
+      throw this.rejected('Arys rechazó el registro del propietario', body, payload);
     }
     const id = extractNumericResult(payload);
     if (!id) {
@@ -82,13 +83,13 @@ export class ArysClient {
   async addVehiculo(body: ArysVehiculoRequest): Promise<number> {
     const payload = await this.request<unknown>('POST', '/api/v1/Vehiculo/AddVehiculo', body);
     if (isZeroArysResult(payload)) {
-      const detail = payload.errorMessage ? `: ${payload.errorMessage}` : '';
       this.logger.warn(
         `Arys AddVehiculo result=0 placa=${body.placa} ` +
           `marca=${body.id_marca} modelo=${body.id_modelo} version=${body.id_version} ` +
-          `color=${body.id_color} tipo=${body.id_tipo_vehi}${detail}`,
+          `color=${body.id_color} tipo=${body.id_tipo_vehi}` +
+          (payload.errorMessage ? `: ${payload.errorMessage}` : ''),
       );
-      throw new BadGatewayException(`Arys rechazó el registro del vehículo${detail}`);
+      throw this.rejected('Arys rechazó el registro del vehículo', body, payload);
     }
     const id = extractNumericResult(payload);
     if (!id) {
@@ -115,10 +116,19 @@ export class ArysClient {
     );
 
     if (isZeroArysResult(payload)) {
-      throw new BadGatewayException('Arys rechazó el registro de la membresía.');
+      throw this.rejected('Arys rechazó el registro de la membresía', primas, payload);
     }
 
     return (payload.result as ArysMembresiaResult) ?? payload;
+  }
+
+  /** Arys respondió result=0: se guarda lo enviado y lo recibido; reintentar no cambia el resultado. */
+  private rejected(message: string, body: unknown, payload: ArysApiResponse<unknown>): ArysDataError {
+    return new ArysDataError(
+      `${message}${payload.errorMessage ? `: ${payload.errorMessage}` : '.'}`,
+      body,
+      JSON.stringify(payload).slice(0, 2000),
+    );
   }
 
   async getEstados(): Promise<Record<string, unknown>[]> {
@@ -176,11 +186,18 @@ export class ArysClient {
     xversion?: string;
     xcolor?: string;
   }) {
+    // Lo que llegó de Sis2000, para el respaldo del intento si no hay equivalente en Arys.
+    const sis2000 = {
+      xmarca: vehiculo.xmarca ?? null,
+      xmodelo: vehiculo.xmodelo ?? null,
+      xversion: vehiculo.xversion ?? null,
+      xcolor: vehiculo.xcolor ?? null,
+    };
     const marcas = await this.getMarcas();
     const marcaKeys = ['etiqueta', 'marca', 'xmarca', 'marca1', 'descripcion', 'nombre'];
     const marca = findBestByLabel(marcas, vehiculo.xmarca, marcaKeys);
     if (!marca) {
-      throw new BadGatewayException(`Marca no encontrada en Arys: ${vehiculo.xmarca}`);
+      throw new ArysDataError(`Marca no encontrada en Arys: ${vehiculo.xmarca}`, { _sis2000: sis2000 });
     }
 
     const marcaId = Number(marca.id_marca ?? marca.id);
@@ -188,7 +205,10 @@ export class ArysClient {
     const modeloKeys = ['etiqueta', 'modelo', 'xmodelo', 'modelo1', 'descripcion', 'nombre'];
     const modelo = findBestByLabel(modelos, vehiculo.xmodelo, modeloKeys);
     if (!modelo) {
-      throw new BadGatewayException(`Modelo no encontrado en Arys: ${vehiculo.xmodelo}`);
+      throw new ArysDataError(`Modelo no encontrado en Arys: ${vehiculo.xmodelo}`, {
+        _sis2000: sis2000,
+        _id_marca_arys: marcaId,
+      });
     }
 
     const modeloId = Number(modelo.id_modelo ?? modelo.id);
@@ -205,8 +225,9 @@ export class ArysClient {
     const porEtiqueta = findBestByLabel(versiones, vehiculo.xversion, versionKeys);
     const version = porEtiqueta ?? firstCatalogItem(versiones);
     if (!version) {
-      throw new BadGatewayException(
+      throw new ArysDataError(
         `Versión no encontrada en Arys para ${vehiculo.xmarca} ${vehiculo.xmodelo} ${vehiculo.xversion}`,
+        { _sis2000: sis2000, _id_marca_arys: marcaId, _id_modelo_arys: modeloId },
       );
     }
 
@@ -217,7 +238,7 @@ export class ArysClient {
       findByLabel(colores, 'NEGRO', colorKeys) ??
       firstCatalogItem(colores);
     if (!color) {
-      throw new BadGatewayException(`Color no encontrado en Arys: ${vehiculo.xcolor}`);
+      throw new ArysDataError(`Color no encontrado en Arys: ${vehiculo.xcolor}`, { _sis2000: sis2000 });
     }
 
     const versionPor: 'etiqueta' | 'respaldo' = porEtiqueta ? 'etiqueta' : 'respaldo';
@@ -297,7 +318,13 @@ export class ArysClient {
     const payload = (await response.json().catch(() => ({}))) as ArysApiResponse<T>;
 
     if (payload.isSuccess === false) {
-      throw new BadGatewayException(payload.errorMessage || `Arys rechazó ${path}.`);
+      // No se sabe si es un rechazo de datos o un fallo interno de Arys: se guarda y se sigue reintentando.
+      throw new ArysDataError(
+        payload.errorMessage || `Arys rechazó ${path}.`,
+        body,
+        JSON.stringify(payload).slice(0, 2000),
+        false,
+      );
     }
 
     return payload;

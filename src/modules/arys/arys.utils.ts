@@ -41,12 +41,21 @@ export const findByLabel = (
 ): Record<string, unknown> | null => {
   const normalizedLabel = normalizeText(label);
   if (!normalizedLabel) return null;
+  const exact = items.find((item) =>
+    labelKeys.some((key) => normalizeText(item?.[key]) === normalizedLabel),
+  );
+  if (exact) return exact;
+  // Sin espacios ni signos: Sis2000 "4 RUNNER" / "X-TRAIL" / "C 70" ↔ Arys "4RUNNER" / "X TRAIL" / "C70".
+  const compactLabel = compactText(normalizedLabel);
+  if (!compactLabel) return null;
   return (
     items.find((item) =>
-      labelKeys.some((key) => normalizeText(item?.[key]) === normalizedLabel),
+      labelKeys.some((key) => compactText(normalizeText(item?.[key])) === compactLabel),
     ) ?? null
   );
 };
+
+const compactText = (value: string): string => value.replace(/[^A-Z0-9Ñ]/g, '');
 
 const itemLabels = (item: Record<string, unknown>, labelKeys: string[]): string[] =>
   labelKeys.map((key) => normalizeText(item?.[key])).filter(Boolean);
@@ -141,11 +150,16 @@ export const isZeroArysResult = (payload: { result?: unknown } | null | undefine
   return result === 0 || result === '0';
 };
 
-/** Fallo de datos antes de llamar a Arys; guarda lo que se intentó armar para respaldo. */
+/**
+ * Fallo por datos (de Sis2000 o rechazo de Arys); guarda lo que se intentó enviar y, si hubo,
+ * la respuesta. `permanent`: reintentar no lo arregla, hace falta corregir el dato (NEEDS_DATA).
+ */
 export class ArysDataError extends Error {
   constructor(
     message: string,
     readonly requestBody: unknown,
+    readonly responseBody: string | null = null,
+    readonly permanent = true,
   ) {
     super(message);
   }

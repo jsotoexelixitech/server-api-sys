@@ -49,6 +49,20 @@ describe('ArysClient', () => {
     expect(version?.id_version).toBe(11);
   });
 
+  it.each([
+    ['4 RUNNER', 1],
+    ['X-TRAIL', 22],
+    ['C 70', 11],
+  ])('resuelve modelo sin espacios ni guiones (%s)', (label, id) => {
+    const modelos = [
+      { id_modelo: 1, modelo1: '4RUNNER' },
+      { id_modelo: 22, modelo1: 'X TRAIL' },
+      { id_modelo: 11, modelo1: 'C70' },
+      { id_modelo: 30, modelo1: 'C30' },
+    ];
+    expect(findBestByLabel(modelos, label, ['modelo1'])?.id_modelo).toBe(id);
+  });
+
   describe('findCiudadByName', () => {
     const ciudades = [
       { id_ciudad: 561, ciudad1: 'NUESTRA SEÑORA DEL ROSARIO DE BARUTA' },
