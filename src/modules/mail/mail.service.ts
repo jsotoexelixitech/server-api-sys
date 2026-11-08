@@ -246,6 +246,7 @@ export class MailService {
       ctaUrl: str('ctaUrl') || undefined,
       extraNote: str('extraNote') || undefined,
       callCenterPhone: phone,
+      introArriba: data.introArriba === false || data.introArriba === 'false' ? false : undefined,
     });
   }
 
