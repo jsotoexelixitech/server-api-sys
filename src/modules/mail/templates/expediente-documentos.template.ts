@@ -1,7 +1,9 @@
 /**
- * Correo al asegurado del monitor de expedientes (Nexus): lista de documentos con su estado,
- * botón para subirlos y vencimiento del enlace. Marca igual que `branded` (logo, colores, pie).
- * HTML de correo: tablas y estilos en línea, máx. 600 px, legible a 360 px (Gmail y Outlook).
+ * Correo al asegurado del monitor de expedientes (Nexus). Texto oficial de La Mundial
+ * (de usted): saludo, póliza en negrita, documentación pendiente como lista simple,
+ * botón «Completar mi expediente», firma y pie de control documental.
+ * Marca igual que `branded` (logo, colores). HTML de correo: tablas y estilos en línea,
+ * máx. 600 px, legible a 360 px (Gmail y Outlook).
  */
 import { escapeHtml, type BuiltEmail } from './lamundial-branded.template';
 
@@ -26,7 +28,7 @@ export type ExpedienteEstadoDoc = (typeof EXPEDIENTE_ESTADOS_DOC)[number];
 export type ExpedienteDocumento = {
   nombre: string;
   estado: ExpedienteEstadoDoc;
-  /** Solo en `corregir`: motivo ya redactado para el asegurado. */
+  /** Solo en `corregir`: motivo corto ya redactado para el asegurado. */
   motivo?: string;
   /** Cuando el correo cubre varias pólizas. */
   poliza?: string;
@@ -36,15 +38,10 @@ export type ExpedienteDocumentosParams = {
   tipo: ExpedienteTipoCorreo;
   subject?: string;
   nombre?: string;
-  poliza?: string;
+  /** Números de póliza (sin «N.º»). */
+  polizas?: string[];
   documentos?: ExpedienteDocumento[];
   enlace?: string;
-  /** Fecha ISO de vencimiento del enlace. */
-  venceEn?: string;
-  /** Textos opcionales (si no vienen se usan los del tipo). */
-  title?: string;
-  intro?: string;
-  notas?: string[];
   callCenterPhone?: string;
 };
 
@@ -55,82 +52,12 @@ const BRAND_RED = '#c8102e';
 const MUTED = '#6b7280';
 const TEXT = '#1f2937';
 const FONT = 'Arial,Helvetica,sans-serif';
-
+const MARCA = 'La Mundial de Seguros';
 const MAX_DOCS = 30;
 
-const ESTADO_UI: Record<
-  ExpedienteEstadoDoc,
-  { label: string; fg: string; bg: string; bar: string }
-> = {
-  pendiente: { label: 'Pendiente', fg: '#92400e', bg: '#fef3c7', bar: '#f59e0b' },
-  corregir: { label: 'Envíalo de nuevo', fg: '#991b1b', bg: '#fee2e2', bar: BRAND_RED },
-  en_revision: { label: 'En revisión', fg: '#1e40af', bg: '#dbeafe', bar: '#3b82f6' },
-  recibido: { label: 'Recibido', fg: '#334155', bg: '#e2e8f0', bar: '#64748b' },
-  aprobado: { label: 'Aprobado', fg: '#166534', bg: '#dcfce7', bar: '#16a34a' },
-};
-
-/** `{poliza}` se reemplaza por «tu póliza N° X» (o «tus pólizas …») con el número en negrita. */
-const COPY: Record<ExpedienteTipoCorreo, { subject: string; title: string; intro: string }> = {
-  solicitud: {
-    subject: 'La Mundial | Completa la documentación de tu póliza',
-    title: 'Completa la documentación de tu póliza',
-    intro:
-      'Ya emitimos {poliza}. Para completar tu expediente, envíanos los documentos de esta lista.',
-  },
-  recordatorio: {
-    subject: 'La Mundial | Aún necesitamos un documento de tu expediente',
-    title: 'Aún necesitamos documentos de tu expediente',
-    intro: 'Todavía faltan documentos para completar el expediente de {poliza}.',
-  },
-  observado: {
-    subject: 'La Mundial | Necesitamos corregir un documento',
-    title: 'Necesitamos que envíes un documento de nuevo',
-    intro:
-      'Revisamos lo que enviaste para {poliza} y hay un documento que debes enviar otra vez. Tu póliza sigue emitida.',
-  },
-  recibido: {
-    subject: 'La Mundial | Documento recibido',
-    title: 'Recibimos tu documento',
-    intro:
-      'Recibimos tu documento de {poliza}. Lo estamos revisando y te avisaremos si hace falta corregir algo.',
-  },
-  completo: {
-    subject: 'La Mundial | Tu expediente está completo',
-    title: 'Tu expediente está completo',
-    intro: 'Validamos toda la documentación de {poliza}. No necesitas hacer nada más.',
-  },
-};
-
-/** Nota única por tipo (el aviso de correo automático va solo en el pie). */
-function notaPorDefecto(tipo: ExpedienteTipoCorreo, conEnlace: boolean): string[] {
-  if (tipo !== 'solicitud' && tipo !== 'recordatorio') return [];
-  return [
-    conEnlace
-      ? 'Si ya los entregaste a tu asesor de seguros, no tienes que enviarlos de nuevo: los estamos validando.'
-      : 'Puedes entregarlos a tu asesor de seguros. Si ya lo hiciste, no tienes que enviarlos de nuevo: los estamos validando.',
-  ];
-}
-
-/** Texto con `{poliza}`: HTML escapado con el número en negrita, y versión plana. */
-function conPoliza(
-  plantilla: string,
-  poliza: string,
-  varias: boolean,
-): { html: string; text: string } {
-  const prefijo = varias ? 'tus pólizas' : 'tu póliza';
-  const numero = poliza ? (varias ? poliza : `N° ${poliza}`) : '';
-  const partes = plantilla.split('{poliza}');
-  const refHtml = numero
-    ? `${prefijo} <strong style="color:${BRAND_BLUE};white-space:nowrap;">${escapeHtml(numero)}</strong>`
-    : prefijo;
-  const refText = numero ? `${prefijo} ${numero}` : prefijo;
-  return {
-    html: partes.map((x) => escapeHtml(x)).join(refHtml),
-    text: partes.join(refText),
-  };
-}
-
-const PASOS = ['Abre el enlace', 'Toma una foto o elige el archivo', 'Listo, nosotros lo revisamos'];
+const PIE_BASE =
+  'Este es un mensaje automático generado por nuestro sistema de control documental. No requiere responder a este correo';
+const PIE_ENLACE = '; puede completar la gestión a través del enlace indicado.';
 
 function corto(v: unknown, max: number): string {
   const s = String(v ?? '')
@@ -147,24 +74,6 @@ function callCenter(raw?: string): string {
 export function enlaceSeguro(raw?: string): string {
   const s = String(raw ?? '').trim();
   return /^https?:\/\/[^\s"'<>]+$/i.test(s) ? s : '';
-}
-
-/** "lunes, 14 de noviembre de 2026" en hora de Caracas; '' si la fecha no es válida. */
-export function formatoVence(iso?: string): string {
-  if (!iso) return '';
-  const d = new Date(iso);
-  if (Number.isNaN(d.getTime())) return '';
-  try {
-    return d.toLocaleDateString('es-VE', {
-      weekday: 'long',
-      day: 'numeric',
-      month: 'long',
-      year: 'numeric',
-      timeZone: 'America/Caracas',
-    });
-  } catch {
-    return d.toISOString().slice(0, 10);
-  }
 }
 
 export function normalizarDocumentos(raw: unknown): ExpedienteDocumento[] {
@@ -185,161 +94,258 @@ export function normalizarDocumentos(raw: unknown): ExpedienteDocumento[] {
   return out;
 }
 
-function pill(estado: ExpedienteEstadoDoc): string {
-  const ui = ESTADO_UI[estado];
-  return `<span style="display:inline-block;background:${ui.bg};color:${ui.fg};font-family:${FONT};font-size:12px;font-weight:700;line-height:16px;padding:4px 10px;border-radius:12px;white-space:nowrap;">&#9679;&nbsp;${escapeHtml(ui.label)}</span>`;
+/** Acepta `polizas[]` o, por compatibilidad, `poliza` separada por comas. */
+export function normalizarPolizas(raw: unknown, legacy?: unknown): string[] {
+  const list: unknown[] = Array.isArray(raw)
+    ? raw
+    : String(legacy ?? '')
+        .split(/\s*,\s*/)
+        .filter(Boolean);
+  return list
+    .map((p) => corto(p, 60).replace(/^N\.?\s*[°º]\s*/i, ''))
+    .filter(Boolean)
+    .slice(0, 10);
 }
 
-function documentoHtml(d: ExpedienteDocumento): string {
-  const ui = ESTADO_UI[d.estado];
-  const polizaHtml = d.poliza
-    ? `<div style="font-family:${FONT};font-size:12px;line-height:18px;color:${MUTED};">Póliza ${escapeHtml(d.poliza)}</div>`
-    : '';
-  const motivoHtml = d.motivo
-    ? `<div style="margin-top:8px;font-family:${FONT};font-size:13px;line-height:19px;color:${ui.fg};"><strong>Qué corregir:</strong> ${escapeHtml(d.motivo)}</div>`
-    : '';
-  return `<tr>
-                  <td style="padding:0 0 10px;">
-                    <table role="presentation" width="100%" cellspacing="0" cellpadding="0" border="0" style="border-collapse:separate;">
-                      <tr>
-                        <td width="4" style="width:4px;background:${ui.bar};font-size:0;line-height:0;">&nbsp;</td>
-                        <td style="padding:12px 14px;background:#f9fafb;border:1px solid #e5e7eb;border-left:0;">
-                          <div style="font-family:${FONT};font-size:15px;line-height:21px;font-weight:700;color:${TEXT};">${escapeHtml(d.nombre)}</div>
-                          ${polizaHtml}
-                          <div style="margin-top:6px;">${pill(d.estado)}</div>
-                          ${motivoHtml}
-                        </td>
-                      </tr>
-                    </table>
-                  </td>
-                </tr>`;
+/** «N.º X», «N.º X y N.º Y», «N.º X, N.º Y y N.º Z». */
+export function listaPolizas(polizas: string[]): string {
+  const n = polizas.map((p) => `N.º ${p}`);
+  return n.length <= 1 ? n.join('') : `${n.slice(0, -1).join(', ')} y ${n[n.length - 1]}`;
+}
+
+/** Asunto oficial; el recordatorio lleva «Recordatorio:» delante. */
+export function asuntoExpediente(tipo: ExpedienteTipoCorreo, polizas: string[]): string {
+  const ref = `${polizas.length > 1 ? 'sus pólizas' : 'su póliza'}${
+    polizas.length ? ` ${listaPolizas(polizas)}` : ''
+  }`;
+  switch (tipo) {
+    case 'recordatorio':
+      return `Recordatorio: ${MARCA} | Complete la documentación de ${ref}`;
+    case 'observado':
+      return `${MARCA} | Necesitamos corregir un documento de ${ref}`;
+    case 'recibido':
+      return `${MARCA} | Documento recibido de ${ref}`;
+    case 'completo':
+      return `${MARCA} | Expediente completo de ${ref}`;
+    default:
+      return `${MARCA} | Complete la documentación de ${ref}`;
+  }
+}
+
+/** «Licencia de conducir (La licencia está vencida).» */
+function lineaDoc(d: ExpedienteDocumento): string {
+  const motivo = d.motivo ? d.motivo.replace(/[.\s]+$/, '') : '';
+  return motivo ? `${d.nombre} (${motivo}).` : `${d.nombre}.`;
+}
+
+/** Párrafo como segmentos [texto, negrita]. */
+type Seg = [string, boolean?];
+type Bloque = { p: Seg[] } | { lista: string[]; titulo?: string } | { boton: true };
+
+function cuerpo(
+  tipo: ExpedienteTipoCorreo,
+  polizas: string[],
+  documentos: ExpedienteDocumento[],
+  conEnlace: boolean,
+): Bloque[] {
+  const varias = polizas.length > 1;
+  const su = varias ? 'sus pólizas' : 'su póliza';
+  const num = listaPolizas(polizas);
+  const refPoliza: Seg[] = num ? [[`${su} `], [num, true]] : [[su]];
+  const saludoMarca: Bloque = { p: [['Reciba un cordial saludo de '], [MARCA, true], ['.']] };
+  const noAfecta: Bloque = { p: [[`Esta gestión no afecta la emisión de ${su}.`]] };
+  const boton: Bloque[] = conEnlace ? [{ boton: true }] : [];
+
+  if (tipo === 'solicitud' || tipo === 'recordatorio') {
+    const pend = documentos.filter((d) => d.estado === 'pendiente' || d.estado === 'corregir');
+    const listas: Bloque[] = [];
+    if (varias && pend.some((d) => d.poliza)) {
+      for (const pol of polizas) {
+        const items = pend.filter((d) => d.poliza === pol).map(lineaDoc);
+        if (items.length) listas.push({ titulo: `Póliza N.º ${pol}:`, lista: items });
+      }
+    } else if (pend.length) {
+      listas.push({ lista: pend.map(lineaDoc) });
+    }
+    const emitida = varias ? 'han sido emitidas exitosamente' : 'ha sido emitida exitosamente';
+    return [
+      saludoMarca,
+      { p: [[`Le confirmamos que ${su} `], [num ? `${num} ${emitida}` : emitida, true], ['.']] },
+      {
+        p: [
+          [
+            'Como parte de nuestros procesos de control y actualización de expedientes, hemos identificado que aún se encuentra pendiente completar la siguiente documentación:',
+          ],
+        ],
+      },
+      ...listas,
+      {
+        p: [
+          ['Es importante que complete este proceso a la brevedad', true],
+          [
+            `, ya que mantener su expediente actualizado forma parte de los requisitos documentales de ${su}.`,
+          ],
+        ],
+      },
+      ...(conEnlace
+        ? ([
+            {
+              p: [
+                [
+                  'Para facilitarle la gestión, hemos habilitado un enlace seguro donde podrá cargar los documentos directamente:',
+                ],
+              ],
+            },
+          ] as Bloque[])
+        : []),
+      ...boton,
+      { p: [['¿Ya entregó estos documentos a La Mundial de Seguros?', true]] },
+      {
+        p: [
+          [
+            'Si los entregó previamente por alguno de nuestros canales autorizados, no necesita cargarlos nuevamente. Sin embargo, mientras no se confirme su validación, su expediente continuará registrado como pendiente y recibirá las notificaciones de seguimiento correspondientes.',
+          ],
+        ],
+      },
+      {
+        p: [
+          [
+            'Le agradecemos atender esta solicitud oportunamente para mantener su documentación completa y debidamente validada.',
+          ],
+        ],
+      },
+      noAfecta,
+    ];
+  }
+
+  if (tipo === 'observado') {
+    const corr = documentos.filter((d) => d.estado === 'corregir');
+    return [
+      saludoMarca,
+      {
+        p: [
+          ['Revisamos la documentación recibida para '],
+          ...refPoliza,
+          [' y necesitamos que cargue nuevamente el siguiente documento:'],
+        ],
+      },
+      ...(corr.length ? ([{ lista: corr.map(lineaDoc) }] as Bloque[]) : []),
+      ...(conEnlace
+        ? ([{ p: [['Puede hacerlo directamente en el enlace seguro:']] }] as Bloque[])
+        : []),
+      ...boton,
+      noAfecta,
+    ];
+  }
+
+  if (tipo === 'recibido') {
+    const doc = documentos.find((d) => d.estado === 'recibido');
+    return [
+      saludoMarca,
+      {
+        p: [
+          ['Le confirmamos que recibimos '],
+          ...(doc ? ([['el documento '], [doc.nombre, true]] as Seg[]) : ([['su documento']] as Seg[])),
+          [' de '],
+          ...refPoliza,
+          ['. Lo estamos verificando y le informaremos si hace falta alguna corrección.'],
+        ],
+      },
+    ];
+  }
+
+  return [
+    saludoMarca,
+    {
+      p: [
+        ['Le confirmamos que hemos completado y validado la documentación de '],
+        ...refPoliza,
+        ['. No necesita realizar ninguna otra gestión para este expediente.'],
+      ],
+    },
+  ];
+}
+
+function parrafoHtml(p: Seg[]): string {
+  const inner = p
+    .map(([t, b]) =>
+      b ? `<strong style="color:${BRAND_BLUE};">${escapeHtml(t)}</strong>` : escapeHtml(t),
+    )
+    .join('');
+  return `<p style="margin:0 0 14px;font-family:${FONT};font-size:15px;line-height:23px;color:${TEXT};">${inner}</p>`;
+}
+
+function listaHtml(items: string[]): string {
+  const filas = items
+    .map(
+      (i) => `<tr>
+                  <td width="22" valign="top" style="width:22px;font-family:${FONT};font-size:15px;line-height:23px;color:${BRAND_RED};">&#8226;</td>
+                  <td valign="top" style="font-family:${FONT};font-size:15px;line-height:23px;color:${TEXT};">${escapeHtml(i)}</td>
+                </tr>`,
+    )
+    .join('');
+  return `<table role="presentation" width="100%" cellspacing="0" cellpadding="0" border="0" style="margin:0 0 14px;">${filas}</table>`;
 }
 
 export function buildExpedienteDocumentosEmail(params: ExpedienteDocumentosParams): BuiltEmail {
   const tipo: ExpedienteTipoCorreo = (EXPEDIENTE_TIPOS as readonly string[]).includes(params.tipo)
     ? params.tipo
     : 'solicitud';
-  const copy = COPY[tipo];
   const phone = callCenter(params.callCenterPhone);
-  const subject = corto(params.subject, 200) || copy.subject;
-  const nombre = corto(params.nombre, 80) || 'cliente';
-  const poliza = corto(params.poliza, 200);
-  const title = corto(params.title, 160) || copy.title;
-  const varias = /,| y /.test(poliza);
-  const intro = conPoliza(corto(params.intro, 600) || copy.intro, poliza, varias);
+  const polizas = normalizarPolizas(params.polizas);
+  const subject = corto(params.subject, 200) || asuntoExpediente(tipo, polizas);
+  const nombre = corto(params.nombre, 80);
   const documentos = normalizarDocumentos(params.documentos);
   const enlace = tipo === 'completo' || tipo === 'recibido' ? '' : enlaceSeguro(params.enlace);
-  const vence = enlace ? formatoVence(params.venceEn) : '';
-  const notasParam = (params.notas ?? []).map((n) => corto(n, 400)).filter(Boolean).slice(0, 4);
-  const notas = notasParam.length ? notasParam : notaPorDefecto(tipo, Boolean(enlace));
-  const pendientes = documentos.filter((d) => d.estado === 'pendiente' || d.estado === 'corregir');
+  const bloques = cuerpo(tipo, polizas, documentos, Boolean(enlace));
+  const saludo = `Estimado(a) ${nombre || 'asegurado(a)'}:`;
+  const pie = PIE_BASE + (enlace ? PIE_ENLACE : '.');
 
   // ─── Texto plano ──────────────────────────────────────────────────────
   const text = [
-    'La Mundial de Seguros',
-    '',
-    title,
-    '',
-    `Hola ${nombre},`,
-    intro.text,
-    documentos.length ? '\nTus documentos:' : '',
-    ...documentos.map(
-      (d) =>
-        `- ${d.nombre}${d.poliza ? ` (póliza ${d.poliza})` : ''}: ${ESTADO_UI[d.estado].label}` +
-        (d.motivo ? `\n  Qué corregir: ${d.motivo}` : ''),
-    ),
-    enlace ? `\nSubir mis documentos: ${enlace}` : '',
-    vence ? `El enlace vence el ${vence}.` : '',
-    enlace ? `\nCómo hacerlo:\n${PASOS.map((p, i) => `${i + 1}. ${p}`).join('\n')}` : '',
-    notas.length ? `\n${notas.join('\n')}` : '',
-    '',
-    `Teléfono: ${phone}`,
-    'Correo: info@lamundialdeseguros.com',
-    'Web: https://lamundialdeseguros.com/',
-    '',
-    'Mensaje automático. No respondas a este correo.',
-  ]
-    .filter((line) => line !== '')
-    .join('\n');
+    saludo,
+    ...bloques.map((b) => {
+      if ('p' in b) return b.p.map(([t]) => t).join('');
+      if ('lista' in b)
+        return [b.titulo ?? '', ...b.lista.map((i) => `- ${i}`)].filter(Boolean).join('\n');
+      return `Completar mi expediente: ${enlace}`;
+    }),
+    `Atentamente,\n${MARCA}`,
+    `Teléfono: ${phone}\nCorreo: info@lamundialdeseguros.com\nWeb: https://lamundialdeseguros.com/`,
+    pie,
+  ].join('\n\n');
 
   // ─── HTML ─────────────────────────────────────────────────────────────
-  // Vista previa de la bandeja (oculta): un dato que no repite el cuerpo.
-  const preheader =
-    pendientes.length && enlace
-      ? `${pendientes.length === 1 ? 'Falta 1 documento' : `Faltan ${pendientes.length} documentos`}${vence ? `. El enlace vence el ${vence}` : ''}.`
-      : title;
-
-  const docsHtml = documentos.length
-    ? `<tr>
-            <td class="px" style="padding:24px 32px 0;">
-              <div style="font-family:${FONT};font-size:13px;line-height:18px;font-weight:700;letter-spacing:0.06em;text-transform:uppercase;color:${BRAND_BLUE};margin:0 0 12px;">Tus documentos</div>
-              <table role="presentation" width="100%" cellspacing="0" cellpadding="0" border="0">
-                ${documentos.map(documentoHtml).join('')}
-              </table>
-            </td>
-          </tr>`
-    : '';
-
-  const ctaHtml = enlace
-    ? `<tr>
-            <td class="px" style="padding:16px 32px 0;">
-              <table role="presentation" width="100%" cellspacing="0" cellpadding="0" border="0">
+  const botonHtml = `<table role="presentation" width="100%" cellspacing="0" cellpadding="0" border="0" style="margin:4px 0 8px;">
                 <tr>
                   <td align="center" bgcolor="${BRAND_BLUE}" style="background:${BRAND_BLUE};border-radius:8px;">
                     <a href="${escapeHtml(enlace)}" target="_blank" rel="noopener noreferrer"
-                      style="display:block;padding:16px 20px;font-family:${FONT};font-size:17px;line-height:22px;font-weight:700;color:#ffffff;text-decoration:none;border-radius:8px;">Subir mis documentos</a>
+                      style="display:block;padding:16px 20px;font-family:${FONT};font-size:17px;line-height:22px;font-weight:700;color:#ffffff;text-decoration:none;border-radius:8px;">Completar mi expediente</a>
                   </td>
                 </tr>
               </table>
-              ${
-                vence
-                  ? `<p style="margin:10px 0 0;font-family:${FONT};font-size:13px;line-height:19px;color:${MUTED};text-align:center;">El enlace vence el <strong style="color:${TEXT};">${escapeHtml(vence)}</strong>.</p>`
-                  : ''
-              }
-            </td>
-          </tr>
-          <tr>
-            <td class="px" style="padding:24px 32px 0;">
-              <div style="font-family:${FONT};font-size:13px;line-height:18px;font-weight:700;letter-spacing:0.06em;text-transform:uppercase;color:${BRAND_BLUE};margin:0 0 10px;">Cómo hacerlo</div>
-              <table role="presentation" width="100%" cellspacing="0" cellpadding="0" border="0">
-                ${PASOS.map(
-                  (p, i) => `<tr>
-                  <td width="36" valign="top" style="width:36px;padding:0 0 10px;">
-                    <table role="presentation" cellspacing="0" cellpadding="0" border="0"><tr>
-                      <td align="center" valign="middle" width="26" height="26" bgcolor="${BRAND_BLUE}" style="width:26px;height:26px;background:${BRAND_BLUE};border-radius:13px;font-family:${FONT};font-size:13px;line-height:26px;font-weight:700;color:#ffffff;">${i + 1}</td>
-                    </tr></table>
-                  </td>
-                  <td valign="middle" style="padding:0 0 10px;font-family:${FONT};font-size:15px;line-height:26px;color:${TEXT};">${escapeHtml(p)}</td>
-                </tr>`,
-                ).join('')}
-              </table>
-            </td>
-          </tr>`
-    : '';
-
-  const notasHtml = notas.length
-    ? `<tr>
-            <td class="px" style="padding:16px 32px 0;">
-              ${notas
-                .map(
-                  (n) =>
-                    `<p style="margin:0 0 8px;font-family:${FONT};font-size:13px;line-height:20px;color:${MUTED};">${escapeHtml(n)}</p>`,
-                )
-                .join('')}
-            </td>
-          </tr>`
-    : '';
-
-  const fallbackHtml = enlace
-    ? `<tr>
-            <td class="px" style="padding:8px 32px 0;">
-              <p style="margin:0;font-family:${FONT};font-size:12px;line-height:18px;color:#9ca3af;">
-                Si el botón no funciona, copia y pega este enlace en tu navegador:<br>
+              <p style="margin:0 0 18px;font-family:${FONT};font-size:12px;line-height:18px;color:#9ca3af;">
+                Si el botón no funciona, copie y pegue este enlace en su navegador:<br>
                 <a href="${escapeHtml(enlace)}" style="color:${BRAND_BLUE};word-break:break-all;">${escapeHtml(enlace)}</a>
-              </p>
-            </td>
-          </tr>`
-    : '';
+              </p>`;
+
+  const cuerpoHtml = bloques
+    .map((b) => {
+      if ('p' in b) return parrafoHtml(b.p);
+      if ('lista' in b)
+        return (
+          (b.titulo
+            ? `<p style="margin:0 0 6px;font-family:${FONT};font-size:15px;line-height:23px;font-weight:700;color:${BRAND_BLUE};">${escapeHtml(b.titulo)}</p>`
+            : '') + listaHtml(b.lista)
+        );
+      return botonHtml;
+    })
+    .join('\n              ');
+
+  const preheader =
+    tipo === 'solicitud' || tipo === 'recordatorio'
+      ? 'Tiene documentación pendiente por completar en su expediente.'
+      : subject;
 
   const html = `<!DOCTYPE html>
 <html lang="es">
@@ -352,7 +358,6 @@ export function buildExpedienteDocumentosEmail(params: ExpedienteDocumentosParam
   <style>
     @media only screen and (max-width: 480px) {
       .px { padding-left: 18px !important; padding-right: 18px !important; }
-      .h1 { font-size: 21px !important; line-height: 27px !important; }
     }
   </style>
 </head>
@@ -380,20 +385,12 @@ export function buildExpedienteDocumentosEmail(params: ExpedienteDocumentosParam
             </td>
           </tr>
           <tr>
-            <td class="px" style="padding:22px 32px 0;">
-              <h1 class="h1" style="margin:0;font-family:${FONT};font-size:23px;line-height:30px;font-weight:800;color:${BRAND_BLUE};">${escapeHtml(title)}</h1>
+            <td class="px" style="padding:24px 32px 0;">
+              <p style="margin:0 0 14px;font-family:${FONT};font-size:16px;line-height:24px;color:${TEXT};">${escapeHtml(saludo)}</p>
+              ${cuerpoHtml}
+              <p style="margin:18px 0 0;font-family:${FONT};font-size:15px;line-height:23px;color:${TEXT};">Atentamente,<br><strong style="color:${BRAND_BLUE};">${MARCA}</strong></p>
             </td>
           </tr>
-          <tr>
-            <td class="px" style="padding:16px 32px 0;">
-              <p style="margin:0 0 8px;font-family:${FONT};font-size:16px;line-height:24px;color:${TEXT};">Hola <strong>${escapeHtml(nombre)}</strong>,</p>
-              <p style="margin:0;font-family:${FONT};font-size:15px;line-height:23px;color:${TEXT};">${intro.html}</p>
-            </td>
-          </tr>
-          ${docsHtml}
-          ${ctaHtml}
-          ${notasHtml}
-          ${fallbackHtml}
           <tr>
             <td class="px" style="padding:24px 32px 0;">
               <div style="border-top:1px solid #e5e7eb;font-size:0;line-height:0;">&nbsp;</div>
@@ -401,13 +398,12 @@ export function buildExpedienteDocumentosEmail(params: ExpedienteDocumentosParam
           </tr>
           <tr>
             <td class="px" style="padding:12px 32px 26px;text-align:center;">
-              <p style="margin:0 0 6px;font-family:${FONT};font-size:15px;font-weight:800;color:${BRAND_BLUE};">La Mundial de Seguros</p>
               <p style="margin:0 0 10px;font-family:${FONT};font-size:13px;line-height:20px;color:${BRAND_BLUE};">
                 Teléfono: ${escapeHtml(phone)}<br>
                 Correo: <a href="mailto:info@lamundialdeseguros.com" style="color:${BRAND_BLUE};">info@lamundialdeseguros.com</a><br>
                 Web: <a href="https://lamundialdeseguros.com/" style="color:${BRAND_BLUE};">lamundialdeseguros.com</a>
               </p>
-              <p style="margin:0;font-family:${FONT};font-size:11px;line-height:16px;color:${MUTED};">Mensaje automático. No respondas a este correo.</p>
+              <p style="margin:0;font-family:${FONT};font-size:11px;line-height:16px;color:${MUTED};">${escapeHtml(pie)}</p>
             </td>
           </tr>
         </table>

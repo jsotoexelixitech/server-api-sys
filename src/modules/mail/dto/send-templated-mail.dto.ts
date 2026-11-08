@@ -62,8 +62,8 @@ export class SendTemplatedMailDto {
       'funeral-payment-link: name, planName, paymentUrl, expiresAt. ' +
       'funeral-rejected: tomadorNombre, planName, reason. ' +
       'branded: subject, eyebrow, title, intro, fields[], ctaLabel, ctaUrl, extraNote. ' +
-      'expediente-documentos: tipo (solicitud|recordatorio|observado|recibido|completo), subject, nombre, poliza, ' +
-      'documentos[] { nombre, estado (pendiente|corregir|en_revision|recibido|aprobado), motivo, poliza }, enlace, venceEn, title, intro, notas[].',
+      'expediente-documentos: tipo (solicitud|recordatorio|observado|recibido|completo), subject, nombre, polizas[], ' +
+      'documentos[] { nombre, estado (pendiente|corregir|en_revision|recibido|aprobado), motivo, poliza }, enlace.',
     example: { tomadorNombre: 'Joel Yepes', planName: 'Funerario Individual', scoreTotal: '25.5' },
   })
   @IsObject()

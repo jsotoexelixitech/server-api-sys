@@ -14,6 +14,7 @@ import { buildLamundialBrandedEmail } from './templates/lamundial-branded.templa
 import {
   buildExpedienteDocumentosEmail,
   normalizarDocumentos,
+  normalizarPolizas,
   type ExpedienteTipoCorreo,
 } from './templates/expediente-documentos.template';
 import type { SendTemplatedMailDto } from './dto/send-templated-mail.dto';
@@ -196,20 +197,13 @@ export class MailService {
     }
 
     if (dto.template === 'expediente-documentos') {
-      const notas = Array.isArray(data.notas)
-        ? (data.notas as unknown[]).map((n) => String(n ?? '')).filter((n) => n.trim())
-        : [];
       return buildExpedienteDocumentosEmail({
         tipo: str('tipo', 'solicitud') as ExpedienteTipoCorreo,
         subject: str('subject') || undefined,
         nombre: str('nombre') || undefined,
-        poliza: str('poliza') || undefined,
+        polizas: normalizarPolizas(data.polizas, data.poliza),
         documentos: normalizarDocumentos(data.documentos),
         enlace: str('enlace') || undefined,
-        venceEn: str('venceEn') || undefined,
-        title: str('title') || undefined,
-        intro: str('intro') || undefined,
-        notas,
         callCenterPhone: phone,
       });
     }

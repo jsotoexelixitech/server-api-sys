@@ -1,80 +1,138 @@
 import {
+  asuntoExpediente,
   buildExpedienteDocumentosEmail,
   enlaceSeguro,
-  formatoVence,
+  EXPEDIENTE_TIPOS,
   normalizarDocumentos,
+  normalizarPolizas,
 } from './expediente-documentos.template';
 
 const ENLACE = 'https://nexusqa.exelixitech.com/portal-lm/expediente?t=abc123';
+const POLIZA = '18-27-0000137414';
 
-describe('plantilla expediente-documentos', () => {
-  it('solicitud: saludo, póliza en negrita, documentos con estado, botón, vence y pasos', () => {
-    const r = buildExpedienteDocumentosEmail({
-      tipo: 'solicitud',
-      nombre: 'Luis',
-      poliza: '18-1-0000078926',
+const solicitud = () =>
+  buildExpedienteDocumentosEmail({
+    tipo: 'solicitud',
+    nombre: 'José',
+    polizas: [POLIZA],
+    documentos: [
+      { nombre: 'Cédula de identidad', estado: 'aprobado' },
+      { nombre: 'Licencia de conducir', estado: 'pendiente' },
+      { nombre: 'Certificado de circulación', estado: 'pendiente' },
+    ],
+    enlace: ENLACE,
+  });
+
+function todos(enlace?: string) {
+  return EXPEDIENTE_TIPOS.map((tipo) =>
+    buildExpedienteDocumentosEmail({
+      tipo,
+      nombre: 'Ana',
+      polizas: [POLIZA],
       documentos: [
         { nombre: 'Cédula de identidad', estado: 'pendiente' },
         { nombre: 'Licencia de conducir', estado: 'corregir', motivo: 'La licencia está vencida.' },
-        { nombre: 'Certificado de circulación', estado: 'en_revision' },
-        { nombre: 'RIF', estado: 'aprobado' },
+        { nombre: 'Certificado de circulación', estado: 'recibido' },
       ],
-      enlace: ENLACE,
-      venceEn: '2026-11-14T15:00:00.000Z',
-    });
-    expect(r.subject).toBe('La Mundial | Completa la documentación de tu póliza');
-    expect(r.html).toContain('Hola <strong>Luis</strong>');
-    expect(r.html).toMatch(/tu póliza <strong[^>]*>N° 18-1-0000078926<\/strong>/);
-    expect(r.html).toContain('Pendiente');
-    expect(r.html).toContain('Envíalo de nuevo');
-    expect(r.html).toContain('En revisión');
-    expect(r.html).toContain('Aprobado');
-    expect(r.html).toContain('La licencia está vencida.');
-    expect(r.html).toContain('Subir mis documentos');
-    expect(r.html).toContain('noviembre de 2026');
-    expect(r.html).toContain('Toma una foto o elige el archivo');
-    expect(r.html).toContain('asesor de seguros');
+      enlace,
+    }),
+  );
+}
+
+describe('plantilla expediente-documentos (texto oficial La Mundial)', () => {
+  it('solicitud: texto oficial, lista simple de pendientes y botón', () => {
+    const r = solicitud();
+    expect(r.subject).toBe(
+      `La Mundial de Seguros | Complete la documentación de su póliza N.º ${POLIZA}`,
+    );
+    expect(r.text).toContain('Estimado(a) José:');
+    expect(r.text).toContain('Reciba un cordial saludo de La Mundial de Seguros.');
+    expect(r.text).toContain(
+      `Le confirmamos que su póliza N.º ${POLIZA} ha sido emitida exitosamente.`,
+    );
+    expect(r.text).toContain('- Licencia de conducir.\n- Certificado de circulación.');
+    expect(r.text).not.toContain('Cédula de identidad');
+    expect(r.text).toContain('Es importante que complete este proceso a la brevedad, ya que');
+    expect(r.text).toContain('¿Ya entregó estos documentos a La Mundial de Seguros?');
+    expect(r.text).toContain('Esta gestión no afecta la emisión de su póliza.');
+    expect(r.text).toContain('Atentamente,\nLa Mundial de Seguros');
+    expect(r.text).toContain(
+      'No requiere responder a este correo; puede completar la gestión a través del enlace indicado.',
+    );
+    expect(r.html).toContain('Completar mi expediente');
+    expect(r.html).toContain('Si el botón no funciona, copie y pegue este enlace en su navegador');
     expect(r.html).toContain('max-width:600px');
-    expect(r.text).toContain('- Licencia de conducir: Envíalo de nuevo');
-    expect(r.text).toContain(`Subir mis documentos: ${ENLACE}`);
     expect(r.text).not.toMatch(/<[a-z]/i);
   });
 
-  it('cada mensaje sale una sola vez', () => {
-    const r = buildExpedienteDocumentosEmail({
-      tipo: 'solicitud',
-      nombre: 'Luis',
-      poliza: 'P-1',
-      documentos: [{ nombre: 'Cédula de identidad', estado: 'pendiente' }],
-      enlace: ENLACE,
-    });
-    const veces = (s: string, sub: string) => s.split(sub).length - 1;
-    expect(veces(r.html, 'Ya emitimos')).toBe(1);
-    expect(veces(r.html, 'asesor de seguros')).toBe(1);
-    expect(veces(r.html, 'Mensaje automático')).toBe(1);
-    expect(veces(r.text, 'Ya emitimos')).toBe(1);
+  it('la póliza y «ha sido emitida exitosamente» van en negrita', () => {
+    const r = solicitud();
+    expect(r.html).toMatch(
+      new RegExp(`<(strong|b)[^>]*>N\\.º ${POLIZA} ha sido emitida exitosamente</(strong|b)>`),
+    );
+    expect(r.html).toMatch(
+      /<(strong|b)[^>]*>Es importante que complete este proceso a la brevedad<\//,
+    );
+    for (const r2 of todos(ENLACE)) {
+      expect(r2.html).toMatch(new RegExp(`<(strong|b)[^>]*>N\\.º ${POLIZA}[^<]*</(strong|b)>`));
+    }
   });
 
-  it('ningún tipo dice «vendedor»', () => {
-    for (const tipo of ['solicitud', 'recordatorio', 'observado', 'recibido', 'completo'] as const) {
-      for (const enlace of [ENLACE, undefined]) {
-        const r = buildExpedienteDocumentosEmail({
-          tipo,
-          nombre: 'Ana',
-          poliza: 'P-1',
-          documentos: [{ nombre: 'Cédula de identidad', estado: 'pendiente' }],
-          enlace,
-        });
-        expect(`${r.subject} ${r.html} ${r.text}`.toLowerCase()).not.toContain('vendedor');
+  it('documento observado: motivo corto entre paréntesis', () => {
+    const [sol, , obs] = todos(ENLACE);
+    expect(sol.text).toContain('- Licencia de conducir (La licencia está vencida).');
+    expect(obs.text).toContain('- Licencia de conducir (La licencia está vencida).');
+    expect(obs.text).toContain('cargue nuevamente el siguiente documento');
+  });
+
+  it('recordatorio: mismo cuerpo y «Recordatorio:» delante del asunto', () => {
+    const [sol, rec] = todos(ENLACE);
+    expect(rec.subject).toBe(`Recordatorio: ${sol.subject}`);
+    expect(rec.text).toBe(sol.text);
+  });
+
+  it('varias pólizas: plural y documentos por póliza', () => {
+    const r = buildExpedienteDocumentosEmail({
+      tipo: 'solicitud',
+      nombre: 'Ana',
+      polizas: ['P-1', 'P-2'],
+      documentos: [
+        { nombre: 'Licencia de conducir', estado: 'pendiente', poliza: 'P-1' },
+        { nombre: 'Certificado de circulación', estado: 'pendiente', poliza: 'P-2' },
+      ],
+      enlace: ENLACE,
+    });
+    expect(r.subject).toContain('sus pólizas N.º P-1 y N.º P-2');
+    expect(r.text).toContain(
+      'Le confirmamos que sus pólizas N.º P-1 y N.º P-2 han sido emitidas exitosamente.',
+    );
+    expect(r.text).toContain('Póliza N.º P-1:\n- Licencia de conducir.');
+    expect(r.text).toContain('Póliza N.º P-2:\n- Certificado de circulación.');
+  });
+
+  it('de usted: sin tuteo ni «vendedor» en ningún correo', () => {
+    for (const enlace of [ENLACE, undefined]) {
+      for (const r of todos(enlace)) {
+        const all = `${r.subject}\n${r.html}\n${r.text}`;
+        expect(all).not.toMatch(
+          /\btu\s|\btus\s|envíanos|Toma una foto|Subir mis|\bpuedes\b|\bnecesitas\b/i,
+        );
+        expect(all.toLowerCase()).not.toContain('vendedor');
+        expect(r.text).toContain('Atentamente,\nLa Mundial de Seguros');
+        expect(r.text).toContain('sistema de control documental');
       }
     }
+  });
+
+  it('sin vencimiento, sin pasos y sin nota de asesor', () => {
+    expect(solicitud().html).not.toMatch(/vence|Cómo hacerlo|asesor/i);
   });
 
   it('escapa todo lo que viene en data', () => {
     const r = buildExpedienteDocumentosEmail({
       tipo: 'observado',
       nombre: '<script>x</script>',
-      poliza: '"><img src=x>',
+      polizas: ['"><img src=x>'],
       documentos: [{ nombre: '<b>doc</b>', estado: 'corregir', motivo: '<i>m</i>' }],
       enlace: ENLACE,
     });
@@ -82,45 +140,24 @@ describe('plantilla expediente-documentos', () => {
     expect(r.html).not.toContain('<img src=x>');
     expect(r.html).not.toContain('<b>doc</b>');
     expect(r.html).not.toContain('<i>m</i>');
-    expect(r.html).toContain('&lt;script&gt;');
   });
 
-  it('sin enlace o con esquema inseguro no hay botón ni pasos', () => {
+  it('sin enlace o con esquema inseguro no hay botón y el pie no menciona el enlace', () => {
     for (const enlace of [undefined, 'javascript:alert(1)']) {
-      const r = buildExpedienteDocumentosEmail({
-        tipo: 'recordatorio',
-        nombre: 'Ana',
-        documentos: [{ nombre: 'Cédula de identidad', estado: 'pendiente' }],
-        enlace,
-      });
-      expect(r.html).not.toContain('Subir mis documentos');
+      const r = buildExpedienteDocumentosEmail({ tipo: 'recordatorio', nombre: 'Ana', enlace });
+      expect(r.html).not.toContain('Completar mi expediente');
       expect(r.html).not.toContain('javascript:');
-      expect(r.html).toContain('Puedes entregarlos a tu asesor de seguros');
+      expect(r.text).toContain('No requiere responder a este correo.');
     }
   });
 
   it('recibido y completo no llevan botón aunque llegue enlace', () => {
-    for (const tipo of ['recibido', 'completo'] as const) {
-      const r = buildExpedienteDocumentosEmail({ tipo, nombre: 'Ana', poliza: 'P-1', enlace: ENLACE });
-      expect(r.html).not.toContain('Subir mis documentos');
-    }
+    const [, , , rec, comp] = todos(ENLACE);
+    for (const r of [rec, comp]) expect(r.html).not.toContain('Completar mi expediente');
+    expect(rec.text).toContain('recibimos el documento Certificado de circulación');
   });
 
-  it('varias pólizas: plural y póliza en cada documento', () => {
-    const r = buildExpedienteDocumentosEmail({
-      tipo: 'recordatorio',
-      nombre: 'Ana',
-      poliza: 'P-1, P-2',
-      documentos: [
-        { nombre: 'Cédula de identidad', estado: 'pendiente', poliza: 'P-1' },
-        { nombre: 'Licencia de conducir', estado: 'pendiente', poliza: 'P-2' },
-      ],
-    });
-    expect(r.html).toMatch(/tus pólizas <strong[^>]*>P-1, P-2<\/strong>/);
-    expect(r.html).toContain('Póliza P-2');
-  });
-
-  it('normaliza documentos: estado desconocido = pendiente, motivo solo al corregir, tope 30', () => {
+  it('normaliza documentos y pólizas', () => {
     const docs = normalizarDocumentos([
       { nombre: 'A', estado: 'raro', motivo: 'no va' },
       { nombre: '' },
@@ -129,12 +166,10 @@ describe('plantilla expediente-documentos', () => {
     ]);
     expect(docs[0]).toEqual({ nombre: 'A', estado: 'pendiente' });
     expect(docs.length).toBeLessThanOrEqual(30);
-  });
-
-  it('helpers de enlace y fecha', () => {
-    expect(enlaceSeguro('http://a.test/x')).toBe('http://a.test/x');
+    expect(normalizarPolizas(undefined, 'N° P-1, P-2')).toEqual(['P-1', 'P-2']);
+    expect(asuntoExpediente('completo', [])).toBe(
+      'La Mundial de Seguros | Expediente completo de su póliza',
+    );
     expect(enlaceSeguro('data:text/html,1')).toBe('');
-    expect(formatoVence('no-fecha')).toBe('');
-    expect(formatoVence('2026-11-14T15:00:00.000Z')).toMatch(/14/);
   });
 });

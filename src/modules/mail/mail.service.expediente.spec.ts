@@ -21,22 +21,26 @@ describe('MailService: plantilla expediente-documentos', () => {
   it('arma el correo con los datos de Nexus y respeta el asunto recibido', () => {
     const r = build({
       tipo: 'observado',
-      subject: '[Prueba QA] La Mundial | Necesitamos corregir un documento',
+      subject: '[Prueba QA] La Mundial de Seguros | Necesitamos corregir un documento de su póliza N.º P-1',
       nombre: 'Luis',
-      poliza: 'P-1',
+      polizas: ['P-1'],
       documentos: [{ nombre: 'Licencia de conducir', estado: 'corregir', motivo: 'Está vencida.' }],
       enlace: 'https://portal.test/expediente?t=x',
-      venceEn: '2026-11-14T15:00:00.000Z',
     });
     expect('error' in r).toBe(false);
     if ('error' in r) return;
-    expect(r.subject).toBe('[Prueba QA] La Mundial | Necesitamos corregir un documento');
-    expect(r.html).toContain('Está vencida.');
-    expect(r.html).toContain('Subir mis documentos');
+    expect(r.subject).toBe('[Prueba QA] La Mundial de Seguros | Necesitamos corregir un documento de su póliza N.º P-1');
+    expect(r.html).toContain('Licencia de conducir (Está vencida).');
+    expect(r.html).toContain('Completar mi expediente');
+  });
+
+  it('acepta poliza en texto (compatibilidad)', () => {
+    const r = build({ tipo: 'completo', nombre: 'Ana', poliza: 'P-9' });
+    expect('error' in r ? r.error : r.html).toMatch(/<strong[^>]*>N\.º P-9<\/strong>/);
   });
 
   it('sin asunto usa el del tipo', () => {
     const r = build({ tipo: 'completo', nombre: 'Ana' });
-    expect('error' in r ? r.error : r.subject).toBe('La Mundial | Tu expediente está completo');
+    expect('error' in r ? r.error : r.subject).toBe('La Mundial de Seguros | Expediente completo de su póliza');
   });
 });
