@@ -41,6 +41,7 @@ import {
   blankToNull,
   cidPasaporte,
   pasaporteSinChoque,
+  tipoClienteMismaPersona,
 } from './personas-identidad.rules';
 
 class Mutex {
@@ -1166,21 +1167,73 @@ export class PersonasService {
   /**
    * 400 si el pasaporte choca con otro cliente de Sis2000: OK si no hay filas, o una sola con el
    * mismo cci_rif y cid igual (o vacío/'0'). maclient.cci_rif es la clave real; cid es único.
+   * Si choca pero es la MISMA persona (mismo cci_rif, cid V-/E- y mismo nombre y apellido),
+   * devuelve el tipo con el que ya está registrada para emitir con ese documento (no crea otro
+   * cliente ni cambia el que existe). Sin nombre/apellido se comporta como antes.
    */
-  async assertPasaporteSinChoque(cid: string, digitos: number): Promise<void> {
+  async assertPasaporteSinChoque(
+    cid: string,
+    digitos: number,
+    persona?: { nombre?: unknown; apellido?: unknown },
+  ): Promise<'V' | 'E' | null> {
     const T = this.db.types;
     const req = this.db.request();
     req.input('dig', T.Numeric(13, 0), digitos);
     req.input('cid', T.VarChar(30), cid);
     const r = await req.query(
-      'SELECT cci_rif, RTRIM(cid) AS cid FROM maclient WHERE cci_rif = @dig OR RTRIM(cid) = @cid',
+      'SELECT cci_rif, RTRIM(cid) AS cid, RTRIM(xnombre) AS xnombre, RTRIM(xapellido) AS xapellido, ' +
+        'RTRIM(xcliente) AS xcliente FROM maclient WHERE cci_rif = @dig OR RTRIM(cid) = @cid',
     );
-    const rows = (r.recordset ?? []) as { cci_rif: unknown; cid: unknown }[];
-    if (!pasaporteSinChoque(rows, cid, digitos)) {
-      this.logger.warn(
-        `Pasaporte ${cid} (${digitos}) choca en maclient: ${JSON.stringify(rows.slice(0, 3))}`,
+    const rows = (r.recordset ?? []) as {
+      cci_rif: unknown;
+      cid: unknown;
+      xnombre?: unknown;
+      xapellido?: unknown;
+      xcliente?: unknown;
+    }[];
+    if (pasaporteSinChoque(rows, cid, digitos)) return null;
+    const tipo = persona ? tipoClienteMismaPersona(rows, digitos, persona.nombre, persona.apellido) : null;
+    if (tipo) {
+      this.logger.log(
+        `Pasaporte ${cid} → cliente existente ${tipo}-${digitos} (misma persona): se emite con ese documento`,
       );
-      throw new BadRequestException(MSG_PASAPORTE_CHOQUE);
+      return tipo;
+    }
+    this.logger.warn(
+      `Pasaporte ${cid} (${digitos}) choca en maclient: ${JSON.stringify(rows.slice(0, 3))}`,
+    );
+    throw new BadRequestException(MSG_PASAPORTE_CHOQUE);
+  }
+
+  /** Nombre y apellido del rol (titular/tomador) para comparar con el cliente existente. */
+  private personaPasaporte(b: Record<string, unknown>, rol: string) {
+    return { nombre: b[`nombre_${rol}`], apellido: b[`apellido_${rol}`] };
+  }
+
+  /**
+   * Misma persona ya registrada como V/E: el body pasa a ese documento (tipo y dígitos) en todos
+   * los roles y asegurados que traían ese pasaporte; no se envía cid ni se crea otro cliente.
+   */
+  private usarClienteExistente(
+    b: Record<string, unknown>,
+    p: PasaporteAlfanumerico,
+    tipo: 'V' | 'E',
+  ): void {
+    for (const rol of ['titular', 'tomador']) {
+      if (b[`cid_${rol}`] && cidPasaporte(b[`cid_${rol}`]) === p.cid) {
+        delete b[`cid_${rol}`];
+        b[`tipo_cedula_${rol}`] = tipo;
+        b[`rif_${rol}`] = p.digitos;
+      }
+    }
+    const asegurados = Array.isArray(b['asegurados']) ? (b['asegurados'] as Record<string, unknown>[]) : [];
+    for (const a of asegurados) {
+      const tipoA = String(a?.['icedula_asegurado'] ?? a?.['tipoDoc'] ?? '').trim().toUpperCase();
+      const idA = Number(String(a?.['xrif_asegurado'] ?? a?.['identificacion'] ?? '').replace(/\D/g, ''));
+      if (tipoA.startsWith('P') && idA === p.digitos) {
+        if ('icedula_asegurado' in a) a['icedula_asegurado'] = tipo;
+        if ('tipoDoc' in a) a['tipoDoc'] = tipo;
+      }
     }
   }
 
@@ -1241,7 +1294,8 @@ export class PersonasService {
   async validateEmissionPerson(body: Record<string, unknown>) {
     // Pasaporte alfanumérico de titular/tomador: rif_* = dígitos y revisión de choque ANTES de pagar.
     for (const p of this.pasaportesUnicos(aplicarPasaportesAlfanumericos(body))) {
-      await this.assertPasaporteSinChoque(p.cid, p.digitos);
+      const tipo = await this.assertPasaporteSinChoque(p.cid, p.digitos, this.personaPasaporte(body, p.rol));
+      if (tipo) this.usarClienteExistente(body, p, tipo);
     }
     const req = this.db.request();
     const T = this.db.types;
@@ -1592,7 +1646,11 @@ export class PersonasService {
         // Emisión local vía SP de producción (SysIP fb_organizacion_swagger / main actual).
         // Pasaporte alfanumérico: revisar choque otra vez y crear el cliente con cid completo.
         for (const p of pasaportes) {
-          await this.assertPasaporteSinChoque(p.cid, p.digitos);
+          const tipo = await this.assertPasaporteSinChoque(p.cid, p.digitos, this.personaPasaporte(b, p.rol));
+          if (tipo) {
+            this.usarClienteExistente(b, p, tipo);
+            continue;
+          }
           await this.crearClientePasaporte(b, p, canal);
         }
 
