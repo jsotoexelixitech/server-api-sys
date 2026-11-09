@@ -190,6 +190,8 @@ export const NEST_AUTH_SCOPE_CATALOG: NestAuthScopeMeta[] = [
     label: 'Configurador de productos',
     description: 'Crear y editar coberturas, tarifas, tablas de tasas por edad y planes en Sis2000 (product-builder)',
     routes: [
+      'GET /api/v1/configurador/productores',
+      'GET /api/v1/configurador/canales',
       'GET /api/v1/configurador/coberturas',
       'POST /api/v1/configurador/coberturas',
       'PATCH /api/v1/configurador/coberturas/:cramo/:ccobertura',
@@ -200,6 +202,7 @@ export const NEST_AUTH_SCOPE_CATALOG: NestAuthScopeMeta[] = [
       'GET /api/v1/configurador/tablas-edad/:ctablaedad',
       'POST /api/v1/configurador/tablas-edad',
       'PUT /api/v1/configurador/tablas-edad/:ctablaedad/tramos',
+      'GET /api/v1/configurador/planes/:cramo/:cplan',
       'POST /api/v1/configurador/planes',
       'PUT /api/v1/configurador/planes/:cramo/:cplan',
       'DELETE /api/v1/configurador/planes/:cramo/:cplan',

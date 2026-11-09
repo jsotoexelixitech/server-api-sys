@@ -2,8 +2,8 @@ import { Body, Controller, Delete, Get, HttpCode, HttpStatus, Param, ParseIntPip
 import { ApiBody, ApiHeader, ApiOperation, ApiTags } from '@nestjs/swagger';
 import { ConfiguradorService } from './configurador.service';
 import {
-  CrearCoberturaDto, CrearDetalleTarifaDto, CrearTablaEdadDto, CrearTarifaDto, EditarCoberturaDto, EditarTarifaDto, PlanDto,
-  ProductoresQueryDto, RamoQueryDto, TarifasQueryDto, TramosEdadDto,
+  CanalesQueryDto, CrearCoberturaDto, CrearDetalleTarifaDto, CrearTablaEdadDto, CrearTarifaDto, EditarCoberturaDto, EditarTarifaDto,
+  PlanDto, ProductoresQueryDto, RamoQueryDto, TarifasQueryDto, TramosEdadDto,
 } from './dto/configurador.dto';
 import { NestProtected } from '../auth/decorators/nest-protected.decorator';
 import { NEST_AUTH_SCOPES } from '../auth/scopes/nest-auth-scopes.constants';
@@ -28,6 +28,19 @@ export class ConfiguradorController {
   @ApiOperation({ summary: 'Productores (maproduc) para asignar a un plan; filtro por nombre o código', operationId: 'configuradorProductores' })
   async productores(@Query() q: ProductoresQueryDto) {
     return { status: true, data: await this.service.listarProductores(q.q ?? '') };
+  }
+
+  // ── Canales alternos ───────────────────────────────────────────────────────
+
+  @Get('canales')
+  @NestProtected(SCOPE)
+  @ApiOperation({
+    summary: 'Canales alternos activos (macanalalt) para asignar a un plan; filtro por nombre o código',
+    description: 'En mausuplan el canal va con centidad C y citem = ccanalalt. Solo lectura.',
+    operationId: 'configuradorCanales',
+  })
+  async canales(@Query() q: CanalesQueryDto) {
+    return { status: true, data: await this.service.listarCanales(q.q ?? '') };
   }
 
   // ── Coberturas ─────────────────────────────────────────────────────────────
@@ -129,6 +142,19 @@ export class ConfiguradorController {
   }
 
   // ── Planes ─────────────────────────────────────────────────────────────────
+
+  @Get('planes/:cramo/:cplan')
+  @NestProtected(SCOPE)
+  @ApiOperation({
+    summary: 'Leer un plan completo (respaldo antes de modificar)',
+    description:
+      'Filas de maplanes/maplanes_per, maplantar, maplcober_per, mapltarifas_per, mapledades_per, maplanes_frec y mausuplan, ' +
+      'más el plan en la forma de PlanDto y advertencias de lo que no se puede reponer. `data: null` si el plan no existe.',
+    operationId: 'configuradorLeerPlan',
+  })
+  async leerPlan(@Param('cramo', ParseIntPipe) cramo: number, @Param('cplan') cplan: string) {
+    return { status: true, data: await this.service.obtenerPlan(cramo, cplan) };
+  }
 
   @Post('planes')
   @NestProtected(SCOPE)

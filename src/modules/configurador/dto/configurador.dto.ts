@@ -15,6 +15,14 @@ export class ProductoresQueryDto {
   q?: string;
 }
 
+export class CanalesQueryDto {
+  @ApiPropertyOptional({ example: 'FARMATODO', description: 'Filtro por nombre o código de canal alterno (ccanalalt)' })
+  @IsOptional()
+  @IsString()
+  @MaxLength(60)
+  q?: string;
+}
+
 export class RamoQueryDto {
   @ApiProperty({ example: 28 })
   @Type(() => Number)

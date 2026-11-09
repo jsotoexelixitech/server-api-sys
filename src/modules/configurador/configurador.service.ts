@@ -3,6 +3,7 @@ import * as sql from 'mssql';
 import { MssqlService } from '../../database/mssql.service';
 import { parseSPError } from '../../common/helpers/sp-error.helper';
 import { validarPlan, validarTramos } from './configurador.reglas';
+import { reconstruirPlan, type FilasPlan, type PlanLeido } from './configurador.plan-lectura';
 import {
   CrearCoberturaDto, CrearDetalleTarifaDto, CrearTablaEdadDto, CrearTarifaDto, DetalleTarifaDto, EditarCoberturaDto,
   EditarTarifaDto, PlanDto, TramoEdadDto,
@@ -47,15 +48,36 @@ export class ConfiguradorService {
     return r.recordset ?? [];
   }
 
+  // ── Canales alternos ───────────────────────────────────────────────────────
+
+  /**
+   * Canales alternos activos (macanalalt, bactivo = 1) — solo lectura; TOP 50 filtrados por nombre o código.
+   * En mausuplan el canal va con centidad 'C' y citem = ccanalalt (spBuscaPlan lo valida contra macanalalt).
+   */
+  async listarCanales(q: string) {
+    const texto = (q ?? '').trim().slice(0, 60);
+    const req = this.db.request();
+    req.input('q', sql.VarChar(60), texto);
+    req.input('q2', sql.VarChar(62), `%${texto}%`);
+    const r = await req.query(`
+      SELECT TOP (50) ccanalalt, LTRIM(RTRIM(xcanalalt)) AS xcanalalt, LTRIM(RTRIM(ctipocanal)) AS ctipocanal
+      FROM macanalalt WITH (NOLOCK)
+      WHERE bactivo = 1 AND (@q = '' OR xcanalalt LIKE @q2 OR CONVERT(VARCHAR(20), ccanalalt) LIKE @q2)
+      ORDER BY xcanalalt`);
+    return r.recordset ?? [];
+  }
+
   // ── Coberturas ─────────────────────────────────────────────────────────────
 
+  /** Incluye reaseguro (ccontrea, cramorea, cramopcnd) para que el configurador lo respalde antes de editar. */
   async listarCoberturas(cramo: number) {
     const req = this.db.request();
     req.input('cramo', sql.SmallInt, cramo);
     const r = await req.query(`
       SELECT cramo, RTRIM(ccobertura) AS ccobertura, RTRIM(xdescripcion_l) AS xdescripcion_l,
              RTRIM(xdescripcion_c) AS xdescripcion_c, RTRIM(xabreviatura) AS xabreviatura, bobligatoria,
-             RTRIM(cmoneda) AS cmoneda, isuma, iestado, cramoint, ccoberturaint
+             RTRIM(cmoneda) AS cmoneda, isuma, RTRIM(isumarecibo) AS isumarecibo, iestado, cramoint, ccoberturaint,
+             ccontrea, cramorea, cramopcnd
       FROM macoberturas WITH (NOLOCK) WHERE cramo = @cramo
       ORDER BY TRY_CAST(RTRIM(ccobertura) AS INT), ccobertura`);
     return r.recordset ?? [];
@@ -235,6 +257,34 @@ export class ConfiguradorService {
   }
 
   // ── Planes (spMantPlanes) ──────────────────────────────────────────────────
+
+  /**
+   * Plan completo tal como está en Sis2000 (solo lectura), para que el configurador lo respalde antes de modificarlo
+   * y pueda restaurarlo. Trae las filas de las tablas que llena spMantPlanes y el plan en la forma de PlanDto.
+   * null si el plan no existe (así el configurador distingue «no existe» de «no se pudo leer»).
+   */
+  async obtenerPlan(cramo: number, cplan: string): Promise<PlanLeido | null> {
+    const req = this.db.request();
+    req.input('cramo', sql.SmallInt, cramo);
+    req.input('cplan', sql.Char(6), cplan.trim());
+    const donde = 'WITH (NOLOCK) WHERE cramo = @cramo AND cplan = @cplan';
+    const r = await req.query(`
+      SELECT TOP 1 * FROM maplanes ${donde};
+      SELECT TOP 1 * FROM maplanes_per ${donde};
+      SELECT * FROM maplantar ${donde};
+      SELECT * FROM maplcober_per ${donde};
+      SELECT * FROM mapltarifas_per ${donde};
+      SELECT * FROM mapledades_per ${donde};
+      SELECT * FROM maplanes_frec ${donde};
+      SELECT cramo, RTRIM(cplan) AS cplan, RTRIM(centidad) AS centidad, RTRIM(citem) AS citem, RTRIM(itipouso) AS itipouso
+      FROM mausuplan ${donde};`);
+    const [maplanes, maplanes_per, maplantar, maplcober_per, mapltarifas_per, mapledades_per, maplanes_frec, mausuplan] =
+      r.recordsets as unknown as Record<string, unknown>[][];
+    const filas: FilasPlan = {
+      maplanes, maplanes_per, maplantar, maplcober_per, mapltarifas_per, mapledades_per, maplanes_frec, mausuplan,
+    };
+    return reconstruirPlan(filas);
+  }
 
   async crearPlan(dto: PlanDto) {
     await this.validarPlanEnBd(dto);
