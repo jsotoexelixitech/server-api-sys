@@ -142,8 +142,8 @@ describe('plantilla expediente-reporte-diario', () => {
     expect(p.dia).toEqual({ emitidas: 0, completas: 0, incompletas: 2, sinDatos: 0 });
     expect(p.fecha).toBe('');
     const r = buildExpedienteReporteDiarioEmail(p);
-    expect(r.text).toContain('18 pólizas más están en el detalle del monitor.');
-    expect(r.html).toContain('18 pólizas más están en el detalle del monitor.');
+    expect(r.text).toContain('18 pólizas más no caben en este correo.');
+    expect(r.html).toContain('18 pólizas más no caben en este correo.');
     // Gmail recorta por encima de ~102 KB: con 200 filas el HTML queda por debajo.
     expect(Buffer.byteLength(r.html, 'utf8')).toBeLessThan(100_000);
 
@@ -171,8 +171,8 @@ describe('plantilla expediente-reporte-diario', () => {
     expect(mostradas).toBeGreaterThan(50);
     expect(mostradas).toBeLessThan(REPORTE_MAX_FILAS);
     const resto = REPORTE_MAX_FILAS - mostradas + 5;
-    expect(r.html).toContain(`${resto} pólizas más están en el detalle del monitor.`);
-    expect(r.text).toContain(`${resto} pólizas más están en el detalle del monitor.`);
+    expect(r.html).toContain(`${resto} pólizas más no caben en este correo.`);
+    expect(r.text).toContain(`${resto} pólizas más no caben en este correo.`);
     expect(r.text).toContain(`PÓLIZAS INCOMPLETAS DE HOY (${REPORTE_MAX_FILAS + 5})`);
   });
 
