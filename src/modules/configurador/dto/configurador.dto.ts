@@ -363,3 +363,81 @@ export class PlanDto {
   @Type(() => FrecuenciaPlanDto)
   frecuencias: FrecuenciaPlanDto[];
 }
+
+// ── Proveedores del plan (maplprov_per) ──────────────────────────────────────
+
+export class ProveedoresQueryDto {
+  @ApiPropertyOptional({ example: 'VENEMERGENCIA', description: 'Filtro por nombre, RIF (cid) o cci_rif del proveedor' })
+  @IsOptional()
+  @IsString()
+  @MaxLength(60)
+  q?: string;
+}
+
+/** Clave de una fila de maplprov_per dentro del plan: proveedor, clave y vigencia desde. */
+export class ClaveProveedorPlanDto {
+  @ApiProperty({ example: 311624457, description: 'Proveedor (maclient.cci_rif).' })
+  @Type(() => Number)
+  @IsInt()
+  @Min(1)
+  cci_rif: number;
+
+  @ApiProperty({ example: 1, description: 'Clave del proveedor (maclient_prov.cclave_num).' })
+  @Type(() => Number)
+  @IsInt()
+  @Min(0)
+  cclave_num: number;
+
+  @ApiProperty({ example: '2026-01-01', description: 'Vigencia desde (parte de la clave de la fila).' })
+  @Matches(FECHA)
+  fdesde: string;
+}
+
+export class ProveedorPlanDto extends ClaveProveedorPlanDto {
+  @ApiPropertyOptional({ example: '2040-12-31', description: 'Vigencia hasta. Vacía = sin fin.' })
+  @IsOptional()
+  @Matches(FECHA)
+  fhasta?: string;
+
+  @ApiPropertyOptional({ example: 1, description: 'Tipo de servicio (itiposerv).' })
+  @IsOptional()
+  @Type(() => Number)
+  @IsInt()
+  @Min(0)
+  itiposerv?: number;
+
+  @ApiPropertyOptional({ example: 0, description: 'Costo en la moneda local (mcosto).' })
+  @IsOptional()
+  @IsNumber({ maxDecimalPlaces: 2 })
+  @Min(0)
+  mcosto?: number;
+
+  @ApiPropertyOptional({ example: 11.05, description: 'Costo en divisa (mcostoext); al emitir se convierte con la tasa de la póliza.' })
+  @IsOptional()
+  @IsNumber({ maxDecimalPlaces: 2 })
+  @Min(0)
+  mcostoext?: number;
+
+  @ApiPropertyOptional({ example: '$', default: '$' })
+  @IsOptional()
+  @IsString()
+  @MaxLength(4)
+  cmoneda?: string;
+}
+
+/** Editar una fila existente: solo cambian vigencia hasta, tipo de servicio, costos y moneda. */
+export class EditarProveedorPlanDto extends ClaveProveedorPlanDto {
+  @ApiPropertyOptional({ example: '2040-12-31' }) @IsOptional() @Matches(FECHA) fhasta?: string;
+  @ApiPropertyOptional({ example: 1 }) @IsOptional() @Type(() => Number) @IsInt() @Min(0) itiposerv?: number;
+  @ApiPropertyOptional() @IsOptional() @IsNumber({ maxDecimalPlaces: 2 }) @Min(0) mcosto?: number;
+  @ApiPropertyOptional() @IsOptional() @IsNumber({ maxDecimalPlaces: 2 }) @Min(0) mcostoext?: number;
+  @ApiPropertyOptional() @IsOptional() @IsString() @MaxLength(4) cmoneda?: string;
+}
+
+/** Baja = cerrar la vigencia (fhasta); la fila no se borra. */
+export class BajaProveedorPlanDto extends ClaveProveedorPlanDto {
+  @ApiPropertyOptional({ example: '2026-11-09', description: 'Último día vigente. Por defecto, hoy.' })
+  @IsOptional()
+  @Matches(FECHA)
+  fhasta_baja?: string;
+}

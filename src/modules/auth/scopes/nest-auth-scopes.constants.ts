@@ -206,6 +206,11 @@ export const NEST_AUTH_SCOPE_CATALOG: NestAuthScopeMeta[] = [
       'POST /api/v1/configurador/planes',
       'PUT /api/v1/configurador/planes/:cramo/:cplan',
       'DELETE /api/v1/configurador/planes/:cramo/:cplan',
+      'GET /api/v1/configurador/proveedores',
+      'GET /api/v1/configurador/planes/:cramo/:cplan/proveedores',
+      'POST /api/v1/configurador/planes/:cramo/:cplan/proveedores',
+      'PATCH /api/v1/configurador/planes/:cramo/:cplan/proveedores',
+      'POST /api/v1/configurador/planes/:cramo/:cplan/proveedores/baja',
     ],
   },
   {

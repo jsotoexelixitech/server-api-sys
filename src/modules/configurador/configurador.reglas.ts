@@ -16,6 +16,41 @@ export function validarTramos(tramos: TramoEdad[]): string[] {
   return errores;
 }
 
+/** Proveedor del plan (maplprov_per). Fechas 'YYYY-MM-DD'; fhasta vacía = sin fin. */
+export interface ProveedorPlanRegla {
+  cci_rif: number;
+  cclave_num: number;
+  fdesde: string;
+  fhasta?: string | null;
+  mcosto?: number;
+  mcostoext?: number;
+}
+
+const FIN = '9999-12-31';
+
+/**
+ * Alta de un proveedor en el plan: vigencia válida, costo no negativo y sin solaparse con otra vigencia del mismo
+ * proveedor y clave. `existentes` son las filas actuales del plan (las de baja con fhasta pasada también cuentan).
+ */
+export function validarProveedorPlan(nuevo: ProveedorPlanRegla, existentes: ProveedorPlanRegla[]): string[] {
+  const errores: string[] = [];
+  const hasta = nuevo.fhasta || FIN;
+  if (nuevo.fdesde > hasta) errores.push('La vigencia desde es posterior a la vigencia hasta.');
+  if ((nuevo.mcosto ?? 0) < 0 || (nuevo.mcostoext ?? 0) < 0) errores.push('El costo no puede ser negativo.');
+  for (const e of existentes) {
+    if (Number(e.cci_rif) !== Number(nuevo.cci_rif) || Number(e.cclave_num) !== Number(nuevo.cclave_num)) continue;
+    const eHasta = e.fhasta || FIN;
+    if (nuevo.fdesde <= eHasta && e.fdesde <= hasta) {
+      errores.push(
+        `El proveedor ${nuevo.cci_rif} (clave ${nuevo.cclave_num}) ya tiene una vigencia ${e.fdesde} – ${e.fhasta || 'sin fin'} que se solapa; ` +
+          'da de baja la anterior o ajusta las fechas.',
+      );
+      break;
+    }
+  }
+  return errores;
+}
+
 interface ParentescoRegla { cparen: number; csexo: string; nedad_min: number; nedad_max: number }
 interface CoberturaRegla {
   ccobertura: string; ctarifa: string;

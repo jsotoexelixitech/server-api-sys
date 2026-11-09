@@ -2,8 +2,9 @@ import { Body, Controller, Delete, Get, HttpCode, HttpStatus, Param, ParseIntPip
 import { ApiBody, ApiHeader, ApiOperation, ApiTags } from '@nestjs/swagger';
 import { ConfiguradorService } from './configurador.service';
 import {
-  CanalesQueryDto, CrearCoberturaDto, CrearDetalleTarifaDto, CrearTablaEdadDto, CrearTarifaDto, EditarCoberturaDto, EditarTarifaDto,
-  PlanDto, ProductoresQueryDto, RamoQueryDto, TarifasQueryDto, TramosEdadDto,
+  BajaProveedorPlanDto, CanalesQueryDto, CrearCoberturaDto, CrearDetalleTarifaDto, CrearTablaEdadDto, CrearTarifaDto,
+  EditarCoberturaDto, EditarProveedorPlanDto, EditarTarifaDto, PlanDto, ProductoresQueryDto, ProveedoresQueryDto,
+  ProveedorPlanDto, RamoQueryDto, TarifasQueryDto, TramosEdadDto,
 } from './dto/configurador.dto';
 import { NestProtected } from '../auth/decorators/nest-protected.decorator';
 import { NEST_AUTH_SCOPES } from '../auth/scopes/nest-auth-scopes.constants';
@@ -184,5 +185,57 @@ export class ConfiguradorController {
   @ApiOperation({ summary: 'Eliminar plan (spMantPlanes D)', operationId: 'configuradorEliminarPlan' })
   async eliminarPlan(@Param('cramo', ParseIntPipe) cramo: number, @Param('cplan') cplan: string) {
     return { status: true, data: await this.service.eliminarPlan(cramo, cplan) };
+  }
+
+  // ── Proveedores del plan (maplprov_per) ────────────────────────────────────
+
+  @Get('proveedores')
+  @NestProtected(SCOPE)
+  @ApiOperation({
+    summary: 'Catálogo de proveedores (maclient_prov ⋈ maclient) con sus claves; filtro por nombre o RIF',
+    operationId: 'configuradorProveedores',
+  })
+  async proveedores(@Query() q: ProveedoresQueryDto) {
+    return { status: true, data: await this.service.listarProveedores(q.q ?? '') };
+  }
+
+  @Get('planes/:cramo/:cplan/proveedores')
+  @NestProtected(SCOPE)
+  @ApiOperation({
+    summary: 'Proveedores del plan (todas las vigencias) y si la escritura está habilitada',
+    description: 'El proveedor se asigna al plan y aplica a todas sus coberturas. Al emitir personas se copia a adproveedor.',
+    operationId: 'configuradorProveedoresPlan',
+  })
+  async proveedoresPlan(@Param('cramo', ParseIntPipe) cramo: number, @Param('cplan') cplan: string) {
+    return { status: true, data: await this.service.listarProveedoresPlan(cramo, cplan) };
+  }
+
+  @Post('planes/:cramo/:cplan/proveedores')
+  @NestProtected(SCOPE)
+  @ApiOperation({
+    summary: 'Agregar proveedor al plan (maplprov_per)',
+    description: 'Requiere CONFIGURADOR_PROVEEDORES_ESCRITURA=1. Valida plan, proveedor y que la vigencia no se solape.',
+    operationId: 'configuradorAgregarProveedorPlan',
+  })
+  @ApiBody({ type: ProveedorPlanDto })
+  async agregarProveedorPlan(@Param('cramo', ParseIntPipe) cramo: number, @Param('cplan') cplan: string, @Body() dto: ProveedorPlanDto) {
+    return { status: true, data: await this.service.agregarProveedorPlan(cramo, cplan, dto) };
+  }
+
+  @Patch('planes/:cramo/:cplan/proveedores')
+  @NestProtected(SCOPE)
+  @ApiOperation({ summary: 'Editar proveedor del plan (vigencia hasta, tipo de servicio, costo, moneda)', operationId: 'configuradorEditarProveedorPlan' })
+  @ApiBody({ type: EditarProveedorPlanDto })
+  async editarProveedorPlan(@Param('cramo', ParseIntPipe) cramo: number, @Param('cplan') cplan: string, @Body() dto: EditarProveedorPlanDto) {
+    return { status: true, data: await this.service.editarProveedorPlan(cramo, cplan, dto) };
+  }
+
+  @Post('planes/:cramo/:cplan/proveedores/baja')
+  @HttpCode(HttpStatus.OK)
+  @NestProtected(SCOPE)
+  @ApiOperation({ summary: 'Dar de baja un proveedor del plan (cierra la vigencia; no borra)', operationId: 'configuradorBajaProveedorPlan' })
+  @ApiBody({ type: BajaProveedorPlanDto })
+  async bajaProveedorPlan(@Param('cramo', ParseIntPipe) cramo: number, @Param('cplan') cplan: string, @Body() dto: BajaProveedorPlanDto) {
+    return { status: true, data: await this.service.bajaProveedorPlan(cramo, cplan, dto) };
   }
 }

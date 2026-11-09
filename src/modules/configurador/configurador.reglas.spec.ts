@@ -1,4 +1,20 @@
-import { validarPlan, validarTramos, type PlanRegla } from './configurador.reglas';
+import { validarPlan, validarProveedorPlan, validarTramos, type PlanRegla } from './configurador.reglas';
+
+describe('validarProveedorPlan', () => {
+  const vigente = { cci_rif: 311624457, cclave_num: 1, fdesde: '2023-01-01', fhasta: '2040-12-31' };
+
+  it('acepta otra clave u otro proveedor aunque las fechas coincidan, y una vigencia posterior a la baja', () => {
+    expect(validarProveedorPlan({ ...vigente, cclave_num: 2 }, [vigente])).toEqual([]);
+    expect(validarProveedorPlan({ ...vigente, cci_rif: 1 }, [vigente])).toEqual([]);
+    expect(validarProveedorPlan({ cci_rif: 311624457, cclave_num: 1, fdesde: '2041-01-01' }, [vigente])).toEqual([]);
+  });
+
+  it('rechaza vigencias que se solapan (también sin fecha hasta), fechas invertidas y costo negativo', () => {
+    expect(validarProveedorPlan({ cci_rif: 311624457, cclave_num: 1, fdesde: '2030-01-01' }, [vigente]).join(' ')).toMatch(/se solapa/);
+    expect(validarProveedorPlan({ ...vigente, fdesde: '2050-01-01' }, [{ ...vigente, fhasta: null }]).join(' ')).toMatch(/invertid|posterior/);
+    expect(validarProveedorPlan({ cci_rif: 9, cclave_num: 1, fdesde: '2026-01-01', mcostoext: -1 }, []).join(' ')).toMatch(/negativo/);
+  });
+});
 
 describe('validarTramos', () => {
   it('acepta tramos contiguos con tasa', () => {

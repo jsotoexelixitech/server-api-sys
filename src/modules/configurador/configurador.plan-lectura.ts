@@ -14,6 +14,8 @@ export interface FilasPlan {
   mapledades_per: Fila[];
   maplanes_frec: Fila[];
   mausuplan: Fila[];
+  /** Proveedores del plan: solo informativo (spMantPlanes no los recibe; se restauran por su propio camino). */
+  maplprov_per?: Fila[];
 }
 
 export interface PlanLeido {

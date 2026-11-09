@@ -2,12 +2,28 @@ import { BadRequestException, ConflictException, Injectable, Logger, NotFoundExc
 import * as sql from 'mssql';
 import { MssqlService } from '../../database/mssql.service';
 import { parseSPError } from '../../common/helpers/sp-error.helper';
-import { validarPlan, validarTramos } from './configurador.reglas';
+import { validarPlan, validarProveedorPlan, validarTramos } from './configurador.reglas';
 import { reconstruirPlan, type FilasPlan, type PlanLeido } from './configurador.plan-lectura';
 import {
-  CrearCoberturaDto, CrearDetalleTarifaDto, CrearTablaEdadDto, CrearTarifaDto, DetalleTarifaDto, EditarCoberturaDto,
-  EditarTarifaDto, PlanDto, TramoEdadDto,
+  BajaProveedorPlanDto, CrearCoberturaDto, CrearDetalleTarifaDto, CrearTablaEdadDto, CrearTarifaDto, DetalleTarifaDto,
+  EditarCoberturaDto, EditarProveedorPlanDto, EditarTarifaDto, PlanDto, ProveedorPlanDto, TramoEdadDto,
 } from './dto/configurador.dto';
+
+/**
+ * Escritura de proveedores del plan (maplprov_per). Apagada por defecto: no hay SP de mantenimiento conocido y la
+ * estructura de la tabla (clave y columnas de auditoría) falta confirmarla en Sis2000_QA. Se enciende con
+ * CONFIGURADOR_PROVEEDORES_ESCRITURA=1. La lectura siempre está disponible.
+ */
+export const proveedoresEscrituraHabilitada = () =>
+  ['1', 'true', 'si', 'sí'].includes(String(process.env.CONFIGURADOR_PROVEEDORES_ESCRITURA ?? '').trim().toLowerCase());
+
+/** Columnas de maplprov_per que el configurador escribe siempre (las que usa sp_registrar_proveedor_poliza_nexus). */
+const COLUMNAS_PROVEEDOR_PLAN = ['cramo', 'cplan', 'cci_rif', 'cclave_num', 'fdesde', 'fhasta', 'itiposerv', 'mcosto', 'mcostoext', 'cmoneda'];
+/** Auditoría estándar de Sis2000: se escribe solo si la columna existe en maplprov_per. */
+const AUDITORIA_ALTA: Array<[string, string]> = [
+  ['u_version', "'!'"], ['cprog', '@cprog'], ['ifuente', '@ifuente'], ['fingreso', 'GETDATE()'], ['cusuario', '@cusuario'], ['ccategoria', '1'],
+];
+const AUDITORIA_MOD: Array<[string, string]> = [['fultmod', 'GETDATE()'], ['cusuariomod', '@cusuario'], ['ccategoriamod', '1']];
 
 /** Usuario Sis2000 de la integración Exelixi (mismo de las emisiones Nexus). */
 const CUSUARIO = 20364172;
@@ -277,11 +293,12 @@ export class ConfiguradorService {
       SELECT * FROM mapledades_per ${donde};
       SELECT * FROM maplanes_frec ${donde};
       SELECT cramo, RTRIM(cplan) AS cplan, RTRIM(centidad) AS centidad, RTRIM(citem) AS citem, RTRIM(itipouso) AS itipouso
-      FROM mausuplan ${donde};`);
-    const [maplanes, maplanes_per, maplantar, maplcober_per, mapltarifas_per, mapledades_per, maplanes_frec, mausuplan] =
+      FROM mausuplan ${donde};
+      SELECT * FROM maplprov_per ${donde};`);
+    const [maplanes, maplanes_per, maplantar, maplcober_per, mapltarifas_per, mapledades_per, maplanes_frec, mausuplan, maplprov_per] =
       r.recordsets as unknown as Record<string, unknown>[][];
     const filas: FilasPlan = {
-      maplanes, maplanes_per, maplantar, maplcober_per, mapltarifas_per, mapledades_per, maplanes_frec, mausuplan,
+      maplanes, maplanes_per, maplantar, maplcober_per, mapltarifas_per, mapledades_per, maplanes_frec, mausuplan, maplprov_per,
     };
     return reconstruirPlan(filas);
   }
@@ -322,6 +339,175 @@ export class ConfiguradorService {
       fdesde: p.fdesde, fhasta: p.fhasta ?? '2099-12-31', all_productor: true, coberturas: [], frecuencias: [],
     } as unknown as PlanDto);
     return { cramo, cplan: cplan.trim(), eliminado: !(await this.planExiste(cramo, cplan)) };
+  }
+
+  // ── Proveedores del plan (maplprov_per) ────────────────────────────────────
+  // La relación es por plan (cramo, cplan): aplica a todas sus coberturas. Al emitir personas,
+  // sp_registrar_proveedor_poliza_nexus copia a adproveedor los proveedores vigentes del plan.
+
+  /** Catálogo de proveedores (maclient_prov ⋈ maclient) por nombre, RIF o cci_rif, agrupado con sus claves. */
+  async listarProveedores(q: string) {
+    const texto = (q ?? '').trim().slice(0, 60);
+    const req = this.db.request();
+    req.input('q', sql.VarChar(60), texto);
+    req.input('q2', sql.VarChar(62), `%${texto}%`);
+    const r = await req.query(`
+      SELECT TOP (60) p.*, RTRIM(c.cid) AS cid, LTRIM(RTRIM(c.xcliente)) AS xcliente
+      FROM maclient_prov p WITH (NOLOCK)
+      INNER JOIN maclient c WITH (NOLOCK) ON c.cci_rif = p.cci_rif
+      WHERE (@q = '' OR c.xcliente LIKE @q2 OR RTRIM(c.cid) LIKE @q2 OR CONVERT(VARCHAR(20), p.cci_rif) LIKE @q2)
+      ORDER BY c.xcliente`);
+    const grupos = new Map<string, { cci_rif: number; cid: string; xcliente: string; claves: Record<string, unknown>[] }>();
+    for (const fila of (r.recordset ?? []) as Record<string, unknown>[]) {
+      const { cid, xcliente, cci_rif, ...resto } = fila;
+      const k = String(cci_rif);
+      if (!grupos.has(k)) grupos.set(k, { cci_rif: Number(cci_rif), cid: rtrim(cid), xcliente: rtrim(xcliente), claves: [] });
+      grupos.get(k)!.claves.push(resto);
+    }
+    return [...grupos.values()];
+  }
+
+  /** Proveedores del plan (todas las vigencias, también las de baja) y si la escritura está habilitada. */
+  async listarProveedoresPlan(cramo: number, cplan: string) {
+    const columnas = await this.columnasDe('maplprov_per');
+    const req = this.db.request();
+    req.input('cramo', sql.SmallInt, cramo);
+    req.input('cplan', sql.Char(6), cplan.trim());
+    const r = await req.query(`
+      SELECT m.cramo, RTRIM(m.cplan) AS cplan, m.cci_rif, m.cclave_num,
+             CONVERT(varchar(10), m.fdesde, 23) AS fdesde, CONVERT(varchar(10), m.fhasta, 23) AS fhasta,
+             m.itiposerv, m.mcosto, m.mcostoext, RTRIM(m.cmoneda) AS cmoneda,
+             RTRIM(c.cid) AS cid, LTRIM(RTRIM(c.xcliente)) AS xcliente,
+             CASE WHEN m.fdesde <= CAST(GETDATE() AS date) AND (m.fhasta IS NULL OR m.fhasta >= CAST(GETDATE() AS date))
+                  THEN 1 ELSE 0 END AS vigente
+      FROM maplprov_per m WITH (NOLOCK)
+      LEFT JOIN maclient c WITH (NOLOCK) ON c.cci_rif = m.cci_rif
+      WHERE m.cramo = @cramo AND m.cplan = @cplan
+      ORDER BY c.xcliente, m.cclave_num, m.fdesde`);
+    return {
+      escritura_habilitada: proveedoresEscrituraHabilitada(),
+      /** Columna de cobertura en maplprov_per (null = la relación es solo por plan). */
+      columna_cobertura: ['ccobertura', 'ccober'].find((c) => columnas.has(c)) ?? null,
+      proveedores: (r.recordset ?? []).map((f: Record<string, unknown>) => ({ ...f, vigente: f.vigente === 1 })),
+    };
+  }
+
+  async agregarProveedorPlan(cramo: number, cplan: string, dto: ProveedorPlanDto) {
+    const columnas = await this.exigirEscrituraProveedores();
+    await this.exigirPlanCualquiera(cramo, cplan);
+    await this.exigirProveedor(dto.cci_rif, dto.cclave_num);
+    const actuales = (await this.listarProveedoresPlan(cramo, cplan)).proveedores as unknown as ProveedorPlanDto[];
+    this.exigirReglas(validarProveedorPlan(dto, actuales));
+    const req = this.db.request();
+    this.claveProveedor(req, cramo, cplan, dto);
+    req.input('fhasta', sql.Date, dto.fhasta ?? null);
+    req.input('itiposerv', sql.Int, dto.itiposerv ?? 1);
+    req.input('mcosto', sql.Numeric(17, 2), dto.mcosto ?? 0);
+    req.input('mcostoext', sql.Numeric(17, 2), dto.mcostoext ?? 0);
+    req.input('cmoneda', sql.Char(4), (dto.cmoneda ?? '$').trim() || '$');
+    this.auditoria(req);
+    // Nombres de columna de listas fijas (nunca texto del usuario); valores siempre parametrizados.
+    const auditoria = AUDITORIA_ALTA.filter(([c]) => columnas.has(c));
+    const cols = [...COLUMNAS_PROVEEDOR_PLAN, ...auditoria.map(([c]) => c)];
+    const vals = [...COLUMNAS_PROVEEDOR_PLAN.map((c) => `@${c}`), ...auditoria.map(([, v]) => v)];
+    await this.escribir('agregar proveedor al plan', () =>
+      req.query(`INSERT INTO maplprov_per (${cols.join(', ')}) VALUES (${vals.join(', ')})`));
+    return { cramo, cplan: cplan.trim(), cci_rif: dto.cci_rif, cclave_num: dto.cclave_num, fdesde: dto.fdesde };
+  }
+
+  async editarProveedorPlan(cramo: number, cplan: string, dto: EditarProveedorPlanDto) {
+    const columnas = await this.exigirEscrituraProveedores();
+    const sets: string[] = [];
+    const req = this.db.request();
+    if (dto.fhasta !== undefined) {
+      if (dto.fhasta < dto.fdesde) throw new BadRequestException('La vigencia hasta es anterior a la vigencia desde.');
+      sets.push('fhasta = @fhasta'); req.input('fhasta', sql.Date, dto.fhasta);
+    }
+    if (dto.itiposerv !== undefined) { sets.push('itiposerv = @itiposerv'); req.input('itiposerv', sql.Int, dto.itiposerv); }
+    if (dto.mcosto !== undefined) { sets.push('mcosto = @mcosto'); req.input('mcosto', sql.Numeric(17, 2), dto.mcosto); }
+    if (dto.mcostoext !== undefined) { sets.push('mcostoext = @mcostoext'); req.input('mcostoext', sql.Numeric(17, 2), dto.mcostoext); }
+    if (dto.cmoneda !== undefined) { sets.push('cmoneda = @cmoneda'); req.input('cmoneda', sql.Char(4), dto.cmoneda.trim() || '$'); }
+    if (!sets.length) throw new BadRequestException('No hay campos para actualizar.');
+    this.claveProveedor(req, cramo, cplan, dto);
+    req.input('cusuario', sql.Numeric(11, 0), CUSUARIO);
+    for (const [c, v] of AUDITORIA_MOD) if (columnas.has(c)) sets.push(`${c} = ${v}`);
+    const r = await this.escribir('editar proveedor del plan', () => req.query(`
+      UPDATE maplprov_per SET ${sets.join(', ')}
+      WHERE cramo = @cramo AND cplan = @cplan AND cci_rif = @cci_rif AND cclave_num = @cclave_num AND fdesde = @fdesde`));
+    if (!r.rowsAffected[0]) throw new NotFoundException(this.noExisteProveedor(cramo, cplan, dto));
+    return { cramo, cplan: cplan.trim(), cci_rif: dto.cci_rif, cclave_num: dto.cclave_num, fdesde: dto.fdesde };
+  }
+
+  /** Baja = cerrar la vigencia (fhasta); nunca se borra la fila. */
+  async bajaProveedorPlan(cramo: number, cplan: string, dto: BajaProveedorPlanDto) {
+    const columnas = await this.exigirEscrituraProveedores();
+    const fhasta = dto.fhasta_baja ?? new Date().toISOString().slice(0, 10);
+    if (fhasta < dto.fdesde) throw new BadRequestException('La fecha de baja es anterior a la vigencia desde.');
+    const req = this.db.request();
+    this.claveProveedor(req, cramo, cplan, dto);
+    req.input('fhasta', sql.Date, fhasta);
+    req.input('cusuario', sql.Numeric(11, 0), CUSUARIO);
+    const sets = ['fhasta = @fhasta', ...AUDITORIA_MOD.filter(([c]) => columnas.has(c)).map(([c, v]) => `${c} = ${v}`)];
+    const r = await this.escribir('dar de baja el proveedor del plan', () => req.query(`
+      UPDATE maplprov_per SET ${sets.join(', ')}
+      WHERE cramo = @cramo AND cplan = @cplan AND cci_rif = @cci_rif AND cclave_num = @cclave_num AND fdesde = @fdesde`));
+    if (!r.rowsAffected[0]) throw new NotFoundException(this.noExisteProveedor(cramo, cplan, dto));
+    return { cramo, cplan: cplan.trim(), cci_rif: dto.cci_rif, cclave_num: dto.cclave_num, fdesde: dto.fdesde, fhasta };
+  }
+
+  private noExisteProveedor(cramo: number, cplan: string, k: { cci_rif: number; cclave_num: number; fdesde: string }) {
+    return `No existe el proveedor ${k.cci_rif} (clave ${k.cclave_num}, desde ${k.fdesde}) en el plan ${cplan.trim()} del ramo ${cramo}.`;
+  }
+
+  private claveProveedor(req: sql.Request, cramo: number, cplan: string, k: { cci_rif: number; cclave_num: number; fdesde: string }) {
+    req.input('cramo', sql.SmallInt, cramo);
+    req.input('cplan', sql.Char(6), cplan.trim());
+    req.input('cci_rif', sql.Numeric(18, 0), k.cci_rif);
+    req.input('cclave_num', sql.Numeric(10, 0), k.cclave_num);
+    req.input('fdesde', sql.Date, k.fdesde);
+  }
+
+  /** Bandera encendida, columnas mínimas presentes y sin columna de cobertura (si la hubiera, falta elegirla por cobertura). */
+  private async exigirEscrituraProveedores() {
+    if (!proveedoresEscrituraHabilitada()) {
+      throw new BadRequestException(
+        'La escritura de proveedores del plan está desactivada (CONFIGURADOR_PROVEEDORES_ESCRITURA) hasta confirmar la estructura de maplprov_per en Sis2000_QA.',
+      );
+    }
+    const columnas = await this.columnasDe('maplprov_per');
+    const faltan = COLUMNAS_PROVEEDOR_PLAN.filter((c) => !columnas.has(c));
+    if (faltan.length) throw new BadRequestException(`maplprov_per no tiene las columnas esperadas: ${faltan.join(', ')}.`);
+    const cob = ['ccobertura', 'ccober'].find((c) => columnas.has(c));
+    if (cob) throw new BadRequestException(`maplprov_per tiene columna de cobertura (${cob}): hay que habilitar la elección por cobertura antes de escribir.`);
+    return columnas;
+  }
+
+  private async exigirPlanCualquiera(cramo: number, cplan: string) {
+    const existe = await this.existe(
+      'SELECT 1 FROM maplanes WHERE cramo = @cramo AND cplan = @cplan UNION ALL SELECT 1 FROM maplanes_per WHERE cramo = @cramo AND cplan = @cplan',
+      { cramo, cplan },
+    );
+    if (!existe) throw new BadRequestException(`No existe el plan ${cplan.trim()} en el ramo ${cramo}.`);
+  }
+
+  private async exigirProveedor(cciRif: number, cclave: number) {
+    const conClave = (await this.columnasDe('maclient_prov')).has('cclave_num');
+    const req = this.db.request();
+    req.input('cci_rif', sql.Numeric(18, 0), cciRif);
+    req.input('cclave_num', sql.Numeric(10, 0), cclave);
+    const r = await req.query(`SELECT CASE WHEN EXISTS (SELECT 1 FROM maclient_prov WHERE cci_rif = @cci_rif${
+      conClave ? ' AND cclave_num = @cclave_num' : ''}) THEN 1 ELSE 0 END AS e`);
+    if (r.recordset?.[0]?.e !== 1) {
+      throw new BadRequestException(`El proveedor ${cciRif}${conClave ? ` con clave ${cclave}` : ''} no está en maclient_prov.`);
+    }
+  }
+
+  /** Nombres de columna (minúsculas) de una tabla de dbo; el nombre de tabla viene siempre del código. */
+  private async columnasDe(tabla: 'maplprov_per' | 'maclient_prov'): Promise<Set<string>> {
+    const req = this.db.request();
+    req.input('tabla', sql.VarChar(128), `dbo.${tabla}`);
+    const r = await req.query('SELECT LOWER(name) AS name FROM sys.columns WHERE object_id = OBJECT_ID(@tabla)');
+    return new Set((r.recordset ?? []).map((f: Record<string, unknown>) => String(f.name)));
   }
 
   // ── Internos ───────────────────────────────────────────────────────────────
