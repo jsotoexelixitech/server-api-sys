@@ -419,7 +419,10 @@ export class ConfiguradorService {
     const columnas = await this.exigirEscrituraProveedores();
     const sets: string[] = [];
     const req = this.db.request();
-    if (dto.fhasta !== undefined) {
+    if (dto.sin_fin === true) {
+      if (dto.fhasta !== undefined) throw new BadRequestException('Indica fecha hasta o sin fin, no ambas.');
+      sets.push('fhasta = NULL');
+    } else if (dto.fhasta !== undefined) {
       if (dto.fhasta < dto.fdesde) throw new BadRequestException('La vigencia hasta es anterior a la vigencia desde.');
       sets.push('fhasta = @fhasta'); req.input('fhasta', sql.Date, dto.fhasta);
     }

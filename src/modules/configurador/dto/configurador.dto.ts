@@ -428,6 +428,10 @@ export class ProveedorPlanDto extends ClaveProveedorPlanDto {
 /** Editar una fila existente: solo cambian vigencia hasta, tipo de servicio, costos y moneda. */
 export class EditarProveedorPlanDto extends ClaveProveedorPlanDto {
   @ApiPropertyOptional({ example: '2040-12-31' }) @IsOptional() @Matches(FECHA) fhasta?: string;
+  @ApiPropertyOptional({ default: false, description: 'true = vigencia sin fin (fhasta NULL); p. ej. al restaurar una baja.' })
+  @IsOptional()
+  @IsBoolean()
+  sin_fin?: boolean;
   @ApiPropertyOptional({ example: 1 }) @IsOptional() @Type(() => Number) @IsInt() @Min(0) itiposerv?: number;
   @ApiPropertyOptional() @IsOptional() @IsNumber({ maxDecimalPlaces: 2 }) @Min(0) mcosto?: number;
   @ApiPropertyOptional() @IsOptional() @IsNumber({ maxDecimalPlaces: 2 }) @Min(0) mcostoext?: number;
