@@ -77,4 +77,33 @@ export class ValidateEmissionPersonDto {
   @MaxLength(15)
   @Matches(CID_PASAPORTE_RE, { message: `cid_tomador: ${CID_PASAPORTE_MSG}` })
   cid_tomador?: string;
+
+  // Nombre y apellido: con pasaporte (cid_*) permiten reconocer a la misma persona ya registrada con E/V.
+  @ApiPropertyOptional({ description: 'Nombre del titular' })
+  @Transform(blankToUndefined)
+  @IsOptional()
+  @IsString()
+  @MaxLength(120)
+  nombre_titular?: string;
+
+  @ApiPropertyOptional({ description: 'Apellido del titular' })
+  @Transform(blankToUndefined)
+  @IsOptional()
+  @IsString()
+  @MaxLength(120)
+  apellido_titular?: string;
+
+  @ApiPropertyOptional({ description: 'Nombre del tomador' })
+  @Transform(blankToUndefined)
+  @IsOptional()
+  @IsString()
+  @MaxLength(120)
+  nombre_tomador?: string;
+
+  @ApiPropertyOptional({ description: 'Apellido del tomador' })
+  @Transform(blankToUndefined)
+  @IsOptional()
+  @IsString()
+  @MaxLength(120)
+  apellido_tomador?: string;
 }
