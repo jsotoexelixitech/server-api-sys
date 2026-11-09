@@ -90,13 +90,17 @@ export class CanalService {
         ORDER BY xcanalalt
       `),
       this.db.request().query(`
-        SELECT LTRIM(RTRIM(cgestor)) AS cgestor,
-               LTRIM(RTRIM(xgestor)) AS xgestor,
-               ccanalalt,
-               cscanalalt
-        FROM magestor WITH (NOLOCK)
-        WHERE bactivo = 1
-        ORDER BY xgestor
+        SELECT LTRIM(RTRIM(g.cgestor)) AS cgestor,
+               LTRIM(RTRIM(g.xgestor)) AS xgestor,
+               g.ccanalalt,
+               g.cscanalalt
+        FROM magestor g WITH (NOLOCK)
+        -- Un punto de comercialización de un canal inactivo cuenta como inactivo,
+        -- aunque en magestor siga con bactivo = 1 (no se cambia el dato en Sis2000).
+        LEFT JOIN macanalalt c WITH (NOLOCK) ON c.ccanalalt = g.ccanalalt
+        WHERE g.bactivo = 1
+          AND (g.ccanalalt IS NULL OR c.bactivo = 1)
+        ORDER BY g.xgestor
       `),
     ]);
 

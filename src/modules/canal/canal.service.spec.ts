@@ -28,4 +28,12 @@ describe('CanalService.getActores', () => {
     await expect(service.getActores('nest_valida')).resolves.toEqual({ canales: [], gestores: [] });
     expect(query).toHaveBeenCalledTimes(2);
   });
+
+  it("los puntos de comercialización de un canal inactivo no salen como activos", async () => {
+    const { service, query } = build(jest.fn().mockResolvedValue(undefined));
+    await service.getActores("nest_valida");
+    const sqlGestores = String(query.mock.calls.map((c) => c[0]).find((q) => /FROM magestor/.test(String(q))));
+    expect(sqlGestores).toMatch(/LEFT JOIN macanalalt c/);
+    expect(sqlGestores).toMatch(/g.ccanalalt IS NULL OR c.bactivo = 1/);
+  });
 });
