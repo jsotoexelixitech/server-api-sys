@@ -92,14 +92,19 @@ export class CanalService {
       this.db.request().query(`
         SELECT LTRIM(RTRIM(g.cgestor)) AS cgestor,
                LTRIM(RTRIM(g.xgestor)) AS xgestor,
-               g.ccanalalt,
+               -- Canal del punto: la columna ccanalalt si apunta a un canal que existe; si no
+               -- (vacía o 0), el primer número del código («215-1-…» → 215) si es un canal.
+               COALESCE(cc.ccanalalt, cp.ccanalalt) AS ccanalalt,
                g.cscanalalt
         FROM magestor g WITH (NOLOCK)
-        -- Un punto de comercialización de un canal inactivo cuenta como inactivo,
-        -- aunque en magestor siga con bactivo = 1 (no se cambia el dato en Sis2000).
-        LEFT JOIN macanalalt c WITH (NOLOCK) ON c.ccanalalt = g.ccanalalt
+        LEFT JOIN macanalalt cc WITH (NOLOCK) ON cc.ccanalalt = g.ccanalalt
+        LEFT JOIN macanalalt cp WITH (NOLOCK)
+          ON CONVERT(varchar(10), cp.ccanalalt) =
+             CASE WHEN CHARINDEX('-', LTRIM(g.cgestor)) > 1
+                  THEN LEFT(LTRIM(g.cgestor), CHARINDEX('-', LTRIM(g.cgestor)) - 1) END
+        -- Un punto de un canal inactivo cuenta como inactivo (no se cambia el dato en Sis2000).
         WHERE g.bactivo = 1
-          AND (g.ccanalalt IS NULL OR c.bactivo = 1)
+          AND COALESCE(cc.bactivo, cp.bactivo, 1) = 1
         ORDER BY g.xgestor
       `),
     ]);

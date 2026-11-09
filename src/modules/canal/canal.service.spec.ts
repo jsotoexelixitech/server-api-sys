@@ -33,7 +33,11 @@ describe('CanalService.getActores', () => {
     const { service, query } = build(jest.fn().mockResolvedValue(undefined));
     await service.getActores("nest_valida");
     const sqlGestores = String(query.mock.calls.map((c) => c[0]).find((q) => /FROM magestor/.test(String(q))));
-    expect(sqlGestores).toMatch(/LEFT JOIN macanalalt c/);
-    expect(sqlGestores).toMatch(/g.ccanalalt IS NULL OR c.bactivo = 1/);
+    expect(sqlGestores).toMatch(/LEFT JOIN macanalalt cc/);
+    expect(sqlGestores).toMatch(/LEFT JOIN macanalalt cp/);
+    expect(sqlGestores).toMatch(/COALESCE(cc.bactivo, cp.bactivo, 1) = 1/);
+    // Canal por columna o, si falta, por el prefijo del código (215-…).
+    expect(sqlGestores).toMatch(/COALESCE(cc.ccanalalt, cp.ccanalalt) AS ccanalalt/);
+    expect(sqlGestores).toMatch(/CHARINDEX/);
   });
 });
