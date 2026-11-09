@@ -102,7 +102,12 @@ export class RiesgosGeneralesController {
       'sp_pre_emision_condominio_nexus. Recibo pendiente de cobro. Acepta `calculo` (suma = unidades × valor_unidad) y ' +
       '`meses` de vigencia (1 a 60; sin enviar, 1 año, o el horizonte si viene `biomasa`), `datos_bien` (xdescrip3 y xdescrip4) ' +
       'y `biomasa`, que exige lote e ihl. Con `biomasa`, responde 409 si el lote ya tiene póliza vigente en el ramo, sea cual sea ' +
-      'el tomador, el asegurado o el plan. Requiere el scope `emissions:riesgos-generales`.',
+      'el tomador, el asegurado o el plan. Ramos habilitados: RIESGOS_GENERALES_RAMOS_EMISION (lista de cramo o `todos` = ' +
+      'patrimoniales vigentes sin RCV; por defecto 16, 25 y 38). `modo: combo` emite cualquier cobertura del ramo con tarifa vigente ' +
+      '(prima = suma × tasa / 100 o la prima fija) usando `cplan` como plan contenedor (vigente del mismo ramo). Antes del SP ' +
+      'valida que cada cobertura exista activa en el ramo, tenga matarifa y exactamente una fila en matarifa_d (400 si no). ' +
+      'Ramos 28 y 38 exigen `apartamento`; el duplicado de póliza vigente del SP responde 409 con mensaje claro. ' +
+      'Requiere el scope `emissions:riesgos-generales`.',
     operationId: 'riesgosGeneralesEmision',
   })
   @ApiHeader(APIKEY_HEADER)

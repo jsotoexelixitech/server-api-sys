@@ -284,6 +284,7 @@ describe('RiesgosGeneralesService (datos del bien)', () => {
   const fila = {
     cplan: 'PAS06', xplan: 'PASTORA', cmoneda: '$', ccober: '901', ctarifa: '1', xcobertura: 'ENGORDE', msumaplan: 0,
     bobligatoria: 'T', pprima: 1.666667, msumamin: 0, msumamax: 0, pcomision: 10, ptasamon: 1, cnrecibo: '25-1',
+    iestado: 'V', qtarifa: 1, qdetalle: 1, qramo: 1,
     cnpoliza: '25-1-1100016178', cpoliza: '1',
   };
 
