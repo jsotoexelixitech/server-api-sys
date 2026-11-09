@@ -35,9 +35,9 @@ describe('CanalService.getActores', () => {
     const sqlGestores = String(query.mock.calls.map((c) => c[0]).find((q) => /FROM magestor/.test(String(q))));
     expect(sqlGestores).toMatch(/LEFT JOIN macanalalt cc/);
     expect(sqlGestores).toMatch(/LEFT JOIN macanalalt cp/);
-    expect(sqlGestores).toMatch(/COALESCE(cc.bactivo, cp.bactivo, 1) = 1/);
+    expect(sqlGestores).toContain("COALESCE(cc.bactivo, cp.bactivo, 1) = 1");
     // Canal por columna o, si falta, por el prefijo del código (215-…).
-    expect(sqlGestores).toMatch(/COALESCE(cc.ccanalalt, cp.ccanalalt) AS ccanalalt/);
+    expect(sqlGestores).toContain("COALESCE(cc.ccanalalt, cp.ccanalalt) AS ccanalalt");
     expect(sqlGestores).toMatch(/CHARINDEX/);
   });
 });
