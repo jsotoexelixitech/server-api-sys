@@ -18,6 +18,10 @@ import {
   type ExpedienteTipoCorreo,
 } from './templates/expediente-documentos.template';
 import { buildExpedienteCodigoEmail, codigoSeguro } from './templates/expediente-codigo.template';
+import {
+  buildExpedienteReporteDiarioEmail,
+  normalizarReporteDiario,
+} from './templates/expediente-reporte-diario.template';
 import type { SendTemplatedMailDto } from './dto/send-templated-mail.dto';
 
 export type PolicyEmissionMailResult = {
@@ -207,6 +211,10 @@ export class MailService {
         minutos: Number(data.minutos),
         callCenterPhone: phone,
       });
+    }
+
+    if (dto.template === 'expediente-reporte-diario') {
+      return buildExpedienteReporteDiarioEmail(normalizarReporteDiario(data));
     }
 
     if (dto.template === 'expediente-documentos') {
