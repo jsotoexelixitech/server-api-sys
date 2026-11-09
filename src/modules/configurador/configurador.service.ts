@@ -1,4 +1,4 @@
-import { BadRequestException, ConflictException, Injectable, Logger, NotFoundException } from '@nestjs/common';
+import { BadRequestException, ConflictException, ForbiddenException, Injectable, Logger, NotFoundException } from '@nestjs/common';
 import * as sql from 'mssql';
 import { MssqlService } from '../../database/mssql.service';
 import { parseSPError } from '../../common/helpers/sp-error.helper';
@@ -326,6 +326,14 @@ export class ConfiguradorService {
   }
 
   async eliminarPlan(cramo: number, cplan: string) {
+    // spMantPlanes borra datos en Sis2000 (incidente en mantenimiento de planes): desde aquí nunca se borra.
+    void cramo;
+    void cplan;
+    throw new ForbiddenException('Borrar planes en Sis2000 no está permitido desde el configurador.');
+  }
+
+  /** Ya no se usa: se conserva para referencia. */
+  private async eliminarPlanAnterior(cramo: number, cplan: string) {
     const req = this.db.request();
     req.input('cramo', sql.SmallInt, cramo);
     req.input('cplan', sql.Char(6), cplan.trim());
@@ -544,6 +552,7 @@ export class ConfiguradorService {
   }
 
   private async mantPlan(operation: 'C' | 'U' | 'D', dto: PlanDto) {
+    if (operation === 'D') throw new ForbiddenException('Borrar planes en Sis2000 no está permitido desde el configurador.');
     const T = sql;
     const req = this.db.request();
     const allProductor = dto.all_productor === true;
