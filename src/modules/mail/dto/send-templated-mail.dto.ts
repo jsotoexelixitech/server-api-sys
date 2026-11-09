@@ -3,6 +3,7 @@ import { Type } from 'class-transformer';
 import {
   ArrayMaxSize,
   IsArray,
+  IsBoolean,
   IsEmail,
   IsIn,
   IsObject,
@@ -71,6 +72,16 @@ export class SendTemplatedMailDto {
   @ArrayMaxSize(20)
   @IsEmail({}, { each: true })
   toExtra?: string[];
+
+  @ApiPropertyOptional({
+    description:
+      'true = destinatarios en copia oculta (CCO): "Para" lleva la cuenta remitente y la lista va en BCC. ' +
+      'Solo aplica con más de un destinatario; sin el campo el envío no cambia.',
+    example: true,
+  })
+  @IsOptional()
+  @IsBoolean()
+  ocultarDestinatarios?: boolean;
 
   @ApiPropertyOptional({ example: 'Mesa técnica' })
   @IsOptional()
