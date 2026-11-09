@@ -17,7 +17,12 @@ import {
   SP_VALIDATE_AUTOMOVIL_LEGACY,
 } from '../../config/sis2000-sp.constants';
 import { esTipoCedulaJuridica } from './constants/persona-juridica.constants';
-import { cotizacionErrorFromMessage, parseCprocesCotizacion } from './cotizacion-emision';
+import {
+  cotizacionErrorFromMessage,
+  parseCcertiCotizacion,
+  parseCprocesCotizacion,
+  parseMprimaEsperada,
+} from './cotizacion-emision';
 import { EmissionRow, splitEmissionRows } from './emission-rcv-aparte';
 import { SearchProprietaryDto } from './dto/search-proprietary.dto';
 import { SearchVehicleByPlateDto, SearchVehicleBySerialDto } from './dto/search-vehicle.dto';
@@ -858,9 +863,16 @@ export class EmissionsService {
 
       // Cotización de SysIP: el plan, la suma y las primas los toma el SP de sopoltar.
       const cprocesCotizacion = parseCprocesCotizacion(b);
+      const ccertiCotizacion = parseCcertiCotizacion(b, cprocesCotizacion);
+      const mprimaEsperada = parseMprimaEsperada(b, cprocesCotizacion);
       delete b['cproces'];
       delete b['cproces_cotizacion'];
+      delete b['ccerti'];
+      delete b['ccerti_cotizacion'];
+      delete b['mprima_esperada'];
       if (cprocesCotizacion != null) b['cproces_cotizacion'] = cprocesCotizacion;
+      if (ccertiCotizacion != null) b['ccerti_cotizacion'] = ccertiCotizacion;
+      if (mprimaEsperada != null) b['mprima_esperada'] = mprimaEsperada;
 
       // cnpoliza lo genera Sis2000; string vacío bloquea el SP (no entra a IF @cnpoliza IS NULL)
       if (b['cnpoliza'] == null || String(b['cnpoliza']).trim() === '') {
@@ -1767,6 +1779,15 @@ export class EmissionsService {
     if (cprocesCotizacion != null) {
       params['cproces_cotizacion'] = { type: T.Numeric(13, 0), value: cprocesCotizacion };
     }
+    const ccertiCotizacion = this.intField(b['ccerti_cotizacion']);
+    if (ccertiCotizacion != null) {
+      params['ccerti_cotizacion'] = { type: T.Int, value: ccertiCotizacion };
+    }
+    // Ya validado en createEmissionAuto (parseMprimaEsperada); solo existe en sp_pre_emision.
+    const mprimaEsperada = b['mprima_esperada'];
+    if (typeof mprimaEsperada === 'number') {
+      params['mprima_esperada'] = { type: T.Numeric(18, 2), value: mprimaEsperada };
+    }
 
     Object.entries(params).forEach(([key, field]) =>
       req.input(key, (field as { type: unknown }).type, (field as { value: unknown }).value),
@@ -1837,7 +1858,7 @@ export class EmissionsService {
     const polizaRcv = rcvAparte ? await this.buildPolizaRcvAparte(rcvAparte, pdfBase) : undefined;
 
     this.logger.log(
-      `emitLocal OK cnpoliza=${cnpoliza} cnrecibo=${cnrecibo}${cprocesCotizacion != null ? ` cotizacion=${cprocesCotizacion}` : ''}${polizaRcv ? ` rcv_aparte=${polizaRcv.cnpoliza}` : ''}`,
+      `emitLocal OK cnpoliza=${cnpoliza} cnrecibo=${cnrecibo}${cprocesCotizacion != null ? ` cotizacion=${cprocesCotizacion}${ccertiCotizacion != null ? `/${ccertiCotizacion}` : ''}` : ''}${polizaRcv ? ` rcv_aparte=${polizaRcv.cnpoliza}` : ''}`,
     );
 
     // El repair recotiza la póliza: con cotización las primas deben quedar las cotizadas.

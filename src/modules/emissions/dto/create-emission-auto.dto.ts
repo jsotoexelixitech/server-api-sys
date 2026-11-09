@@ -386,6 +386,28 @@ export class CreateEmissionAutoDto {
   @IsString()
   cproces?: string;
 
+  @ApiPropertyOptional({
+    example: 2,
+    description:
+      'Opción de cobertura de la cotización (ccerti). Solo junto con `cproces`; también se acepta como ' +
+      '`ccerti_cotizacion`. Sin él se emite la única opción. Con varias opciones sin indicar cuál: ' +
+      '400 COTIZACION_NO_COINCIDE. Si la opción no existe: 400 COTIZACION_NO_EXISTE.',
+  })
+  @IsOptional()
+  @IsInt()
+  ccerti?: number;
+
+  @ApiPropertyOptional({
+    example: 152.4,
+    description:
+      'Prima en USD de la opción elegida (`ccerti`), con hasta 2 decimales. Solo junto con `cproces`. ' +
+      'El SP la compara con la prima cotizada: si no coincide, 400 COTIZACION_NO_COINCIDE.',
+  })
+  @IsOptional()
+  @IsNumber({ maxDecimalPlaces: 2 })
+  @Min(0.01)
+  mprima_esperada?: number;
+
   @ApiPropertyOptional({ description: 'Canal alterno (Marketplace / SSO).' })
   @IsOptional()
   @IsInt()
