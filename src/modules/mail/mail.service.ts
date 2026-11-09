@@ -1,4 +1,4 @@
-import { Injectable, Logger } from '@nestjs/common';
+import { BadRequestException, Injectable, Logger } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import nodemailer from 'nodemailer';
 import type Transporter from 'nodemailer/lib/mailer';
@@ -22,7 +22,12 @@ import {
   buildExpedienteReporteDiarioEmail,
   normalizarReporteDiario,
 } from './templates/expediente-reporte-diario.template';
+import {
+  buildExpedienteReporteSimpleEmail,
+  normalizarReporteSimple,
+} from './templates/expediente-reporte-diario-simple.template';
 import type { SendTemplatedMailDto } from './dto/send-templated-mail.dto';
+import { prepararAdjuntos, type PreparedAttachment } from './mail-attachments';
 
 export type PolicyEmissionMailResult = {
   sent: boolean;
@@ -120,6 +125,10 @@ export class MailService {
   }
 
   async sendTemplatedEmail(dto: SendTemplatedMailDto): Promise<PolicyEmissionMailResult> {
+    // Adjuntos inválidos = 400 (el cliente puede reintentar sin adjunto); sin adjuntos no cambia nada.
+    const prepared = prepararAdjuntos(dto.attachments);
+    if ('error' in prepared) throw new BadRequestException(prepared.error);
+
     if (!this.isEnabled()) {
       return { sent: false, mode: 'disabled', error: 'MAIL_ENABLED=false' };
     }
@@ -141,6 +150,7 @@ export class MailService {
       html: built.html,
       text: built.text,
       logLabel: dto.template,
+      ...(prepared.adjuntos.length ? { attachments: prepared.adjuntos } : {}),
     });
   }
 
@@ -213,6 +223,10 @@ export class MailService {
       });
     }
 
+    if (dto.template === 'expediente-reporte-diario-simple') {
+      return buildExpedienteReporteSimpleEmail(normalizarReporteSimple(data));
+    }
+
     if (dto.template === 'expediente-reporte-diario') {
       return buildExpedienteReporteDiarioEmail(normalizarReporteDiario(data));
     }
@@ -265,6 +279,7 @@ export class MailService {
     html: string;
     text: string;
     logLabel: string;
+    attachments?: PreparedAttachment[];
   }): Promise<PolicyEmissionMailResult> {
     const fromEmail = this.config.get<string>('SMTP_FROM', 'info@lamundialdeseguros.com');
     const fromName = this.config.get<string>('SMTP_FROM_NAME', 'La Mundial de Seguros');
@@ -282,8 +297,18 @@ export class MailService {
         html: opts.html,
         encoding: 'quoted-printable',
         headers: { 'Content-Language': 'es' },
+        ...(opts.attachments?.length
+          ? {
+              attachments: opts.attachments.map((a) => ({
+                filename: a.filename,
+                content: a.content,
+                contentType: a.contentType,
+              })),
+            }
+          : {}),
       });
-      this.logger.log(`Correo ${opts.logLabel} enviado a ${toList.join(', ')}`);
+      const adj = opts.attachments?.length ? ` (${opts.attachments.length} adjunto(s))` : '';
+      this.logger.log(`Correo ${opts.logLabel} enviado a ${toList.join(', ')}${adj}`);
       return { sent: true, mode: 'smtp', messageId: info.messageId };
     } catch (err) {
       const msg = err instanceof Error ? err.message : String(err);

@@ -91,7 +91,8 @@ export class MailController {
   @ApiOperation({
     summary: 'Enviar correo con plantilla registrada (reutilizable)',
     description:
-      'No acepta HTML libre. `template` elige el diseño (funeral-payment-link, funeral-review-alert, funeral-rejected, branded, expediente-documentos, expediente-codigo o expediente-reporte-diario). ' +
+      'No acepta HTML libre. `template` elige el diseño (funeral-payment-link, funeral-review-alert, funeral-rejected, branded, expediente-documentos, expediente-codigo, expediente-reporte-diario o expediente-reporte-diario-simple). ' +
+      'Adjuntos opcionales en `attachments` (xlsx, csv o pdf en base64; máx. 5 y 8 MB en total). ' +
       'Los endpoints específicos de funerario siguen vigentes.',
     operationId: 'sendTemplatedEmail',
   })

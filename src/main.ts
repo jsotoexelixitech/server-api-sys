@@ -36,6 +36,7 @@ import { readPartnerPackagesConfig } from './partner/partner-env';
 import { warnCatalogRoutesMissingFromOpenApi } from './modules/docs/open-api-catalog-audit';
 import { OpenApiDocumentStore } from './modules/docs/open-api-document.store';
 import { joinPublicPath } from './common/config/public-path';
+import { MAIL_SEND_BODY_LIMIT } from './modules/mail/mail-attachments';
 import { nestRequestAuthAls } from './modules/auth/nest-request-auth.context';
 
 function resolveBrandAssetsDir(): string {
@@ -90,6 +91,15 @@ async function bootstrap(): Promise<void> {
     app.getHttpAdapter().getInstance().use(`${publicPaths.prefix}/assets`, staticAssets);
   }
   const httpServerEarly = app.getHttpAdapter().getInstance();
+  // Correo con adjuntos (Excel del control documental): body JSON más grande solo en esta ruta.
+  // Función con nombre propio: Nest no registra su jsonParser global si ve otra capa «jsonParser».
+  const mailSendJson = express.json({ limit: MAIL_SEND_BODY_LIMIT });
+  httpServerEarly.use(
+    '/api/v1/mail/send',
+    function mailSendBodyParser(req: express.Request, res: express.Response, next: express.NextFunction) {
+      mailSendJson(req, res, next);
+    },
+  );
   httpServerEarly.use(
     '/admin',
     express.static(join(assetsDir, 'admin'), {
