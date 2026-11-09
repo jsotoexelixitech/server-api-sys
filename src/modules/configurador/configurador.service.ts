@@ -24,6 +24,8 @@ const AUDITORIA_ALTA: Array<[string, string]> = [
   ['u_version', "'!'"], ['cprog', '@cprog'], ['ifuente', '@ifuente'], ['fingreso', 'GETDATE()'], ['cusuario', '@cusuario'], ['ccategoria', '1'],
 ];
 const AUDITORIA_MOD: Array<[string, string]> = [['fultmod', 'GETDATE()'], ['cusuariomod', '@cusuario'], ['ccategoriamod', '1']];
+/** Columnas de maclient_prov que el catálogo puede mostrar (si existen); el resto no sale de Sis2000. */
+const COLUMNAS_CATALOGO_PROVEEDOR = ['cclave_num', 'xclave', 'xdescripcion', 'itiposerv', 'iestado', 'bactivo'];
 
 /** Usuario Sis2000 de la integración Exelixi (mismo de las emisiones Nexus). */
 const CUSUARIO = 20364172;
@@ -345,14 +347,19 @@ export class ConfiguradorService {
   // La relación es por plan (cramo, cplan): aplica a todas sus coberturas. Al emitir personas,
   // sp_registrar_proveedor_poliza_nexus copia a adproveedor los proveedores vigentes del plan.
 
-  /** Catálogo de proveedores (maclient_prov ⋈ maclient) por nombre, RIF o cci_rif, agrupado con sus claves. */
+  /**
+   * Catálogo de proveedores (maclient_prov ⋈ maclient) por nombre, RIF o cci_rif, agrupado con sus claves.
+   * De maclient_prov solo salen columnas de una lista blanca que existan (nunca datos bancarios u otros sensibles).
+   */
   async listarProveedores(q: string) {
     const texto = (q ?? '').trim().slice(0, 60);
+    const existentes = await this.columnasDe('maclient_prov');
+    const extra = COLUMNAS_CATALOGO_PROVEEDOR.filter((c) => existentes.has(c)).map((c) => `p.${c}`);
     const req = this.db.request();
     req.input('q', sql.VarChar(60), texto);
     req.input('q2', sql.VarChar(62), `%${texto}%`);
     const r = await req.query(`
-      SELECT TOP (60) p.*, RTRIM(c.cid) AS cid, LTRIM(RTRIM(c.xcliente)) AS xcliente
+      SELECT TOP (60) ${['p.cci_rif', ...extra].join(', ')}, RTRIM(c.cid) AS cid, LTRIM(RTRIM(c.xcliente)) AS xcliente
       FROM maclient_prov p WITH (NOLOCK)
       INNER JOIN maclient c WITH (NOLOCK) ON c.cci_rif = p.cci_rif
       WHERE (@q = '' OR c.xcliente LIKE @q2 OR RTRIM(c.cid) LIKE @q2 OR CONVERT(VARCHAR(20), p.cci_rif) LIKE @q2)
