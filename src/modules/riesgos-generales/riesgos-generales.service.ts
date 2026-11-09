@@ -5,18 +5,31 @@ import { parseSPError, toUserFacingError } from '../../common/helpers/sp-error.h
 import { buildPolicyPdfUrl } from '../../common/helpers/policy-url.helper';
 import { SP_PRE_EMISION_CONDOMINIO } from '../../config/sis2000-sp.constants';
 import {
-  calcularCoberturas, componerDatosBien, esObligatoria, mapCoberturaRamo, mapRamoPatrimonial, sumarMeses,
-  type CoberturaTarifa, type CotizacionCalculada, type DatoBien, type DatosBienCompuestos,
+  RAMOS_CON_UNIDAD, RAMO_RCV, calcularCoberturas, calcularCoberturasRamo, componerDatosBien, erroresCoberturasSp, esObligatoria,
+  mapCoberturaRamo, mapRamoPatrimonial, parsearRamosEmision, sumarMeses, traducirDuplicadoSp,
+  type ChequeoCobertura, type CoberturaTarifa, type CotizacionCalculada, type DatoBien, type DatosBienCompuestos,
 } from './riesgos-generales.calculo';
 import { calcularBiomasa, datosBienBiomasa, patronLote, type ResultadoBiomasa } from './riesgos-generales.biomasa';
 import {
-  CoberturasRamoDto, CotizarCoberturasDto, EmitirCoberturasDto, PersonaRiesgoDto, RAMOS_BIOMASA, TarifaPlanDto,
+  type CoberturasBaseDto, CoberturasRamoDto, CotizarCoberturasDto, EmitirCoberturasDto, PersonaRiesgoDto, RAMOS_BIOMASA, TarifaPlanDto,
 } from './dto/riesgos-generales.dto';
 
 /** Usuario Sis2000 de las emisiones Nexus de riesgos generales (mismo que condominio). */
 const CUSUARIO_NEXUS = 20364172;
 
 type CotizacionConBien = CotizacionCalculada & { biomasa?: ResultadoBiomasa; datos_bien?: DatosBienCompuestos; aviso_lote?: string };
+
+/** Plan contenedor (maplanes del ramo) y ramo, consultados antes de emitir. */
+interface ContextoPlan {
+  /** maplanes.iestado del plan en el ramo; null si el plan no existe en ese ramo. */
+  iestado: string | null;
+  cmoneda: string;
+  ptasamon: number;
+  /** Otro ramo donde el plan sí está vigente (para el mensaje). */
+  cramo_otro: number | null;
+  /** El ramo es patrimonial vigente (ctiporamo 1 y 6, sin RCV). */
+  patrimonial: boolean;
+}
 
 /**
  * Riesgos generales por cobertura (cotizador RC): tarifa del plan, cotización y emisión con las coberturas
@@ -138,6 +151,106 @@ export class RiesgosGeneralesService {
     return ((result.recordset ?? []) as Record<string, unknown>[]).map((r) => mapRamoPatrimonial(r));
   }
 
+  /**
+   * Plan contenedor y ramo en una sola consulta: estado del plan en el ramo, moneda y tasa de cambio, otro ramo donde
+   * el plan esté vigente (para el mensaje) y si el ramo es patrimonial vigente (ctiporamo 1 y 6, sin RCV).
+   */
+  private async contextoPlan(cramo: number, cplan: string): Promise<ContextoPlan> {
+    const T = this.db.types;
+    const result = await this.db.request()
+      .input('cramo', T.Int, cramo)
+      .input('cplan', T.VarChar(10), cplan.trim())
+      .query(`
+        SELECT pl.iestado, pl.cmoneda, pl.ptasamon, o.cramo_otro, rm.qramo
+        FROM (SELECT 1 AS uno) b
+        OUTER APPLY (
+          SELECT TOP 1 RTRIM(p.iestado) AS iestado, RTRIM(p.cmoneda) AS cmoneda, m.ptasamon
+          FROM maplanes p WITH (NOLOCK)
+          LEFT JOIN mamonedas m WITH (NOLOCK) ON m.cmoneda = p.cmoneda
+          WHERE p.cramo = @cramo AND RTRIM(p.cplan) = @cplan
+          ORDER BY CASE WHEN p.iestado = 'V' THEN 0 ELSE 1 END
+        ) pl
+        OUTER APPLY (
+          SELECT TOP 1 x.cramo AS cramo_otro
+          FROM maplanes x WITH (NOLOCK)
+          WHERE RTRIM(x.cplan) = @cplan AND x.cramo <> @cramo AND x.iestado = 'V'
+          ORDER BY x.cramo
+        ) o
+        OUTER APPLY (
+          SELECT COUNT(*) AS qramo
+          FROM maramos r WITH (NOLOCK)
+          WHERE r.cramo = @cramo AND r.iestado = 'V' AND r.ctiporamo IN (1, 6) AND r.cramo <> 26
+        ) rm`);
+    const r = (result.recordset?.[0] ?? {}) as Record<string, unknown>;
+    return {
+      iestado: r.iestado == null ? null : String(r.iestado).trim(),
+      cmoneda: String(r.cmoneda ?? '$').trim() || '$',
+      ptasamon: Number(r.ptasamon ?? 0) || 1,
+      cramo_otro: r.cramo_otro == null ? null : Number(r.cramo_otro),
+      patrimonial: Number(r.qramo ?? 0) > 0,
+    };
+  }
+
+  /** El plan debe existir vigente en el mismo ramo: es el contenedor de la póliza (moneda, cplan y regla de duplicados). */
+  private exigirPlanVigente(cramo: number, cplan: string, ctx: ContextoPlan) {
+    if (ctx.iestado === 'V') return;
+    if (ctx.iestado) throw new BadRequestException(`El plan ${cplan} del ramo ${cramo} no está vigente en Sis2000: elija un plan vigente del ramo.`);
+    if (ctx.cramo_otro != null) {
+      throw new BadRequestException(`El plan ${cplan} no es del ramo ${cramo} (es del ramo ${ctx.cramo_otro}): elija un plan vigente del ramo ${cramo}.`);
+    }
+    throw new BadRequestException(`El plan ${cplan} no existe en el ramo ${cramo}: elija un plan vigente del ramo.`);
+  }
+
+  /** RIESGOS_GENERALES_RAMOS_EMISION: lista de cramo o 'todos' (patrimonial vigente, sin RCV). Por defecto 16, 25 y 38. */
+  private async exigirRamoEmitible(cramo: number, ctx: () => Promise<ContextoPlan>) {
+    const config = parsearRamosEmision(this.config.get<string>('RIESGOS_GENERALES_RAMOS_EMISION'));
+    if (cramo === RAMO_RCV) throw new BadRequestException('El ramo 26 (RCV) no se emite por esta ruta.');
+    if (config === 'todos') {
+      if (!(await ctx()).patrimonial) {
+        throw new BadRequestException(`El ramo ${cramo} no es un ramo patrimonial vigente (ctiporamo 1 o 6): no se puede emitir por esta ruta.`);
+      }
+      return;
+    }
+    if (!config.includes(cramo)) {
+      throw new BadRequestException(`El ramo ${cramo} no está habilitado para emitir por coberturas (ramos habilitados: ${config.join(', ')}).`);
+    }
+  }
+
+  /**
+   * Antes del SP, en una sola consulta: cada cobertura existe activa en macoberturas del ramo, tiene fila en matarifa y
+   * exactamente una en matarifa_d. sp_emision_condominio_nexus une con matarifa_d sin filtrar vigencia: con 0 filas la
+   * cobertura desaparece de la póliza y con 2 o más se duplica.
+   */
+  private async validarCoberturasSp(cramo: number, coberturas: { ccober: string; ctarifa: string }[]) {
+    const T = this.db.types;
+    const result = await this.db.request()
+      .input('cramo', T.Int, cramo)
+      .input('coberturas', T.NVarChar(T.MAX), JSON.stringify(coberturas.map((c) => ({ ccober: c.ccober, ctarifa: c.ctarifa }))))
+      .query(`
+        SELECT j.ccober, j.ctarifa, mc.iestado,
+               (SELECT COUNT(*) FROM matarifa t WITH (NOLOCK)
+                 WHERE t.cramo = @cramo AND t.ccober = j.ccober AND t.ctarifa = j.ctarifa) AS qtarifa,
+               (SELECT COUNT(*) FROM matarifa_d d WITH (NOLOCK)
+                 WHERE d.cramo = @cramo AND d.ccober = j.ccober AND d.ctarifa = j.ctarifa) AS qdetalle
+        FROM OPENJSON(@coberturas) WITH (ccober VARCHAR(10) '$.ccober', ctarifa VARCHAR(10) '$.ctarifa') j
+        OUTER APPLY (
+          SELECT TOP 1 RTRIM(c.iestado) AS iestado
+          FROM macoberturas c WITH (NOLOCK)
+          WHERE c.cramo = @cramo AND c.ccobertura = j.ccober
+          ORDER BY CASE WHEN c.iestado = 'V' THEN 0 ELSE 1 END
+        ) mc`);
+    const filas: ChequeoCobertura[] = ((result.recordset ?? []) as Record<string, unknown>[]).map((r) => ({
+      ccober: String(r.ccober ?? '').trim(),
+      ctarifa: String(r.ctarifa ?? '').trim(),
+      iestado: r.iestado == null ? null : String(r.iestado),
+      qtarifa: Number(r.qtarifa ?? 0),
+      qdetalle: Number(r.qdetalle ?? 0),
+    }));
+    if (filas.length !== coberturas.length) throw new InternalServerErrorException('No se pudieron validar las coberturas antes de emitir.');
+    const errores = erroresCoberturasSp(cramo, filas);
+    if (errores.length) throw new BadRequestException(errores.join(' '));
+  }
+
   async cotizar(dto: CotizarCoberturasDto): Promise<CotizacionConBien> {
     const cot = await this.calcular(dto);
     const lote = cot.biomasa?.lote;
@@ -152,12 +265,28 @@ export class RiesgosGeneralesService {
     }
   }
 
-  private async calcular(dto: CotizarCoberturasDto): Promise<CotizacionConBien> {
-    const tarifa = await this.getTarifa(dto);
-    const { cotizacion, errores } = calcularCoberturas(tarifa.coberturas, dto.coberturas, dto.calculo);
+  /**
+   * Modo `plan`: coberturas y tasas del plan (maplantar). Modo `combo`: cualquier cobertura del ramo con tarifa vigente;
+   * el plan solo es contenedor (debe estar vigente en el ramo). `ctx` evita repetir la consulta del plan al emitir.
+   */
+  private async calcular(dto: CoberturasBaseDto, ctx?: ContextoPlan): Promise<CotizacionConBien> {
+    let cmoneda: string;
+    let res: ReturnType<typeof calcularCoberturas>;
+    if (dto.modo === 'combo') {
+      const plan = ctx ?? await this.contextoPlan(dto.cramo, dto.cplan);
+      this.exigirPlanVigente(dto.cramo, dto.cplan.trim(), plan);
+      const { coberturas } = await this.getCoberturasRamo({ cramo: dto.cramo });
+      cmoneda = plan.cmoneda;
+      res = calcularCoberturasRamo(coberturas, dto.coberturas, dto.calculo);
+    } else {
+      const tarifa = await this.getTarifa(dto);
+      cmoneda = tarifa.cmoneda;
+      res = calcularCoberturas(tarifa.coberturas, dto.coberturas, dto.calculo);
+    }
+    const { cotizacion, errores } = res;
     if (!cotizacion) throw new BadRequestException(errores.join(' '));
     const biomasa = dto.biomasa ? this.proyectarBiomasa(dto) : undefined;
-    const datos: DatoBien[] = [...(biomasa ? datosBienBiomasa(biomasa, tarifa.cmoneda) : []), ...(dto.datos_bien ?? [])];
+    const datos: DatoBien[] = [...(biomasa ? datosBienBiomasa(biomasa, cmoneda) : []), ...(dto.datos_bien ?? [])];
     if (!datos.length) return cotizacion;
     return { ...cotizacion, ...(biomasa ? { biomasa } : {}), datos_bien: componerDatosBien(datos) };
   }
@@ -184,7 +313,7 @@ export class RiesgosGeneralesService {
     return fila ? String(fila.cnpoliza ?? '').trim() : null;
   }
 
-  private proyectarBiomasa(dto: CotizarCoberturasDto): ResultadoBiomasa {
+  private proyectarBiomasa(dto: CoberturasBaseDto): ResultadoBiomasa {
     if (!(RAMOS_BIOMASA as readonly number[]).includes(dto.cramo)) {
       throw new BadRequestException(`El ramo ${dto.cramo} no admite el bloque biomasa.`);
     }
@@ -203,7 +332,15 @@ export class RiesgosGeneralesService {
     if (dto.biomasa && dto.meses && dto.meses !== dto.biomasa.horizonte_meses) {
       throw new BadRequestException(`meses (${dto.meses}) no coincide con horizonte_meses (${dto.biomasa.horizonte_meses}).`);
     }
-    const cot = await this.calcular(dto);
+    if ((RAMOS_CON_UNIDAD as readonly number[]).includes(dto.cramo) && !(Number(dto.apartamento) > 0)) {
+      throw new BadRequestException(`En el ramo ${dto.cramo} el número de apartamento o unidad es obligatorio: Sis2000 no permite dos pólizas vigentes con el mismo asegurado, plan y unidad.`);
+    }
+    const cplan = dto.cplan.trim();
+    let ctxCache: ContextoPlan | undefined;
+    const ctx = async () => (ctxCache ??= await this.contextoPlan(dto.cramo, cplan));
+    await this.exigirRamoEmitible(dto.cramo, ctx);
+    this.exigirPlanVigente(dto.cramo, cplan, await ctx());
+    const cot = await this.calcular(dto, await ctx());
     if (cot.datos_bien?.omitidos.length) {
       this.logger.warn(`emitir: datos del bien sin espacio en xdescrip3/4: ${cot.datos_bien.omitidos.join(', ')}`);
     }
@@ -217,21 +354,13 @@ export class RiesgosGeneralesService {
     if (meses) hasta.setTime(sumarMeses(hoy, meses).getTime());
     else hasta.setFullYear(hasta.getFullYear() + 1);
 
-    const tasaRes = await this.db.request()
-      .input('cramo', T.Int, dto.cramo)
-      .input('cplan', T.VarChar(10), dto.cplan.trim())
-      .query(`SELECT m.ptasamon FROM maplanes p INNER JOIN mamonedas m ON m.cmoneda = p.cmoneda
-              WHERE p.cramo = @cramo AND RTRIM(p.cplan) = @cplan`);
-    const tasa = Number(tasaRes.recordset?.[0]?.ptasamon ?? 0) || 1;
+    const tasa = (await ctx()).ptasamon;
 
     const tomador = dto.tomador;
     const asegurado = dto.asegurado ?? dto.tomador;
     const rifTomador = this.rif(tomador.rif);
     const rifAsegurado = this.rif(asegurado.rif);
     if (!rifTomador || !rifAsegurado) throw new BadRequestException('El RIF o la cédula del tomador y del asegurado son obligatorios.');
-    if (dto.cramo === 38 && !dto.apartamento) {
-      throw new BadRequestException('El número de apartamento es obligatorio en el ramo 38 (clave cédula + plan + unidad).');
-    }
 
     // Un lote, una póliza vigente. La validación del SP (asegurado + plan) sigue aparte y no cambia.
     const lote = cot.biomasa?.lote;
@@ -241,6 +370,8 @@ export class RiesgosGeneralesService {
         throw new ConflictException(`El lote ${lote} ya está asegurado en la póliza vigente ${poliza}. Un lote no puede tener dos pólizas vigentes, aunque cambien el tomador o el plan.`);
       }
     }
+
+    await this.validarCoberturasSp(dto.cramo, cot.coberturas);
 
     const coberturasJson = JSON.stringify(cot.coberturas.map((c) => ({
       ccober: c.ccober, ctarifa: c.ctarifa, msumaasegext: c.suma_asegurada, mprimabrutaext: c.prima,
@@ -316,6 +447,8 @@ export class RiesgosGeneralesService {
       if (err instanceof InternalServerErrorException) throw err;
       const msg = parseSPError(err);
       this.logger.error(`emitir: ${msg}`);
+      const duplicado = traducirDuplicadoSp(msg, dto.cramo, cplan, dto.apartamento);
+      if (duplicado) throw new ConflictException(duplicado);
       throw new BadRequestException(toUserFacingError(msg));
     }
   }

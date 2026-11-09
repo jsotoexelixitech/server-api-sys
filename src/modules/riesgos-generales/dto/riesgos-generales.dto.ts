@@ -2,7 +2,7 @@ import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
 import { Type } from 'class-transformer';
 import {
   ArrayMaxSize, ArrayMinSize, IsArray, IsDateString, IsIn, IsInt, IsNotEmpty, IsNumber, IsOptional, IsPositive, IsString,
-  Matches, Max, MaxLength, Min, ValidateNested,
+  Matches, Max, MaxLength, Min, ValidateIf, ValidateNested,
 } from 'class-validator';
 
 /**
@@ -45,6 +45,15 @@ export class CoberturaPedidaDto {
   @IsNotEmpty()
   @MaxLength(4)
   ccober: string;
+
+  @ApiPropertyOptional({
+    example: '1',
+    description: 'Modo combo: tarifa de la cobertura (matarifa.ctarifa). Solo hace falta si la cobertura tiene varias tarifas vigentes en el ramo.',
+  })
+  @IsOptional()
+  @IsString()
+  @MaxLength(10)
+  ctarifa?: string;
 
   @ApiPropertyOptional({
     example: 140000,
@@ -123,7 +132,31 @@ export class BiomasaDto {
   ihl?: string;
 }
 
-export class CotizarCoberturasDto extends TarifaPlanDto {
+/** Modo de tarifa: `plan` = coberturas del plan (maplantar); `combo` = coberturas del ramo, el plan es solo contenedor. */
+export const MODOS_TARIFA = ['plan', 'combo'] as const;
+export type ModoTarifa = (typeof MODOS_TARIFA)[number];
+
+/**
+ * Campos comunes de cotizar y emitir, sin el ramo: cada DTO valida `cramo` a su manera (cotizar: RAMOS_COBERTURAS;
+ * emitir: cualquier entero y el servicio aplica RIESGOS_GENERALES_RAMOS_EMISION).
+ */
+export abstract class CoberturasCamposDto {
+  @ApiProperty({ example: '2', description: 'Plan vigente del ramo. En modo combo es el contenedor: aporta moneda, plan y la regla de duplicados.' })
+  @IsString()
+  @IsNotEmpty()
+  @MaxLength(6)
+  cplan: string;
+
+  @ApiPropertyOptional({
+    enum: MODOS_TARIFA,
+    default: 'plan',
+    description: '`plan` (por defecto): coberturas y tasas del plan (maplantar). `combo`: cualquier cobertura del ramo con tarifa vigente '
+      + '(GET coberturas); prima = suma × pprima / 100 o la prima fija de matarifa_d si no hay tasa.',
+  })
+  @IsOptional()
+  @IsIn(MODOS_TARIFA as unknown as string[])
+  modo?: ModoTarifa;
+
   @ApiProperty({
     type: [CoberturaPedidaDto],
     description: 'Coberturas elegidas con su suma (o sin suma si se envía `calculo`). La básica es obligatoria.',
@@ -164,6 +197,20 @@ export class CotizarCoberturasDto extends TarifaPlanDto {
   biomasa?: BiomasaDto;
 }
 
+/** Cotizar o emitir: campos comunes con el ramo. */
+export type CoberturasBaseDto = CoberturasCamposDto & { cramo: number };
+
+/** Cotizar: solo los ramos con tarifa por cobertura (RAMOS_COBERTURAS). */
+export class CotizarCoberturasDto extends CoberturasCamposDto {
+  @ApiProperty({ example: 38, enum: RAMOS_COBERTURAS })
+  @Type(() => Number)
+  @IsIn(RAMOS_COBERTURAS as unknown as number[])
+  cramo: number;
+}
+
+/** Ramos donde el SP exige número de unidad o apartamento. */
+const RAMOS_UNIDAD_DTO = [28, 38];
+
 export class PersonaRiesgoDto {
   @ApiProperty({ example: 'V' }) @IsString() @MaxLength(1) tipo_cedula: string;
   @ApiProperty({ example: '12345678' }) @IsNotEmpty() rif: string | number;
@@ -174,7 +221,16 @@ export class PersonaRiesgoDto {
   @ApiPropertyOptional({ example: 'juan@correo.com' }) @IsOptional() @IsString() correo?: string;
 }
 
-export class EmitirCoberturasDto extends CotizarCoberturasDto {
+/**
+ * Emitir: cualquier cramo en el DTO; el servicio lo valida contra RIESGOS_GENERALES_RAMOS_EMISION (por defecto 16, 25 y 38).
+ */
+export class EmitirCoberturasDto extends CoberturasCamposDto {
+  @ApiProperty({ example: 38, description: 'Ramo; debe estar habilitado en RIESGOS_GENERALES_RAMOS_EMISION (por defecto 16, 25 y 38).' })
+  @Type(() => Number)
+  @IsInt()
+  @Min(1)
+  cramo: number;
+
   @ApiProperty({ type: PersonaRiesgoDto })
   @ValidateNested()
   @Type(() => PersonaRiesgoDto)
@@ -197,11 +253,14 @@ export class EmitirCoberturasDto extends CotizarCoberturasDto {
   @IsNotEmpty()
   direccion_riesgo: string;
 
-  @ApiPropertyOptional({ example: 52, description: 'Ramo 38: número de apartamento o unidad (clave cédula + plan + unidad).' })
-  @IsOptional()
+  @ApiPropertyOptional({
+    example: 52,
+    description: 'Ramos 28 y 38 (obligatorio): número de apartamento o unidad; Sis2000 no deja dos pólizas vigentes con el mismo asegurado, plan y unidad.',
+  })
+  @ValidateIf((o: EmitirCoberturasDto) => o.apartamento != null || RAMOS_UNIDAD_DTO.includes(Number(o.cramo)))
   @Type(() => Number)
-  @IsInt()
-  @Min(1)
+  @IsInt({ message: 'En los ramos 28 y 38 el número de apartamento o unidad es obligatorio (entero mayor a 0).' })
+  @Min(1, { message: 'En los ramos 28 y 38 el número de apartamento o unidad es obligatorio (entero mayor a 0).' })
   apartamento?: number;
 
   @ApiPropertyOptional({ example: 80080 })

@@ -20,6 +20,8 @@ export interface CoberturaTarifa {
 
 export interface CoberturaPedida {
   ccober: string;
+  /** Tarifa (matarifa.ctarifa). Solo en modo combo y solo hace falta si la cobertura tiene varias tarifas vigentes. */
+  ctarifa?: string;
   /** Suma de la cobertura. Opcional si viene `calculo` (se ignora y se reemplaza por unidades × valor_unidad). */
   suma?: number;
 }
@@ -137,15 +139,16 @@ export const sumaPorCalculo = (c: CalculoSuma) => r2(c.unidades * c.valor_unidad
 export function resolverSumas(
   pedidas: CoberturaPedida[],
   calculo?: CalculoSuma,
-): { pedidas: { ccober: string; suma: number }[]; errores: string[] } {
+): { pedidas: { ccober: string; ctarifa?: string; suma: number }[]; errores: string[] } {
+  const base = (p: CoberturaPedida) => ({ ccober: p.ccober, ...(p.ctarifa?.trim() ? { ctarifa: p.ctarifa.trim() } : {}) });
   if (calculo) {
     const suma = sumaPorCalculo(calculo);
-    return { pedidas: pedidas.map((p) => ({ ccober: p.ccober, suma })), errores: [] };
+    return { pedidas: pedidas.map((p) => ({ ...base(p), suma })), errores: [] };
   }
   const errores: string[] = [];
   const resueltas = pedidas.map((p) => {
     if (p.suma == null) errores.push(`La cobertura ${p.ccober} no tiene suma: envíe suma o calculo.`);
-    return { ccober: p.ccober, suma: Number(p.suma ?? 0) };
+    return { ...base(p), suma: Number(p.suma ?? 0) };
   });
   return { pedidas: resueltas, errores };
 }
@@ -236,4 +239,124 @@ export function calcularCoberturas(
       coberturas,
     },
   };
+}
+
+/**
+ * Modo combo: valida y calcula las coberturas pedidas contra las del RAMO con tarifa vigente (GET coberturas), sin
+ * maplantar; el plan solo es contenedor. Misma regla del cotizador RC: prima = suma × pprima / 100 o, si la tarifa no
+ * tiene tasa, la prima fija (mprima) de matarifa_d. Sin prima mínima, recargo ni descuento. Las obligatorias del ramo
+ * (bobligatoria o básica) deben venir. Si una cobertura tiene varias tarifas vigentes hay que indicar `ctarifa`.
+ */
+export function calcularCoberturasRamo(
+  catalogo: CoberturaRamo[],
+  pedidasEntrada: CoberturaPedida[],
+  calculo?: CalculoSuma,
+): { cotizacion: CotizacionCalculada | null; errores: string[] } {
+  const { pedidas, errores: erroresSuma } = resolverSumas(pedidasEntrada, calculo);
+  if (erroresSuma.length) return { cotizacion: null, errores: erroresSuma };
+  const errores: string[] = [];
+  const vistas = new Set<string>();
+  const elegidas: { t: CoberturaRamo; suma: number }[] = [];
+
+  for (const p of pedidas) {
+    const tarifas = catalogo.filter((t) => t.ccober === p.ccober);
+    const t = p.ctarifa ? tarifas.find((x) => x.ctarifa === p.ctarifa) : tarifas.length === 1 ? tarifas[0] : undefined;
+    if (vistas.has(p.ccober)) errores.push(`La cobertura ${p.ccober} está repetida.`);
+    vistas.add(p.ccober);
+    if (!tarifas.length) { errores.push(`La cobertura ${p.ccober} no es del ramo o no tiene tarifa vigente.`); continue; }
+    if (!t) {
+      errores.push(p.ctarifa
+        ? `La cobertura ${p.ccober} no tiene la tarifa ${p.ctarifa} vigente en el ramo.`
+        : `La cobertura ${p.ccober} tiene varias tarifas vigentes (${tarifas.map((x) => x.ctarifa).join(', ')}): indique ctarifa.`);
+      continue;
+    }
+    if (!(p.suma > 0)) errores.push(`${t.xcobertura}: la suma debe ser mayor a 0.`);
+    if (t.msumamin > 0 && p.suma < t.msumamin) errores.push(`${t.xcobertura}: la suma mínima es ${t.msumamin}.`);
+    if (t.msumamax > 0 && p.suma > t.msumamax) errores.push(`${t.xcobertura}: la suma máxima es ${t.msumamax}.`);
+    if (!(t.pprima > 0) && !(t.mprima > 0)) errores.push(`${t.xcobertura}: no tiene tasa ni prima fija vigente en matarifa_d.`);
+    elegidas.push({ t, suma: p.suma });
+  }
+  const obligatorias = new Map(catalogo.filter((t) => t.obligatoria).map((t) => [t.ccober, t]));
+  for (const t of obligatorias.values()) {
+    if (!vistas.has(t.ccober)) errores.push(`${t.xcobertura} es obligatoria.`);
+  }
+  if (errores.length) return { cotizacion: null, errores };
+
+  const coberturas = elegidas.map(({ t, suma: s }) => {
+    const suma = r2(s);
+    const prima = t.pprima > 0 ? r2((suma * t.pprima) / 100) : r2(t.mprima);
+    return {
+      ccober: t.ccober, ctarifa: t.ctarifa, xcobertura: t.xcobertura, suma_asegurada: suma, pprima: t.pprima,
+      prima, pcomision: t.pcomision, comision: r2((prima * t.pcomision) / 100),
+    };
+  });
+  const basica = coberturas.find((c) => c.ccober === COBERTURA_BASICA);
+  return {
+    errores: [],
+    cotizacion: {
+      suma_asegurada: basica ? basica.suma_asegurada : Math.max(...coberturas.map((c) => c.suma_asegurada)),
+      prima_total: r2(coberturas.reduce((s, c) => s + c.prima, 0)),
+      comision_total: r2(coberturas.reduce((s, c) => s + c.comision, 0)),
+      coberturas,
+    },
+  };
+}
+
+/** Ramos 28 y 38: el SP exige número de apartamento o unidad (clave asegurado + plan + unidad). */
+export const RAMOS_CON_UNIDAD = [28, 38] as const;
+
+/** Ramos de emisión por defecto (comportamiento previo a RIESGOS_GENERALES_RAMOS_EMISION). */
+export const RAMOS_EMISION_DEFECTO = [16, 25, 38] as const;
+
+/** RCV: nunca se emite por esta ruta, aunque esté en la lista. */
+export const RAMO_RCV = 26;
+
+/**
+ * RIESGOS_GENERALES_RAMOS_EMISION: 'todos' (cualquier ramo patrimonial vigente, ctiporamo 1 y 6, salvo RCV) o lista de
+ * cramo separados por coma. Vacía o sin ningún número válido: el valor por defecto 16,25,38.
+ */
+export function parsearRamosEmision(raw: unknown): 'todos' | number[] {
+  const t = String(raw ?? '').trim().toLowerCase();
+  if (t === 'todos') return 'todos';
+  const lista = [...new Set(t.split(',').map((x) => Number(x.trim())).filter((n) => Number.isInteger(n) && n > 0 && n !== RAMO_RCV))];
+  return lista.length ? lista : [...RAMOS_EMISION_DEFECTO];
+}
+
+/** Fila de la validación previa al SP: conteos por cobertura enviada (macoberturas, matarifa, matarifa_d). */
+export interface ChequeoCobertura {
+  ccober: string;
+  ctarifa: string;
+  /** macoberturas.iestado de la cobertura en el ramo; null si no existe. */
+  iestado: string | null;
+  qtarifa: number;
+  qdetalle: number;
+}
+
+/**
+ * Lo que sp_emision_condominio_nexus necesita de cada cobertura: existir activa en macoberturas del ramo, tener fila en
+ * matarifa y EXACTAMENTE una en matarifa_d (el SP une sin filtrar vigencia: con 0 filas la cobertura desaparece de la
+ * póliza y con 2 o más se duplica).
+ */
+export function erroresCoberturasSp(cramo: number, filas: ChequeoCobertura[]): string[] {
+  const aviso = 'avisar a La Mundial';
+  return filas.flatMap((f) => {
+    const id = `La cobertura ${f.ccober} (tarifa ${f.ctarifa})`;
+    if (f.iestado == null) return [`${id} no existe en el ramo ${cramo}.`];
+    if (String(f.iestado).trim().toUpperCase() !== 'V') return [`${id} no está activa en el ramo ${cramo}.`];
+    if (!(Number(f.qtarifa) > 0)) return [`${id} no se puede emitir: no tiene tarifa en matarifa; ${aviso}.`];
+    if (Number(f.qdetalle) === 0) return [`${id} no se puede emitir: tarifa sin detalle en matarifa_d; ${aviso}.`];
+    if (Number(f.qdetalle) > 1) return [`${id} no se puede emitir: tarifa con detalle repetido en matarifa_d (${f.qdetalle} filas); ${aviso}.`];
+    return [];
+  });
+}
+
+/** Mensaje claro para el duplicado que lanza sp_pre_emision_condominio_nexus; null si es otro error. */
+export function traducirDuplicadoSp(msg: string, cramo: number, cplan: string, unidad?: number): string | null {
+  if (!/p[oó]liza vigente con el mismo asegurado/i.test(msg)) return null;
+  if (/apartamento/i.test(msg)) {
+    return `El asegurado ya tiene una póliza vigente del plan ${cplan} (ramo ${cramo}) para la unidad ${unidad ?? '—'}. `
+      + 'Indique otra unidad o apartamento, o espere al vencimiento o la anulación de esa póliza.';
+  }
+  return `El asegurado ya tiene una póliza vigente del plan ${cplan} en el ramo ${cramo}: Sis2000 no permite otra con el mismo `
+    + 'asegurado y plan. Elija otro plan contenedor del ramo, o espere al vencimiento o la anulación de esa póliza.';
 }
