@@ -151,6 +151,7 @@ export class MailService {
       text: built.text,
       logLabel: dto.template,
       ...(prepared.adjuntos.length ? { attachments: prepared.adjuntos } : {}),
+      ...(dto.ocultarDestinatarios === true ? { ocultarDestinatarios: true } : {}),
     });
   }
 
@@ -280,18 +281,26 @@ export class MailService {
     text: string;
     logLabel: string;
     attachments?: PreparedAttachment[];
+    /** true + más de un destinatario: "Para" = remitente y la lista va en CCO (BCC). */
+    ocultarDestinatarios?: boolean;
   }): Promise<PolicyEmissionMailResult> {
     const fromEmail = this.config.get<string>('SMTP_FROM', 'info@lamundialdeseguros.com');
     const fromName = this.config.get<string>('SMTP_FROM_NAME', 'La Mundial de Seguros');
     const replyTo = this.config.get<string>('SMTP_REPLY_TO', fromEmail);
     const toList = Array.isArray(opts.to) ? opts.to : [opts.to];
+    const enCco = opts.ocultarDestinatarios === true && toList.length > 1;
+    const destino = enCco
+      ? { to: { name: fromName, address: fromEmail }, bcc: toList }
+      : {
+          to: toList.length === 1 && opts.toName
+            ? { name: opts.toName, address: toList[0] }
+            : toList,
+        };
     try {
       const info = await this.getTransporter().sendMail({
         from: `"${fromName}" <${fromEmail}>`,
         replyTo,
-        to: toList.length === 1 && opts.toName
-          ? { name: opts.toName, address: toList[0] }
-          : toList,
+        ...destino,
         subject: opts.subject,
         html: opts.html,
         text: opts.text,
@@ -306,7 +315,8 @@ export class MailService {
           : {}),
       });
       const adj = opts.attachments?.length ? ` (${opts.attachments.length} adjunto(s))` : '';
-      this.logger.log(`Correo ${opts.logLabel} enviado a ${toList.join(', ')}${adj}`);
+      const cco = enCco ? ' (CCO)' : '';
+      this.logger.log(`Correo ${opts.logLabel} enviado a ${toList.join(', ')}${cco}${adj}`);
       return { sent: true, mode: 'smtp', messageId: info.messageId };
     } catch (err) {
       const msg = err instanceof Error ? err.message : String(err);
