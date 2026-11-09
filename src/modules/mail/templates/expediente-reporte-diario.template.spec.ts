@@ -82,14 +82,15 @@ describe('plantilla expediente-reporte-diario', () => {
     expect(r.text).toContain('- Sin correo válido del asegurado: 12');
     expect(r.text).toContain('- Estado: Cuadrada');
     expect(r.text).toContain('- Documentos que no se pudieron leer: 2');
-    expect(r.text).toContain(`Ver detalle en el monitor (requiere iniciar sesión): ${ENLACE}`);
+    expect(r.text).not.toContain(ENLACE);
+    expect(r.text.toLowerCase()).not.toContain('monitor');
     expect(r.text).not.toContain('0 pendientes de la emisión del día');
 
     expect(r.html).toContain('N.º 18-27-0000137414');
     expect(r.html).toContain('Emitida por: Farmatodo');
     expect(r.html).toContain('No enviar correos: Sí');
-    expect(r.html).toContain('Ver detalle en el monitor');
-    expect(r.html).toContain(`href="${ENLACE}"`);
+    expect(r.html).not.toContain(ENLACE);
+    expect(r.html.toLowerCase()).not.toContain('monitor');
     expect(r.html).toContain('Asegurado protegido');
     // Nunca «vendedor» ni «Sin información».
     expect(`${r.html}${r.text}`).not.toMatch(/vendedor|sin información/i);

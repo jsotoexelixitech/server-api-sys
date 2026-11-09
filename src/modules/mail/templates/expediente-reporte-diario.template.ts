@@ -256,9 +256,9 @@ function filasConciliacion(p: ReporteDiarioParams): Fila[] {
   const c = p.conciliacion;
   return [
     ['Pólizas emitidas en Nexus', num(c.emisionesNexus)],
-    ['Registradas en el monitor', num(c.enMonitor)],
+    ['Registradas para control documental', num(c.enMonitor)],
     ['No pasaron por el OCR (fuera del control)', num(c.noPasaronOcr)],
-    ['Sin vínculo con el monitor', num(c.sinVinculo), c.sinVinculo > 0],
+    ['Sin registro de control documental', num(c.sinVinculo), c.sinVinculo > 0],
     ['Estado', estadoConciliacion(c.sinVinculo), c.sinVinculo > 0],
   ];
 }
@@ -379,13 +379,13 @@ function tablaPolizas(p: ReporteDiarioParams): string {
   const restantes = p.polizasRestantes
     ? `<p style="margin:10px 0 0;font-family:${FONT};font-size:13px;line-height:19px;color:${BRAND_RED};">Se muestran ${num(
         p.polizas.length,
-      )} pólizas; ${plural(p.polizasRestantes, 'póliza más está', 'pólizas más están')} en el detalle del monitor.</p>`
+      )} pólizas; ${plural(p.polizasRestantes, 'póliza más no cabe', 'pólizas más no caben')} en este correo.</p>`
     : '';
   return `<table class="lst" role="presentation" width="100%" cellspacing="0" cellpadding="8" border="0" style="border-collapse:collapse;font-family:${FONT};font-size:13px;line-height:18px;color:${TEXT};">
                 <tr class="hd">${th('Póliza', '28%')}${th('Asegurado y emisión', '27%')}${th('Observación', '22%')}${th('Seguimiento', '23%')}</tr>
 ${p.polizas.map(filaPolizaHtml).join('\n')}
               </table>
-              <p style="margin:8px 0 0;font-family:${FONT};font-size:11px;line-height:16px;color:${MUTED};">Asegurado protegido: iniciales y documento parcial. Los datos completos están en el monitor.</p>
+              <p style="margin:8px 0 0;font-family:${FONT};font-size:11px;line-height:16px;color:${MUTED};">Asegurado protegido: iniciales y documento parcial.</p>
               ${restantes}`;
 }
 
@@ -396,7 +396,7 @@ export function buildExpedienteReporteDiarioEmail(params: ReporteDiarioParams): 
   const estadoConc = estadoConciliacion(p.conciliacion.sinVinculo);
   const corte = p.corte ? `Corte: ${p.corte} (hora de Caracas)` : '';
   const pie =
-    'Mensaje automático del monitor de expedientes del Marketplace. No responda a este correo.';
+    'Mensaje automático de control documental del Marketplace. No responda a este correo.';
   const preheader = cero
     ? `0 pendientes de la emisión del día · ${plural(d.emitidas, 'póliza emitida', 'pólizas emitidas')}`
     : `${plural(d.incompletas, 'póliza incompleta', 'pólizas incompletas')} de ${num(d.emitidas)} emitidas hoy`;
@@ -434,9 +434,9 @@ export function buildExpedienteReporteDiarioEmail(params: ReporteDiarioParams): 
             const [primera, ...resto] = lineaFila(f);
             return [`${i + 1}. ${primera}`, ...resto];
           }),
-          'Asegurado protegido: iniciales y documento parcial. Los datos completos están en el monitor.',
+          'Asegurado protegido: iniciales y documento parcial.',
           p.polizasRestantes
-            ? `${plural(p.polizasRestantes, 'póliza más está', 'pólizas más están')} en el detalle del monitor.`
+            ? `${plural(p.polizasRestantes, 'póliza más no cabe', 'pólizas más no caben')} en este correo.`
             : '',
         ]
           .filter(Boolean)
@@ -454,7 +454,6 @@ export function buildExpedienteReporteDiarioEmail(params: ReporteDiarioParams): 
     ['PENDIENTES HISTÓRICOS', kv(filasHistoricos(p))].join('\n'),
     ['CONCILIACIÓN DEL DÍA (TODAS LAS ÁREAS)', kv(filasConciliacion(p))].join('\n'),
     ['ENTREGABILIDAD Y ERRORES TÉCNICOS (HOY)', kv(filasEntregabilidad(p))].join('\n'),
-    p.enlace ? `Ver detalle en el monitor (requiere iniciar sesión): ${p.enlace}` : '',
     pie,
   ]
     .filter(Boolean)
@@ -516,18 +515,8 @@ export function buildExpedienteReporteDiarioEmail(params: ReporteDiarioParams): 
                   : ''
               }`;
 
-  const boton = p.enlace
-    ? `<table role="presentation" width="100%" cellspacing="0" cellpadding="0" border="0" style="margin:26px 0 6px;">
-                <tr>
-                  <td align="center" bgcolor="${BRAND_BLUE}" style="background:${BRAND_BLUE};border-radius:8px;">
-                    <a href="${escapeHtml(p.enlace)}" target="_blank" rel="noopener noreferrer"
-                      style="display:block;padding:14px 20px;font-family:${FONT};font-size:16px;line-height:22px;font-weight:700;color:#ffffff;text-decoration:none;border-radius:8px;">Ver detalle en el monitor</a>
-                  </td>
-                </tr>
-              </table>
-              <p style="margin:0;font-family:${FONT};font-size:12px;line-height:18px;color:${MUTED};">Requiere iniciar sesión. Si el botón no funciona, copie este enlace:<br>
-                <a href="${escapeHtml(p.enlace)}" style="color:${BRAND_BLUE};word-break:break-all;">${escapeHtml(p.enlace)}</a></p>`
-    : '';
+  // Sin enlace ni botón: el correo no remite a ninguna pantalla.
+  const boton = '';
 
   const html = `<!DOCTYPE html>
 <html lang="es">
