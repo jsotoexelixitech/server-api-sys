@@ -5,7 +5,9 @@ import { PersonasService } from './personas.service';
  * Pasaporte alfanumérico (titular/tomador): cid = 'P-EM2849387' en maclient.cid y cci_rif = 2849387.
  * db mockeado: maclient (query) devuelve `maclientRows`; los SP se registran en `calls`.
  */
-function crearServicio(maclientRows: { cci_rif: number; cid: string }[]) {
+function crearServicio(
+  maclientRows: { cci_rif: number; cid: string; xnombre?: string; xapellido?: string; xcliente?: string }[],
+) {
   const calls: { sp: string; inputs: Record<string, unknown> }[] = [];
   const queries: Record<string, unknown>[] = [];
   const db = {
@@ -90,7 +92,7 @@ describe('Pasaporte alfanumérico — emisión de personas', () => {
 
   it('cliente con el mismo cid → OK', async () => {
     const { svc } = crearServicio([{ cci_rif: 2849387, cid: 'P-EM2849387' }]);
-    await expect(svc.assertPasaporteSinChoque('P-EM2849387', 2849387)).resolves.toBeUndefined();
+    await expect(svc.assertPasaporteSinChoque('P-EM2849387', 2849387)).resolves.toBeNull();
   });
 
   it('cci_rif existente con cid V-… → 400', async () => {
@@ -121,5 +123,50 @@ describe('Pasaporte alfanumérico — emisión de personas', () => {
     b.asegurados.push({ icedula_asegurado: 'P', xrif_asegurado: 'AB123456', nparentesco_asegurado: 3 });
     await expect(svc.createEmissionPerson('key', b as never)).rejects.toThrow(/asegurados\[1\]/);
     expect(calls.some((c) => c.sp === 'sp_create_maclient_nexus')).toBe(false);
+  });
+
+  describe('misma persona ya registrada con E/V', () => {
+    const existente = { cci_rif: 2849387, cid: 'E-2849387', xnombre: 'ZHIZHONG', xapellido: 'HUANG', xcliente: 'ZHIZHONG HUANG' };
+
+    it('mismo nombre y apellido → no frena, devuelve el tipo registrado', async () => {
+      const { svc } = crearServicio([existente]);
+      await expect(
+        svc.assertPasaporteSinChoque('P-EM2849387', 2849387, { nombre: 'Zhizhong', apellido: 'Huang' }),
+      ).resolves.toBe('E');
+    });
+
+    it('otro nombre → sigue siendo choque (400)', async () => {
+      const { svc } = crearServicio([{ ...existente, xnombre: 'PEDRO', xapellido: 'PEREZ', xcliente: 'PEDRO PEREZ' }]);
+      await expect(
+        svc.assertPasaporteSinChoque('P-EM2849387', 2849387, { nombre: 'ZHIZHONG', apellido: 'HUANG' }),
+      ).rejects.toThrow(/ya está registrada a otro cliente/);
+    });
+
+    it('sin nombre (llamada vieja) → choque como antes', async () => {
+      const { svc } = crearServicio([existente]);
+      await expect(svc.assertPasaporteSinChoque('P-EM2849387', 2849387)).rejects.toThrow(BadRequestException);
+    });
+
+    it('validación (antes de pagar) pasa con la misma persona', async () => {
+      const { svc } = crearServicio([existente]);
+      await expect(
+        svc.validateEmissionPerson({
+          cramo: 9, plan: 'FUNBAS', rif_titular: 2849387, tipo_cedula_titular: 'P', cid_titular: 'P-EM2849387',
+          nombre_titular: 'ZHIZHONG', apellido_titular: 'HUANG',
+        }),
+      ).resolves.toBeDefined();
+    });
+
+    it('emisión: no crea otro cliente y emite con el documento registrado (E)', async () => {
+      const { svc, calls } = crearServicio([existente]);
+      await svc.createEmissionPerson('key', clone(body) as never).catch(() => undefined);
+      expect(calls.some((c) => c.sp === 'sp_create_maclient_nexus')).toBe(false);
+      const pre = calls.find((c) => 'xrif_titular' in c.inputs && 'asegurados' in c.inputs);
+      expect(pre).toBeDefined();
+      expect(pre!.inputs).toMatchObject({ icedula_titular: 'E', xrif_titular: 2849387, xrif_tomador: 2849387 });
+      const aseg = JSON.parse(String(pre!.inputs['asegurados']))[0];
+      expect(aseg.rif_asegurado).toBe(2849387);
+      expect(aseg.tipo_cedula_asegurado).toBe('E');
+    });
   });
 });

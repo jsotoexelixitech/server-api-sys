@@ -81,6 +81,51 @@ export function pasaporteSinChoque(
   return Number(r.cci_rif) === digitos && (rcid === cid || rcid === '' || rcid === '0');
 }
 
+/** Nombre comparable: mayúsculas, sin tildes ni signos, espacios simples. */
+export function nombreComparable(...partes: unknown[]): string {
+  return partes
+    .map((p) => String(p ?? ''))
+    .join(' ')
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '')
+    .toUpperCase()
+    .replace(/[^A-Z0-9 ]/g, ' ')
+    .replace(/\s+/g, ' ')
+    .trim();
+}
+
+export interface FilaClienteNombre {
+  cci_rif: unknown;
+  cid: unknown;
+  xnombre?: unknown;
+  xapellido?: unknown;
+  xcliente?: unknown;
+}
+
+/**
+ * El pasaporte choca con un cliente que ya existe, pero es la MISMA persona: una sola fila, mismo
+ * cci_rif, cid de persona natural V-/E- y mismo nombre y apellido. Devuelve el tipo ('V' o 'E')
+ * con el que ya está registrado (la emisión se hace con ese documento, sin crear otro cliente),
+ * o null si no se puede asegurar que sea la misma persona.
+ */
+export function tipoClienteMismaPersona(
+  rows: FilaClienteNombre[],
+  digitos: number,
+  nombre: unknown,
+  apellido: unknown,
+): 'V' | 'E' | null {
+  if (rows.length !== 1) return null;
+  const r = rows[0];
+  if (Number(r.cci_rif) !== digitos) return null;
+  const m = /^([VE])-?(\d+)$/.exec(String(r.cid ?? '').trim().toUpperCase());
+  if (!m || Number(m[2]) !== digitos) return null;
+  const buscado = nombreComparable(nombre, apellido);
+  if (!buscado || !nombreComparable(nombre) || !nombreComparable(apellido)) return null;
+  const registrado = nombreComparable(r.xnombre, r.xapellido);
+  const completo = nombreComparable(r.xcliente);
+  return buscado === registrado || buscado === completo ? (m[1] as 'V' | 'E') : null;
+}
+
 export const MSG_PASAPORTE_CHOQUE =
   'La identificación ya está registrada a otro cliente en Sis2000; use el RIF personal (E).';
 
