@@ -5,7 +5,7 @@ import { parseSPError } from '../../common/helpers/sp-error.helper';
 import { validarPlan, validarProveedorPlan, validarTramos } from './configurador.reglas';
 import { reconstruirPlan, type FilasPlan, type PlanLeido } from './configurador.plan-lectura';
 import {
-  BajaProveedorPlanDto, CrearCoberturaDto, CrearDetalleTarifaDto, CrearTablaEdadDto, CrearTarifaDto, DetalleTarifaDto,
+  BajaProveedorPlanDto, CanalesPlanDto, CrearCoberturaDto, CrearDetalleTarifaDto, CrearTablaEdadDto, CrearTarifaDto, DetalleTarifaDto,
   EditarCoberturaDto, EditarProveedorPlanDto, EditarTarifaDto, PlanDto, ProveedorPlanDto, TramoEdadDto,
 } from './dto/configurador.dto';
 
@@ -37,6 +37,20 @@ const rtrim = (v: unknown) => String(v ?? '').trim();
 
 /** Un solo lote en transacción: con XACT_ABORT cualquier error revierte todo (no depende de sql.Transaction del pool). */
 const lote = (sentencias: string[]) => `SET XACT_ABORT ON;\nBEGIN TRAN;\n${sentencias.join('\n')}\nCOMMIT TRAN;`;
+
+/**
+ * Sentencias para agregar n canales al plan en mausuplan (parámetros @cramo, @cplan, @it0..@itN-1; @id y @nuevos
+ * declarados antes). Solo INSERT si la fila no está; no hay DELETE ni UPDATE.
+ */
+export function sentenciasCanalesPlan(n: number): string[] {
+  return Array.from({ length: n }, (_, i) => `IF NOT EXISTS (SELECT 1 FROM mausuplan WHERE cramo = @cramo AND cplan = @cplan
+  AND centidad = 'C' AND itipouso = 'A' AND ((@it${i} IS NULL AND citem IS NULL) OR citem = @it${i}))
+BEGIN
+  SET @id = @id + 1;
+  INSERT INTO mausuplan (id, centidad, citem, cramo, cplan, u_version, itipouso) VALUES (@id, 'C', @it${i}, @cramo, @cplan, '!', 'A');
+  INSERT INTO @nuevos (citem) VALUES (@it${i});
+END`);
+}
 
 /**
  * Configurador de productos en Sis2000 (lo usa proyecto-product-builder). Coberturas, tarifas y tablas de tasas por
@@ -349,6 +363,53 @@ export class ConfiguradorService {
       fdesde: p.fdesde, fhasta: p.fhasta ?? '2099-12-31', all_productor: true, coberturas: [], frecuencias: [],
     } as unknown as PlanDto);
     return { cramo, cplan: cplan.trim(), eliminado: !(await this.planExiste(cramo, cplan)) };
+  }
+
+  // ── Canales alternos del plan (mausuplan centidad C) ───────────────────────
+
+  /**
+   * Agrega canales alternos al plan en mausuplan (centidad 'C', itipouso 'A', citem = ccanalalt; citem NULL = todos).
+   * Solo alta: si la fila ya está no se toca, y nunca se borra (ni inclusiones ni exclusiones 'E'). No pasa por
+   * spMantPlanes. El id se calcula como en spConfigurePlansProduct (MAX + 1) con bloqueo dentro de la transacción.
+   */
+  async agregarCanalesPlan(cramo: number, cplan: string, dto: CanalesPlanDto) {
+    const todos = dto.all_canal === true;
+    const canales = todos ? [] : [...new Set(dto.canales ?? [])];
+    if (!todos && !canales.length) throw new BadRequestException('Indica al menos un canal o «todos».');
+    await this.exigirPlanCualquiera(cramo, cplan);
+    const req = this.db.request();
+    req.input('cramo', sql.SmallInt, cramo);
+    req.input('cplan', sql.VarChar(10), cplan.trim());
+    if (canales.length) {
+      const lista = canales.map((c, i) => { req.input(`c${i}`, sql.Int, c); return `@c${i}`; }).join(', ');
+      const r = await req.query(`SELECT ccanalalt FROM macanalalt WITH (NOLOCK) WHERE bactivo = 1 AND ccanalalt IN (${lista})`);
+      const activos = new Set((r.recordset ?? []).map((f: Record<string, unknown>) => Number(f.ccanalalt)));
+      const faltan = canales.filter((c) => !activos.has(c));
+      if (faltan.length) throw new BadRequestException(`Canal(es) que no existen o no están activos en macanalalt: ${faltan.join(', ')}.`);
+    }
+    const items = todos ? [null] : canales.map((c) => String(c));
+    items.forEach((v, i) => req.input(`it${i}`, sql.VarChar(10), v));
+    const r = await this.escribir('agregar canales al plan', () => req.query(lote([
+      'DECLARE @id INT = (SELECT ISNULL(MAX(id), 0) FROM mausuplan WITH (UPDLOCK, HOLDLOCK));',
+      'DECLARE @nuevos TABLE (citem VARCHAR(10) NULL);',
+      ...sentenciasCanalesPlan(items.length),
+    ]) + '\nSELECT citem FROM @nuevos;'));
+    const nuevos = ((r.recordset ?? []) as Record<string, unknown>[]).map((f) => (f.citem == null ? null : rtrim(f.citem)));
+    const avisos: string[] = [];
+    const exc = this.db.request();
+    exc.input('cramo', sql.SmallInt, cramo);
+    exc.input('cplan', sql.VarChar(10), cplan.trim());
+    const e = await exc.query(`SELECT RTRIM(citem) AS citem FROM mausuplan WITH (NOLOCK)
+      WHERE cramo = @cramo AND cplan = @cplan AND centidad = 'C' AND itipouso = 'E'`);
+    const excluidos = ((e.recordset ?? []) as Record<string, unknown>[]).map((f) => rtrim(f.citem));
+    if (excluidos.length) avisos.push(`El plan tiene canales excluidos (itipouso E) que no se tocan: ${excluidos.join(', ')}.`);
+    return {
+      cramo,
+      cplan: cplan.trim(),
+      agregados: nuevos,
+      ya_estaban: items.filter((v) => !nuevos.includes(v)),
+      avisos,
+    };
   }
 
   // ── Proveedores del plan (maplprov_per) ────────────────────────────────────

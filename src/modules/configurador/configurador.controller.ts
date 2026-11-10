@@ -2,7 +2,7 @@ import { Body, Controller, Delete, Get, HttpCode, HttpStatus, Param, ParseIntPip
 import { ApiBody, ApiHeader, ApiOperation, ApiTags } from '@nestjs/swagger';
 import { ConfiguradorService } from './configurador.service';
 import {
-  BajaProveedorPlanDto, CanalesQueryDto, CrearCoberturaDto, CrearDetalleTarifaDto, CrearTablaEdadDto, CrearTarifaDto,
+  BajaProveedorPlanDto, CanalesPlanDto, CanalesQueryDto, CrearCoberturaDto, CrearDetalleTarifaDto, CrearTablaEdadDto, CrearTarifaDto,
   EditarCoberturaDto, EditarProveedorPlanDto, EditarTarifaDto, PlanDto, ProductoresQueryDto, ProveedoresQueryDto,
   ProveedorPlanDto, RamoQueryDto, TarifasQueryDto, TramosEdadDto,
 } from './dto/configurador.dto';
@@ -185,6 +185,21 @@ export class ConfiguradorController {
   @ApiOperation({ summary: 'Eliminar plan (spMantPlanes D)', operationId: 'configuradorEliminarPlan' })
   async eliminarPlan(@Param('cramo', ParseIntPipe) cramo: number, @Param('cplan') cplan: string) {
     return { status: true, data: await this.service.eliminarPlan(cramo, cplan) };
+  }
+
+  @Post('planes/:cramo/:cplan/canales')
+  @HttpCode(HttpStatus.OK)
+  @NestProtected(SCOPE)
+  @ApiOperation({
+    summary: 'Agregar canales alternos al plan (mausuplan centidad C)',
+    description:
+      'Solo alta: inserta los canales que el plan no tiene; los que ya están no se tocan y nunca se borra ninguno. ' +
+      'No pasa por spMantPlanes. all_canal = fila con citem NULL (todos los canales).',
+    operationId: 'configuradorAgregarCanalesPlan',
+  })
+  @ApiBody({ type: CanalesPlanDto })
+  async agregarCanalesPlan(@Param('cramo', ParseIntPipe) cramo: number, @Param('cplan') cplan: string, @Body() dto: CanalesPlanDto) {
+    return { status: true, data: await this.service.agregarCanalesPlan(cramo, cplan, dto) };
   }
 
   // ── Proveedores del plan (maplprov_per) ────────────────────────────────────

@@ -364,6 +364,23 @@ export class PlanDto {
   frecuencias: FrecuenciaPlanDto[];
 }
 
+// ── Canales alternos del plan (mausuplan centidad C) ─────────────────────────
+
+/** Canales que se agregan al plan. Solo alta: los que ya están se dejan igual y nunca se borra ninguno. */
+export class CanalesPlanDto {
+  @ApiPropertyOptional({ default: false, description: 'true = todos los canales (fila con citem NULL).' })
+  @IsOptional()
+  @IsBoolean()
+  all_canal?: boolean;
+
+  @ApiPropertyOptional({ example: [8], description: 'Canales alternos (macanalalt.ccanalalt) a agregar.' })
+  @IsOptional()
+  @IsArray()
+  @IsInt({ each: true })
+  @Min(1, { each: true })
+  canales?: number[];
+}
+
 // ── Proveedores del plan (maplprov_per) ──────────────────────────────────────
 
 export class ProveedoresQueryDto {
