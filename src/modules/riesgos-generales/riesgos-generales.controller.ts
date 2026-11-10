@@ -1,4 +1,4 @@
-import { Body, Controller, Get, HttpCode, HttpStatus, Post, Query } from '@nestjs/common';
+import { Body, Controller, Get, HttpCode, HttpStatus, Post, Query, Req } from '@nestjs/common';
 import { ApiBody, ApiHeader, ApiOperation, ApiTags } from '@nestjs/swagger';
 import { RiesgosGeneralesService } from './riesgos-generales.service';
 import { CoberturasRamoDto, CotizarCoberturasDto, EmitirCoberturasDto, TarifaPlanDto } from './dto/riesgos-generales.dto';
@@ -107,13 +107,19 @@ export class RiesgosGeneralesController {
       '(prima = suma × tasa / 100 o la prima fija) usando `cplan` como plan contenedor (vigente del mismo ramo). Antes del SP ' +
       'valida que cada cobertura exista activa en el ramo, tenga matarifa y exactamente una fila en matarifa_d (400 si no). ' +
       'Ramos 28 y 38 exigen `apartamento`; el duplicado de póliza vigente del SP responde 409 con mensaje claro. ' +
-      'Requiere el scope `emissions:riesgos-generales`.',
+      'Requiere el scope `emissions:riesgos-generales`.\n\n' +
+      '**`modo: cotizador` (prima informada):** para los ramos sin tarifa en Sis2000 (la tarifa la aplica Técnico), emite con ' +
+      'la `prima` de cada cobertura que manda el cotizador RC o Técnico, sin recalcular con matarifa_d. Exige `prima_total` (> 0 e ' +
+      'igual a la suma de las primas, con tolerancia de redondeo), `cotizador` (rcg, rcp, rce o combo) y `ncotizacion`; cada cobertura ' +
+      'del ramo con suma > 0 y prima ≥ 0, todas en la moneda del plan contenedor. Protegido: RIESGOS_GENERALES_EMISION_COTIZADOR=true ' +
+      '(apagado por defecto), el scope `emissions:riesgos-generales-prima` escrito tal cual en la key (los comodines no cuentan) y el ' +
+      'ramo en RIESGOS_GENERALES_COTIZADOR_RAMOS (por defecto 27, 28 y 37). Sin esas tres, 403 o 400 antes de tocar Sis2000.',
     operationId: 'riesgosGeneralesEmision',
   })
   @ApiHeader(APIKEY_HEADER)
   @ApiBody({ type: EmitirCoberturasDto })
   @ApiCommonErrors()
-  async emitir(@Body() dto: EmitirCoberturasDto) {
-    return { status: true, data: await this.service.emitir(dto) };
+  async emitir(@Body() dto: EmitirCoberturasDto, @Req() req: { nestAuth?: { scopes?: string[] } }) {
+    return { status: true, data: await this.service.emitir(dto, req?.nestAuth?.scopes) };
   }
 }

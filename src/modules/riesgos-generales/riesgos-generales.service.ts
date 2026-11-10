@@ -1,12 +1,16 @@
-import { BadRequestException, ConflictException, Injectable, InternalServerErrorException, Logger, NotFoundException } from '@nestjs/common';
+import {
+  BadRequestException, ConflictException, ForbiddenException, Injectable, InternalServerErrorException, Logger, NotFoundException,
+} from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { MssqlService } from '../../database/mssql.service';
 import { parseSPError, toUserFacingError } from '../../common/helpers/sp-error.helper';
 import { buildPolicyPdfUrl } from '../../common/helpers/policy-url.helper';
 import { SP_PRE_EMISION_CONDOMINIO } from '../../config/sis2000-sp.constants';
+import { NEST_AUTH_SCOPES } from '../auth/scopes/nest-auth-scopes.constants';
 import {
-  RAMOS_CON_UNIDAD, RAMO_RCV, calcularCoberturas, calcularCoberturasRamo, componerDatosBien, erroresCoberturasSp, esObligatoria,
-  mapCoberturaRamo, mapRamoPatrimonial, parsearRamosEmision, sumarMeses, traducirDuplicadoSp,
+  RAMOS_CON_UNIDAD, RAMO_RCV, calcularCoberturas, calcularCoberturasInformadas, calcularCoberturasRamo, componerDatosBien,
+  erroresCoberturasSp, esObligatoria, mapCoberturaRamo, mapRamoPatrimonial, parsearRamosCotizador, parsearRamosEmision, sumarMeses,
+  traducirDuplicadoSp,
   type ChequeoCobertura, type CoberturaTarifa, type CotizacionCalculada, type DatoBien, type DatosBienCompuestos,
 } from './riesgos-generales.calculo';
 import { calcularBiomasa, datosBienBiomasa, patronLote, type ResultadoBiomasa } from './riesgos-generales.biomasa';
@@ -36,6 +40,8 @@ interface ContextoPlan {
  * y sumas elegidas. La prima se calcula siempre aquí (suma × tasa de matarifa_d); el cliente solo manda
  * coberturas y sumas. La emisión usa sp_pre_emision_condominio_nexus con @coberturas, que graba cada
  * cobertura tal como se envía (sp_emision_condominio_nexus no recalcula cuando hay cotización preestablecida).
+ * Excepción: `modo: cotizador` acepta la prima por cobertura que fija el cotizador RC o Técnico (ramos sin tarifa), con
+ * las protecciones de exigirModoCotizador.
  */
 @Injectable()
 export class RiesgosGeneralesService {
@@ -251,6 +257,44 @@ export class RiesgosGeneralesService {
     if (errores.length) throw new BadRequestException(errores.join(' '));
   }
 
+  /**
+   * Modo cotizador (prima informada por el cotizador RC o Técnico). La prima viene del cliente, así que se protege con
+   * tres llaves: RIESGOS_GENERALES_EMISION_COTIZADOR=true (apagado por defecto), el scope
+   * `emissions:riesgos-generales-prima` escrito tal cual en la key (los comodines `*` y `emissions:*` no cuentan; con la
+   * autenticación apagada tampoco pasa) y el ramo en RIESGOS_GENERALES_COTIZADOR_RAMOS (por defecto 27, 28 y 37), que
+   * además debe ser patrimonial vigente. RCV (26) nunca.
+   */
+  private async exigirModoCotizador(cramo: number, scopes: string[] | undefined, ctx: () => Promise<ContextoPlan>) {
+    if (String(this.config.get<string>('RIESGOS_GENERALES_EMISION_COTIZADOR') ?? '').trim().toLowerCase() !== 'true') {
+      throw new ForbiddenException('La emisión con prima informada (modo cotizador) no está habilitada en este ambiente (RIESGOS_GENERALES_EMISION_COTIZADOR).');
+    }
+    if (!(scopes ?? []).includes(NEST_AUTH_SCOPES.EMISSIONS_RIESGOS_GENERALES_PRIMA)) {
+      throw new ForbiddenException(`Permiso requerido: ${NEST_AUTH_SCOPES.EMISSIONS_RIESGOS_GENERALES_PRIMA} (explícito en la key) para emitir con prima informada.`);
+    }
+    if (cramo === RAMO_RCV) throw new BadRequestException('El ramo 26 (RCV) no se emite por esta ruta.');
+    const ramos = parsearRamosCotizador(this.config.get<string>('RIESGOS_GENERALES_COTIZADOR_RAMOS'));
+    if (!ramos.includes(cramo)) {
+      throw new BadRequestException(`El ramo ${cramo} no está habilitado para emitir con prima informada (ramos habilitados: ${ramos.join(', ')}).`);
+    }
+    if (!(await ctx()).patrimonial) {
+      throw new BadRequestException(`El ramo ${cramo} no es un ramo patrimonial vigente (ctiporamo 1 o 6): no se puede emitir por esta ruta.`);
+    }
+  }
+
+  /** Modo cotizador: coberturas del ramo con la prima informada, validadas sin recalcular (calcularCoberturasInformadas). */
+  private async calcularInformado(dto: EmitirCoberturasDto, ctx: ContextoPlan): Promise<CotizacionConBien> {
+    if (dto.calculo || dto.biomasa) throw new BadRequestException('El modo cotizador no admite calculo ni biomasa: envíe la suma y la prima de cada cobertura.');
+    const { coberturas } = await this.getCoberturasRamo({ cramo: dto.cramo });
+    const { cotizacion, errores } = calcularCoberturasInformadas(coberturas, dto.coberturas, dto.prima_total, ctx.cmoneda);
+    if (!cotizacion) throw new BadRequestException(errores.join(' '));
+    const origen = String(dto.cotizador ?? '').toUpperCase();
+    const datos: DatoBien[] = [
+      { etiqueta: 'Cotización', valor: [origen, String(dto.ncotizacion ?? '').trim()].filter(Boolean).join(' ') || 'cotizador RC' },
+      ...(dto.datos_bien ?? []),
+    ];
+    return { ...cotizacion, datos_bien: componerDatosBien(datos) };
+  }
+
   async cotizar(dto: CotizarCoberturasDto): Promise<CotizacionConBien> {
     const cot = await this.calcular(dto);
     const lote = cot.biomasa?.lote;
@@ -270,6 +314,9 @@ export class RiesgosGeneralesService {
    * el plan solo es contenedor (debe estar vigente en el ramo). `ctx` evita repetir la consulta del plan al emitir.
    */
   private async calcular(dto: CoberturasBaseDto, ctx?: ContextoPlan): Promise<CotizacionConBien> {
+    if (dto.modo === 'cotizador') {
+      throw new BadRequestException('El modo cotizador solo se usa para emitir (POST emision): la prima la informa el cotizador RC o Técnico.');
+    }
     let cmoneda: string;
     let res: ReturnType<typeof calcularCoberturas>;
     if (dto.modo === 'combo') {
@@ -325,7 +372,8 @@ export class RiesgosGeneralesService {
     return biomasa;
   }
 
-  async emitir(dto: EmitirCoberturasDto) {
+  /** `scopes`: los de la key o sesión del request (solo los usa el modo cotizador). */
+  async emitir(dto: EmitirCoberturasDto, scopes?: string[]) {
     if (dto.biomasa && (!dto.biomasa.lote?.trim() || !dto.biomasa.ihl?.trim())) {
       throw new BadRequestException('Para emitir, el bloque biomasa debe traer lote e ihl.');
     }
@@ -338,9 +386,11 @@ export class RiesgosGeneralesService {
     const cplan = dto.cplan.trim();
     let ctxCache: ContextoPlan | undefined;
     const ctx = async () => (ctxCache ??= await this.contextoPlan(dto.cramo, cplan));
-    await this.exigirRamoEmitible(dto.cramo, ctx);
+    const informada = dto.modo === 'cotizador';
+    if (informada) await this.exigirModoCotizador(dto.cramo, scopes, ctx);
+    else await this.exigirRamoEmitible(dto.cramo, ctx);
     this.exigirPlanVigente(dto.cramo, cplan, await ctx());
-    const cot = await this.calcular(dto, await ctx());
+    const cot = informada ? await this.calcularInformado(dto, await ctx()) : await this.calcular(dto, await ctx());
     if (cot.datos_bien?.omitidos.length) {
       this.logger.warn(`emitir: datos del bien sin espacio en xdescrip3/4: ${cot.datos_bien.omitidos.join(', ')}`);
     }
@@ -421,7 +471,7 @@ export class RiesgosGeneralesService {
     req.input('cusuario', T.Int, CUSUARIO_NEXUS);
 
     try {
-      this.logger.log(`emitir: EXEC ${SP_PRE_EMISION_CONDOMINIO} ramo=${dto.cramo} plan=${dto.cplan} rif=${rifAsegurado} prima=${cot.prima_total} coberturas=${cot.coberturas.length} fhasta=${ymd(hasta)}`);
+      this.logger.log(`emitir: EXEC ${SP_PRE_EMISION_CONDOMINIO} modo=${dto.modo ?? 'plan'}${informada ? ` cotizador=${dto.cotizador} ncot=${dto.ncotizacion}` : ''} ramo=${dto.cramo} plan=${dto.cplan} rif=${rifAsegurado} prima=${cot.prima_total} coberturas=${cot.coberturas.length} fhasta=${ymd(hasta)}`);
       const result = await req.execute(SP_PRE_EMISION_CONDOMINIO);
       const row = (result.recordset?.[0] ?? {}) as Record<string, unknown>;
       const cnpoliza = String(row.cnpoliza ?? '').trim();
