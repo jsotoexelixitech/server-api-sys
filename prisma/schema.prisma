@@ -132,3 +132,23 @@ model ArysMembershipConfig {
   @@map("arys_membership_config")
   @@schema("nest_auth")
 }
+
+/// Configurador (product-builder): cobro por días de un plan Sis2000. Sis2000 no tiene columnas para esto; vive aquí.
+/// primas = [{ ccober, prima_diaria }]. Una fila por (cramo, cplan). Crear con docs/sql/postgres/nest-cfg-plan-cobro-dias.sql.
+model CfgPlanCobroDias {
+  id             Int      @id @default(autoincrement())
+  cramo          Int
+  cplan          String   @db.VarChar(10)
+  activo         Boolean  @default(false)
+  diasMin        Int      @map("dias_min")
+  diasMax        Int      @map("dias_max")
+  cmoneda        String?  @db.VarChar(4)
+  primas         Json     @default("[]")
+  actualizadoPor String?  @map("actualizado_por") @db.VarChar(80)
+  createdAt      DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt      DateTime @default(now()) @updatedAt @map("updated_at") @db.Timestamptz(6)
+
+  @@unique([cramo, cplan], map: "cfg_plan_cobro_dias_cramo_cplan_key")
+  @@map("cfg_plan_cobro_dias")
+  @@schema("nest_auth")
+}
