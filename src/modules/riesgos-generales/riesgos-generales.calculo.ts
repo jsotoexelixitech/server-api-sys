@@ -360,3 +360,120 @@ export function traducirDuplicadoSp(msg: string, cramo: number, cplan: string, u
   return `El asegurado ya tiene una póliza vigente del plan ${cplan} en el ramo ${cramo}: Sis2000 no permite otra con el mismo `
     + 'asegurado y plan. Elija otro plan contenedor del ramo, o espere al vencimiento o la anulación de esa póliza.';
 }
+
+// ── Modo cotizador: prima informada ─────────────────────────────────────────────────────────────────────────────────
+// En los ramos patrimoniales sin tarifa en Sis2000 (RC General 28, RC Patronal 27, RC Empresarial 37 y los del combo que
+// se habiliten) la prima la fija Técnico o el cotizador RC, no matarifa_d. Este modo acepta la prima de cada cobertura y
+// la valida; nunca la recalcula. Está protegido por variable de entorno y por un scope explícito (ver servicio).
+
+/** Ramos del modo cotizador por defecto: 27 (RC Patronal), 28 (RC General) y 37 (RC Empresarial). */
+export const RAMOS_COTIZADOR_DEFECTO = [27, 28, 37] as const;
+
+/** Origen de la prima informada. */
+export const ORIGENES_COTIZADOR = ['rcg', 'rcp', 'rce', 'combo'] as const;
+export type OrigenCotizador = (typeof ORIGENES_COTIZADOR)[number];
+
+/**
+ * RIESGOS_GENERALES_COTIZADOR_RAMOS: lista explícita de cramo separados por coma (sin 'todos': cada ramo se habilita a
+ * propósito). Vacía o sin números válidos: 27, 28 y 37. RCV (26) nunca.
+ */
+export function parsearRamosCotizador(raw: unknown): number[] {
+  const lista = [...new Set(String(raw ?? '').split(',').map((x) => Number(x.trim())).filter((n) => Number.isInteger(n) && n > 0 && n !== RAMO_RCV))];
+  return lista.length ? lista : [...RAMOS_COTIZADOR_DEFECTO];
+}
+
+/** Cobertura pedida con la prima que fijó el cotizador o Técnico. */
+export interface CoberturaInformada {
+  ccober: string;
+  ctarifa?: string;
+  suma?: number;
+  prima?: number;
+}
+
+/** '$', 'US$', 'USD' → USD; 'BS', 'BS.', 'VES', 'BSD' → BS; 'EUR', '€' → EUR; otro código → tal cual en mayúsculas. */
+export function normalizarMoneda(m: unknown): string {
+  const t = String(m ?? '').trim().toUpperCase().replace(/\.$/, '');
+  if (['$', 'US$', 'USD', 'DOLAR', 'DÓLAR'].includes(t)) return 'USD';
+  if (['BS', 'VES', 'VEF', 'BSD', 'BSS', 'BS.S', 'BOLIVAR', 'BOLÍVAR'].includes(t)) return 'BS';
+  if (['EUR', '€', 'EURO'].includes(t)) return 'EUR';
+  return t;
+}
+
+/** Diferencia aceptada entre la prima total y la suma de las primas: medio céntimo por cobertura (redondeos) y un céntimo mínimo. */
+export const toleranciaPrima = (n: number) => r2(Math.max(0.01, n * 0.005));
+
+/**
+ * Modo cotizador: valida las coberturas con su prima informada contra las del ramo (GET coberturas) y arma la cotización
+ * SIN recalcular la prima. Reglas: cada cobertura existe en el ramo (con `ctarifa` si tiene varias), sin repetir, suma > 0,
+ * prima ≥ 0, todas en la misma moneda (y la del plan contenedor si se indica); prima total > 0 e igual a la suma de las
+ * primas con tolerancia de redondeo. No aplica topes ni obligatorias de matarifa_d: la tarifa la aplica Técnico.
+ */
+export function calcularCoberturasInformadas(
+  catalogo: CoberturaRamo[],
+  pedidas: CoberturaInformada[],
+  primaTotal: unknown,
+  monedaPlan?: string,
+): { cotizacion: CotizacionCalculada | null; errores: string[] } {
+  const errores: string[] = [];
+  const vistas = new Set<string>();
+  const elegidas: { t: CoberturaRamo; suma: number; prima: number }[] = [];
+  if (!pedidas.length) errores.push('Envíe al menos una cobertura.');
+
+  for (const p of pedidas) {
+    const ctarifa = p.ctarifa?.trim();
+    const tarifas = catalogo.filter((t) => t.ccober === p.ccober);
+    const t = ctarifa ? tarifas.find((x) => x.ctarifa === ctarifa) : tarifas.length === 1 ? tarifas[0] : undefined;
+    if (vistas.has(p.ccober)) errores.push(`La cobertura ${p.ccober} está repetida.`);
+    vistas.add(p.ccober);
+    if (!tarifas.length) { errores.push(`La cobertura ${p.ccober} no es del ramo o no tiene tarifa vigente.`); continue; }
+    if (!t) {
+      errores.push(ctarifa
+        ? `La cobertura ${p.ccober} no tiene la tarifa ${ctarifa} vigente en el ramo.`
+        : `La cobertura ${p.ccober} tiene varias tarifas vigentes (${tarifas.map((x) => x.ctarifa).join(', ')}): indique ctarifa.`);
+      continue;
+    }
+    const suma = Number(p.suma);
+    const prima = Number(p.prima);
+    if (!(Number.isFinite(suma) && suma > 0)) errores.push(`${t.xcobertura}: la suma debe ser mayor a 0.`);
+    if (p.prima == null || !Number.isFinite(prima)) errores.push(`${t.xcobertura}: falta la prima de la cobertura.`);
+    else if (prima < 0) errores.push(`${t.xcobertura}: la prima no puede ser negativa.`);
+    elegidas.push({ t, suma, prima });
+  }
+
+  const monedas = [...new Set(elegidas.map((e) => normalizarMoneda(e.t.cmoneda)))];
+  if (monedas.length > 1) errores.push(`Las coberturas mezclan monedas (${monedas.join(', ')}): use las de una sola moneda.`);
+  const mPlan = monedaPlan ? normalizarMoneda(monedaPlan) : '';
+  if (monedas.length === 1 && mPlan && ['USD', 'BS', 'EUR'].includes(mPlan) && ['USD', 'BS', 'EUR'].includes(monedas[0]) && mPlan !== monedas[0]) {
+    errores.push(`Las coberturas son en ${monedas[0]} y el plan contenedor en ${mPlan}: elija un plan de la misma moneda.`);
+  }
+
+  const total = Number(primaTotal);
+  if (!(Number.isFinite(total) && total > 0)) errores.push('La prima total debe ser mayor a 0: no se emite una póliza sin prima.');
+  if (errores.length) return { cotizacion: null, errores };
+
+  const coberturas = elegidas.map(({ t, suma: s, prima: p }) => {
+    const suma = r2(s);
+    const prima = r2(p);
+    return {
+      ccober: t.ccober, ctarifa: t.ctarifa, xcobertura: t.xcobertura, suma_asegurada: suma,
+      // Tasa aplicada (informativa): prima / suma × 100.
+      pprima: suma > 0 ? Math.round((prima * 100 / suma) * 1e6) / 1e6 : 0,
+      prima, pcomision: t.pcomision, comision: r2((prima * t.pcomision) / 100),
+    };
+  });
+  const suma = r2(coberturas.reduce((s, c) => s + c.prima, 0));
+  if (Math.abs(suma - r2(total)) > toleranciaPrima(coberturas.length) + 1e-9) {
+    return { cotizacion: null, errores: [`La prima total (${r2(total)}) no coincide con la suma de las primas por cobertura (${suma}).`] };
+  }
+  const basica = coberturas.find((c) => c.ccober === COBERTURA_BASICA);
+  return {
+    errores: [],
+    cotizacion: {
+      suma_asegurada: basica ? basica.suma_asegurada : Math.max(...coberturas.map((c) => c.suma_asegurada)),
+      // Se emite la suma de las primas por cobertura: así el total de la póliza cuadra con su detalle.
+      prima_total: suma,
+      comision_total: r2(coberturas.reduce((s, c) => s + c.comision, 0)),
+      coberturas,
+    },
+  };
+}

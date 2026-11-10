@@ -4,6 +4,7 @@ import {
   ArrayMaxSize, ArrayMinSize, IsArray, IsDateString, IsIn, IsInt, IsNotEmpty, IsNumber, IsOptional, IsPositive, IsString,
   Matches, Max, MaxLength, Min, ValidateIf, ValidateNested,
 } from 'class-validator';
+import { ORIGENES_COTIZADOR, type OrigenCotizador } from '../riesgos-generales.calculo';
 
 /**
  * Ramos con tarifa por cobertura en matarifa_d: 16 = Combinado Empresarial, 25 = Riesgos Especiales,
@@ -63,6 +64,16 @@ export class CoberturaPedidaDto {
   @IsNumber({ maxDecimalPlaces: 2 })
   @Min(0)
   suma?: number;
+
+  @ApiPropertyOptional({
+    example: 350.5,
+    description: 'Solo `modo: cotizador`: prima anual de la cobertura que fijó el cotizador o Técnico (≥ 0, en la moneda de la cobertura). '
+      + 'En los demás modos se ignora: la prima la calcula nest-api.',
+  })
+  @IsOptional()
+  @IsNumber({ maxDecimalPlaces: 2 })
+  @Min(0)
+  prima?: number;
 }
 
 /** Cálculo genérico de la suma asegurada: unidades × valor_unidad, aplicado a todas las coberturas pedidas. */
@@ -132,8 +143,11 @@ export class BiomasaDto {
   ihl?: string;
 }
 
-/** Modo de tarifa: `plan` = coberturas del plan (maplantar); `combo` = coberturas del ramo, el plan es solo contenedor. */
-export const MODOS_TARIFA = ['plan', 'combo'] as const;
+/**
+ * Modo de tarifa: `plan` = coberturas del plan (maplantar); `combo` = coberturas del ramo, el plan es solo contenedor;
+ * `cotizador` = coberturas del ramo con la prima que fijó el cotizador RC o Técnico (solo emisión y protegido).
+ */
+export const MODOS_TARIFA = ['plan', 'combo', 'cotizador'] as const;
 export type ModoTarifa = (typeof MODOS_TARIFA)[number];
 
 /**
@@ -151,7 +165,9 @@ export abstract class CoberturasCamposDto {
     enum: MODOS_TARIFA,
     default: 'plan',
     description: '`plan` (por defecto): coberturas y tasas del plan (maplantar). `combo`: cualquier cobertura del ramo con tarifa vigente '
-      + '(GET coberturas); prima = suma × pprima / 100 o la prima fija de matarifa_d si no hay tasa.',
+      + '(GET coberturas); prima = suma × pprima / 100 o la prima fija de matarifa_d si no hay tasa. `cotizador` (solo emisión): '
+      + 'coberturas del ramo con su `prima` informada, sin recalcular; requiere RIESGOS_GENERALES_EMISION_COTIZADOR=true y el scope '
+      + '`emissions:riesgos-generales-prima`.',
   })
   @IsOptional()
   @IsIn(MODOS_TARIFA as unknown as string[])
@@ -276,4 +292,25 @@ export class EmitirCoberturasDto extends CoberturasCamposDto {
   @Min(1)
   @Max(60)
   meses?: number;
+
+  @ApiPropertyOptional({
+    example: 1234.56,
+    description: 'Obligatorio con `modo: cotizador`: prima total anual (> 0); debe ser igual a la suma de las primas por cobertura (tolerancia de redondeo).',
+  })
+  @ValidateIf((o: EmitirCoberturasDto) => o.modo === 'cotizador' || o.prima_total != null)
+  @IsNumber({ maxDecimalPlaces: 2 })
+  @IsPositive()
+  prima_total?: number;
+
+  @ApiPropertyOptional({ enum: ORIGENES_COTIZADOR, description: 'Obligatorio con `modo: cotizador`: cotización de origen (RCG, RCP, RCE o combo).' })
+  @ValidateIf((o: EmitirCoberturasDto) => o.modo === 'cotizador' || o.cotizador != null)
+  @IsIn(ORIGENES_COTIZADOR as unknown as string[])
+  cotizador?: OrigenCotizador;
+
+  @ApiPropertyOptional({ example: 'RCG-2026-P123456', description: 'Obligatorio con `modo: cotizador`: número de la cotización; se graba en los datos del bien.' })
+  @ValidateIf((o: EmitirCoberturasDto) => o.modo === 'cotizador' || o.ncotizacion != null)
+  @IsString()
+  @Matches(/\S/, { message: 'ncotizacion no puede estar vacío' })
+  @MaxLength(40)
+  ncotizacion?: string;
 }
