@@ -10,6 +10,11 @@ export const NEST_AUTH_SCOPES = {
    * tal cual en la key: los comodines (`*`, `emissions:*`) no la otorgan.
    */
   EMISSIONS_RIESGOS_GENERALES_PRIMA: 'emissions:riesgos-generales-prima',
+  /**
+   * Emisión colectiva con la prima del cotizador colectivo (POST /api/v1/personas/emision-colectiva). Se exige tal cual
+   * en la key: los comodines (`*`, `emissions:*`) no la otorgan.
+   */
+  EMISSIONS_COLECTIVO: 'emissions:colectivo',
   /** Replicar tasas del tarificador de Condominio/Hogar (matarifa_d, ramos 16 y 38). */
   TARIFAS_CONDOMINIO: 'tarifas:condominio',
   COLLECTION_WRITE: 'collection:write',
@@ -87,6 +92,13 @@ export const NEST_AUTH_SCOPE_CATALOG: NestAuthScopeMeta[] = [
     description: 'Emitir con la prima que fija el cotizador RC o Técnico (modo cotizador). Además requiere emissions:riesgos-generales '
       + 'y RIESGOS_GENERALES_EMISION_COTIZADOR=true; los comodines no la otorgan',
     routes: [],
+  },
+  {
+    id: NEST_AUTH_SCOPES.EMISSIONS_COLECTIVO,
+    label: 'Emisión colectiva',
+    description: 'Emitir pólizas colectivas con la prima del cotizador colectivo y la plantilla modelo del producto; '
+      + 'los comodines no la otorgan',
+    routes: ['POST /api/v1/personas/emision-colectiva'],
   },
   {
     id: NEST_AUTH_SCOPES.TARIFAS_CONDOMINIO,
