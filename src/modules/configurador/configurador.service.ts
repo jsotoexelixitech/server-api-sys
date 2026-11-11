@@ -817,8 +817,35 @@ export class ConfiguradorService {
 
   private errorSql(accion: string, err: unknown) {
     if (err instanceof BadRequestException || err instanceof ConflictException || err instanceof NotFoundException) return err;
-    const msg = parseSPError(err);
+    const msg = parseSPError(err) || detalleErrorSqlVacio(err);
     this.logger.error(`${accion}: ${msg}`);
     return new BadRequestException(`No se pudo ${accion}: ${msg}`);
   }
+}
+
+/**
+ * Sis2000 a veces lanza el error del SP con el texto vacío (p. ej. RAISERROR de un mensaje NULL). Se arma lo que
+ * traiga el driver: errores previos, número, línea y procedimiento, para no mostrar «No se pudo …:» sin causa.
+ */
+function detalleErrorSqlVacio(err: unknown): string {
+  const e = (err ?? {}) as {
+    number?: number; lineNumber?: number; procName?: string; state?: number;
+    precedingErrors?: { message?: string; number?: number }[];
+    originalError?: { info?: { message?: string; number?: number; procName?: string; lineNumber?: number } };
+  };
+  const previos = (e.precedingErrors ?? []).map((p) => (p?.message ?? '').trim()).filter(Boolean);
+  if (previos.length) return previos.join(' | ');
+  const info = e.originalError?.info;
+  if (info?.message?.trim()) return info.message.trim();
+  const numero = e.number ?? info?.number;
+  const proc = e.procName || info?.procName;
+  const linea = e.lineNumber ?? info?.lineNumber;
+  const partes = [
+    numero != null ? `error SQL ${numero}` : '',
+    proc ? `en ${proc}` : '',
+    linea != null ? `línea ${linea}` : '',
+  ].filter(Boolean);
+  return partes.length
+    ? `${partes.join(' ')} (Sis2000 no envió el texto del error)`
+    : 'Sis2000 devolvió un error sin texto';
 }
