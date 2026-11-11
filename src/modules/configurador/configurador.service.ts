@@ -710,7 +710,19 @@ export class ConfiguradorService {
     req.input('frecuencias', T.NVarChar(T.MAX), JSON.stringify(dto.frecuencias.map((f) => ({
       ifrecuencia: f.ifrecuencia.trim(), xfrecuencia: f.xfrecuencia.trim(), ndias: f.ndias ?? null,
     }))));
-    const r = await this.escribir(`spMantPlanes ${operation}`, () => req.execute('spMantPlanes'));
+    const r = await this.escribir(`spMantPlanes ${operation}`, async () => {
+      try {
+        return await req.execute('spMantPlanes');
+      } catch (err) {
+        // spMantPlanes inserta mapledades_per una vez por cobertura y parentesco: con varias coberturas, desde la
+        // segunda choca con la PK (cramo, cplan, fdesde, cparen). El resto del plan se graba igual (sin XACT_ABORT).
+        if (dto.type === 'personas' && operation === 'C' && soloEdadesRepetidas(err) && (await this.planPersonasExiste(dto.cramo, dto.cplan))) {
+          this.logger.warn(`spMantPlanes C ${dto.cramo}/${dto.cplan}: edades repetidas por cobertura (mapledades_per_pk); el plan quedó creado.`);
+          return { recordset: [{}] } as unknown as Awaited<ReturnType<typeof req.execute>>;
+        }
+        throw err;
+      }
+    });
     const fila = (r.recordset?.[0] ?? {}) as Record<string, unknown>;
     const fallo = fila.berror === true || fila.error === true || fila.status === false || fila.success === false;
     if (fallo) {
@@ -815,6 +827,15 @@ export class ConfiguradorService {
     }
   }
 
+  /** Plan de personas ya grabado en maplanes_per (para tolerar las edades repetidas de spMantPlanes). */
+  private async planPersonasExiste(cramo: number, cplan: string): Promise<boolean> {
+    const req = this.db.request();
+    req.input('cramo', sql.Int, cramo);
+    req.input('cplan', sql.VarChar(6), cplan.trim());
+    const r = await req.query('SELECT COUNT(*) AS n FROM maplanes_per WHERE cramo = @cramo AND RTRIM(cplan) = @cplan');
+    return Number(r.recordset?.[0]?.n ?? 0) > 0;
+  }
+
   private errorSql(accion: string, err: unknown) {
     if (err instanceof BadRequestException || err instanceof ConflictException || err instanceof NotFoundException) return err;
     const msg = parseSPError(err) || detalleErrorSqlVacio(err);
@@ -848,4 +869,13 @@ function detalleErrorSqlVacio(err: unknown): string {
   return partes.length
     ? `${partes.join(' ')} (Sis2000 no envió el texto del error)`
     : 'Sis2000 devolvió un error sin texto';
+}
+
+/** true si todos los errores del driver son la PK de mapledades_per (edades repetidas por cobertura en spMantPlanes). */
+function soloEdadesRepetidas(err: unknown): boolean {
+  const e = (err ?? {}) as { message?: string; precedingErrors?: { message?: string }[] };
+  const msgs = [e.message ?? '', ...(e.precedingErrors ?? []).map((p) => p?.message ?? '')]
+    .map((m) => m.trim())
+    .filter(Boolean);
+  return msgs.length > 0 && msgs.every((m) => /mapledades_per_pk/i.test(m));
 }
