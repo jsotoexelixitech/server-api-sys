@@ -2,7 +2,8 @@ import { Body, Controller, Delete, Get, HttpCode, HttpStatus, Param, ParseIntPip
 import { ApiBody, ApiHeader, ApiOperation, ApiTags } from '@nestjs/swagger';
 import { ConfiguradorService } from './configurador.service';
 import {
-  BajaProveedorPlanDto, CanalesPlanDto, CanalesQueryDto, CrearCoberturaDto, CrearDetalleTarifaDto, CrearTablaEdadDto, CrearTarifaDto,
+  BajaProveedorPlanDto, CanalesPlanDto, CanalesQueryDto, CrearCoberturaDto, CrearDetalleTarifaDto, CrearProductoDto, CrearTablaEdadDto,
+  CrearTarifaDto,
   EditarCoberturaDto, EditarProveedorPlanDto, EditarTarifaDto, PlanDto, ProductoresQueryDto, ProveedoresQueryDto,
   ProveedorPlanDto, RamoQueryDto, TarifasQueryDto, TramosEdadDto,
 } from './dto/configurador.dto';
@@ -21,6 +22,29 @@ const SCOPE = NEST_AUTH_SCOPES.CONFIGURADOR_WRITE;
 @Controller('v1/configurador')
 export class ConfiguradorController {
   constructor(private readonly service: ConfiguradorService) {}
+
+  // ── Ramos y productos ──────────────────────────────────────────────────────
+
+  @Get('ramos')
+  @NestProtected(SCOPE)
+  @ApiOperation({ summary: 'Ramos de Sis2000 (maramos) para elegir el ramo de un producto o plan', operationId: 'configuradorRamos' })
+  async ramos() {
+    return { status: true, data: await this.service.listarRamos() };
+  }
+
+  @Post('productos')
+  @NestProtected(SCOPE)
+  @ApiOperation({
+    summary: 'Crear producto (sp_CrearProducto)',
+    description:
+      'Requiere CONFIGURADOR_PRODUCTOS_ESCRITURA=1 (si no, 403). Valida que el ramo exista y llama a sp_CrearProducto; ' +
+      'si el SP responde status 0 (p. ej. código ya registrado) devuelve 400 con su mensaje. Solo alta: no hay edición.',
+    operationId: 'configuradorCrearProducto',
+  })
+  @ApiBody({ type: CrearProductoDto })
+  async crearProducto(@Body() dto: CrearProductoDto) {
+    return { status: true, data: await this.service.crearProducto(dto) };
+  }
 
   // ── Productores ────────────────────────────────────────────────────────────
 

@@ -1,7 +1,7 @@
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
-import { Type } from 'class-transformer';
+import { Transform, Type } from 'class-transformer';
 import {
-  ArrayMinSize, IsArray, IsBoolean, IsIn, IsInt, IsNotEmpty, IsNumber, IsOptional, IsString, Matches, MaxLength, Min,
+  ArrayMinSize, IsArray, IsBoolean, IsIn, IsInt, IsNotEmpty, IsNumber, IsOptional, IsString, Matches, Max, MaxLength, Min,
   ValidateNested,
 } from 'class-validator';
 
@@ -37,6 +37,71 @@ export class TarifasQueryDto extends RamoQueryDto {
   @IsNotEmpty()
   @MaxLength(4)
   ccober: string;
+}
+
+// ── Productos (maproductos, vía sp_CrearProducto) ───────────────────────────
+
+const recortar = ({ value }: { value: unknown }) => (typeof value === 'string' ? value.trim() : value);
+
+/** Alta de producto en Sis2000 con sp_CrearProducto (SP de La Mundial). Solo crea: no hay edición desde aquí. */
+export class CrearProductoDto {
+  @ApiProperty({ example: 'PRB01', description: 'Código nuevo de producto (máx. 40, sin espacios).' })
+  @Transform(recortar)
+  @IsString()
+  @IsNotEmpty()
+  @MaxLength(40)
+  @Matches(/^\S+$/, { message: 'cproducto no puede tener espacios.' })
+  cproducto: string;
+
+  @ApiProperty({ example: 28, description: 'Ramo (maramos.cramo); debe existir.' })
+  @IsInt()
+  @Min(1)
+  @Max(32767)
+  cramo: number;
+
+  @ApiProperty({ example: 'PRODUCTO DE PRUEBA', description: 'Nombre del producto (máx. 60).' })
+  @Transform(recortar)
+  @IsString()
+  @IsNotEmpty()
+  @MaxLength(60)
+  xdescripcion_l: string;
+
+  @ApiPropertyOptional({ example: 'PROD PRUEBA', description: 'Nombre corto (máx. 15). Por defecto, el inicio del nombre.' })
+  @IsOptional()
+  @Transform(recortar)
+  @IsString()
+  @MaxLength(15)
+  xdescripcion_c?: string;
+
+  @ApiPropertyOptional({ example: 'PRB', description: 'Abreviatura (máx. 5).' })
+  @IsOptional()
+  @Transform(recortar)
+  @IsString()
+  @MaxLength(5)
+  xabreviatura?: string;
+
+  @ApiPropertyOptional({ default: true, description: 'Lo venden productores.' })
+  @IsOptional()
+  @IsBoolean()
+  iproductor?: boolean;
+
+  @ApiPropertyOptional({ default: true, description: 'Lo venden canales.' })
+  @IsOptional()
+  @IsBoolean()
+  icanal?: boolean;
+
+  @ApiPropertyOptional({ description: 'Descripción comercial (máx. 150).' })
+  @IsOptional()
+  @Transform(recortar)
+  @IsString()
+  @MaxLength(150)
+  xdescripcion_prod?: string;
+
+  @ApiPropertyOptional({ description: 'Tipo de ramo (ctiporamo de sp_CrearProducto).' })
+  @IsOptional()
+  @IsInt()
+  @Min(0)
+  ctiporamo?: number;
 }
 
 // ── Coberturas (macoberturas) ────────────────────────────────────────────────

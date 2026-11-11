@@ -5,7 +5,8 @@ import { parseSPError } from '../../common/helpers/sp-error.helper';
 import { validarPlan, validarProveedorPlan, validarTramos } from './configurador.reglas';
 import { reconstruirPlan, type FilasPlan, type PlanLeido } from './configurador.plan-lectura';
 import {
-  BajaProveedorPlanDto, CanalesPlanDto, CrearCoberturaDto, CrearDetalleTarifaDto, CrearTablaEdadDto, CrearTarifaDto, DetalleTarifaDto,
+  BajaProveedorPlanDto, CanalesPlanDto, CrearCoberturaDto, CrearDetalleTarifaDto, CrearProductoDto, CrearTablaEdadDto, CrearTarifaDto,
+  DetalleTarifaDto,
   EditarCoberturaDto, EditarProveedorPlanDto, EditarTarifaDto, PlanDto, ProveedorPlanDto, TramoEdadDto,
 } from './dto/configurador.dto';
 
@@ -16,6 +17,13 @@ import {
  */
 export const proveedoresEscrituraHabilitada = () =>
   ['1', 'true', 'si', 'sí'].includes(String(process.env.CONFIGURADOR_PROVEEDORES_ESCRITURA ?? '').trim().toLowerCase());
+
+/**
+ * Alta de productos en Sis2000 (sp_CrearProducto, SP de La Mundial). Apagada por defecto; se enciende con
+ * CONFIGURADOR_PRODUCTOS_ESCRITURA=1. La lectura de ramos siempre está disponible.
+ */
+export const productosEscrituraHabilitada = () =>
+  ['1', 'true', 'si', 'sí'].includes(String(process.env.CONFIGURADOR_PRODUCTOS_ESCRITURA ?? '').trim().toLowerCase());
 
 /** Columnas de maplprov_per que el configurador escribe siempre (las que usa sp_registrar_proveedor_poliza_nexus). */
 const COLUMNAS_PROVEEDOR_PLAN = ['cramo', 'cplan', 'cci_rif', 'cclave_num', 'fdesde', 'fhasta', 'itiposerv', 'mcosto', 'mcostoext', 'cmoneda'];
@@ -63,6 +71,51 @@ export class ConfiguradorService {
   private readonly logger = new Logger(ConfiguradorService.name);
 
   constructor(private readonly db: MssqlService) {}
+
+  // ── Ramos y productos ──────────────────────────────────────────────────────
+
+  /** Ramos de Sis2000 (maramos) — solo lectura. */
+  async listarRamos() {
+    const r = await this.db.request().query(
+      'SELECT cramo, LTRIM(RTRIM(xdescripcion_l)) AS xdescripcion FROM maramos WITH (NOLOCK) ORDER BY cramo',
+    );
+    return r.recordset ?? [];
+  }
+
+  /**
+   * Crea un producto con sp_CrearProducto (SP de La Mundial; aquí no se crea ni modifica). Solo alta: sp_ActualizarProducto
+   * no se usa (pone NULL en los campos que no recibe). El SP devuelve una fila status (1/0), message, cproducto.
+   */
+  async crearProducto(dto: CrearProductoDto) {
+    if (!productosEscrituraHabilitada()) {
+      throw new ForbiddenException(
+        'La escritura de productos está desactivada en este ambiente (CONFIGURADOR_PRODUCTOS_ESCRITURA=1 para habilitarla).',
+      );
+    }
+    const cproducto = dto.cproducto.trim();
+    const nombre = dto.xdescripcion_l.trim();
+    await this.exigirRamo(dto.cramo);
+    const req = this.db.request();
+    req.input('cproducto', sql.Char(40), cproducto);
+    req.input('cramo', sql.Numeric(5, 0), dto.cramo);
+    req.input('xdescripcion_l', sql.Char(60), nombre);
+    req.input('xdescripcion_c', sql.Char(15), (dto.xdescripcion_c?.trim() || nombre).slice(0, 15));
+    if (dto.xabreviatura?.trim()) req.input('xabreviatura', sql.Char(5), dto.xabreviatura.trim());
+    req.input('iproductor', sql.Bit, dto.iproductor ?? true);
+    req.input('icanal', sql.Bit, dto.icanal ?? true);
+    req.input('cusuario', sql.Numeric(11, 0), CUSUARIO);
+    if (dto.ctiporamo !== undefined && dto.ctiporamo !== null) req.input('ctiporamo', sql.Int, dto.ctiporamo);
+    if (dto.xdescripcion_prod?.trim()) req.input('xdescripcion_prod', sql.VarChar(150), dto.xdescripcion_prod.trim());
+    const r = await this.escribir('crear producto', () => req.execute('sp_CrearProducto'));
+    const fila = (r.recordset?.[0] ?? {}) as Record<string, unknown>;
+    const mensaje = rtrim(fila.message ?? fila.mensaje);
+    if (!(fila.status === true || Number(fila.status) === 1)) {
+      this.logger.error(`sp_CrearProducto ${cproducto} ramo ${dto.cramo}: ${JSON.stringify(fila)}`);
+      throw new BadRequestException(mensaje || 'sp_CrearProducto rechazó el producto.');
+    }
+    this.logger.log(`sp_CrearProducto ${cproducto} ramo ${dto.cramo}: creado`);
+    return { cproducto: rtrim(fila.cproducto) || cproducto, cramo: dto.cramo, message: mensaje || 'Producto creado.' };
+  }
 
   // ── Productores ────────────────────────────────────────────────────────────
 
