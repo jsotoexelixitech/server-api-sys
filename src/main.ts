@@ -100,6 +100,14 @@ async function bootstrap(): Promise<void> {
       mailSendJson(req, res, next);
     },
   );
+  // Emisión colectiva: la nómina completa va en el body (≈400 bytes por persona; el límite por defecto es 100 KB).
+  const colectivoJson = express.json({ limit: '5mb' });
+  httpServerEarly.use(
+    '/api/v1/personas/emision-colectiva',
+    function emisionColectivaBodyParser(req: express.Request, res: express.Response, next: express.NextFunction) {
+      colectivoJson(req, res, next);
+    },
+  );
   httpServerEarly.use(
     '/admin',
     express.static(join(assetsDir, 'admin'), {

@@ -25,6 +25,9 @@ export const SP_PRE_EMISION_PERSONAS = 'sp_pre_emision_personas_general_nexus';
 /** Invocado al final del pre-SP personas (no desde nest-api directamente). */
 export const SP_EMISION_PERSONAS = 'sp_emision_personas_general_nexus';
 
+/** Emisión colectiva (docs/sql/emision-colectivo-nexus). Llama a sp_emision_personas_colectivo_nexus al final. */
+export const SP_PRE_EMISION_COLECTIVO = 'sp_pre_emision_personas_colectivo_nexus';
+
 /** Prorrata viajero por días (fdesde/fhasta o ndias × tarifa diaria). */
 export const SP_CALCULO_VIAJERO_PRORRATA = 'spCalculoViajeroProrrata';
 

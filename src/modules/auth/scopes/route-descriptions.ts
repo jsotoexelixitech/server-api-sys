@@ -86,6 +86,7 @@ const ROUTE_LABELS: Record<string, string> = {
   'POST /api/v1/personas/validacion': 'Validación pre-emisión personas',
   'POST /api/v1/personas/poliza-vigente': 'Consultar póliza funeraria vigente por cédula',
   'POST /api/v1/personas/emision': 'Emitir póliza personas / viajero',
+  'POST /api/v1/personas/emision-colectiva': 'Emitir póliza colectiva con la prima del cotizador colectivo',
   'POST /api/v1/viajero-nacional/emision': 'Emitir viajero 3 días',
   'POST /api/v1/viajero-margarita/emision': 'Emitir viajero 7 días',
   'POST /api/v1/viajero-3-dias/emision': 'Emitir viajero 3 días',
