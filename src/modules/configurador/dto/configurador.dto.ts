@@ -293,7 +293,7 @@ export class TramoEdadDto {
   @Min(0)
   pprima: number;
 
-  @ApiPropertyOptional({ example: 0 }) @IsOptional() @IsNumber({ maxDecimalPlaces: 2 }) @Min(0) mprima?: number;
+  @ApiPropertyOptional({ example: 0.306, description: 'Prima fija por persona (hasta 6 decimales).' }) @IsOptional() @IsNumber({ maxDecimalPlaces: 6 }) @Min(0) mprima?: number;
   @ApiPropertyOptional({ example: 0 }) @IsOptional() @IsNumber({ maxDecimalPlaces: 2 }) @Min(0) msuma?: number;
   @ApiPropertyOptional({ example: 0 }) @IsOptional() @IsNumber({ maxDecimalPlaces: 2 }) @Min(0) msumamax?: number;
 }

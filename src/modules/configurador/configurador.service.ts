@@ -797,7 +797,7 @@ export class ConfiguradorService {
     req.input(`emin${i}`, sql.TinyInt, t.nedad_min);
     req.input(`emax${i}`, sql.TinyInt, t.nedad_max);
     req.input(`pprima${i}`, sql.Numeric(13, 6), t.pprima);
-    req.input(`mprima${i}`, sql.Numeric(17, 2), t.mprima ?? 0);
+    req.input(`mprima${i}`, sql.Numeric(17, 6), t.mprima ?? 0);
     req.input(`msuma${i}`, sql.Numeric(17, 2), t.msuma ?? 0);
     req.input(`msumamax${i}`, sql.Numeric(17, 2), t.msumamax ?? 0);
     return `
