@@ -26,6 +26,7 @@ import {
 import { GetProductosPersonasDto } from './dto/get-productos-personas.dto';
 import { MarketplaceCanalResolver } from './marketplace-canal.resolver';
 import { parseCoberturasCuotaInicial, sumPrimaCuotaInicial } from './cuota-inicial';
+import { sumPrimaBinacional } from './prima-binacional';
 import { dedupeCities } from './ciudades';
 
 export interface CotizacionResult {
@@ -484,24 +485,6 @@ export class ValrepService {
     return (
       process.env.MSSQL_SP_BUSCA_DETALLE_PLAN?.trim() || 'spBuscaDetallePlan'
     );
-  }
-
-  /** Coberturas casco/AP que spCalculoAuto excluye de totalPA (ramo RCV / binacional). */
-  private static readonly COBER_EXCLUIDAS_TOTAL_PA = new Set([
-    '1', '2', '3', '4', '5', '16', '28', '69',
-  ]);
-
-  /**
-   * sp_calculo_auto_nexus con iplaca=B devuelve detalle pero a menudo NO el 2.º recordset
-   * con totalPA (a diferencia de la rama nacional). Sumamos prima del detalle con la misma
-   * regla que spCalculoAuto: coberturas fuera de casco/PT/PP/AP.
-   */
-  private sumPaFromDetalleBinacional(detalle: CalculatePlanCoberturasRow[]): number {
-    return detalle.reduce((sum, row) => {
-      const cc = String(row.ccobertura ?? '').trim();
-      if (ValrepService.COBER_EXCLUIDAS_TOTAL_PA.has(cc)) return sum;
-      return sum + Number(row.prima ?? 0);
-    }, 0);
   }
 
   private formatLocalYmd(d: Date): string {
@@ -1417,12 +1400,15 @@ export class ValrepService {
       const totalAP = Number(precioRow.totalAP ?? 0);
       const totalPP = Number(precioRow.totalPP ?? 0);
 
-      if (totalPA <= 0 && iplaca === 'B') {
-        totalPA = this.sumPaFromDetalleBinacional(detalle);
-        if (totalPA > 0) {
+      // Binacional: la emisión cobra SUM(prima) de todas las coberturas del SP (RC + APOV
+      // 67/68/69 por puesto). Se cotiza con esa misma suma para que no difiera de lo emitido.
+      if (iplaca === 'B') {
+        const totalDetalle = sumPrimaBinacional(detalle);
+        if (totalDetalle > 0 && totalDetalle !== totalPA) {
           this.logger.log(
-            `calculatePlanCoberturas: totalPA binacional derivado del detalle (${detalle.length} filas) = ${totalPA}`,
+            `calculatePlanCoberturas: totalPA binacional desde el detalle (${detalle.length} filas, puestos=${puestos}) = ${totalDetalle} (SP totalPA=${totalPA})`,
           );
+          totalPA = totalDetalle;
         }
       }
 
