@@ -18,8 +18,17 @@ export type ReporteSimpleParams = {
   incompletos: number;
   canales: { completos: number; incompletos: number };
   productores: { completos: number; incompletos: number };
-  /** Pólizas sin datos de quién las emitió (solo se muestra si es mayor que 0). */
+  /** Pólizas sin canal ni productor identificado (solo se muestra si es mayor que 0). */
   sinDatos: number;
+  /** Desglose de sinDatos (12-nov-2026); sin él, todo cuenta como incompleto. */
+  sinCanal: { completos: number; incompletos: number };
+  /** «Total N = Canales a + Productores b + Sin canal identificado c» (la arma Nexus). */
+  cuadre: string;
+  /** Números de póliza pendientes de identificar canal (solo el número) y su total. */
+  pendientesCanal: string[];
+  pendientesCanalTotal: number;
+  /** Por qué el Monitor puede mostrar otro total (la arma Nexus). */
+  nota: string;
   /** false: el correo salió sin el Excel (no se menciona). */
   adjunto: boolean;
   /** Filas que no cupieron en el Excel por tamaño. */
@@ -83,6 +92,19 @@ export function normalizarReporteSimple(raw: unknown): ReporteSimpleParams {
       incompletos: entero(productores.incompletos),
     },
     sinDatos: entero(r.sinDatos),
+    sinCanal: (() => {
+      const sc = obj(r.sinCanal);
+      return 'completos' in sc || 'incompletos' in sc
+        ? { completos: entero(sc.completos), incompletos: entero(sc.incompletos) }
+        : { completos: 0, incompletos: entero(r.sinDatos) };
+    })(),
+    cuadre: /^Total [\d.,]+ = [\p{L}\d .,+]+$/u.test(corto(r.cuadre, 160)) ? corto(r.cuadre, 160) : '',
+    pendientesCanal: (Array.isArray(r.pendientesCanal) ? r.pendientesCanal : [])
+      .map((p) => corto(p, 30))
+      .filter((p) => /^[A-Za-z0-9._/-]{1,30}$/.test(p))
+      .slice(0, 50),
+    pendientesCanalTotal: entero(r.pendientesCanalTotal),
+    nota: corto(r.nota, 300),
     adjunto: !(r.adjunto === false || r.adjunto === 'false'),
     omitidas: {
       incompletos: entero(omitidas.incompletos),
@@ -115,8 +137,11 @@ export function buildExpedienteReporteSimpleEmail(p: ReporteSimpleParams): Built
   const titulo = `Control documental diario${p.fecha ? ` – ${p.fecha}` : ''}`;
   const corte = p.corte ? `Corte: ${p.corte} (hora de Caracas)` : '';
   const cero = p.incompletos === 0;
-  const sinDatos = p.sinDatos
-    ? `Sin datos de canal o productor: ${num(p.sinDatos)}`
+  const pendTotal = Math.max(p.pendientesCanalTotal, p.pendientesCanal.length);
+  const pendientes = pendTotal
+    ? `Pendientes de identificar canal (${num(pendTotal)}): ${p.pendientesCanal.join(', ')}${
+        pendTotal > p.pendientesCanal.length ? ', …' : ''
+      }`
     : '';
   const excel = p.adjunto ? LINEA_EXCEL : '';
   const omitidas = p.adjunto ? lineaOmitidas(p) : '';
@@ -133,10 +158,13 @@ export function buildExpedienteReporteSimpleEmail(p: ReporteSimpleParams): Built
       `Incompletos: ${num(p.incompletos)}`,
       `De canales: ${porArea(p.canales)}`,
       `De productores: ${porArea(p.productores)}`,
-      sinDatos,
+      p.sinDatos ? `Sin canal identificado: ${porArea(p.sinCanal)}` : '',
+      p.cuadre,
     ]
       .filter(Boolean)
       .join('\n'),
+    pendientes,
+    p.nota,
     excel,
     omitidas,
     pie,
@@ -209,8 +237,11 @@ export function buildExpedienteReporteSimpleEmail(p: ReporteSimpleParams): Built
               <table role="presentation" width="100%" cellspacing="0" cellpadding="0" border="0" style="margin:12px 0 0;border-bottom:1px solid ${LINE};">
                 ${fila('De canales', porArea(p.canales))}
                 ${fila('De productores', porArea(p.productores))}
+                ${p.sinDatos ? fila('Sin canal identificado', porArea(p.sinCanal)) : ''}
               </table>
-              ${parrafo(sinDatos, 12, MUTED)}
+              ${parrafo(p.cuadre, 13, TEXT)}
+              ${parrafo(pendientes, 12, BRAND_RED)}
+              ${parrafo(p.nota, 12, MUTED)}
               ${parrafo(excel)}
               ${parrafo(omitidas, 12, MUTED)}
             </td>
