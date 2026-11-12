@@ -294,6 +294,31 @@ export class ConfiguradorService {
 
   // ── Tablas de tasas por edad ───────────────────────────────────────────────
 
+  /** Tablas de tasas por edad (solo lectura): TOP 50 por código o descripción, con tramos y rango de edades. */
+  async buscarTablasEdad(q: string) {
+    const texto = (q ?? '').trim().slice(0, 60);
+    const req = this.db.request();
+    req.input('q', sql.VarChar(60), texto);
+    req.input('q2', sql.VarChar(62), `%${texto}%`);
+    const r = await req.query(`
+      SELECT TOP (50) RTRIM(t.ctablaedad) AS ctablaedad, RTRIM(t.xtablaedad) AS xtablaedad,
+        COUNT(d.ctablaedad) AS ntramos, MIN(d.nedad_min) AS nedad_min, MAX(d.nedad_max) AS nedad_max
+      FROM mapltabedad t WITH (NOLOCK)
+      LEFT JOIN mapltabedad_d d WITH (NOLOCK) ON d.ctablaedad = t.ctablaedad
+      WHERE (@q = '' OR t.ctablaedad LIKE @q2 OR t.xtablaedad LIKE @q2)
+      GROUP BY t.ctablaedad, t.xtablaedad
+      ORDER BY t.ctablaedad`);
+    return r.recordset ?? [];
+  }
+
+  /** Parentescos (maparent) — solo lectura; cparentesco es el cparen de los planes de personas. */
+  async listarParentescos() {
+    const r = await this.db.request().query(`
+      SELECT cparentesco AS cparen, LTRIM(RTRIM(xparentesco)) AS xparentesco
+      FROM maparent WITH (NOLOCK) ORDER BY cparentesco`);
+    return r.recordset ?? [];
+  }
+
   async obtenerTablaEdad(ctablaedad: string) {
     const req = this.db.request();
     req.input('ctab', sql.Char(10), ctablaedad.trim());

@@ -135,6 +135,24 @@ export class ConfiguradorController {
 
   // ── Tablas de tasas por edad ───────────────────────────────────────────────
 
+  @Get('tablas-edad')
+  @NestProtected(SCOPE)
+  @ApiOperation({
+    summary: 'Buscar tablas de tasas por edad (mapltabedad) por código o descripción',
+    description: 'Solo lectura. TOP 50 con cantidad de tramos y rango de edades, para elegir una tabla existente en vez de crear otra.',
+    operationId: 'configuradorBuscarTablasEdad',
+  })
+  async buscarTablasEdad(@Query() q: ProductoresQueryDto) {
+    return { status: true, data: await this.service.buscarTablasEdad(q.q ?? '') };
+  }
+
+  @Get('parentescos')
+  @NestProtected(SCOPE)
+  @ApiOperation({ summary: 'Parentescos de Sis2000 (maparent) para planes de personas', operationId: 'configuradorParentescos' })
+  async parentescos() {
+    return { status: true, data: await this.service.listarParentescos() };
+  }
+
   @Get('tablas-edad/:ctablaedad')
   @NestProtected(SCOPE)
   @ApiOperation({ summary: 'Tabla de tasas por edad con sus tramos y los planes que la usan', operationId: 'configuradorTablaEdad' })
