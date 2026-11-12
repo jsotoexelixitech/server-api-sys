@@ -183,12 +183,18 @@ BEGIN
 		-- SNAPSHOT DE LA CONFIGURACION COLECTIVA VIGENTE (pcplanes/pccoberturas/pctarifas) HACIA LA NUEVA POLIZA.
 		-- Las primas, recargos y comisiones de la poliza quedan tal como estaban configurados en la plantilla
 		-- del plan al momento de la emision (no se recalculan a mano, no se hardcodean).
+		-- [colectivo-nexus 12-nov-2026] xplan lleva el nombre de la empresa contratante (tomador, o el titular si no hay
+		-- tomador), no el de la plantilla: la plantilla puede ser el contrato de otro cliente y su nombre no debe
+		-- arrastrarse a la poliza nueva. Si no hay nombre se conserva el de la plantilla.
+		DECLARE @xplan_nuevo varchar(60) =
+			LEFT(NULLIF(LTRIM(RTRIM(COALESCE(NULLIF(LTRIM(RTRIM(@xcliente_tomador)), ''), @xcliente_titular))), ''), 60)
+
 		INSERT INTO dbo.pcplanes
 		(cpoliza, fanopol, fmespol, cplan, fdesde, u_version, fhasta, cramo, iaplica, xplan, cmoneda, precargo, premb_t,
 		premb_b, pcomision, mcomision, mcomisionext, msumamax, pprima, iedad, icalculoedad, cedadmax_m, cedadmin_m,
 		cedadmax_f, cedadmin_f, iclasetar, ipagaprima, xobserva, iestado, cprog, ifuente, bok, cerror, fingreso, cusuario)
 		SELECT
-		@cpoliza, @fano, @fmes, cplan, @fdesde_pol, '!', @fhasta_pol, cramo, iaplica, xplan, @cmoneda, precargo, premb_t,
+		@cpoliza, @fano, @fmes, cplan, @fdesde_pol, '!', @fhasta_pol, cramo, iaplica, COALESCE(@xplan_nuevo, xplan), @cmoneda, precargo, premb_t,
 		premb_b, pcomision, mcomision, mcomisionext, msumamax, pprima, iedad, icalculoedad, cedadmax_m, cedadmin_m,
 		cedadmax_f, cedadmin_f, iclasetar, ipagaprima, xobserva, 'V', @cprog, @ifuente, 0, 0, GETDATE(), 7
 		FROM dbo.pcplanes WITH (NOLOCK)
