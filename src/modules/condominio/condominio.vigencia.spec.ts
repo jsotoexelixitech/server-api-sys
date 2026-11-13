@@ -9,6 +9,7 @@ const servicio = () => {
     tasas: [{ ccober: '1', ctarifa: '1', pprima: 0.5, pcomision: 0 }],
   });
   svc.partesPorAntiguedad = jest.fn().mockResolvedValue(new Map());
+  svc.descuentoPorSuma = jest.fn().mockResolvedValue(0);
   return svc;
 };
 

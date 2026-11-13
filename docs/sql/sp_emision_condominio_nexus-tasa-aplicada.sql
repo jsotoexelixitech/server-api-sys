@@ -5,6 +5,10 @@
 --
 -- ORDEN: aplicar antes condominio-tasas-antiguedad.sql. Sin esa tabla este SP fallaría al emitir.
 -- PRODUCCIÓN: comparar antes con la definición de allá; esta se generó desde QA.
+--
+-- 2026-11-12 (deducibles por cobertura): adpoltar toma el deducible de la tarifa vigente de matarifa_d.
+--   pdedu_fran = % del siniestro; mdedu_franext = mínimo en US$ que configura Técnica; mdedu_fran = mínimo × @ptasamon.
+--   Antes copiaba mdedu_fran tal cual y el JOIN no filtraba vigencia. Base: definición de Sis2000_QA (.67) del 2026-11-04.
 
 -- Si falta la tabla, NOEXEC evita que se ejecute el resto del script (un THROW no detiene los lotes siguientes).
 IF OBJECT_ID('dbo.MATARIFA_REPARTO_NEXUS', 'U') IS NULL
@@ -391,13 +395,22 @@ BEGIN
             SELECT 
                 @crecibo, tc.ccober, tc.ctarifa, '!', @cramo, @cpoliza, YEAR(@fdesde), MONTH(@fdesde), 0, c.ccoberpcnd, 'N', 1,
                 @cnpoliza, @cnrecibo, @cproces, @csucur, @cmoneda, @ptasamon, 'NU', @fdesde_rec, @fhasta_rec, 'N', 0, tc.msumabruta,
-                tc.msumabrutaext, tc.msumabruta, tc.msumabrutaext, tc.mprima, tc.mprimaext, tc.pprima, d.bfraded, d.mdedu_fran, d.mdedu_franext, d.pdedu_fran,
+                -- Deducible de la tarifa vigente: Técnica lo configura en US$ (mdedu_franext); el monto en Bs sale con la tasa de la póliza.
+                tc.msumabrutaext, tc.msumabruta, tc.msumabrutaext, tc.mprima, tc.mprimaext, tc.pprima, d.bfraded,
+                ROUND(ISNULL(d.mdedu_franext, 0) * @ptasamon, 2), ISNULL(d.mdedu_franext, 0), ISNULL(d.pdedu_fran, 0),
                 tc.mdescuento, tc.mdescuentoext, tc.mdescuentoext, tc.mrecargo, tc.mrecargoext, tc.mrecargoext, tc.mprimabruta, tc.mprimabrutaext, tc.pcomision,
                 tc.mcomision, tc.mcomisionext, f.bprimarea, tc.mprima, tc.mprimaext, 'V', c.isuma, c.cramoint, c.ccoberturaint, c.ccoberturaint,
                 'spEmisionCondo', @xfuente, 0, 0, GETDATE(), @cusuario, 1, NULL, NULL, NULL, NULL, NULL
             FROM #temp_calculo_cuota tc
             INNER JOIN dbo.macoberturas c ON c.ccobertura = tc.ccober AND c.cramo = @cramo
-            INNER JOIN dbo.matarifa_d d ON d.ccober = tc.ccober AND d.cramo = @cramo AND d.ctarifa = tc.ctarifa
+            -- Una sola fila de matarifa_d, la vigente si existe (antes el JOIN sin vigencia podía duplicar coberturas en adpoltar).
+            -- CROSS APPLY sin filtrar iestado: como el INNER JOIN anterior, exige que la tarifa exista.
+            CROSS APPLY (
+                SELECT TOP 1 dv.bfraded, dv.mdedu_franext, dv.pdedu_fran
+                FROM dbo.matarifa_d dv
+                WHERE dv.ccober = tc.ccober AND dv.cramo = @cramo AND dv.ctarifa = tc.ctarifa
+                ORDER BY CASE WHEN dv.iestado = 'V' THEN 0 ELSE 1 END, dv.fdesde DESC
+            ) d
             INNER JOIN dbo.matarifa f ON f.cramo = @cramo AND f.ccober = tc.ccober AND f.ctarifa = tc.ctarifa;
 
             -- Cargar coberturas por cuota (adpolcob)

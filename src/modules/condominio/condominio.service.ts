@@ -8,6 +8,7 @@ import {
   FRECUENCIAS_CONFIGURABLES,
   GetTarificadorDto,
   UpdateTarificadorAntiguedadDto,
+  UpdateTarificadorDescuentosSumaDto,
   UpdateTarificadorFrecuenciaDto,
   UpdateTarificadorTasaDto,
 } from './dto/tarificador.dto';
@@ -26,6 +27,18 @@ const RIF_MAX_DIGITS = 12;
 const MONEY_MAX_ABS = 1e16 - 1;
 /** SIS2000 maclient_dir.xavecalle = CHAR(60). */
 const XAVECALLE_MAX = 60;
+
+/**
+ * Cómo cobra una cobertura del reparto de Condominio: parte de la tasa global sobre la suma completa (F y P)
+ * o monto fijo (M). Las opcionales pueden faltar en la cotización; con límite, su suma es ese % de la suma asegurada.
+ */
+export interface ParteReparto {
+  itipo: 'F' | 'P' | 'M';
+  tasa: number | null;
+  monto: number | null;
+  opcional: boolean;
+  plimite: number | null;
+}
 
 @Injectable()
 export class CondominioService {
@@ -559,7 +572,7 @@ export class CondominioService {
     // Cotización vigente: el precio ya aprobado se respeta aunque las tarifas hayan cambiado; solo se comprueba que cuadre.
     const vence = cot.vigencia?.vence_el ? new Date(cot.vigencia.vence_el).getTime() : 0;
     const vigente = vence > Date.now();
-    const partes = vigente ? new Map<string, number>() : await this.partesPorAntiguedad(cramo, cot, errors);
+    const partes = vigente ? new Map<string, ParteReparto>() : await this.partesPorAntiguedad(cramo, cot, errors);
 
     const descRes = dispositivos.length
       ? await this.db.request().input('cramo', T.Int, cramo)
@@ -569,9 +582,16 @@ export class CondominioService {
       ? await this.db.request().input('cramo', T.Int, cramo)
           .query(`SELECT ISNULL(SUM(porcenta), 0) AS pct FROM masustac WHERE cramo = @cramo AND csustanc IN (${sustancias.map(Number).join(',')})`)
       : null;
-    const descPct = Number(descRes?.recordset?.[0]?.pct ?? 0);
+    // Descuento total = dispositivos de seguridad + tramo de suma asegurada configurado por Técnica.
+    const descDispositivos = Number(descRes?.recordset?.[0]?.pct ?? 0);
+    const descSuma = await this.descuentoPorSuma(cramo, cot.suma_asegurada);
+    const descPct = descDispositivos + descSuma;
     const recPct = Number(recRes?.recordset?.[0]?.pct ?? 0);
-    if (!vigente && !near(cot.descuento_pct ?? 0, descPct)) errors.push(`descuento_pct (${cot.descuento_pct ?? 0}) no coincide con los dispositivos (${descPct}).`);
+    if (!vigente && !near(cot.descuento_pct ?? 0, descPct)) {
+      errors.push(
+        `descuento_pct (${cot.descuento_pct ?? 0}) no coincide con dispositivos (${descDispositivos}) + suma asegurada (${descSuma}).`,
+      );
+    }
     if (!vigente && !near(cot.recargo_pct ?? 0, recPct)) errors.push(`recargo_pct (${cot.recargo_pct ?? 0}) no coincide con las sustancias (${recPct}).`);
 
     let sumaPrimas = 0;
@@ -591,7 +611,18 @@ export class CondominioService {
         errors.push(`Cobertura ${key}: tasa ${c.tasa} fuera del rango (${t.ptasa_min} a ${t.ptasa_max}).`);
       }
       const tasa = conRango ? c.tasa! : t.pprima;
-      const bruta = parte != null ? (cot.suma_asegurada * parte) / 100 : (c.suma_asegurada * tasa) / 100;
+      // F y P cobran su parte de la tasa global sobre la suma completa; M es un monto fijo.
+      const bruta =
+        parte == null
+          ? (c.suma_asegurada * tasa) / 100
+          : parte.itipo === 'M'
+            ? parte.monto!
+            : (cot.suma_asegurada * parte.tasa!) / 100;
+      // Con límite configurado, la suma de la cobertura es ese % de la suma asegurada (lo que va a la póliza).
+      const limite = parte?.plimite != null ? (cot.suma_asegurada * parte.plimite) / 100 : null;
+      if (!vigente && limite != null && !near(c.suma_asegurada, limite)) {
+        errors.push(`Cobertura ${key}: suma asegurada ${c.suma_asegurada} no coincide con el límite (${parte!.plimite} % = ${limite.toFixed(2)}).`);
+      }
       const desc = (c.prima_bruta * descPct) / 100;
       const rec = (c.prima_bruta * recPct) / 100;
       if (!vigente && !near(c.prima_bruta, bruta)) errors.push(`Cobertura ${key}: prima bruta ${c.prima_bruta} no coincide con suma × tasa (${bruta.toFixed(2)}).`);
@@ -603,7 +634,8 @@ export class CondominioService {
       if (!near(c.comision ?? 0, (c.prima * pcom) / 100)) errors.push(`Cobertura ${key}: comisión no cuadra con prima × pcomision.`);
       sumaPrimas += c.prima;
     }
-    for (const key of partes.keys()) {
+    for (const [key, parte] of partes) {
+      if (parte.opcional) continue;
       if (!cot.coberturas.some((c) => `${c.ccober.trim()}|${c.ctarifa.trim()}` === key)) {
         errors.push(`La cotización debe incluir la cobertura ${key} del reparto de la tasa global.`);
       }
@@ -700,7 +732,8 @@ export class CondominioService {
       .input('cramo', T.Int, dto.cramo)
       .query(`
         SELECT RTRIM(d.ccober) AS ccober, RTRIM(d.ctarifa) AS ctarifa, RTRIM(c.xdescripcion_l) AS xcobertura,
-               d.pprima, d.fultmod, d.cusuariomod, ISNULL(ara.pcomision, 0) AS pcomision
+               d.pprima, d.fultmod, d.cusuariomod, ISNULL(ara.pcomision, 0) AS pcomision,
+               ISNULL(d.pdedu_fran, 0) AS pdedu_fran, ISNULL(d.mdedu_franext, 0) AS mdedu_franext
         FROM matarifa_d d
         INNER JOIN macoberturas c ON c.cramo = d.cramo AND c.ccobertura = d.ccober
         LEFT JOIN maarancel ara ON ara.cramo = d.cramo AND ara.iestado = 'V' AND ara.ctarifa = d.ctarifa
@@ -717,6 +750,8 @@ export class CondominioService {
         xcobertura: r.xcobertura,
         pprima: Number(r.pprima),
         pcomision: Number(r.pcomision),
+        pdedu_fran: Number(r.pdedu_fran),
+        mdedu_franext: Number(r.mdedu_franext),
         fultmod: r.fultmod,
         cusuariomod: r.cusuariomod == null ? null : Number(r.cusuariomod),
         ...(rangos.get(`${r.ccober}|${r.ctarifa}`) ?? {}),
@@ -798,7 +833,13 @@ export class CondominioService {
     const where = `cramo = @cramo AND RTRIM(ccober) = RTRIM(@ccober) AND RTRIM(ctarifa) = RTRIM(@ctarifa)
                    AND iestado = 'V' AND fdesde <= GETDATE() AND (fhasta IS NULL OR fhasta >= GETDATE())`;
 
-    const current = await keyReq().query(`SELECT pprima, fultmod, cusuariomod FROM matarifa_d WHERE ${where}`);
+    const conDeducible = dto.pdedu_fran !== undefined || dto.mdedu_franext !== undefined;
+    if (conDeducible && (dto.pdedu_fran === undefined || dto.mdedu_franext === undefined)) {
+      throw new BadRequestException('Envía el % del deducible y su monto mínimo (0 si no aplica).');
+    }
+    const current = await keyReq().query(
+      `SELECT pprima, pdedu_fran, mdedu_franext, fultmod, cusuariomod FROM matarifa_d WHERE ${where}`,
+    );
     if (current.recordset.length === 0) {
       throw new BadRequestException('La cobertura no tiene una tarifa vigente en el Core (matarifa_d).');
     }
@@ -807,10 +848,14 @@ export class CondominioService {
     }
     const before = current.recordset[0];
 
+    // Deducible: % y mínimo en US$. El monto en Bs (mdedu_fran) lo calcula la emisión con la tasa de la póliza.
+    const setDeducible = conDeducible ? ', pdedu_fran = @pdedu, mdedu_franext = @mdedu' : '';
     const upd = await keyReq()
       .input('pprima', T.Numeric(18, 6), dto.pprima)
+      .input('pdedu', T.Numeric(13, 6), dto.pdedu_fran ?? 0)
+      .input('mdedu', T.Numeric(17, 2), dto.mdedu_franext ?? 0)
       .input('cusuario', T.Numeric(18, 0), dto.cusuario)
-      .query(`UPDATE matarifa_d SET pprima = @pprima, fultmod = GETDATE(), cusuariomod = @cusuario,
+      .query(`UPDATE matarifa_d SET pprima = @pprima${setDeducible}, fultmod = GETDATE(), cusuariomod = @cusuario,
                      cprog = 'NEXUS_TARIFICADOR' WHERE ${where}`);
     if ((upd.rowsAffected?.[0] ?? 0) !== 1) {
       throw new ConflictException('No se actualizó exactamente un registro; el cambio no se aplicó.');
@@ -819,7 +864,24 @@ export class CondominioService {
     this.logger.warn(
       `tarificador: ramo=${dto.cramo} cober=${dto.ccober} pprima ${before.pprima} -> ${dto.pprima} usuario=${dto.cusuario} (${dto.xusuario ?? 's/n'})`,
     );
-    return { before: { pprima: Number(before.pprima) }, after: { pprima: dto.pprima, cusuariomod: dto.cusuario } };
+    if (conDeducible) {
+      this.logger.warn(
+        `tarificador: ramo=${dto.cramo} cober=${dto.ccober} deducible ${Number(before.pdedu_fran ?? 0)}%/US$${Number(before.mdedu_franext ?? 0)} -> ` +
+          `${dto.pdedu_fran}%/US$${dto.mdedu_franext} usuario=${dto.cusuario}`,
+      );
+    }
+    return {
+      before: {
+        pprima: Number(before.pprima),
+        pdedu_fran: Number(before.pdedu_fran ?? 0),
+        mdedu_franext: Number(before.mdedu_franext ?? 0),
+      },
+      after: {
+        pprima: dto.pprima,
+        ...(conDeducible ? { pdedu_fran: dto.pdedu_fran, mdedu_franext: dto.mdedu_franext } : {}),
+        cusuariomod: dto.cusuario,
+      },
+    };
   }
 
   private static readonly FRECUENCIAS_CATALOGO: Record<string, string> = {
@@ -956,9 +1018,12 @@ export class CondominioService {
   async getTarificadorAntiguedad(cramo = 16) {
     const T = this.db.types;
     const existe = await this.db.request().query(
-      `SELECT OBJECT_ID('dbo.MATARIFA_ANTIGUEDAD_NEXUS', 'U') AS tasas, OBJECT_ID('dbo.MATARIFA_REPARTO_NEXUS', 'U') AS reparto`,
+      `SELECT OBJECT_ID('dbo.MATARIFA_ANTIGUEDAD_NEXUS', 'U') AS tasas, OBJECT_ID('dbo.MATARIFA_REPARTO_NEXUS', 'U') AS reparto,
+              COL_LENGTH('dbo.MATARIFA_REPARTO_NEXUS', 'iopcional') AS opcional`,
     );
-    const base = { cramo, tramos: CondominioService.TRAMOS_ANTIGUEDAD };
+    // Sin condominio-reparto-opcional.sql el reparto funciona como antes: todo obligatorio, límite 100 %, sin montos fijos.
+    const extendido = !!existe.recordset[0]?.opcional;
+    const base = { cramo, tramos: CondominioService.TRAMOS_ANTIGUEDAD, reparto_extendido: extendido };
     if (!existe.recordset[0]?.tasas || !existe.recordset[0]?.reparto) {
       return { ...base, disponible: false, configurado: false, tasas: [], reparto: [] };
     }
@@ -971,11 +1036,11 @@ export class CondominioService {
       .input('cramo', T.Int, cramo)
       .query(`
         SELECT RTRIM(r.ccober) AS ccober, RTRIM(r.ctarifa) AS ctarifa, RTRIM(c.xdescripcion_l) AS xcobertura,
-               r.itipo, r.pvalor, r.fultmod, r.cusuariomod
+               r.itipo, r.pvalor, r.fultmod, r.cusuariomod${extendido ? ', r.iopcional, r.plimite' : ''}
         FROM dbo.MATARIFA_REPARTO_NEXUS r
         LEFT JOIN macoberturas c ON c.cramo = r.cramo AND RTRIM(c.ccobertura) = RTRIM(r.ccober)
         WHERE r.cramo = @cramo
-        ORDER BY CASE WHEN r.itipo = 'F' THEN 1 ELSE 0 END, TRY_CAST(RTRIM(r.ccober) AS INT)
+        ORDER BY CASE r.itipo WHEN 'P' THEN 0 WHEN 'F' THEN 1 ELSE 2 END, TRY_CAST(RTRIM(r.ccober) AS INT)
       `);
     const filas = (reparto.recordset as any[]).map((r) => ({
       ccober: r.ccober,
@@ -983,6 +1048,8 @@ export class CondominioService {
       xcobertura: r.xcobertura ?? null,
       itipo: String(r.itipo).trim(),
       pvalor: Number(r.pvalor),
+      iopcional: !!r.iopcional,
+      plimite: r.plimite == null ? null : Number(r.plimite),
       fultmod: r.fultmod,
       cusuariomod: r.cusuariomod == null ? null : Number(r.cusuariomod),
     }));
@@ -1004,6 +1071,84 @@ export class CondominioService {
   }
 
   /** Reemplaza las tasas por antigüedad y el reparto por cobertura de Condominio, en una sola transacción. */
+  private async tablaDescuentoSumaExiste(): Promise<boolean> {
+    const existe = await this.db.request().query(`SELECT OBJECT_ID('dbo.MATARIFA_DESCUENTO_SUMA_NEXUS', 'U') AS tabla`);
+    return Boolean(existe.recordset[0]?.tabla);
+  }
+
+  /** Tramos de descuento por suma asegurada del ramo. Sin la tabla no hay tramos. */
+  async getTarificadorDescuentosSuma(cramo: number) {
+    if (!(await this.tablaDescuentoSumaExiste())) return { cramo, disponible: false, tramos: [] };
+    const res = await this.db
+      .request()
+      .input('cramo', this.db.types.Int, cramo)
+      .query(`SELECT msuma_desde, msuma_hasta, pdescuento, fultmod, cusuariomod
+              FROM dbo.MATARIFA_DESCUENTO_SUMA_NEXUS WHERE cramo = @cramo ORDER BY msuma_desde`);
+    return {
+      cramo,
+      disponible: true,
+      tramos: (res.recordset as any[]).map((r) => ({
+        msuma_desde: Number(r.msuma_desde),
+        msuma_hasta: r.msuma_hasta == null ? null : Number(r.msuma_hasta),
+        pdescuento: Number(r.pdescuento),
+        fultmod: r.fultmod,
+        cusuariomod: r.cusuariomod == null ? null : Number(r.cusuariomod),
+      })),
+    };
+  }
+
+  /** % de descuento del tramo que contiene la suma asegurada (desde <= suma < hasta), o 0. */
+  async descuentoPorSuma(cramo: number, suma: number): Promise<number> {
+    const { tramos } = await this.getTarificadorDescuentosSuma(cramo);
+    const tramo = tramos.find((t) => suma >= t.msuma_desde && (t.msuma_hasta == null || suma < t.msuma_hasta));
+    return tramo ? tramo.pdescuento : 0;
+  }
+
+  /** Reemplaza los tramos del ramo. Deben estar ordenados, sin solaparse, y solo el último puede no tener tope. */
+  async updateTarificadorDescuentosSuma(dto: UpdateTarificadorDescuentosSumaDto) {
+    if (!(await this.tablaDescuentoSumaExiste())) {
+      throw new BadRequestException('Falta crear la tabla de descuentos en el Core (script condominio-hogar-descuento-suma.sql).');
+    }
+    const tramos = [...dto.tramos].sort((a, b) => a.msuma_desde - b.msuma_desde);
+    tramos.forEach((t, i) => {
+      const hasta = t.msuma_hasta ?? null;
+      if (hasta !== null && hasta <= t.msuma_desde) {
+        throw new BadRequestException(`Tramo ${i + 1}: «hasta» debe ser mayor que «desde».`);
+      }
+      const sig = tramos[i + 1];
+      if (sig && (hasta === null || sig.msuma_desde < hasta)) {
+        throw new BadRequestException(`Los tramos ${i + 1} y ${i + 2} se solapan: cada suma asegurada debe caer en un solo tramo.`);
+      }
+    });
+
+    const T = this.db.types;
+    const tx = this.db.transaction();
+    await tx.begin();
+    try {
+      await new T.Request(tx).input('cramo', T.Int, dto.cramo).query(`DELETE FROM dbo.MATARIFA_DESCUENTO_SUMA_NEXUS WHERE cramo = @cramo`);
+      for (const t of tramos) {
+        await new T.Request(tx)
+          .input('cramo', T.Int, dto.cramo)
+          .input('desde', T.Numeric(18, 2), t.msuma_desde)
+          .input('hasta', T.Numeric(18, 2), t.msuma_hasta ?? null)
+          .input('pct', T.Numeric(9, 4), t.pdescuento)
+          .input('cusuario', T.Numeric(18, 0), dto.cusuario)
+          .query(`
+            INSERT INTO dbo.MATARIFA_DESCUENTO_SUMA_NEXUS (cramo, msuma_desde, msuma_hasta, pdescuento, fultmod, cusuariomod)
+            VALUES (@cramo, @desde, @hasta, @pct, GETDATE(), @cusuario)
+          `);
+      }
+      await tx.commit();
+    } catch (err) {
+      await tx.rollback().catch(() => undefined);
+      throw err;
+    }
+    this.logger.warn(
+      `tarificador descuentos por suma: ramo=${dto.cramo} ${tramos.length} tramos usuario=${dto.cusuario} (${dto.xusuario ?? 's/n'})`,
+    );
+    return this.getTarificadorDescuentosSuma(dto.cramo);
+  }
+
   async updateTarificadorAntiguedad(dto: UpdateTarificadorAntiguedadDto) {
     const claves = new Set(dto.tasas.map((t) => `${t.iuso}|${t.itramo}`));
     if (claves.size !== 8 || dto.tasas.length !== 8) {
@@ -1012,6 +1157,21 @@ export class CondominioService {
     const repetidas = new Set(dto.reparto.map((r) => `${r.ccober.trim()}|${r.ctarifa.trim()}`));
     if (repetidas.size !== dto.reparto.length) {
       throw new BadRequestException('Cada cobertura solo puede aparecer una vez en el reparto.');
+    }
+    const actual = await this.getTarificadorAntiguedad(dto.cramo);
+    const usaExtension = dto.reparto.some((r) => r.itipo === 'M' || r.iopcional || r.plimite != null);
+    if (usaExtension && !actual.reparto_extendido) {
+      throw new BadRequestException(
+        'Falta aplicar condominio-reparto-opcional.sql: el Core aún no admite coberturas opcionales, límites ni montos fijos en el reparto.',
+      );
+    }
+    for (const r of dto.reparto) {
+      if (r.itipo !== 'M' && r.pvalor > 100) {
+        throw new BadRequestException(`Cobertura ${r.ccober}: el valor ${r.pvalor} supera 100 (solo un monto fijo puede ser mayor).`);
+      }
+      if (r.ccober.trim() === '1' && (r.iopcional || (r.plimite != null && r.plimite !== 100) || r.itipo === 'M')) {
+        throw new BadRequestException('La cobertura básica (1) va siempre, cubre el 100 % de la suma y cobra parte de la tasa global.');
+      }
     }
     const fijas = dto.reparto.filter((r) => r.itipo === 'F').reduce((acc, r) => acc + r.pvalor, 0);
     const pct = dto.reparto.filter((r) => r.itipo === 'P').reduce((acc, r) => acc + r.pvalor, 0);
@@ -1055,12 +1215,17 @@ export class CondominioService {
           .input('ccober', T.VarChar(4), r.ccober.trim())
           .input('ctarifa', T.VarChar(4), r.ctarifa.trim())
           .input('itipo', T.Char(1), r.itipo)
-          .input('pvalor', T.Numeric(9, 6), r.pvalor)
+          .input('pvalor', T.Numeric(14, 6), r.pvalor)
           .input('cusuario', T.Numeric(18, 0), dto.cusuario)
-          .query(`
-            INSERT INTO dbo.MATARIFA_REPARTO_NEXUS (cramo, ccober, ctarifa, itipo, pvalor, fultmod, cusuariomod)
-            VALUES (@cramo, @ccober, @ctarifa, @itipo, @pvalor, GETDATE(), @cusuario)
-          `);
+          .input('iopcional', T.Bit, r.iopcional ? 1 : 0)
+          .input('plimite', T.Numeric(9, 4), r.plimite ?? null)
+          .query(
+            actual.reparto_extendido
+              ? `INSERT INTO dbo.MATARIFA_REPARTO_NEXUS (cramo, ccober, ctarifa, itipo, pvalor, iopcional, plimite, fultmod, cusuariomod)
+                 VALUES (@cramo, @ccober, @ctarifa, @itipo, @pvalor, @iopcional, @plimite, GETDATE(), @cusuario)`
+              : `INSERT INTO dbo.MATARIFA_REPARTO_NEXUS (cramo, ccober, ctarifa, itipo, pvalor, fultmod, cusuariomod)
+                 VALUES (@cramo, @ccober, @ctarifa, @itipo, @pvalor, GETDATE(), @cusuario)`,
+          );
       }
       await tx.commit();
     } catch (err) {
@@ -1078,7 +1243,7 @@ export class CondominioService {
    * Solo aplica a Condominio con la tarifa configurada; si lo está, la cotización debe traer año y uso.
    */
   private async partesPorAntiguedad(cramo: number, cot: CotizacionPreestablecidaDto, errors: string[]) {
-    const partes = new Map<string, number>();
+    const partes = new Map<string, ParteReparto>();
     if (cramo !== 16) return partes;
     const config = await this.getTarificadorAntiguedad(cramo);
     if (!config.configurado) return partes;
@@ -1096,7 +1261,14 @@ export class CondominioService {
     const fijas = config.reparto.filter((r) => r.itipo === 'F').reduce((acc, r) => acc + r.pvalor, 0);
     const resto = global - fijas;
     for (const r of config.reparto) {
-      partes.set(`${r.ccober}|${r.ctarifa}`, r.itipo === 'F' ? r.pvalor : (resto * r.pvalor) / 100);
+      const itipo = r.itipo as ParteReparto['itipo'];
+      partes.set(`${r.ccober}|${r.ctarifa}`, {
+        itipo,
+        tasa: itipo === 'F' ? r.pvalor : itipo === 'P' ? (resto * r.pvalor) / 100 : null,
+        monto: itipo === 'M' ? r.pvalor : null,
+        opcional: !!r.iopcional,
+        plimite: r.plimite ?? null,
+      });
     }
     return partes;
   }

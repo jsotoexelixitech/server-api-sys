@@ -60,6 +60,22 @@ export class UpdateTarificadorTasaDto {
   @Max(100)
   ptasa_max?: number;
 
+  @ApiPropertyOptional({ example: 10, description: 'Deducible: % del siniestro (matarifa_d.pdedu_fran). Va junto con mdedu_franext.' })
+  @IsOptional()
+  @Type(() => Number)
+  @IsNumber({ maxDecimalPlaces: 4 })
+  @Min(0)
+  @Max(100)
+  pdedu_fran?: number;
+
+  @ApiPropertyOptional({ example: 500, description: 'Deducible: monto mínimo en US$ (matarifa_d.mdedu_franext). Va junto con pdedu_fran.' })
+  @IsOptional()
+  @Type(() => Number)
+  @IsNumber({ maxDecimalPlaces: 2 })
+  @Min(0)
+  @Max(999999999)
+  mdedu_franext?: number;
+
   @ApiProperty({ example: 20364172, description: 'Código de usuario Sis2000 de quien modifica (auditoría cusuariomod).' })
   @Type(() => Number)
   @IsInt()
@@ -141,16 +157,34 @@ export class RepartoCoberturaDto {
   @MaxLength(4)
   ctarifa: string;
 
-  @ApiProperty({ example: 'P', enum: ['F', 'P'], description: 'F = parte fija de la tasa; P = porcentaje de lo que queda tras las partes fijas.' })
-  @IsIn(['F', 'P'])
+  @ApiProperty({
+    example: 'P',
+    enum: ['F', 'P', 'M'],
+    description:
+      'F = parte fija de la tasa global; P = porcentaje de lo que queda tras las partes fijas; M = monto fijo anual, fuera de la tasa global.',
+  })
+  @IsIn(['F', 'P', 'M'])
   itipo: string;
 
-  @ApiProperty({ example: 80 })
+  @ApiProperty({ example: 80, description: 'F: tasa en %. P: porcentaje (0–100). M: monto en la moneda de la póliza.' })
   @Type(() => Number)
   @IsNumber({ maxDecimalPlaces: 6 })
   @Min(0)
-  @Max(100)
+  @Max(99999999)
   pvalor: number;
+
+  @ApiPropertyOptional({ example: false, description: 'true = el cliente puede quitarla y deja de pagar su parte.' })
+  @IsOptional()
+  @IsBoolean()
+  iopcional?: boolean;
+
+  @ApiPropertyOptional({ example: 2.5, description: 'Límite asegurado en % de la suma asegurada. Vacío = 100 %.' })
+  @IsOptional()
+  @Type(() => Number)
+  @IsNumber({ maxDecimalPlaces: 4 })
+  @Min(0.0001)
+  @Max(100)
+  plimite?: number | null;
 }
 
 /** Tasas por antigüedad y reparto por cobertura de Condominio. Reemplaza la configuración completa. */
@@ -172,6 +206,55 @@ export class UpdateTarificadorAntiguedadDto {
   @ValidateNested({ each: true })
   @Type(() => RepartoCoberturaDto)
   reparto: RepartoCoberturaDto[];
+
+  @ApiProperty({ example: 20364172, description: 'Código de usuario Sis2000 de quien modifica (auditoría cusuariomod).' })
+  @Type(() => Number)
+  @IsInt()
+  @Min(1)
+  cusuario: number;
+
+  @ApiPropertyOptional({ example: 'Nombre Apellido', description: 'Nombre del usuario, solo para el log.' })
+  @IsOptional()
+  @IsString()
+  @MaxLength(120)
+  xusuario?: string;
+}
+
+/** Tramo de descuento por suma asegurada: msuma_desde <= suma < msuma_hasta (null = sin tope). */
+export class DescuentoSumaDto {
+  @ApiProperty({ example: 100000, description: 'Suma asegurada desde (US$, incluida).' })
+  @Type(() => Number)
+  @IsNumber({ maxDecimalPlaces: 2 })
+  @Min(0)
+  msuma_desde: number;
+
+  @ApiPropertyOptional({ example: 500000, nullable: true, description: 'Suma asegurada hasta (US$, excluida). Vacío = sin tope.' })
+  @IsOptional()
+  @Type(() => Number)
+  @IsNumber({ maxDecimalPlaces: 2 })
+  @Min(0)
+  msuma_hasta?: number | null;
+
+  @ApiProperty({ example: 5, description: '% de descuento sobre la prima bruta de cada cobertura.' })
+  @Type(() => Number)
+  @IsNumber({ maxDecimalPlaces: 4 })
+  @Min(0)
+  @Max(99.9999)
+  pdescuento: number;
+}
+
+/** Reemplaza los tramos de descuento por suma asegurada de un ramo. Lista vacía = sin descuento por suma. */
+export class UpdateTarificadorDescuentosSumaDto {
+  @ApiProperty({ example: 16 })
+  @Type(() => Number)
+  @IsIn(TARIFICADOR_RAMOS as unknown as number[])
+  cramo: number;
+
+  @ApiProperty({ type: [DescuentoSumaDto] })
+  @IsArray()
+  @ValidateNested({ each: true })
+  @Type(() => DescuentoSumaDto)
+  tramos: DescuentoSumaDto[];
 
   @ApiProperty({ example: 20364172, description: 'Código de usuario Sis2000 de quien modifica (auditoría cusuariomod).' })
   @Type(() => Number)
