@@ -60,6 +60,22 @@ export class UpdateTarificadorTasaDto {
   @Max(100)
   ptasa_max?: number;
 
+  @ApiPropertyOptional({ example: 10, description: 'Deducible: % del siniestro (matarifa_d.pdedu_fran). Va junto con mdedu_franext.' })
+  @IsOptional()
+  @Type(() => Number)
+  @IsNumber({ maxDecimalPlaces: 4 })
+  @Min(0)
+  @Max(100)
+  pdedu_fran?: number;
+
+  @ApiPropertyOptional({ example: 500, description: 'Deducible: monto mínimo en US$ (matarifa_d.mdedu_franext). Va junto con pdedu_fran.' })
+  @IsOptional()
+  @Type(() => Number)
+  @IsNumber({ maxDecimalPlaces: 2 })
+  @Min(0)
+  @Max(999999999)
+  mdedu_franext?: number;
+
   @ApiProperty({ example: 20364172, description: 'Código de usuario Sis2000 de quien modifica (auditoría cusuariomod).' })
   @Type(() => Number)
   @IsInt()

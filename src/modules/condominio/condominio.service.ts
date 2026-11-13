@@ -700,7 +700,8 @@ export class CondominioService {
       .input('cramo', T.Int, dto.cramo)
       .query(`
         SELECT RTRIM(d.ccober) AS ccober, RTRIM(d.ctarifa) AS ctarifa, RTRIM(c.xdescripcion_l) AS xcobertura,
-               d.pprima, d.fultmod, d.cusuariomod, ISNULL(ara.pcomision, 0) AS pcomision
+               d.pprima, d.fultmod, d.cusuariomod, ISNULL(ara.pcomision, 0) AS pcomision,
+               ISNULL(d.pdedu_fran, 0) AS pdedu_fran, ISNULL(d.mdedu_franext, 0) AS mdedu_franext
         FROM matarifa_d d
         INNER JOIN macoberturas c ON c.cramo = d.cramo AND c.ccobertura = d.ccober
         LEFT JOIN maarancel ara ON ara.cramo = d.cramo AND ara.iestado = 'V' AND ara.ctarifa = d.ctarifa
@@ -717,6 +718,8 @@ export class CondominioService {
         xcobertura: r.xcobertura,
         pprima: Number(r.pprima),
         pcomision: Number(r.pcomision),
+        pdedu_fran: Number(r.pdedu_fran),
+        mdedu_franext: Number(r.mdedu_franext),
         fultmod: r.fultmod,
         cusuariomod: r.cusuariomod == null ? null : Number(r.cusuariomod),
         ...(rangos.get(`${r.ccober}|${r.ctarifa}`) ?? {}),
@@ -798,7 +801,13 @@ export class CondominioService {
     const where = `cramo = @cramo AND RTRIM(ccober) = RTRIM(@ccober) AND RTRIM(ctarifa) = RTRIM(@ctarifa)
                    AND iestado = 'V' AND fdesde <= GETDATE() AND (fhasta IS NULL OR fhasta >= GETDATE())`;
 
-    const current = await keyReq().query(`SELECT pprima, fultmod, cusuariomod FROM matarifa_d WHERE ${where}`);
+    const conDeducible = dto.pdedu_fran !== undefined || dto.mdedu_franext !== undefined;
+    if (conDeducible && (dto.pdedu_fran === undefined || dto.mdedu_franext === undefined)) {
+      throw new BadRequestException('Envía el % del deducible y su monto mínimo (0 si no aplica).');
+    }
+    const current = await keyReq().query(
+      `SELECT pprima, pdedu_fran, mdedu_franext, fultmod, cusuariomod FROM matarifa_d WHERE ${where}`,
+    );
     if (current.recordset.length === 0) {
       throw new BadRequestException('La cobertura no tiene una tarifa vigente en el Core (matarifa_d).');
     }
@@ -807,10 +816,14 @@ export class CondominioService {
     }
     const before = current.recordset[0];
 
+    // Deducible: % y mínimo en US$. El monto en Bs (mdedu_fran) lo calcula la emisión con la tasa de la póliza.
+    const setDeducible = conDeducible ? ', pdedu_fran = @pdedu, mdedu_franext = @mdedu' : '';
     const upd = await keyReq()
       .input('pprima', T.Numeric(18, 6), dto.pprima)
+      .input('pdedu', T.Numeric(13, 6), dto.pdedu_fran ?? 0)
+      .input('mdedu', T.Numeric(17, 2), dto.mdedu_franext ?? 0)
       .input('cusuario', T.Numeric(18, 0), dto.cusuario)
-      .query(`UPDATE matarifa_d SET pprima = @pprima, fultmod = GETDATE(), cusuariomod = @cusuario,
+      .query(`UPDATE matarifa_d SET pprima = @pprima${setDeducible}, fultmod = GETDATE(), cusuariomod = @cusuario,
                      cprog = 'NEXUS_TARIFICADOR' WHERE ${where}`);
     if ((upd.rowsAffected?.[0] ?? 0) !== 1) {
       throw new ConflictException('No se actualizó exactamente un registro; el cambio no se aplicó.');
@@ -819,7 +832,24 @@ export class CondominioService {
     this.logger.warn(
       `tarificador: ramo=${dto.cramo} cober=${dto.ccober} pprima ${before.pprima} -> ${dto.pprima} usuario=${dto.cusuario} (${dto.xusuario ?? 's/n'})`,
     );
-    return { before: { pprima: Number(before.pprima) }, after: { pprima: dto.pprima, cusuariomod: dto.cusuario } };
+    if (conDeducible) {
+      this.logger.warn(
+        `tarificador: ramo=${dto.cramo} cober=${dto.ccober} deducible ${Number(before.pdedu_fran ?? 0)}%/US$${Number(before.mdedu_franext ?? 0)} -> ` +
+          `${dto.pdedu_fran}%/US$${dto.mdedu_franext} usuario=${dto.cusuario}`,
+      );
+    }
+    return {
+      before: {
+        pprima: Number(before.pprima),
+        pdedu_fran: Number(before.pdedu_fran ?? 0),
+        mdedu_franext: Number(before.mdedu_franext ?? 0),
+      },
+      after: {
+        pprima: dto.pprima,
+        ...(conDeducible ? { pdedu_fran: dto.pdedu_fran, mdedu_franext: dto.mdedu_franext } : {}),
+        cusuariomod: dto.cusuario,
+      },
+    };
   }
 
   private static readonly FRECUENCIAS_CATALOGO: Record<string, string> = {
