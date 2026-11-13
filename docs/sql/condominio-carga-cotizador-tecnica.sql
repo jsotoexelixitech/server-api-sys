@@ -12,7 +12,9 @@
     b) Reparto: terremoto 0,12 fijo y opcional; el resto entre básica 20, robo 13, vidrios 4 (obligatorias)
        y motín 15, agua 12, inundación 12, electrónicos 12, maquinaria 12 (opcionales), con su límite en % de la suma.
        Daños al local: monto fijo USD 0,02 con límite 0,25 %. Extensión de cobertura: incluida, sin prima.
-       Gastos comunes extraordinarios: monto fijo USD 0,02, límite 5 %, SOLO si el código 48 tiene ese nombre.
+       Demolición (49), Honorarios (50), Salvamento (51) y Autoridad civil (52): monto fijo USD 0,02, límite 0,5 %.
+       Gastos comunes extraordinarios (53): monto fijo USD 0,02, límite 5 %.
+       Las 49-53 solo se cargan si el código existe con ese nombre (en QA .80 se crearon el 13-nov; en prod hay que crearlas).
     c) RC General (19) sale del reparto: opcional normal a 0,08 % sobre su límite (20 % de la suma, se configura en el panel).
     d) Deducibles en matarifa_d (pdedu_fran %, mdedu_franext mínimo US$) según el cotizador.
 
@@ -20,8 +22,9 @@
     - Robo, Asalto y/o Atraco del cotizador = cobertura 26 (ROBO). La 27 (ASALTO O ATRACO) queda fuera del reparto.
     - Terremoto (2 % de la suma) y Motín («según cláusula») no tienen deducible numérico: quedan en 0 y el texto
       sale de la plantilla del PDF.
-    - Sin código en el Core todavía (no se cargan): Extinción de incendio, Demolición y escombros, Honorarios,
-      Salvamento, Autoridad civil, Suministros y equipos de mantenimiento, Asistencia domiciliaria.
+    - Sin código en el Core todavía (no se cargan): Extinción de incendio, Suministros y equipos de mantenimiento,
+      Asistencia domiciliaria.
+    - Gastos comunes va en el 53, NO en el 48: en .80 y prod el 48 es DESLAVE y tiene pólizas.
 
   Seguridad: antes de tocar nada comprueba que cada código tenga el nombre esperado en ESTA base
   (en QA .67 y .80 los códigos 47 y 48 no significan lo mismo). Si alguno no coincide, aborta sin cambios.
@@ -51,7 +54,12 @@ INSERT INTO @esperado VALUES
     ('29', '%ROTURA DE VIDRIOS%', 1),
     ('30', '%EQUIPOS ELECTRONICOS%', 1),
     ('33', '%ROTURA DE MAQUINARIA%', 1),
-    ('48', '%GASTOS COMUNES EXTRAORDINARIO%', 0);   -- opcional: solo existe en algunas bases
+    -- creadas en nov-2026: se cargan solo si existen con ese nombre
+    ('49', '%DEMOLICION%', 0),
+    ('50', '%HONORARIOS%', 0),
+    ('51', 'SALVAMENTO', 0),
+    ('52', 'AUTORIDAD CIVIL', 0),
+    ('53', '%GASTOS COMUNES EXTRAORDINARIO%', 0);
 
 -- FOR XML en vez de STRING_AGG: la base está en nivel de compatibilidad 130.
 DECLARE @malos NVARCHAR(2000) = STUFF((
@@ -68,12 +76,20 @@ BEGIN
     RETURN;
 END;
 
-DECLARE @con48 BIT = CASE WHEN EXISTS (
+-- Códigos que se omiten: los no obligatorios que en esta base no existen con su nombre o no tienen tarifa vigente.
+DECLARE @omitir TABLE (ccober VARCHAR(4) PRIMARY KEY);
+INSERT INTO @omitir
+SELECT e.ccober FROM @esperado e
+WHERE e.obligatorio = 0 AND NOT EXISTS (
     SELECT 1 FROM macoberturas c
-    WHERE c.cramo = 16 AND RTRIM(c.ccobertura) = '48'
-      AND RTRIM(c.xdescripcion_l) LIKE '%GASTOS COMUNES EXTRAORDINARIO%' COLLATE Modern_Spanish_CI_AI
-      AND EXISTS (SELECT 1 FROM matarifa_d d WHERE d.cramo = 16 AND RTRIM(d.ccober) = '48' AND d.iestado = 'V')
-) THEN 1 ELSE 0 END;
+    WHERE c.cramo = 16 AND RTRIM(c.ccobertura) = e.ccober
+      AND RTRIM(c.xdescripcion_l) LIKE e.patron COLLATE Modern_Spanish_CI_AI
+      AND EXISTS (SELECT 1 FROM matarifa_d d WHERE d.cramo = 16 AND RTRIM(d.ccober) = e.ccober AND d.iestado = 'V'));
+IF EXISTS (SELECT 1 FROM @omitir)
+BEGIN
+    DECLARE @lista NVARCHAR(200) = STUFF((SELECT ', ' + ccober FROM @omitir FOR XML PATH('')), 1, 2, '');
+    RAISERROR('Aviso: no existen en esta base y no se cargan: %s.', 10, 1, @lista);
+END;
 
 BEGIN TRANSACTION;
 
@@ -108,9 +124,13 @@ FROM (VALUES
     -- incluidas con monto fijo
     ('28', 'M', 0.02, 0, 0.25),
     ('25', 'M', 0,    0, NULL),
-    ('48', 'M', 0.02, 0, 5)
+    ('49', 'M', 0.02, 0, 0.5),
+    ('50', 'M', 0.02, 0, 0.5),
+    ('51', 'M', 0.02, 0, 0.5),
+    ('52', 'M', 0.02, 0, 0.5),
+    ('53', 'M', 0.02, 0, 5)
 ) r (ccober, itipo, pvalor, iopcional, plimite)
-WHERE r.ccober <> '48' OR @con48 = 1;
+WHERE r.ccober NOT IN (SELECT ccober FROM @omitir);
 
 -- ── c) RC General fuera del reparto: 0,08 % sobre su límite ──
 UPDATE matarifa_d SET pprima = 0.08
@@ -122,13 +142,14 @@ WHERE cramo = 16 AND RTRIM(ccober) = '19' AND iestado = 'V';
         ('26', 15, 300), ('29', 15, 300), ('4', 15, 300), ('5', 15, 300),
         ('30', 10, 300), ('33', 10, 300), ('19', 10, 300),
         -- «Demás coberturas»
-        ('1', 10, 300), ('28', 10, 300), ('48', 10, 300)
+        ('1', 10, 300), ('28', 10, 300),
+        ('49', 10, 300), ('50', 10, 300), ('51', 10, 300), ('52', 10, 300), ('53', 10, 300)
     ) v (ccober, pct, minimo)
 )
 UPDATE d SET d.pdedu_fran = ded.pct, d.mdedu_franext = ded.minimo
 FROM matarifa_d d
 JOIN ded ON RTRIM(d.ccober) = ded.ccober
-WHERE d.cramo = 16 AND d.iestado = 'V' AND (ded.ccober <> '48' OR @con48 = 1);
+WHERE d.cramo = 16 AND d.iestado = 'V' AND ded.ccober NOT IN (SELECT ccober FROM @omitir);
 
 COMMIT TRANSACTION;
 
