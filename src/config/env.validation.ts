@@ -196,4 +196,11 @@ export const envValidationSchema = Joi.object({
   RMS_GATEWAY_API_KEY: Joi.string().allow('').optional(),
   RMS_GATEWAY_RAMOS: Joi.string().allow('').default('5,7,8,9,45'),
   RMS_GATEWAY_TIMEOUT_MS: Joi.number().integer().min(1000).default(8000),
+
+  /**
+   * API de documentos del expediente (/api/v1/expedientes): URL interna de nexus-api y la clave
+   * EXPEDIENTES_INTEGRACION_KEY (o EXPEDIENTE_INTERNAL_KEY) de nexus-api. Sin ellas: 503 y sin registro.
+   */
+  NEXUS_EXPEDIENTES_URL: Joi.string().allow('').optional(),
+  NEXUS_EXPEDIENTES_KEY: Joi.string().allow('').optional(),
 });

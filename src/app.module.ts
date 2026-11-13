@@ -38,6 +38,7 @@ import { SiniestrosModule } from './modules/siniestros/siniestros.module';
 import { RecibosModule } from './modules/recibos/recibos.module';
 import { PolizasModule } from './modules/polizas/polizas.module';
 import { ComponentsModule } from './modules/components/components.module';
+import { ExpedientesApiModule } from './modules/expedientes-api/expedientes-api.module';
 
 @Module({
   imports: [
@@ -86,6 +87,7 @@ import { ComponentsModule } from './modules/components/components.module';
     RecibosModule,
     PolizasModule,
     ComponentsModule,
+    ExpedientesApiModule,
   ],
 })
 export class AppModule {}
