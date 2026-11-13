@@ -8,6 +8,7 @@ import {
   FRECUENCIAS_CONFIGURABLES,
   GetTarificadorDto,
   UpdateTarificadorAntiguedadDto,
+  UpdateTarificadorDescuentosSumaDto,
   UpdateTarificadorFrecuenciaDto,
   UpdateTarificadorTasaDto,
 } from './dto/tarificador.dto';
@@ -569,9 +570,16 @@ export class CondominioService {
       ? await this.db.request().input('cramo', T.Int, cramo)
           .query(`SELECT ISNULL(SUM(porcenta), 0) AS pct FROM masustac WHERE cramo = @cramo AND csustanc IN (${sustancias.map(Number).join(',')})`)
       : null;
-    const descPct = Number(descRes?.recordset?.[0]?.pct ?? 0);
+    // Descuento total = dispositivos de seguridad + tramo de suma asegurada configurado por Técnica.
+    const descDispositivos = Number(descRes?.recordset?.[0]?.pct ?? 0);
+    const descSuma = await this.descuentoPorSuma(cramo, cot.suma_asegurada);
+    const descPct = descDispositivos + descSuma;
     const recPct = Number(recRes?.recordset?.[0]?.pct ?? 0);
-    if (!vigente && !near(cot.descuento_pct ?? 0, descPct)) errors.push(`descuento_pct (${cot.descuento_pct ?? 0}) no coincide con los dispositivos (${descPct}).`);
+    if (!vigente && !near(cot.descuento_pct ?? 0, descPct)) {
+      errors.push(
+        `descuento_pct (${cot.descuento_pct ?? 0}) no coincide con dispositivos (${descDispositivos}) + suma asegurada (${descSuma}).`,
+      );
+    }
     if (!vigente && !near(cot.recargo_pct ?? 0, recPct)) errors.push(`recargo_pct (${cot.recargo_pct ?? 0}) no coincide con las sustancias (${recPct}).`);
 
     let sumaPrimas = 0;
@@ -1004,6 +1012,84 @@ export class CondominioService {
   }
 
   /** Reemplaza las tasas por antigüedad y el reparto por cobertura de Condominio, en una sola transacción. */
+  private async tablaDescuentoSumaExiste(): Promise<boolean> {
+    const existe = await this.db.request().query(`SELECT OBJECT_ID('dbo.MATARIFA_DESCUENTO_SUMA_NEXUS', 'U') AS tabla`);
+    return Boolean(existe.recordset[0]?.tabla);
+  }
+
+  /** Tramos de descuento por suma asegurada del ramo. Sin la tabla no hay tramos. */
+  async getTarificadorDescuentosSuma(cramo: number) {
+    if (!(await this.tablaDescuentoSumaExiste())) return { cramo, disponible: false, tramos: [] };
+    const res = await this.db
+      .request()
+      .input('cramo', this.db.types.Int, cramo)
+      .query(`SELECT msuma_desde, msuma_hasta, pdescuento, fultmod, cusuariomod
+              FROM dbo.MATARIFA_DESCUENTO_SUMA_NEXUS WHERE cramo = @cramo ORDER BY msuma_desde`);
+    return {
+      cramo,
+      disponible: true,
+      tramos: (res.recordset as any[]).map((r) => ({
+        msuma_desde: Number(r.msuma_desde),
+        msuma_hasta: r.msuma_hasta == null ? null : Number(r.msuma_hasta),
+        pdescuento: Number(r.pdescuento),
+        fultmod: r.fultmod,
+        cusuariomod: r.cusuariomod == null ? null : Number(r.cusuariomod),
+      })),
+    };
+  }
+
+  /** % de descuento del tramo que contiene la suma asegurada (desde <= suma < hasta), o 0. */
+  async descuentoPorSuma(cramo: number, suma: number): Promise<number> {
+    const { tramos } = await this.getTarificadorDescuentosSuma(cramo);
+    const tramo = tramos.find((t) => suma >= t.msuma_desde && (t.msuma_hasta == null || suma < t.msuma_hasta));
+    return tramo ? tramo.pdescuento : 0;
+  }
+
+  /** Reemplaza los tramos del ramo. Deben estar ordenados, sin solaparse, y solo el último puede no tener tope. */
+  async updateTarificadorDescuentosSuma(dto: UpdateTarificadorDescuentosSumaDto) {
+    if (!(await this.tablaDescuentoSumaExiste())) {
+      throw new BadRequestException('Falta crear la tabla de descuentos en el Core (script condominio-hogar-descuento-suma.sql).');
+    }
+    const tramos = [...dto.tramos].sort((a, b) => a.msuma_desde - b.msuma_desde);
+    tramos.forEach((t, i) => {
+      const hasta = t.msuma_hasta ?? null;
+      if (hasta !== null && hasta <= t.msuma_desde) {
+        throw new BadRequestException(`Tramo ${i + 1}: «hasta» debe ser mayor que «desde».`);
+      }
+      const sig = tramos[i + 1];
+      if (sig && (hasta === null || sig.msuma_desde < hasta)) {
+        throw new BadRequestException(`Los tramos ${i + 1} y ${i + 2} se solapan: cada suma asegurada debe caer en un solo tramo.`);
+      }
+    });
+
+    const T = this.db.types;
+    const tx = this.db.transaction();
+    await tx.begin();
+    try {
+      await new T.Request(tx).input('cramo', T.Int, dto.cramo).query(`DELETE FROM dbo.MATARIFA_DESCUENTO_SUMA_NEXUS WHERE cramo = @cramo`);
+      for (const t of tramos) {
+        await new T.Request(tx)
+          .input('cramo', T.Int, dto.cramo)
+          .input('desde', T.Numeric(18, 2), t.msuma_desde)
+          .input('hasta', T.Numeric(18, 2), t.msuma_hasta ?? null)
+          .input('pct', T.Numeric(9, 4), t.pdescuento)
+          .input('cusuario', T.Numeric(18, 0), dto.cusuario)
+          .query(`
+            INSERT INTO dbo.MATARIFA_DESCUENTO_SUMA_NEXUS (cramo, msuma_desde, msuma_hasta, pdescuento, fultmod, cusuariomod)
+            VALUES (@cramo, @desde, @hasta, @pct, GETDATE(), @cusuario)
+          `);
+      }
+      await tx.commit();
+    } catch (err) {
+      await tx.rollback().catch(() => undefined);
+      throw err;
+    }
+    this.logger.warn(
+      `tarificador descuentos por suma: ramo=${dto.cramo} ${tramos.length} tramos usuario=${dto.cusuario} (${dto.xusuario ?? 's/n'})`,
+    );
+    return this.getTarificadorDescuentosSuma(dto.cramo);
+  }
+
   async updateTarificadorAntiguedad(dto: UpdateTarificadorAntiguedadDto) {
     const claves = new Set(dto.tasas.map((t) => `${t.iuso}|${t.itramo}`));
     if (claves.size !== 8 || dto.tasas.length !== 8) {

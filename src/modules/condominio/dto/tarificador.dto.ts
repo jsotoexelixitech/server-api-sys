@@ -185,3 +185,52 @@ export class UpdateTarificadorAntiguedadDto {
   @MaxLength(120)
   xusuario?: string;
 }
+
+/** Tramo de descuento por suma asegurada: msuma_desde <= suma < msuma_hasta (null = sin tope). */
+export class DescuentoSumaDto {
+  @ApiProperty({ example: 100000, description: 'Suma asegurada desde (US$, incluida).' })
+  @Type(() => Number)
+  @IsNumber({ maxDecimalPlaces: 2 })
+  @Min(0)
+  msuma_desde: number;
+
+  @ApiPropertyOptional({ example: 500000, nullable: true, description: 'Suma asegurada hasta (US$, excluida). Vacío = sin tope.' })
+  @IsOptional()
+  @Type(() => Number)
+  @IsNumber({ maxDecimalPlaces: 2 })
+  @Min(0)
+  msuma_hasta?: number | null;
+
+  @ApiProperty({ example: 5, description: '% de descuento sobre la prima bruta de cada cobertura.' })
+  @Type(() => Number)
+  @IsNumber({ maxDecimalPlaces: 4 })
+  @Min(0)
+  @Max(99.9999)
+  pdescuento: number;
+}
+
+/** Reemplaza los tramos de descuento por suma asegurada de un ramo. Lista vacía = sin descuento por suma. */
+export class UpdateTarificadorDescuentosSumaDto {
+  @ApiProperty({ example: 16 })
+  @Type(() => Number)
+  @IsIn(TARIFICADOR_RAMOS as unknown as number[])
+  cramo: number;
+
+  @ApiProperty({ type: [DescuentoSumaDto] })
+  @IsArray()
+  @ValidateNested({ each: true })
+  @Type(() => DescuentoSumaDto)
+  tramos: DescuentoSumaDto[];
+
+  @ApiProperty({ example: 20364172, description: 'Código de usuario Sis2000 de quien modifica (auditoría cusuariomod).' })
+  @Type(() => Number)
+  @IsInt()
+  @Min(1)
+  cusuario: number;
+
+  @ApiPropertyOptional({ example: 'Nombre Apellido', description: 'Nombre del usuario, solo para el log.' })
+  @IsOptional()
+  @IsString()
+  @MaxLength(120)
+  xusuario?: string;
+}
