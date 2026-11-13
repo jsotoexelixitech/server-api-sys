@@ -43,6 +43,7 @@ import { RecibosModule } from './modules/recibos/recibos.module';
 import { PolizasModule } from './modules/polizas/polizas.module';
 import { ComponentsModule } from './modules/components/components.module';
 import { AutopagoModule } from './modules/autopago/autopago.module';
+import { ExpedientesApiModule } from './modules/expedientes-api/expedientes-api.module';
 
 @Module({
   imports: [
@@ -96,6 +97,7 @@ import { AutopagoModule } from './modules/autopago/autopago.module';
     PolizasModule,
     ComponentsModule,
     AutopagoModule,
+    ExpedientesApiModule,
   ],
 })
 export class AppModule {}
