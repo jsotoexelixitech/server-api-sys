@@ -8,6 +8,7 @@ import { GetByRamoDto } from './dto/get-by-ramo.dto';
 import {
   GetTarificadorDto,
   UpdateTarificadorAntiguedadDto,
+  UpdateTarificadorDescuentosSumaDto,
   UpdateTarificadorFrecuenciaDto,
   UpdateTarificadorTasaDto,
 } from './dto/tarificador.dto';
@@ -476,6 +477,27 @@ export class CondominioController {
   })
   async updateTarificadorAntiguedad(@Body() dto: UpdateTarificadorAntiguedadDto) {
     const data = await this.condominioService.updateTarificadorAntiguedad(dto);
+    return { status: true, data };
+  }
+
+  @Get('tarificador/descuentos-suma')
+  @ApiOperation({
+    summary: 'Descuentos por rango de suma asegurada (ramos 16 y 38)',
+    description: 'Tramos desde/hasta (US$) con el % de descuento sobre la prima bruta. Se suma al descuento por dispositivos.',
+  })
+  async getTarificadorDescuentosSuma(@Query() dto: GetTarificadorDto) {
+    const data = await this.condominioService.getTarificadorDescuentosSuma(dto.cramo);
+    return { status: true, data };
+  }
+
+  @Put('tarificador/descuentos-suma')
+  @NestProtected(NEST_AUTH_SCOPES.TARIFAS_CONDOMINIO)
+  @ApiOperation({
+    summary: 'Guardar los descuentos por rango de suma asegurada',
+    description: 'Reemplaza los tramos del ramo; registra el usuario en cusuariomod. Requiere el scope tarifas:condominio.',
+  })
+  async updateTarificadorDescuentosSuma(@Body() dto: UpdateTarificadorDescuentosSumaDto) {
+    const data = await this.condominioService.updateTarificadorDescuentosSuma(dto);
     return { status: true, data };
   }
 }
