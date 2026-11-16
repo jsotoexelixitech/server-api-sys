@@ -213,6 +213,15 @@ export class CreateEmissionColectivoDto {
   @IsOptional() @IsNumber({ maxDecimalPlaces: 2 }) @Min(0)
   msumaaseg?: number | null;
 
+  @ApiPropertyOptional({
+    example: 30,
+    description:
+      'Comisión del productor (%) con la que se cotizó: base + gastos de adquisición + comisión adicional. ' +
+      'Se aplica a todas las coberturas; sin ella queda la de la plantilla.',
+  })
+  @IsOptional() @IsNumber({ maxDecimalPlaces: 2 }) @Min(0) @Max(100)
+  pcomision?: number | null;
+
   // ── Tomador (empresa contratante) ─────────────────────────────────────────
   @ApiProperty({ example: 'J', enum: TIPOS_CEDULA_COLECTIVO })
   @Transform(upper) @IsIn(TIPOS_CEDULA_COLECTIVO)

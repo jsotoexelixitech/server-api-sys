@@ -3,6 +3,9 @@
 -- tarifas y rangos de edad) a la póliza nueva de la empresa, cobra la prima del cotizador (mprimaext de la solicitud)
 -- repartida entre las coberturas por su suma asegurada, exige tasa, numera recibos con sp_contador_nexus y devuelve
 -- errores con código (prefijo COLECTIVO_...). Aplicar ANTES de 02 (la pre-emisión la llama).
+-- [colectivo-nexus 16-nov-2026] Valen la suma asegurada y la comisión del cotizador, no las de la plantilla:
+-- la suma de la solicitud va a la cobertura principal (la de mayor suma en la plantilla; las demás conservan la suya)
+-- y @pcomision_cotizador se aplica a todas las coberturas. Sin esos datos queda lo de la plantilla.
 -- ============================================================================
 -- Author:      Hamilton Leon
 -- Create date: 2026-09-29
@@ -16,6 +19,8 @@ CREATE OR ALTER PROCEDURE [dbo].[sp_emision_personas_colectivo_nexus]
 	@tplFanopol    SMALLINT,
 	@tplFmespol    TINYINT,
 	@tplFdesde     DATETIME,
+	-- [colectivo-nexus 16-nov-2026] Comisión del productor con la que se cotizó (%). NULL = la de la plantilla.
+	@pcomision_cotizador NUMERIC(9, 2) = NULL,
 	@pSuccess      BIT           = 0 OUTPUT,
 	@pErrorMessage NVARCHAR(MAX) = NULL OUTPUT
 AS
@@ -46,7 +51,9 @@ BEGIN
 			@mcomision numeric(18, 2), @mcomisionext numeric(18, 2), @pcomision numeric(9, 2), @error VARCHAR(400),
 			-- [colectivo-nexus 11-nov-2026] Prima anual del cotizador (moneda de la póliza) y su reparto por recibo.
 			@mprimaext_total numeric(18, 2), @mprima_recibo numeric(18, 2), @mprima_acum numeric(18, 2) = 0,
-			@peso_total numeric(18, 2), @nfilas_reparto INT
+			@peso_total numeric(18, 2), @nfilas_reparto INT,
+			-- [colectivo-nexus 12-nov-2026] Suma asegurada por cobertura (de la plantilla) y su total por recibo.
+			@suma_plantilla numeric(18, 2), @msumarec numeric(18, 2), @msumarecext numeric(18, 2)
 
 		SELECT
 			@cnpoliza_rel = cnpoliza_rel, @cplan = cplan, @xcanal_venta = xcanal_venta, @icedula_tomador = icedula_tomador,
@@ -183,12 +190,18 @@ BEGIN
 		-- SNAPSHOT DE LA CONFIGURACION COLECTIVA VIGENTE (pcplanes/pccoberturas/pctarifas) HACIA LA NUEVA POLIZA.
 		-- Las primas, recargos y comisiones de la poliza quedan tal como estaban configurados en la plantilla
 		-- del plan al momento de la emision (no se recalculan a mano, no se hardcodean).
+		-- [colectivo-nexus 12-nov-2026] xplan lleva el nombre de la empresa contratante (tomador, o el titular si no hay
+		-- tomador), no el de la plantilla: la plantilla puede ser el contrato de otro cliente y su nombre no debe
+		-- arrastrarse a la poliza nueva. Si no hay nombre se conserva el de la plantilla.
+		DECLARE @xplan_nuevo varchar(60) =
+			LEFT(NULLIF(LTRIM(RTRIM(COALESCE(NULLIF(LTRIM(RTRIM(@xcliente_tomador)), ''), @xcliente_titular))), ''), 60)
+
 		INSERT INTO dbo.pcplanes
 		(cpoliza, fanopol, fmespol, cplan, fdesde, u_version, fhasta, cramo, iaplica, xplan, cmoneda, precargo, premb_t,
 		premb_b, pcomision, mcomision, mcomisionext, msumamax, pprima, iedad, icalculoedad, cedadmax_m, cedadmin_m,
 		cedadmax_f, cedadmin_f, iclasetar, ipagaprima, xobserva, iestado, cprog, ifuente, bok, cerror, fingreso, cusuario)
 		SELECT
-		@cpoliza, @fano, @fmes, cplan, @fdesde_pol, '!', @fhasta_pol, cramo, iaplica, xplan, @cmoneda, precargo, premb_t,
+		@cpoliza, @fano, @fmes, cplan, @fdesde_pol, '!', @fhasta_pol, cramo, iaplica, COALESCE(@xplan_nuevo, xplan), @cmoneda, precargo, premb_t,
 		premb_b, pcomision, mcomision, mcomisionext, msumamax, pprima, iedad, icalculoedad, cedadmax_m, cedadmin_m,
 		cedadmax_f, cedadmin_f, iclasetar, ipagaprima, xobserva, 'V', @cprog, @ifuente, 0, 0, GETDATE(), 7
 		FROM dbo.pcplanes WITH (NOLOCK)
@@ -229,18 +242,28 @@ BEGIN
 		WHERE cpoliza = @tplCpoliza AND fanopol = @tplFanopol AND fmespol = @tplFmespol
 
 		-- [colectivo-nexus 11-nov-2026] REPARTO DE LA PRIMA DEL COTIZADOR ENTRE LAS COBERTURAS DE LA PLANTILLA.
-		-- Peso = suma asegurada de la cobertura en la plantilla (msumaext). Si ninguna trae suma, partes iguales.
-		-- La última fila absorbe el redondeo para que la suma por recibo cuadre al centavo.
-		CREATE TABLE #reparto (nfila INT IDENTITY(1, 1) PRIMARY KEY, ccobertura CHAR(4), ctarifa CHAR(4),
-			pcomision NUMERIC(9, 2), peso NUMERIC(18, 2))
+		-- [colectivo-nexus 12-nov-2026] Peso = prima real que cobró la plantilla por cobertura (sus recibos vigentes en
+		-- adpoltar): la prima de cada cobertura depende de su tasa, no de su suma (en la 376 la cobertura 13 lleva el
+		-- 96,5 % con el 62,5 % de la suma). Sin recibos en la plantilla: peso = suma asegurada (msumaext); sin suma:
+		-- partes iguales. La última fila absorbe el redondeo para que la suma por recibo cuadre al centavo.
+		-- msumaext e isuma de la cobertura van a adpoltar/adpolcob/adrecibos como en la emisión del escritorio.
+		CREATE TABLE #reparto (nfila INT IDENTITY(1, 1) PRIMARY KEY, ccobertura CHAR(4) COLLATE DATABASE_DEFAULT, ctarifa CHAR(4) COLLATE DATABASE_DEFAULT,
+			pcomision NUMERIC(9, 2), peso NUMERIC(18, 2), msumaext NUMERIC(18, 2), isuma CHAR(1) COLLATE DATABASE_DEFAULT)
 
-		INSERT INTO #reparto (ccobertura, ctarifa, pcomision, peso)
-		SELECT ccobertura, ctarifa, ISNULL(pcomision, 0), ISNULL(msumaext, 0)
-		FROM dbo.pctarifas WITH (NOLOCK)
-		WHERE cpoliza = @cpoliza AND fanopol = @fano AND fmespol = @fmes
-		ORDER BY qordenimp, ccobertura, ctarifa
+		INSERT INTO #reparto (ccobertura, ctarifa, pcomision, peso, msumaext, isuma)
+		SELECT t.ccobertura, t.ctarifa, ISNULL(t.pcomision, 0), ISNULL(h.mprimaext, 0), ISNULL(t.msumaext, 0),
+			ISNULL(NULLIF(LTRIM(RTRIM(t.isuma)), ''), 'S')
+		FROM dbo.pctarifas t WITH (NOLOCK)
+		OUTER APPLY (
+			SELECT SUM(a.mprimaext) AS mprimaext
+			FROM dbo.adpoltar a WITH (NOLOCK)
+			WHERE a.cpoliza = @tplCpoliza AND a.fanopol = @tplFanopol AND a.fmespol = @tplFmespol
+			  AND a.ccober = t.ccobertura AND a.ctarifa = t.ctarifa AND a.istattar = 'V'
+		) h
+		WHERE t.cpoliza = @cpoliza AND t.fanopol = @fano AND t.fmespol = @fmes
+		ORDER BY t.qordenimp, t.ccobertura, t.ctarifa
 
-		SELECT @nfilas_reparto = COUNT(*), @peso_total = SUM(peso) FROM #reparto
+		SELECT @nfilas_reparto = COUNT(*), @peso_total = SUM(peso), @suma_plantilla = SUM(msumaext) FROM #reparto
 
 		IF @nfilas_reparto = 0
 		BEGIN
@@ -249,8 +272,46 @@ BEGIN
 
 		IF ISNULL(@peso_total, 0) <= 0
 		BEGIN
+			UPDATE #reparto SET peso = msumaext
+			SELECT @peso_total = SUM(peso) FROM #reparto
+		END
+
+		IF ISNULL(@peso_total, 0) <= 0
+		BEGIN
 			UPDATE #reparto SET peso = 1
 			SET @peso_total = @nfilas_reparto
+		END
+
+		-- Plantilla sin sumas en ninguna cobertura: se conserva el comportamiento anterior (suma de la solicitud en cada fila).
+		IF ISNULL(@suma_plantilla, 0) <= 0
+			UPDATE #reparto SET msumaext = ISNULL(@msumaaseg, 0)
+		-- [colectivo-nexus 16-nov-2026] Vale la suma cotizada: va a la cobertura principal, la de mayor suma en la
+		-- plantilla (a igual suma, la de mayor prima). Las demás (muerte accidental, invalidez, funerario...) conservan
+		-- la de la plantilla. En la 376: cobertura 13 de 5000 a la suma cotizada, 14/15/16 quedan en 1000.
+		ELSE IF ISNULL(@msumaaseg, 0) > 0
+		BEGIN
+			DECLARE @nfila_principal INT = (SELECT TOP 1 nfila FROM #reparto ORDER BY msumaext DESC, peso DESC, nfila)
+			UPDATE #reparto SET msumaext = @msumaaseg WHERE nfila = @nfila_principal
+			-- pctarifas de la póliza nueva: de ahí leen la suma pepoltar_ind y los endosos.
+			UPDATE t SET t.msumaext = @msumaaseg, t.msuma = ROUND(@msumaaseg * @ptasamon, 2)
+			FROM dbo.pctarifas t
+			JOIN #reparto r ON r.nfila = @nfila_principal AND r.ccobertura = t.ccobertura AND r.ctarifa = t.ctarifa
+			WHERE t.cpoliza = @cpoliza AND t.fanopol = @fano AND t.fmespol = @fmes
+		END
+
+		-- [colectivo-nexus 16-nov-2026] Vale la comisión cotizada: se aplica a todas las coberturas del reparto y queda
+		-- grabada en las coberturas y tarifas de la póliza nueva (no la negociada en la plantilla).
+		IF @pcomision_cotizador IS NOT NULL
+		BEGIN
+			IF @pcomision_cotizador < 0 OR @pcomision_cotizador > 100
+			BEGIN
+				;THROW 51044, 'COLECTIVO_COMISION_INVALIDA: la comisión del cotizador debe estar entre 0 y 100.', 1;
+			END
+			UPDATE #reparto SET pcomision = @pcomision_cotizador
+			UPDATE dbo.pctarifas SET pcomision = @pcomision_cotizador
+			WHERE cpoliza = @cpoliza AND fanopol = @fano AND fmespol = @fmes
+			UPDATE dbo.pccoberturas SET pcomision = @pcomision_cotizador
+			WHERE cpoliza = @cpoliza AND fanopol = @fano AND fmespol = @fmes
 		END
 
 		-- ============================================================================================
@@ -376,7 +437,8 @@ BEGIN
 		SELECT @nrecibo = 1, @ncuo = 1
 		SELECT @iestadorec = 'P', @fcobro = NULL
 
-		DECLARE @ncobertura_col CHAR(4), @ctarifa_col CHAR(4), @pcomision_col NUMERIC(9, 2), @mprimaext_col NUMERIC(18, 2)
+		DECLARE @ncobertura_col CHAR(4), @ctarifa_col CHAR(4), @pcomision_col NUMERIC(9, 2), @mprimaext_col NUMERIC(18, 2),
+			@msumaext_col NUMERIC(18, 2), @isuma_col CHAR(1)
 
 		WHILE (@nrecibo <= @cuotas)
 		BEGIN
@@ -398,12 +460,13 @@ BEGIN
 					CASE WHEN r.nfila = @nfilas_reparto
 						THEN @mprima_recibo - ISNULL((SELECT SUM(ROUND(@mprima_recibo * r2.peso / @peso_total, 2))
 							FROM #reparto r2 WHERE r2.nfila < r.nfila), 0)
-						ELSE ROUND(@mprima_recibo * r.peso / @peso_total, 2) END
+						ELSE ROUND(@mprima_recibo * r.peso / @peso_total, 2) END,
+					r.msumaext, r.isuma
 				FROM #reparto r
 				ORDER BY r.nfila
 
 			OPEN cur_cober_col
-			FETCH NEXT FROM cur_cober_col INTO @ncobertura_col, @ctarifa_col, @pcomision_col, @mprimaext_col
+			FETCH NEXT FROM cur_cober_col INTO @ncobertura_col, @ctarifa_col, @pcomision_col, @mprimaext_col, @msumaext_col, @isuma_col
 
 			WHILE @@FETCH_STATUS = 0
 			BEGIN
@@ -420,12 +483,13 @@ BEGIN
 				SELECT
 				@crecibo, @ncobertura_col, @ctarifa_col, '!', @cramo, @cpoliza, @fano, @fmes, 0, NULL, '0', 1,
 				@cnpoliza, @cnrecibo, @cproces, @csucur, @cmoneda, @ptasamon, 'NU', @fdesde_rec, @fhasta_rec, 'N',
-				0, @msumaaseg, @msumaaseg, @msumaaseg, @msumaaseg, @mprimaext_col * @ptasamon, @mprimaext_col, 0, 'N',
+				0, ROUND(@msumaext_col * @ptasamon, 2), @msumaext_col, ROUND(@msumaext_col * @ptasamon, 2), @msumaext_col,
+				@mprimaext_col * @ptasamon, @mprimaext_col, 0, 'N',
 				0, 0, 0, 0, 0, 0, 0, 0, 0, @mprimaext_col * @ptasamon, @mprimaext_col, @pcomision_col,
 				(@mprimaext_col * @ptasamon) * (@pcomision_col / 100), @mprimaext_col * (@pcomision_col / 100), 0, 0, 0,
-				'V', 1, @cramoint, 0, 0, @cprog, @ifuente, 0, 0, GETDATE(), 7
+				'V', @isuma_col, @cramoint, 0, 0, @cprog, @ifuente, 0, 0, GETDATE(), 7
 
-				FETCH NEXT FROM cur_cober_col INTO @ncobertura_col, @ctarifa_col, @pcomision_col, @mprimaext_col
+				FETCH NEXT FROM cur_cober_col INTO @ncobertura_col, @ctarifa_col, @pcomision_col, @mprimaext_col, @msumaext_col, @isuma_col
 			END
 			CLOSE cur_cober_col
 			DEALLOCATE cur_cober_col
@@ -522,6 +586,12 @@ BEGIN
 			SELECT @mprimarec = SUM(mprimabruta), @mprimarecext = SUM(mprimabrutaext) FROM dbo.adpolcob WHERE crecibo = @crecibo
 			SELECT @mcomision = SUM(mcomision), @mcomisionext = SUM(mcomisionext) FROM dbo.adpolcob WHERE crecibo = @crecibo
 			SELECT @pcomision = CASE WHEN ISNULL(@mprimarec, 0) > 0 THEN (@mcomision / @mprimarec) * 100 ELSE 0 END
+			-- [colectivo-nexus 12-nov-2026] Suma del recibo = sumas de sus coberturas, con la misma regla que
+			-- sp_genera_adpolrea_nexus: si alguna cobertura es isuma '>' se toma la mayor, si no se suman.
+			SELECT
+				@msumarec = CASE WHEN MAX(CASE WHEN isuma = '>' THEN 1 ELSE 0 END) = 1 THEN MAX(msumaaseg) ELSE SUM(msumaaseg) END,
+				@msumarecext = CASE WHEN MAX(CASE WHEN isuma = '>' THEN 1 ELSE 0 END) = 1 THEN MAX(msumaasegext) ELSE SUM(msumaasegext) END
+			FROM dbo.adpolcob WHERE crecibo = @crecibo
 
 			INSERT INTO dbo.ADRECIBOS
 			(crecibo, u_version, cnpoliza, cnrecibo, cpoliza, fanopol, fmespol, cramo, itipoprod, itiponegocio, itipopol,
@@ -536,7 +606,7 @@ BEGIN
 			@crecibo, '!', @cnpoliza, @cnrecibo, @cpoliza, @fano, @fmes, @cramo, 'NU', 'DI', 'C', 'N', 0, 0, 'P', 'IN',
 			0, @csucur, @csucurrec, 3, 0, @cproces, 0, @xrif_titular, @xrif_tomador, @xrif_titular, 0, 0, @cplan,
 			@cproductor, @cmoneda, @ptasamon, @femision, @fdesde_rec, @fhasta_rec, @fdesde_pol, @fhasta_pol, 'N', 0, 'P',
-			@fcobro, @iestadorec, 0, 'P', 'N', @msumaaseg, @msumaaseg, 0, 0, @msumaaseg, @msumaaseg, @mprimarec,
+			@fcobro, @iestadorec, 0, 'P', 'N', @msumarec, @msumarecext, 0, 0, @msumarec, @msumarecext, @mprimarec,
 			@mprimarecext, 0, @mprimarec, @mprimarecext, @mprimarec, @pcomision, @mcomision, @mcomisionext,
 			@mprimarec, @mprimarecext, @ncuo, @cprog, @ifuente, GETDATE(), 7, @ifrecuencia, NULL, @ctipocanal,
 			@ccanalalt, @cscanalalt

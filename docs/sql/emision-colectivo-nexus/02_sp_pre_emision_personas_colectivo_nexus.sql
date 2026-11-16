@@ -3,6 +3,8 @@
 -- toma la tasa de mamonedas, admite csexo 'A' (ambos) al validar edades,
 -- numera con sp_contador_nexus validando que el C-<ramo>-<n> no exista, errores con código (prefijo COLECTIVO_...)
 -- y llama a sp_emision_personas_colectivo_nexus. Aplicar DESPUÉS de 01.
+-- [colectivo-nexus 16-nov-2026] @pcomision: comisión del productor con la que se cotizó; se pasa al 01, que la aplica
+-- a todas las coberturas (NULL = la de la plantilla). Aplicar ANTES de desplegar el Nest que la envía.
 -- ============================================================================
 -- Author:      Hamilton Leon
 -- Create date: 2026-09-29
@@ -51,6 +53,8 @@ CREATE OR ALTER PROCEDURE [dbo].[sp_pre_emision_personas_colectivo_nexus]
 	@cmoneda char(4) = NULL,
 	@msumaaseg numeric(18, 2) = NULL,
 	@mprimaext numeric(18, 2) = NULL,
+	-- [colectivo-nexus 16-nov-2026] Comisión del cotizador (%). NULL = la de la plantilla.
+	@pcomision numeric(9, 2) = NULL,
 	@ifrecuencia char(1) = NULL,
 	@femision datetime = NULL,
 	@fdesde date = NULL,
@@ -437,5 +441,6 @@ BEGIN
 
 	-- [colectivo-nexus 11-nov-2026] Emisión colectiva _nexus con la plantilla modelo ya resuelta.
 	EXEC dbo.sp_emision_personas_colectivo_nexus
-		@id = @id, @tplCpoliza = @tplCpoliza, @tplFanopol = @tplFanopol, @tplFmespol = @tplFmespol, @tplFdesde = @tplFdesde
+		@id = @id, @tplCpoliza = @tplCpoliza, @tplFanopol = @tplFanopol, @tplFmespol = @tplFmespol, @tplFdesde = @tplFdesde,
+		@pcomision_cotizador = @pcomision
 END

@@ -149,8 +149,14 @@ describe('valoresSpColectivo', () => {
       cpersona_politica: '0',
       cterm_y_cod: '1',
       cprog: 'NEXUS_COLECTIVO',
-      ctipocanal: null,
+      ctipocanal: 'D',
+      pcomision: null,
     });
+  });
+
+  it('pasa la comisión del cotizador al SP', () => {
+    const { dto } = aDto({ ...payloadCotizador(), pcomision: 30 });
+    expect(valoresSpColectivo(dto, canalColectivoPorDefecto(80080)).pcomision).toBe(30);
   });
 
   it('si no vienen los escalares del titular usa los del tomador', () => {
@@ -171,9 +177,16 @@ describe('canalColectivoDesdeFila', () => {
     expect(canalColectivoDesdeFila({ cproductor: 123, ctipocanal: 'A', ccanalalt: 27, cscanalalt: 2 }, 80080)).toMatchObject({
       cproductor: 123, ctipocanal: 'A', ccanalalt: 27, cscanalalt: 2,
     });
-    expect(canalColectivoDesdeFila({ ctipocanal: 'X', ccanalalt: 27 }, 80080)).toMatchObject({
-      cproductor: 80080, ctipocanal: null, ccanalalt: null,
+    expect(canalColectivoDesdeFila({ cproductor: 123, ctipocanal: 'X', ccanalalt: 27 }, 80080)).toMatchObject({
+      cproductor: 123, ctipocanal: null, ccanalalt: null,
     });
+  });
+
+  it('sin tipo de canal y con el productor directo, el canal es directo (D)', () => {
+    expect(canalColectivoDesdeFila({ ctipocanal: null, corigen_rel: 'WE' }, 80080)).toMatchObject({
+      cproductor: 80080, ctipocanal: 'D', ccanalalt: null, cscanalalt: null, corigen_rel: 'WE',
+    });
+    expect(canalColectivoDesdeFila({ cproductor: 80080, ctipocanal: 'N' }, 80080)).toMatchObject({ ctipocanal: 'D' });
   });
 });
 
