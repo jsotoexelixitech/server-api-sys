@@ -3,7 +3,12 @@ import { BadRequestException } from '@nestjs/common';
 import { plainToInstance } from 'class-transformer';
 import { validateSync } from 'class-validator';
 import { CreateEmissionPersonDto } from './dto/create-emission-person.dto';
-import { assertIdentidadesPersonas, blankToNull } from './personas-identidad.rules';
+import {
+  assertIdentidadesPersonas,
+  blankToNull,
+  choqueBeneficiarioPreferencial,
+  resolverBeneficiarioPreferencial,
+} from './personas-identidad.rules';
 import { assertViajeroEmission } from './viajero-emission.rules';
 
 const baseDto = {
@@ -120,5 +125,124 @@ describe('assertViajeroEmission — tomador J', () => {
     expect(() =>
       assertViajeroEmission({ ...body, tipo_cedula_tomador: 'V' }, aseg, []),
     ).toThrow(/apellido del tomador/);
+  });
+});
+
+// [benef-juridico 16-nov-2026] Vida: beneficiario preferencial jurídico.
+describe('beneficiario preferencial jurídico', () => {
+  const banco = {
+    tipo_cedula: 'J',
+    rif: 'J-12345678-9',
+    nombre: '  BANCO   EJEMPLO, C.A. ',
+    apellido: 'no aplica',
+    sexo: 'M',
+    estado_civil: 'S',
+    fnac: '2000-01-01',
+    telefono: '(0212) 123-4567',
+    correo: 'contacto@banco.com',
+    estado: '1',
+    ciudad: 2,
+    direccion: 'Av. Principal',
+  };
+
+  it('J con RIF de 9 dígitos se admite como preferencial (razón social, sin apellido/sexo/fnac)', () => {
+    const pref = resolverBeneficiarioPreferencial(banco);
+    expect(pref).toMatchObject({
+      tipo: 'J',
+      rif: 123456789,
+      juridico: true,
+      nombre: 'BANCO EJEMPLO, C.A.',
+      xcliente: 'BANCO EJEMPLO, C.A.',
+      apellido: null,
+      sexo: null,
+      estadoCivil: null,
+      fnac: null,
+      telefono: '02121234567',
+      estado: 1,
+      ciudad: 2,
+    });
+  });
+
+  it.each(['G', 'C'])('%s también se admite como preferencial', (t) => {
+    expect(resolverBeneficiarioPreferencial({ ...banco, tipo_cedula: t })?.juridico).toBe(true);
+  });
+
+  it('J con 8 dígitos → 400', () => {
+    expect(() => resolverBeneficiarioPreferencial({ ...banco, rif: '12345678' })).toThrow(/9 dígitos/);
+  });
+
+  it('J sin razón social → 400', () => {
+    expect(() => resolverBeneficiarioPreferencial({ ...banco, nombre: ' ' })).toThrow(/razón social/);
+  });
+
+  it('identificación con letras → 400', () => {
+    expect(() =>
+      resolverBeneficiarioPreferencial({ tipo_cedula: 'P', rif: 'EM2849387', nombre: 'Ana', apellido: 'Pérez' }),
+    ).toThrow(BadRequestException);
+  });
+
+  it('natural V se mantiene igual que hoy (nombre + apellido, sexo y fnac)', () => {
+    const pref = resolverBeneficiarioPreferencial({
+      tipo_cedula: 'V',
+      rif: 12345678,
+      nombre: 'Ana',
+      apellido: 'Pérez',
+      sexo: 'F',
+      estado_civil: 'C',
+      fnac: '1990-05-01',
+    });
+    expect(pref).toMatchObject({
+      juridico: false,
+      xcliente: 'Ana Pérez',
+      apellido: 'Pérez',
+      sexo: 'F',
+      estadoCivil: 'C',
+      fnac: '1990-05-01',
+    });
+  });
+
+  it('natural sin apellido → 400', () => {
+    expect(() => resolverBeneficiarioPreferencial({ tipo_cedula: 'V', rif: 12345678, nombre: 'Ana' })).toThrow(
+      /apellido/,
+    );
+  });
+
+  it('sin identificación no hay preferencial', () => {
+    expect(resolverBeneficiarioPreferencial(undefined)).toBeNull();
+    expect(resolverBeneficiarioPreferencial({ tipo_cedula: 'J', nombre: 'BANCO' })).toBeNull();
+  });
+
+  it('beneficiario por fallecimiento J → 400 (solo el preferencial puede ser jurídico)', () => {
+    expect(() =>
+      assertIdentidadesPersonas(
+        { tipo_cedula_titular: 'V', rif_titular: 12345678 },
+        [],
+        [{ icedula_beneficiario: 'J', xrif_beneficiario: '123456789' }],
+      ),
+    ).toThrow(/beneficiarios\[0\]/);
+  });
+
+  it('titular J → 400 aunque haya preferencial jurídico', () => {
+    expect(() =>
+      assertIdentidadesPersonas(
+        { tipo_cedula_titular: 'J', rif_titular: 123456789, beneficiario_preferencial: banco },
+        [],
+        [],
+      ),
+    ).toThrow(/titular/);
+  });
+
+  it('choque: el RIF ya existe con otra letra en maclient', () => {
+    const pref = { tipo: 'J', juridico: true };
+    expect(choqueBeneficiarioPreferencial([{ cid: 'V-123456789' }], pref)).toBe('V-123456789');
+    expect(choqueBeneficiarioPreferencial([{ cid: 'J-123456789' }], pref)).toBeNull();
+    expect(choqueBeneficiarioPreferencial([{ cid: '0' }], pref)).toBeNull();
+    expect(choqueBeneficiarioPreferencial([{ cid: 'E-12345678' }], { tipo: 'V', juridico: false })).toBeNull();
+  });
+
+  it('DTO conserva beneficiario_preferencial', () => {
+    const dto = plainToInstance(CreateEmissionPersonDto, { ...baseDto, beneficiario_preferencial: banco });
+    expect(validateSync(dto)).toHaveLength(0);
+    expect(dto.beneficiario_preferencial).toMatchObject({ tipo_cedula: 'J' });
   });
 });

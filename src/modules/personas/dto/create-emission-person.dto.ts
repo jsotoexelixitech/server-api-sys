@@ -5,6 +5,7 @@ import {
   IsInt,
   IsNotEmpty,
   IsNumber,
+  IsObject,
   IsOptional,
   IsString,
 } from 'class-validator';
@@ -128,6 +129,27 @@ export class CreateEmissionPersonDto {
   @ApiPropertyOptional({ type: [Object], description: 'Lista de beneficiarios (opcional, informativa).' })
   @IsOptional() @IsArray()
   beneficiarios?: unknown[];
+
+  // [benef-juridico 16-nov-2026] Beneficiario preferencial (adpoliza.cbeneficiario). Puede ser
+  // persona jurídica J/G/C (p. ej. un banco en Vida); lo valida resolverBeneficiarioPreferencial.
+  // Los beneficiarios por fallecimiento (`beneficiarios`) siguen solo persona natural.
+  @ApiPropertyOptional({
+    type: Object,
+    description:
+      'Beneficiario preferencial (opcional). Jurídico: tipo_cedula J/G/C, rif de 9 dígitos y nombre = razón social.',
+    example: {
+      tipo_cedula: 'J',
+      rif: 123456789,
+      nombre: 'BANCO EJEMPLO, C.A.',
+      telefono: '02121234567',
+      correo: 'contacto@banco.com',
+      estado: 1,
+      ciudad: 1,
+      direccion: 'Av. Principal',
+    },
+  })
+  @IsOptional() @IsObject()
+  beneficiario_preferencial?: Record<string, unknown>;
 
   // Planos (viajero 3/7): el whitelist los borra si no están acá; el mapper arma beneficiarios[].
   @ApiPropertyOptional({ example: 'V' }) @IsOptional() @IsString() tipo_cedula_beneficiario?: string;
