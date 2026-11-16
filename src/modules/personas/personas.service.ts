@@ -36,13 +36,16 @@ import {
   viajeroDiasCobro,
 } from './viajero-emission.rules';
 import {
+  BeneficiarioPreferencial,
   MSG_PASAPORTE_CHOQUE,
   PasaporteAlfanumerico,
   aplicarPasaportesAlfanumericos,
   assertIdentidadesPersonas,
   blankToNull,
+  choqueBeneficiarioPreferencial,
   cidPasaporte,
   pasaporteSinChoque,
+  resolverBeneficiarioPreferencial,
   tipoClienteMismaPersona,
 } from './personas-identidad.rules';
 
@@ -1166,6 +1169,103 @@ export class PersonasService {
     }
   }
 
+  /**
+   * [benef-juridico 16-nov-2026] Crea/actualiza en maclient al beneficiario preferencial antes de
+   * emitir. Jurídico (J/G/C) igual que el tomador J: sp_create_maclient_nexus con icedula J/G deja
+   * ipersona J/G; xnombre/xcliente = razón social; apellido, sexo, estado civil y fnac en NULL.
+   * El cid lo arma el SP (J-123456789). Un cliente existente no se pisa (el SP solo completa NULL).
+   */
+  private async crearClienteBeneficiarioPreferencial(
+    pref: BeneficiarioPreferencial,
+    canal: Record<string, unknown>,
+  ): Promise<void> {
+    const T = this.db.types;
+    const chk = this.db.request();
+    chk.input('cci_rif', T.Numeric(13, 0), pref.rif);
+    const existentes = await chk.query(`SELECT cid FROM maclient WITH (NOLOCK) WHERE cci_rif = @cci_rif`);
+    const cidOtro = choqueBeneficiarioPreferencial(
+      (existentes.recordset ?? []) as { cid: unknown }[],
+      pref,
+    );
+    if (cidOtro) {
+      throw new BadRequestException(
+        `beneficiario_preferencial: el número ${pref.rif} ya está registrado en Sis2000 como ${cidOtro}; revise el RIF.`,
+      );
+    }
+
+    const req = this.db.request();
+    req.input('icedula', T.Char(1), pref.tipo);
+    req.input('cci_rif', T.Numeric(13, 0), pref.rif);
+    req.input('xnombre', T.VarChar(120), pref.nombre);
+    req.input('xapellido', T.VarChar(120), pref.apellido);
+    req.input('xcliente', T.VarChar(250), pref.xcliente);
+    req.input('isexo', T.Char(1), pref.sexo);
+    req.input('iestado_civil', T.Char(1), pref.estadoCivil);
+    req.input('fnac', T.DateTime, pref.fnac);
+    req.input('xcorreo', T.VarChar(100), pref.correo);
+    req.input('cpais', T.SmallInt, 58);
+    req.input('cestado', T.SmallInt, pref.estado);
+    req.input('cciudad', T.SmallInt, pref.ciudad);
+    req.input('xdireccion', T.VarChar(250), pref.direccion);
+    req.input('czonapos', T.VarChar(10), null);
+    req.input('xtelefono', T.VarChar(20), pref.telefono);
+    req.input('ifuente', T.VarChar(10), String(canal['ifuente_api'] ?? canal['ifuente'] ?? 'API').slice(0, 10));
+    req.input('cid', T.VarChar(15), null);
+    this.logger.log(
+      `createEmissionPerson: sp_create_maclient_nexus beneficiario preferencial ${pref.tipo}-${pref.rif}`,
+    );
+    try {
+      await req.execute('sp_create_maclient_nexus');
+    } catch (err) {
+      const msg = parseSPError(err);
+      this.logger.error(`sp_create_maclient_nexus beneficiario preferencial ${pref.tipo}-${pref.rif}: ${msg}`);
+      throw new BadRequestException(`beneficiario_preferencial: ${msg}`);
+    }
+  }
+
+  /**
+   * [benef-juridico 16-nov-2026] El SP de emisión llena adpoliza.cbeneficiario con un rif de
+   * TMEMISION_PERSONAS_GENERAL_BENF (beneficiarios por fallecimiento). Si vino un beneficiario
+   * preferencial, ese es el que va a póliza y recibo (cuadro: SPReCpBeneficiarioPref).
+   * Mismo patrón que clearViajeLocalBeneficiary.
+   */
+  private async asignarBeneficiarioPreferencial(
+    cnpoliza: string,
+    fanopol: number | undefined,
+    fmespol: number | undefined,
+    rif: number,
+  ): Promise<void> {
+    const T = this.db.types;
+    let fano = fanopol;
+    let fmes = fmespol;
+    if (fano == null || fmes == null) {
+      const pol = this.db.request();
+      pol.input('cnpoliza', T.NVarChar(30), cnpoliza);
+      const r = await pol.query(`
+        SELECT TOP 1 fanopol, fmespol FROM adpoliza WHERE cnpoliza = @cnpoliza ORDER BY fingreso DESC
+      `);
+      const row = r.recordset?.[0] as Record<string, unknown> | undefined;
+      if (!row) {
+        this.logger.warn(`asignarBeneficiarioPreferencial: póliza ${cnpoliza} no encontrada`);
+        return;
+      }
+      fano = Number(row['fanopol']);
+      fmes = Number(row['fmespol']);
+    }
+    const upd = this.db.request();
+    upd.input('cnpoliza', T.NVarChar(30), cnpoliza);
+    upd.input('fanopol', T.SmallInt, fano);
+    upd.input('fmespol', T.TinyInt, fmes);
+    upd.input('cbeneficiario', T.Numeric(9, 0), rif);
+    await upd.query(`
+      UPDATE adpoliza SET cbeneficiario = @cbeneficiario
+      WHERE cnpoliza = @cnpoliza AND fanopol = @fanopol AND fmespol = @fmespol;
+      UPDATE adrecibos SET cbeneficiario = @cbeneficiario
+      WHERE cnpoliza = @cnpoliza AND fanopol = @fanopol AND fmespol = @fmespol;
+    `);
+    this.logger.log(`asignarBeneficiarioPreferencial OK cnpoliza=${cnpoliza} cbeneficiario=${rif}`);
+  }
+
   // ── Validación de persona (speeValidatePersonGeneral) ──────────────────────
   async validateEmissionPerson(body: Record<string, unknown>) {
     // Pasaporte alfanumérico de titular/tomador: rif_* = dígitos y revisión de choque ANTES de pagar.
@@ -1348,12 +1448,20 @@ export class PersonasService {
         asegurados as Record<string, unknown>[],
         beneficiarios,
       );
+      // [benef-juridico 16-nov-2026] Beneficiario preferencial: el único beneficiario que puede ser J/G/C.
+      let beneficiarioPreferencial = resolverBeneficiarioPreferencial(
+        b['beneficiario_preferencial'] ??
+          (b['funeral'] && typeof b['funeral'] === 'object'
+            ? (b['funeral'] as Record<string, unknown>)['beneficiario_preferencial']
+            : undefined),
+      );
       if (
         isViajeroPlan(cramoEmision, planEmision) ||
         isViajeLocalPlan(cramoEmision, planEmision)
       ) {
         beneficiarios = [];
         b['beneficiarios'] = [];
+        beneficiarioPreferencial = null;
       }
 
       await this.assertEmissionPersonValidated(
@@ -1529,6 +1637,9 @@ export class PersonasService {
           }
           await this.crearClientePasaporte(b, p, canal);
         }
+        if (beneficiarioPreferencial) {
+          await this.crearClienteBeneficiarioPreferencial(beneficiarioPreferencial, canal);
+        }
 
         const preEmisionSp = SP_PRE_EMISION_PERSONAS;
         this.logger.log(`=== INICIO EMISION LOCAL SP ${preEmisionSp} ===`);
@@ -1685,8 +1796,27 @@ export class PersonasService {
           }
         }
 
+        if (beneficiarioPreferencial) {
+          try {
+            await this.asignarBeneficiarioPreferencial(cnpoliza, fanopol, fmespol, beneficiarioPreferencial.rif);
+          } catch (prefErr) {
+            const msg = prefErr instanceof Error ? prefErr.message : String(prefErr);
+            this.logger.error(`asignarBeneficiarioPreferencial falló cnpoliza=${cnpoliza}: ${msg}`);
+          }
+        }
+
         try {
-          await this.syncBeneficiarioDir(beneficiarios as Record<string, unknown>[]);
+          const conPreferencial = beneficiarioPreferencial
+            ? [
+              ...(beneficiarios as Record<string, unknown>[]),
+              {
+                xrif_beneficiario: beneficiarioPreferencial.rif,
+                cestado: beneficiarioPreferencial.estado,
+                cciudad: beneficiarioPreferencial.ciudad,
+              },
+            ]
+            : (beneficiarios as Record<string, unknown>[]);
+          await this.syncBeneficiarioDir(conPreferencial);
         } catch (syncErr) {
           const msg = syncErr instanceof Error ? syncErr.message : String(syncErr);
           this.logger.error(`syncBeneficiarioDir falló cnpoliza=${cnpoliza}: ${msg}`);
