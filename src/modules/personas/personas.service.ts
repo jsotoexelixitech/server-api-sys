@@ -42,7 +42,9 @@ import {
   aplicarPasaportesAlfanumericos,
   assertIdentidadesPersonas,
   blankToNull,
+  beneficiariosJuridicos,
   choqueBeneficiarioPreferencial,
+  esBeneficiarioJuridico,
   cidPasaporte,
   pasaporteSinChoque,
   resolverBeneficiarioPreferencial,
@@ -322,7 +324,10 @@ export class PersonasService {
     getPar: (p: unknown) => number,
   ): string | null {
     if (!lista.length) return null;
-    const mapped = lista.map((b) => ({
+    const mapped = lista.map((b) => {
+      // [benef-juridico 16-nov-2026] J/G/C: nombre = razón social, apellido vacío, sin sexo/estado civil/fnac.
+      const pj = esBeneficiarioJuridico(b);
+      return {
       tipo_cedula_beneficiario: String(
         b.icedula_beneficiario ?? b.tipo_cedula_beneficiario ?? b.tipoDoc ?? 'V',
       ).charAt(0),
@@ -330,12 +335,16 @@ export class PersonasService {
         b.xrif_beneficiario ?? b.rif_beneficiario ?? b.identificacion,
       ),
       nombre_beneficiario: b.xnombre_beneficiario ?? b.nombre_beneficiario ?? b.nombre ?? null,
-      apellido_beneficiario: b.xapellido_beneficiario ?? b.apellido_beneficiario ?? b.apellido ?? null,
-      sexo_beneficiario: String(
-        b.isexo_beneficiario ?? b.sexo_beneficiario ?? (b.sexo ? String(b.sexo)[0].toUpperCase() : 'M'),
-      ).charAt(0),
-      estado_civil_beneficiario: String(b.iestado_civil_beneficiario ?? 'S').charAt(0),
-      fnac_beneficiario: b.fnac_beneficiario ?? b.fechaNac ?? null,
+      apellido_beneficiario: pj
+        ? ''
+        : b.xapellido_beneficiario ?? b.apellido_beneficiario ?? b.apellido ?? null,
+      sexo_beneficiario: pj
+        ? null
+        : String(
+          b.isexo_beneficiario ?? b.sexo_beneficiario ?? (b.sexo ? String(b.sexo)[0].toUpperCase() : 'M'),
+        ).charAt(0),
+      estado_civil_beneficiario: pj ? null : String(b.iestado_civil_beneficiario ?? 'S').charAt(0),
+      fnac_beneficiario: pj ? null : b.fnac_beneficiario ?? b.fechaNac ?? null,
       nparentesco_beneficiario: getPar(
         b.nparentesco_beneficiario ?? b.cparen_beneficiario ?? b.parentesco,
       ),
@@ -346,7 +355,8 @@ export class PersonasService {
         b.xtelefono_beneficiario ?? b.telefono_beneficiario ?? b.telefono ?? null,
       correo_beneficiario: b.xcorreo_beneficiario ?? b.correo_beneficiario ?? b.email ?? null,
       pporce_beneficiario: Number(b.pporce_beneficiario ?? b.pporcen ?? b.pporce) || 0,
-    }));
+      };
+    });
     return JSON.stringify(mapped);
   }
 
@@ -1170,14 +1180,17 @@ export class PersonasService {
   }
 
   /**
-   * [benef-juridico 16-nov-2026] Crea/actualiza en maclient al beneficiario preferencial antes de
-   * emitir. Jurídico (J/G/C) igual que el tomador J: sp_create_maclient_nexus con icedula J/G deja
-   * ipersona J/G; xnombre/xcliente = razón social; apellido, sexo, estado civil y fnac en NULL.
-   * El cid lo arma el SP (J-123456789). Un cliente existente no se pisa (el SP solo completa NULL).
+   * [benef-juridico 16-nov-2026] Crea/actualiza en maclient a un beneficiario (preferencial o de la
+   * lista) antes de emitir. Jurídico (J/G/C) igual que el tomador J: sp_create_maclient_nexus con
+   * icedula J/G deja ipersona J/G; xnombre/xcliente = razón social; apellido, sexo, estado civil y
+   * fnac en NULL; cid con el formato de La Mundial 'J-40084902-0' (el SP de emisión lo pasaría como
+   * 'J-400849020'; como el cliente ya existe, sp_create_maclient_nexus no le cambia el cid).
+   * Un cliente existente no se pisa (el SP solo completa lo que esté en NULL).
    */
-  private async crearClienteBeneficiarioPreferencial(
+  private async crearClienteBeneficiario(
     pref: BeneficiarioPreferencial,
     canal: Record<string, unknown>,
+    etiqueta = 'beneficiario_preferencial',
   ): Promise<void> {
     const T = this.db.types;
     const chk = this.db.request();
@@ -1189,7 +1202,7 @@ export class PersonasService {
     );
     if (cidOtro) {
       throw new BadRequestException(
-        `beneficiario_preferencial: el número ${pref.rif} ya está registrado en Sis2000 como ${cidOtro}; revise el RIF.`,
+        `${etiqueta}: el número ${pref.rif} ya está registrado en Sis2000 como ${cidOtro}; revise el RIF.`,
       );
     }
 
@@ -1210,16 +1223,16 @@ export class PersonasService {
     req.input('czonapos', T.VarChar(10), null);
     req.input('xtelefono', T.VarChar(20), pref.telefono);
     req.input('ifuente', T.VarChar(10), String(canal['ifuente_api'] ?? canal['ifuente'] ?? 'API').slice(0, 10));
-    req.input('cid', T.VarChar(15), null);
+    req.input('cid', T.VarChar(15), pref.cid);
     this.logger.log(
-      `createEmissionPerson: sp_create_maclient_nexus beneficiario preferencial ${pref.tipo}-${pref.rif}`,
+      `createEmissionPerson: sp_create_maclient_nexus ${etiqueta} ${pref.cid ?? `${pref.tipo}-${pref.rif}`}`,
     );
     try {
       await req.execute('sp_create_maclient_nexus');
     } catch (err) {
       const msg = parseSPError(err);
-      this.logger.error(`sp_create_maclient_nexus beneficiario preferencial ${pref.tipo}-${pref.rif}: ${msg}`);
-      throw new BadRequestException(`beneficiario_preferencial: ${msg}`);
+      this.logger.error(`sp_create_maclient_nexus ${etiqueta} ${pref.tipo}-${pref.rif}: ${msg}`);
+      throw new BadRequestException(`${etiqueta}: ${msg}`);
     }
   }
 
@@ -1441,7 +1454,7 @@ export class PersonasService {
           }
         }
       }
-      // Tomador J/G/C permitido; titular/asegurados/beneficiarios solo persona natural.
+      // Tomador y beneficiarios J/G/C permitidos; titular y asegurados solo persona natural.
       // Identificación alfanumérica → 400, salvo pasaporte de titular/tomador con cid_*.
       assertIdentidadesPersonas(
         b,
@@ -1463,6 +1476,8 @@ export class PersonasService {
         b['beneficiarios'] = [];
         beneficiarioPreferencial = null;
       }
+      // [benef-juridico 16-nov-2026] Beneficiarios J/G/C de la lista (porcentaje / pebenefi), ya validados.
+      const beneficiariosPJ = beneficiariosJuridicos(beneficiarios);
 
       await this.assertEmissionPersonValidated(
         b,
@@ -1638,7 +1653,12 @@ export class PersonasService {
           await this.crearClientePasaporte(b, p, canal);
         }
         if (beneficiarioPreferencial) {
-          await this.crearClienteBeneficiarioPreferencial(beneficiarioPreferencial, canal);
+          await this.crearClienteBeneficiario(beneficiarioPreferencial, canal);
+        }
+        for (const [i, pj] of beneficiariosPJ.entries()) {
+          if (beneficiariosPJ.findIndex((x) => x.rif === pj.rif) !== i) continue;
+          if (beneficiarioPreferencial?.rif === pj.rif) continue;
+          await this.crearClienteBeneficiario(pj, canal, 'beneficiarios');
         }
 
         const preEmisionSp = SP_PRE_EMISION_PERSONAS;
