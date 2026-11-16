@@ -640,6 +640,10 @@ export class ValrepService {
         sumaAsegAd: 0,
         recargo: 0,
         recargoRcv: body.precargorcv ?? 0,
+        // RCV Binacional: tripulantes elegidos (solo con bpuestos_informados; si no, puestos del modelo).
+        ...(body.bpuestos_informados === true && body.puestos != null
+          ? { puestos: body.puestos, bpuestos_informados: true }
+          : {}),
       });
 
       const mprimaext = calc.pa;
@@ -1376,6 +1380,11 @@ export class ValrepService {
       calcReq.input('cusuario', T.Numeric(20), cusuario);
       calcReq.input('coberAdicional', T.VarChar(2), body.coberAdicional ?? 'RC');
       calcReq.input('ifrecuencia', T.Char(1), ifrecuencia);
+      // RCV Binacional: el APOV se cobra por los tripulantes elegidos (0 = sin tripulantes). Solo se envía
+      // cuando se pide, así el SP sin @bpuestos_informados sigue funcionando.
+      if (body.bpuestos_informados === true && iplaca === 'B' && body.puestos != null) {
+        calcReq.input('bpuestos_informados', T.Bit, true);
+      }
 
       const result = await calcReq.execute(spName);
       const recordsets = (result.recordsets ?? []) as CalculatePlanCoberturasRow[][];

@@ -1,6 +1,6 @@
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
 import { Type } from 'class-transformer';
-import { IsIn, IsInt, IsNotEmpty, IsOptional, IsString, Max, MaxLength, Min, MinLength, Matches } from 'class-validator';
+import { IsBoolean, IsIn, IsInt, IsNotEmpty, IsOptional, IsString, Max, MaxLength, Min, MinLength, Matches } from 'class-validator';
 import { AUTO_IFRECUENCIA_VALUES } from '../constants/auto-ifrecuencia.constants';
 
 export class GetCotizacionAutoDto {
@@ -55,6 +55,26 @@ export class GetCotizacionAutoDto {
   @IsOptional()
   @IsIn(['N', 'E', 'B'])
   iplaca?: string;
+
+  @ApiPropertyOptional({
+    example: 2,
+    description: 'RCV Binacional: tripulantes elegidos (0 = sin tripulantes). Solo se usa con bpuestos_informados.',
+  })
+  @IsOptional()
+  @Type(() => Number)
+  @IsInt()
+  @Min(0)
+  puestos?: number;
+
+  @ApiPropertyOptional({
+    example: true,
+    description:
+      'RCV Binacional (iplaca B): true = puestos son los tripulantes elegidos y el APOV se cobra por ellos. ' +
+      'Sin el campo se usa la regla de siempre.',
+  })
+  @IsOptional()
+  @IsBoolean()
+  bpuestos_informados?: boolean;
 
   @ApiPropertyOptional({ example: 0, description: 'Toneladas de carga (≥0)' })
   @IsOptional()

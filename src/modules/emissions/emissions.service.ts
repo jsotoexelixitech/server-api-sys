@@ -95,6 +95,12 @@ export class EmissionsService {
   }
 
   /** Entero Sis2000 (estado/ciudad/ramo); null si vacío. */
+  /** RCV Binacional con tripulantes elegidos: bpuestos_informados true, placa B y npuestos enviado (0 vale). */
+  private puestosInformadosBinacional(b: Record<string, unknown>, iplaca: unknown): boolean {
+    const flag = ['true', '1'].includes(String(b['bpuestos_informados'] ?? '').trim().toLowerCase());
+    return flag && String(iplaca ?? '').toUpperCase() === 'B' && this.intField(this.pick(b, 'npuestos')) != null;
+  }
+
   private intField(value: unknown): number | null {
     if (value == null || String(value).trim() === '') return null;
     const n = parseInt(String(value), 10);
@@ -1820,6 +1826,11 @@ export class EmissionsService {
     const mprimaEsperada = b['mprima_esperada'];
     if (typeof mprimaEsperada === 'number') {
       params['mprima_esperada'] = { type: T.Numeric(18, 2), value: mprimaEsperada };
+    }
+    // RCV Binacional: npuestos son los tripulantes elegidos (0 = sin tripulantes) y el APOV se cobra por
+    // ellos. Solo si el front lo pide en placa B; el SP sin @bpuestos_informados no recibe nada nuevo.
+    if (this.puestosInformadosBinacional(b, params['iplaca']?.value)) {
+      params['bpuestos_informados'] = { type: T.Bit, value: true };
     }
 
     Object.entries(params).forEach(([key, field]) =>

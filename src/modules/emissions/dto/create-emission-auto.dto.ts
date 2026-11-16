@@ -268,6 +268,16 @@ export class CreateEmissionAutoDto {
   @IsInt()
   npuestos?: number;
 
+  @ApiPropertyOptional({
+    example: true,
+    description:
+      'RCV Binacional (iplaca B): true = npuestos son los tripulantes elegidos (0 = sin tripulantes) y el APOV ' +
+      'se cobra por ellos. Sin el campo se usa la regla de siempre.',
+  })
+  @IsOptional()
+  @IsBoolean()
+  bpuestos_informados?: boolean;
+
   @ApiPropertyOptional({ example: 60, description: 'Toneladas del vehículo (para carga)' })
   @IsOptional()
   @IsInt()
