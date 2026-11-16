@@ -177,7 +177,7 @@ export const envValidationSchema = Joi.object({
   /** Tamaño de paquete TDS de la conexión de origen (bytes). */
   REPORTES_SYNC_ORIGIN_PACKET_SIZE: Joi.number().integer().min(512).max(32767).default(16384),
   /** Entidades que refresca el proceso programado (separadas por coma). */
-  REPORTES_SYNC_SCHEDULE_ENTIDADES: Joi.string().default('recibos,siniestros'),
+  REPORTES_SYNC_SCHEDULE_ENTIDADES: Joi.string().default('recibos,siniestros,polizas'),
   /**
    * Conexión a la BD de ORIGEN de cada aseguradora (sync de reportes). Se convierten a boolean:
    * el driver mssql rechaza el texto "false"/"true" en `encrypt` y el sync falla con
