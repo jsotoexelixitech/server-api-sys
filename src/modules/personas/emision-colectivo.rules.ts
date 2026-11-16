@@ -62,6 +62,9 @@ export interface CanalEmisorColectivo {
   cscanalalt: number | null;
 }
 
+/** Canal directo de La Mundial (sin intermediario). */
+export const CTIPOCANAL_DIRECTO = 'D';
+
 /** Canal sin registro en maclient_api: productor directo, sin canal alterno. */
 export function canalColectivoPorDefecto(cproductor: number): CanalEmisorColectivo {
   return {
@@ -69,7 +72,7 @@ export function canalColectivoPorDefecto(cproductor: number): CanalEmisorColecti
     xcanal_venta: 'Cotizador Colectivo',
     corigen_rel: 'WE',
     ifuente: 'NEXUS',
-    ctipocanal: null,
+    ctipocanal: CTIPOCANAL_DIRECTO,
     ccanalalt: null,
     cscanalalt: null,
   };
@@ -86,12 +89,28 @@ const text = (v: unknown): string | null => {
   return s === '' ? null : s;
 };
 
-/** Fila de maclient_api → canal. Solo los canales T/A/D llevan canal alterno (igual que SysIP). */
+/**
+ * Fila de maclient_api (o key nest_) → canal. Solo los canales T/A/D llevan canal alterno (igual que SysIP).
+ * Si la key no trae tipo de canal y emite con el productor directo de La Mundial, el canal es directo ('D'):
+ * con la key de SysIP la póliza quedaba en 'D' y con la key nest_ quedaba sin canal (16-nov-2026).
+ */
 export function canalColectivoDesdeFila(fila: Record<string, unknown>, cproductorDefecto: number): CanalEmisorColectivo {
   const ctipocanal = text(fila['ctipocanal']);
   const conCanalAlterno = ctipocanal != null && ['T', 'A', 'D'].includes(ctipocanal.toUpperCase());
+  const cproductor = num(fila['cproductor']) ?? cproductorDefecto;
+  if (!conCanalAlterno && cproductor === cproductorDefecto) {
+    return {
+      cproductor,
+      xcanal_venta: text(fila['xcanal_venta']),
+      corigen_rel: text(fila['corigen_rel']),
+      ifuente: text(fila['ifuente_api']) ?? 'NEXUS',
+      ctipocanal: CTIPOCANAL_DIRECTO,
+      ccanalalt: null,
+      cscanalalt: null,
+    };
+  }
   return {
-    cproductor: num(fila['cproductor']) ?? cproductorDefecto,
+    cproductor,
     xcanal_venta: text(fila['xcanal_venta']),
     corigen_rel: text(fila['corigen_rel']),
     ifuente: text(fila['ifuente_api']) ?? 'NEXUS',
@@ -214,6 +233,8 @@ export interface ValoresSpColectivo {
   cmoneda: string;
   msumaaseg: number | null;
   mprimaext: number;
+  /** Comisión del cotizador (%); null = la de la plantilla. */
+  pcomision: number | null;
   ifrecuencia: string;
   femision: string;
   fdesde: string;
@@ -274,6 +295,7 @@ export function valoresSpColectivo(dto: CreateEmissionColectivoDto, canal: Canal
     cmoneda: dto.cmoneda,
     msumaaseg: dto.msumaaseg ?? null,
     mprimaext: dto.prima,
+    pcomision: dto.pcomision ?? null,
     ifrecuencia: dto.frecuencia,
     femision: dto.fecha_emision.slice(0, 10),
     fdesde: dto.fdesde.slice(0, 10),

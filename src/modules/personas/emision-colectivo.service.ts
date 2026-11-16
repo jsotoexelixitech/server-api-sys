@@ -154,6 +154,7 @@ export class EmisionColectivoService {
     req.input('cmoneda', T.Char(4), v.cmoneda);
     req.input('msumaaseg', T.Numeric(18, 2), v.msumaaseg);
     req.input('mprimaext', T.Numeric(18, 2), v.mprimaext);
+    req.input('pcomision', T.Numeric(9, 2), v.pcomision);
     req.input('ifrecuencia', T.Char(1), v.ifrecuencia);
     req.input('femision', T.DateTime, toDate(v.femision));
     req.input('fdesde', T.Date, toDate(v.fdesde));

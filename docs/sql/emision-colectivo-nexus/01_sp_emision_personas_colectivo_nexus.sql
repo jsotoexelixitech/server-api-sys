@@ -3,6 +3,9 @@
 -- tarifas y rangos de edad) a la póliza nueva de la empresa, cobra la prima del cotizador (mprimaext de la solicitud)
 -- repartida entre las coberturas por su suma asegurada, exige tasa, numera recibos con sp_contador_nexus y devuelve
 -- errores con código (prefijo COLECTIVO_...). Aplicar ANTES de 02 (la pre-emisión la llama).
+-- [colectivo-nexus 16-nov-2026] Valen la suma asegurada y la comisión del cotizador, no las de la plantilla:
+-- la suma de la solicitud va a la cobertura principal (la de mayor suma en la plantilla; las demás conservan la suya)
+-- y @pcomision_cotizador se aplica a todas las coberturas. Sin esos datos queda lo de la plantilla.
 -- ============================================================================
 -- Author:      Hamilton Leon
 -- Create date: 2026-09-29
@@ -16,6 +19,8 @@ CREATE OR ALTER PROCEDURE [dbo].[sp_emision_personas_colectivo_nexus]
 	@tplFanopol    SMALLINT,
 	@tplFmespol    TINYINT,
 	@tplFdesde     DATETIME,
+	-- [colectivo-nexus 16-nov-2026] Comisión del productor con la que se cotizó (%). NULL = la de la plantilla.
+	@pcomision_cotizador NUMERIC(9, 2) = NULL,
 	@pSuccess      BIT           = 0 OUTPUT,
 	@pErrorMessage NVARCHAR(MAX) = NULL OUTPUT
 AS
@@ -242,8 +247,8 @@ BEGIN
 		-- 96,5 % con el 62,5 % de la suma). Sin recibos en la plantilla: peso = suma asegurada (msumaext); sin suma:
 		-- partes iguales. La última fila absorbe el redondeo para que la suma por recibo cuadre al centavo.
 		-- msumaext e isuma de la cobertura van a adpoltar/adpolcob/adrecibos como en la emisión del escritorio.
-		CREATE TABLE #reparto (nfila INT IDENTITY(1, 1) PRIMARY KEY, ccobertura CHAR(4), ctarifa CHAR(4),
-			pcomision NUMERIC(9, 2), peso NUMERIC(18, 2), msumaext NUMERIC(18, 2), isuma CHAR(1))
+		CREATE TABLE #reparto (nfila INT IDENTITY(1, 1) PRIMARY KEY, ccobertura CHAR(4) COLLATE DATABASE_DEFAULT, ctarifa CHAR(4) COLLATE DATABASE_DEFAULT,
+			pcomision NUMERIC(9, 2), peso NUMERIC(18, 2), msumaext NUMERIC(18, 2), isuma CHAR(1) COLLATE DATABASE_DEFAULT)
 
 		INSERT INTO #reparto (ccobertura, ctarifa, pcomision, peso, msumaext, isuma)
 		SELECT t.ccobertura, t.ctarifa, ISNULL(t.pcomision, 0), ISNULL(h.mprimaext, 0), ISNULL(t.msumaext, 0),
@@ -280,6 +285,34 @@ BEGIN
 		-- Plantilla sin sumas en ninguna cobertura: se conserva el comportamiento anterior (suma de la solicitud en cada fila).
 		IF ISNULL(@suma_plantilla, 0) <= 0
 			UPDATE #reparto SET msumaext = ISNULL(@msumaaseg, 0)
+		-- [colectivo-nexus 16-nov-2026] Vale la suma cotizada: va a la cobertura principal, la de mayor suma en la
+		-- plantilla (a igual suma, la de mayor prima). Las demás (muerte accidental, invalidez, funerario...) conservan
+		-- la de la plantilla. En la 376: cobertura 13 de 5000 a la suma cotizada, 14/15/16 quedan en 1000.
+		ELSE IF ISNULL(@msumaaseg, 0) > 0
+		BEGIN
+			DECLARE @nfila_principal INT = (SELECT TOP 1 nfila FROM #reparto ORDER BY msumaext DESC, peso DESC, nfila)
+			UPDATE #reparto SET msumaext = @msumaaseg WHERE nfila = @nfila_principal
+			-- pctarifas de la póliza nueva: de ahí leen la suma pepoltar_ind y los endosos.
+			UPDATE t SET t.msumaext = @msumaaseg, t.msuma = ROUND(@msumaaseg * @ptasamon, 2)
+			FROM dbo.pctarifas t
+			JOIN #reparto r ON r.nfila = @nfila_principal AND r.ccobertura = t.ccobertura AND r.ctarifa = t.ctarifa
+			WHERE t.cpoliza = @cpoliza AND t.fanopol = @fano AND t.fmespol = @fmes
+		END
+
+		-- [colectivo-nexus 16-nov-2026] Vale la comisión cotizada: se aplica a todas las coberturas del reparto y queda
+		-- grabada en las coberturas y tarifas de la póliza nueva (no la negociada en la plantilla).
+		IF @pcomision_cotizador IS NOT NULL
+		BEGIN
+			IF @pcomision_cotizador < 0 OR @pcomision_cotizador > 100
+			BEGIN
+				;THROW 51044, 'COLECTIVO_COMISION_INVALIDA: la comisión del cotizador debe estar entre 0 y 100.', 1;
+			END
+			UPDATE #reparto SET pcomision = @pcomision_cotizador
+			UPDATE dbo.pctarifas SET pcomision = @pcomision_cotizador
+			WHERE cpoliza = @cpoliza AND fanopol = @fano AND fmespol = @fmes
+			UPDATE dbo.pccoberturas SET pcomision = @pcomision_cotizador
+			WHERE cpoliza = @cpoliza AND fanopol = @fano AND fmespol = @fmes
+		END
 
 		-- ============================================================================================
 		-- GRUPO COLECTIVO (MULTI-TITULAR): TMEMISION_PERSONAS_GENERAL_ASEG trae a todos los titulares
