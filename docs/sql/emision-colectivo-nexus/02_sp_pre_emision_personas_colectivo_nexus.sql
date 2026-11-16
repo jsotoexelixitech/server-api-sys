@@ -5,6 +5,7 @@
 -- y llama a sp_emision_personas_colectivo_nexus. Aplicar DESPUÉS de 01.
 -- [colectivo-nexus 16-nov-2026] @pcomision: comisión del productor con la que se cotizó; se pasa al 01, que la aplica
 -- a todas las coberturas (NULL = la de la plantilla). Aplicar ANTES de desplegar el Nest que la envía.
+-- [colectivo-nexus 16-nov-2026] Ya no rechaza por edad contra la plantilla: se emite lo que trae la cotización.
 -- ============================================================================
 -- Author:      Hamilton Leon
 -- Create date: 2026-09-29
@@ -335,28 +336,10 @@ BEGIN
 				nestatura_asegurado numeric(8, 2) '$.nestatura_asegurado'
 			) c
 
-		-- Validacion preventiva de edades del grupo (todos los titulares y sus dependientes)
-		-- contra la matriz de elegibilidad pcasegurados
-		IF EXISTS (SELECT 1 FROM dbo.pcasegurados WITH (NOLOCK) WHERE cpoliza = @tplCpoliza AND fanopol = @tplFanopol AND fmespol = @tplFmespol)
-		BEGIN
-			SELECT @fueraDeRango = COUNT(1)
-			FROM dbo.TMEMISION_PERSONAS_GENERAL_ASEG a WITH (NOLOCK)
-			WHERE a.id = @id
-			  AND NOT EXISTS (
-					SELECT 1
-					FROM dbo.pcasegurados pa WITH (NOLOCK)
-					WHERE pa.cpoliza = @tplCpoliza AND pa.fanopol = @tplFanopol AND pa.fmespol = @tplFmespol
-					  -- [colectivo-nexus 11-nov-2026] csexo 'A' = ambos sexos (549 de 551 filas en QA); el original lo rechazaba.
-					  AND (pa.csexo = a.isexo_asegurado OR pa.csexo = 'A')
-					  AND DATEDIFF(YEAR, a.fnac_asegurado, @femision) BETWEEN pa.cedad_as_mn AND pa.cedad_as_mx
-			  )
-
-			IF ISNULL(@fueraDeRango, 0) > 0
-			BEGIN
-				SET @error = CONCAT('COLECTIVO_EDAD_FUERA_DE_RANGO: ', @fueraDeRango, ' asegurado(s) del grupo fuera del rango de edad permitido para este plan colectivo.')
-				;THROW 51014, @error, 1;
-			END
-		END
+		-- [colectivo-nexus 16-nov-2026] Sin validación de edades contra pcasegurados de la plantilla: la póliza se emite
+		-- con los datos tal como vienen de la cotización. Las edades por parentesco y grupo etario las valida el cotizador
+		-- al cargar el censo; si la plantilla tiene rangos más cortos (p. ej. padres hasta 75) no debe bloquear la emisión.
+		-- (Antes: COLECTIVO_EDAD_FUERA_DE_RANGO, THROW 51014.)
 
 		-- Beneficiarios declarados de forma independiente (si la capa intermedia los envia aparte de los titulares)
 		IF (@beneficiarios IS NOT NULL AND ISJSON(@beneficiarios) = 1)
