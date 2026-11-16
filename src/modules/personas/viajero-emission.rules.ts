@@ -9,6 +9,12 @@ export const VIAJERO_LOCAL_RAMO = 25;
 /** Plan VIAJE local genérico (prorrata por fechas). */
 export const VIAJE_LOCAL_PLAN = 'VIAJE';
 
+/**
+ * Planes Viajero Local por días del ramo 25 con las mismas condiciones de emisión que VIAJE
+ * (prorrata por días, un titular, sin beneficiarios). R-095117: VIAJE5 (3.000 $) y VIAJE6 (5.000 $).
+ */
+export const VIAJE_LOCAL_PLANES: readonly string[] = [VIAJE_LOCAL_PLAN, 'VIAJE5', 'VIAJE6'];
+
 /** Plan Viajero Nacional 3 días (ramo 25 · producto 1). */
 export const VIAJE_NACIONAL_PLAN = 'VIAJE3';
 
@@ -44,7 +50,7 @@ export function isViajeLocalPlan(
   plan: string | null | undefined,
 ): boolean {
   if (cramo !== VIAJERO_LOCAL_RAMO) return false;
-  return String(plan ?? '').trim().toUpperCase() === VIAJE_LOCAL_PLAN;
+  return VIAJE_LOCAL_PLANES.includes(String(plan ?? '').trim().toUpperCase());
 }
 
 /** Planes con prima = ndias × tarifa diaria (VIAJE ramo 25, VIAJ* ramo 5). */
