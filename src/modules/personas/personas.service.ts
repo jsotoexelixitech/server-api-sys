@@ -29,9 +29,14 @@ import {
   assertViajeroCotizacion,
   assertViajeroEmission,
   assertViajeroProrrataCotizacion,
+  assertViajeLocalAnualDias,
+  diasViajeInclusivos,
+  isViajeLocalAnualProrrataPlan,
   isViajeLocalPlan,
   isViajeroPlan,
   isViajeroProrrataPlan,
+  prorrataAnualPorDias,
+  round2,
 } from './viajero-emission.rules';
 import {
   MSG_PASAPORTE_CHOQUE,
@@ -98,6 +103,10 @@ export interface CotizacionPerResult {
   ptasa: number;
   /** Coberturas del plan, sumadas entre asegurados. Vacío si el SP no trae detalle. */
   coberturas: CotizacionPerCobertura[];
+  /** VIAJE5/VIAJE6 (ramo 25): días del viaje prorrateados. */
+  ndias?: number;
+  /** VIAJE5/VIAJE6 (ramo 25): prima anual del plan en USD antes de prorratear. */
+  mprimaextAnual?: number;
 }
 
 /** Formato legacy SysIP (`/app/getCotizacionPer`, `/external/getCotizacionPer`). */
@@ -580,7 +589,9 @@ export class PersonasService {
   ): Promise<PlanPerItem[]> {
     if (!this.isViajeroDayProduct(cproducto)) return planes;
 
-    const byCplan = new Map(planes.map((p) => [p.cplan, p]));
+    // Ramo + plan: VIAJE5/VIAJE6 existen en el ramo 5 (4 y 5 días) y en el 25 (3.000 / 5.000 $).
+    const planKey = (cramo: unknown, cplan: string) => `${Number(cramo)}|${cplan}`;
+    const byPlan = new Map(planes.map((p) => [planKey(p.cramo, p.cplan), p]));
     try {
       const T = this.db.types;
       const req = this.db.request();
@@ -619,7 +630,8 @@ export class PersonasService {
         const key = `${cplan}|${ndias}`;
         if (seen.has(key)) continue;
         seen.add(key);
-        const base = byCplan.get(cplan);
+        const base = byPlan.get(planKey(row['cramo'], cplan))
+          ?? planes.find((p) => p.cplan === cplan && !isViajeLocalAnualProrrataPlan(p.cramo, p.cplan));
         const xplanRaw = this.optionalText(row['xplan']) || base?.xplan || cplan;
         expanded.push({
           cplan,
@@ -638,10 +650,19 @@ export class PersonasService {
 
       if (!expanded.length) return planes;
 
+      // VIAJE5/VIAJE6 ramo 25 (R-095117): prorrata por los días del viaje, sin ndias en
+      // maplanes_frec. Se conservan tal como los asignó el canal (mausuplan).
+      for (const p of planes) {
+        if (!isViajeLocalAnualProrrataPlan(p.cramo, p.cplan)) continue;
+        if (expanded.some((e) => planKey(e.cramo, e.cplan) === planKey(p.cramo, p.cplan))) continue;
+        expanded.push({ ...p });
+      }
+
       // Parentescos / nmax si el SP no trajo el cplan (solo maplanes_frec).
       const missingParen = expanded.filter((p) => !(p.parentescos?.length));
       for (const plan of missingParen) {
-        const fromSp = planes.find((p) => p.cplan === plan.cplan);
+        const fromSp = byPlan.get(planKey(plan.cramo, plan.cplan))
+          ?? planes.find((p) => p.cplan === plan.cplan && !isViajeLocalAnualProrrataPlan(p.cramo, p.cplan));
         if (fromSp?.parentescos?.length) {
           plan.parentescos = fromSp.parentescos;
           continue;
@@ -965,9 +986,53 @@ export class PersonasService {
     }
   }
 
+  /** Días de VIAJE5/VIAJE6: fechas del viaje (inclusivas) o ndias; de 1 a 10. */
+  private resolveViajeLocalAnualNdias(body: CotizacionPerDto): number {
+    const fdesde = body.fdesde?.trim();
+    const fhasta = body.fhasta?.trim();
+    let ndias: number;
+    if (fdesde && fhasta) {
+      ndias = diasViajeInclusivos(fdesde, fhasta);
+    } else if (typeof body.ndias === 'number') {
+      ndias = body.ndias;
+    } else {
+      throw new BadRequestException('Viajero Local por días: informe fdesde y fhasta del viaje.');
+    }
+    assertViajeLocalAnualDias(ndias);
+    return ndias;
+  }
+
+  /** spCalculoPer de un asegurado: total (2.º recordset) y detalle por cobertura (1.º). */
+  private async execCalculoPer(
+    body: CotizacionPerDto,
+    ramo: number,
+    asegurado: CotizacionPerDto['asegurados'][number],
+    ptasamon: number | null,
+    ifrecuencia: string,
+    msumaaseg: number | null,
+  ): Promise<{ mprima: number; mprimaext: number; detalle: Record<string, unknown>[] }> {
+    const T = this.db.types;
+    const req = this.db.request();
+    req.input('ptasamon', T.Numeric(13, 6), ptasamon);
+    req.input('cramo', T.Int, ramo);
+    req.input('cplan', T.VarChar(10), body.cplan);
+    req.input('cparen', T.Int, asegurado.cparen);
+    req.input('xrif_asegurado', T.VarChar(10), String(asegurado.xrif_asegurado).replace(/\D/g, ''));
+    req.input('nedad_asegurado', T.Int, asegurado.nedad_asegurado);
+    req.input('ifrecuencia', T.Char(1), ifrecuencia);
+    req.input('msumaaseg', T.Numeric(18, 2), msumaaseg);
+
+    const result = await req.execute(this.spCalculoPerName());
+    const totals = (result.recordsets?.[1] ?? []) as Record<string, unknown>[];
+    return {
+      mprima: totals.length ? Number(totals[0]['mprima']) || 0 : 0,
+      mprimaext: totals.length ? Number(totals[0]['mprimaext']) || 0 : 0,
+      detalle: (result.recordsets?.[0] ?? []) as Record<string, unknown>[],
+    };
+  }
+
   async getCotizacionPer(body: CotizacionPerDto): Promise<CotizacionPerResult> {
     try {
-      const T = this.db.types;
       const ramo = body.cramo ?? this.defaultRamo;
 
       assertViajeroCotizacion(ramo, body.cplan, body.asegurados.length);
@@ -984,7 +1049,35 @@ export class PersonasService {
       let mprimatotalext = 0;
       const coberturas = new Map<string, CotizacionPerCobertura>();
 
+      // VIAJE5/VIAJE6 ramo 25 (R-095117): prima anual del plan ÷ 365 × días del viaje (1 a 10).
+      const anualProrrata = isViajeLocalAnualProrrataPlan(ramo, body.cplan);
+      const ndiasAnual = anualProrrata ? this.resolveViajeLocalAnualNdias(body) : 0;
+      let mprimaAnualExt = 0;
+
       for (const asegurado of body.asegurados) {
+        if (anualProrrata) {
+          // Prima anual con el mismo cálculo de un plan normal (spCalculoPer, frecuencia anual).
+          const anual = await this.execCalculoPer(body, ramo, asegurado, ptasamon, 'A', null);
+          const tasa = anual.mprimaext > 0 ? anual.mprima / anual.mprimaext : Number(ptasamon ?? 0);
+          mprimaAnualExt += anual.mprimaext;
+          // Se prorratea cada cobertura y se suma, como el recibo (SUM de las coberturas):
+          // así la prima cotizada y la emitida cuadran al céntimo.
+          const detalle = anual.detalle.map((row) => {
+            const extCob = prorrataAnualPorDias(Number(row['mprimaext']) || 0, ndiasAnual);
+            return { ...row, mprimaext: extCob, mprima: round2(extCob * tasa) };
+          });
+          if (detalle.length) {
+            mprimatotalext += detalle.reduce((acc, row) => acc + row.mprimaext, 0);
+            mprimatotal += detalle.reduce((acc, row) => acc + row.mprima, 0);
+          } else {
+            const ext = prorrataAnualPorDias(anual.mprimaext, ndiasAnual);
+            mprimatotalext += ext;
+            mprimatotal += round2(ext * tasa);
+          }
+          this.addCoberturas(coberturas, detalle);
+          continue;
+        }
+
         if (useProrrata) {
           const row = await this.getCotizacionViajeroProrrata(body, ramo, asegurado);
           mprimatotal += row.mprima;
@@ -992,24 +1085,13 @@ export class PersonasService {
           continue;
         }
 
-        const req = this.db.request();
-        req.input('ptasamon', T.Numeric(13, 6), ptasamon);
-        req.input('cramo', T.Int, ramo);
-        req.input('cplan', T.VarChar(10), body.cplan);
-        req.input('cparen', T.Int, asegurado.cparen);
-        req.input('xrif_asegurado', T.VarChar(10), String(asegurado.xrif_asegurado).replace(/\D/g, ''));
-        req.input('nedad_asegurado', T.Int, asegurado.nedad_asegurado);
-        req.input('ifrecuencia', T.Char(1), body.ifrecuencia);
-        req.input('msumaaseg', T.Numeric(18, 2), body.msumaaseg ?? null);
-
-        const result = await req.execute(this.spCalculoPerName());
-        const totals = (result.recordsets?.[1] ?? []) as Record<string, unknown>[];
-        if (totals.length > 0) {
-          mprimatotal += Number(totals[0]['mprima']) || 0;
-          mprimatotalext += Number(totals[0]['mprimaext']) || 0;
-        }
+        const calc = await this.execCalculoPer(
+          body, ramo, asegurado, ptasamon, body.ifrecuencia, body.msumaaseg ?? null,
+        );
+        mprimatotal += calc.mprima;
+        mprimatotalext += calc.mprimaext;
         // Primer resultado del SP: una fila por cobertura del asegurado (#temp_calculo_per).
-        this.addCoberturas(coberturas, (result.recordsets?.[0] ?? []) as Record<string, unknown>[]);
+        this.addCoberturas(coberturas, calc.detalle);
       }
 
       if (useProrrata && coberturas.size === 0) {
@@ -1029,10 +1111,17 @@ export class PersonasService {
         : (body.ptasamon ?? 0);
 
       this.logger.log(
-        `getCotizacionPer: plan=${body.cplan} asegurados=${body.asegurados.length} mprimaext=$${mprimaext} mprima=Bs${mprima}`,
+        `getCotizacionPer: plan=${body.cplan} asegurados=${body.asegurados.length} mprimaext=$${mprimaext} mprima=Bs${mprima}`
+          + (anualProrrata ? ` (prorrata ${ndiasAnual}/365 de anual $${round2(mprimaAnualExt)})` : ''),
       );
 
-      return { mprima, mprimaext, ptasa, coberturas: [...coberturas.values()] };
+      return {
+        mprima,
+        mprimaext,
+        ptasa,
+        coberturas: [...coberturas.values()],
+        ...(anualProrrata ? { ndias: ndiasAnual, mprimaextAnual: round2(mprimaAnualExt) } : {}),
+      };
     } catch (err) {
       if (err instanceof BadRequestException) throw err;
       const msg = err instanceof Error ? err.message : String(err);
