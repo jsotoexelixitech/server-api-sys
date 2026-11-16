@@ -6,7 +6,9 @@ import { CreateEmissionPersonDto } from './dto/create-emission-person.dto';
 import {
   assertIdentidadesPersonas,
   blankToNull,
+  beneficiariosJuridicos,
   choqueBeneficiarioPreferencial,
+  cidRifJuridico,
   resolverBeneficiarioPreferencial,
 } from './personas-identidad.rules';
 import { assertViajeroEmission } from './viajero-emission.rules';
@@ -71,7 +73,7 @@ describe('assertIdentidadesPersonas', () => {
     ).toThrow(BadRequestException);
   });
 
-  it('beneficiario G → 400', () => {
+  it('beneficiario G sin RIF ni razón social → 400 (con RIF de 9 dígitos y razón social sí se admite)', () => {
     expect(() =>
       assertIdentidadesPersonas({ tipo_cedula_titular: 'V' }, [], [{ icedula_beneficiario: 'G' }]),
     ).toThrow(BadRequestException);
@@ -212,14 +214,40 @@ describe('beneficiario preferencial jurídico', () => {
     expect(resolverBeneficiarioPreferencial({ tipo_cedula: 'J', nombre: 'BANCO' })).toBeNull();
   });
 
-  it('beneficiario por fallecimiento J → 400 (solo el preferencial puede ser jurídico)', () => {
+  it('cid jurídico con el formato de La Mundial (J-40084902-0)', () => {
+    expect(cidRifJuridico('J', 400849020)).toBe('J-40084902-0');
+    expect(cidRifJuridico('J', '000123456')).toBe('J-00012345-6');
+    expect(resolverBeneficiarioPreferencial({ ...banco, rif: 'J-40084902-0' })?.cid).toBe('J-40084902-0');
+    // Emisión manda el RIF como número: se recuperan los ceros a la izquierda.
+    expect(resolverBeneficiarioPreferencial({ ...banco, rif: 123456 })?.cid).toBe('J-00012345-6');
+    expect(resolverBeneficiarioPreferencial({ tipo_cedula: 'V', rif: 1, nombre: 'Ana', apellido: 'Pérez' })?.cid).toBeNull();
+  });
+
+  // Lista «Beneficiarios» (porcentaje, pebenefi): como SysIP, ARCA FINANCE C.A. J-40084902-0, parentesco Socio (a).
+  const arca = {
+    icedula_beneficiario: 'J',
+    xrif_beneficiario: 400849020,
+    xnombre_beneficiario: 'ARCA FINANCE C.A.',
+    nparentesco_beneficiario: 9,
+    pporce_beneficiario: 100,
+  };
+
+  it('beneficiario de la lista J con RIF de 9 dígitos y razón social → permitido', () => {
     expect(() =>
-      assertIdentidadesPersonas(
-        { tipo_cedula_titular: 'V', rif_titular: 12345678 },
-        [],
-        [{ icedula_beneficiario: 'J', xrif_beneficiario: '123456789' }],
-      ),
-    ).toThrow(/beneficiarios\[0\]/);
+      assertIdentidadesPersonas({ tipo_cedula_titular: 'V', rif_titular: 12345678 }, [], [arca]),
+    ).not.toThrow();
+    expect(beneficiariosJuridicos([{ icedula_beneficiario: 'V', xrif_beneficiario: 1 }, arca])).toEqual([
+      expect.objectContaining({ tipo: 'J', rif: 400849020, cid: 'J-40084902-0', nombre: 'ARCA FINANCE C.A.', apellido: null }),
+    ]);
+  });
+
+  it('beneficiario de la lista J sin razón social o con 8 dígitos → 400', () => {
+    expect(() =>
+      assertIdentidadesPersonas({ tipo_cedula_titular: 'V' }, [], [{ ...arca, xnombre_beneficiario: '' }]),
+    ).toThrow(/beneficiarios\[0\].*razón social/);
+    expect(() =>
+      assertIdentidadesPersonas({ tipo_cedula_titular: 'V' }, [], [{ ...arca, xrif_beneficiario: '40084902' }]),
+    ).toThrow(/beneficiarios\[0\].*9 dígitos/);
   });
 
   it('titular J → 400 aunque haya preferencial jurídico', () => {

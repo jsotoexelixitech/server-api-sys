@@ -90,7 +90,7 @@ describe('Beneficiario preferencial jurídico — emisión de personas', () => {
       isexo: null,
       iestado_civil: null,
       fnac: null,
-      cid: null,
+      cid: 'J-12345678-9',
     });
     const iPre = calls.findIndex((c) => 'xrif_titular' in c.inputs && 'beneficiarios' in c.inputs);
     expect(iPre).toBeGreaterThan(iCrear);
@@ -118,11 +118,62 @@ describe('Beneficiario preferencial jurídico — emisión de personas', () => {
     expect(calls.filter((c) => c.sp === 'sp_create_maclient_nexus' || 'beneficiarios' in c.inputs)).toHaveLength(0);
   });
 
-  it('beneficiario por fallecimiento J → 400', async () => {
+  it('beneficiario de la lista J (Socio, 100%): cliente J-40084902-0 antes del SP y BENF sin apellido/sexo/fnac', async () => {
+    const { svc, calls } = crearServicio();
+    const b = clone(body) as Record<string, unknown>;
+    delete b['beneficiario_preferencial'];
+    b['beneficiarios'] = [
+      {
+        icedula_beneficiario: 'J',
+        xrif_beneficiario: 400849020,
+        xnombre_beneficiario: 'ARCA FINANCE C.A.',
+        xapellido_beneficiario: 'X',
+        isexo_beneficiario: 'M',
+        fnac_beneficiario: '2000-01-01',
+        nparentesco_beneficiario: 9,
+        pporce_beneficiario: 100,
+      },
+    ];
+    await svc.createEmissionPerson('key', b as never);
+    const iCrear = calls.findIndex((c) => c.sp === 'sp_create_maclient_nexus');
+    expect(calls[iCrear].inputs).toMatchObject({
+      icedula: 'J',
+      cci_rif: 400849020,
+      cid: 'J-40084902-0',
+      xnombre: 'ARCA FINANCE C.A.',
+      xcliente: 'ARCA FINANCE C.A.',
+      xapellido: null,
+      isexo: null,
+      fnac: null,
+    });
+    const iPre = calls.findIndex((c) => 'xrif_titular' in c.inputs && 'beneficiarios' in c.inputs);
+    expect(iPre).toBeGreaterThan(iCrear);
+    expect(JSON.parse(String(calls[iPre].inputs['beneficiarios']))[0]).toMatchObject({
+      tipo_cedula_beneficiario: 'J',
+      rif_beneficiario: 400849020,
+      nombre_beneficiario: 'ARCA FINANCE C.A.',
+      apellido_beneficiario: '',
+      sexo_beneficiario: null,
+      estado_civil_beneficiario: null,
+      fnac_beneficiario: null,
+      nparentesco_beneficiario: 9,
+      pporce_beneficiario: 100,
+    });
+  });
+
+  it('beneficiario de la lista J con 8 dígitos → 400 antes de emitir', async () => {
     const { svc, calls } = crearServicio();
     const b = clone(body);
     b.beneficiarios[0].icedula_beneficiario = 'J';
-    await expect(svc.createEmissionPerson('key', b as never)).rejects.toThrow(BadRequestException);
+    b.beneficiarios[0].xrif_beneficiario = '40084902' as never; // texto: el número se completa con ceros (Emisión ya exige 9)
+    await expect(svc.createEmissionPerson('key', b as never)).rejects.toThrow(/9 dígitos/);
     expect(calls.filter((c) => c.sp === 'sp_create_maclient_nexus' || 'beneficiarios' in c.inputs)).toHaveLength(0);
+  });
+
+  it('titular J → 400', async () => {
+    const { svc } = crearServicio();
+    const b = clone(body) as Record<string, unknown>;
+    b['tipo_cedula_titular'] = 'J';
+    await expect(svc.createEmissionPerson('key', b as never)).rejects.toThrow(/titular/);
   });
 });
