@@ -5,9 +5,10 @@ import { BadRequestException } from '@nestjs/common';
  *
  * - Tomador puede ser J/G/C (persona jurídica): el SP La Mundial (sp_create_maclient_nexus)
  *   con J deja ipersona='J' y fnac/isexo en NULL.
- * - Titular, asegurados y beneficiarios por fallecimiento deben ser persona natural (V/E/P).
- * - Beneficiario preferencial (adpoliza.cbeneficiario, p. ej. un banco en Vida) puede ser
- *   J/G/C: ver resolverBeneficiarioPreferencial.
+ * - Titular y asegurados deben ser persona natural (V/E/P).
+ * - Beneficiarios (lista con porcentaje, pebenefi) y beneficiario preferencial (adpoliza.cbeneficiario)
+ *   pueden ser J/G/C, p. ej. «ARCA FINANCE C.A.» J-40084902-0 con parentesco «Socio (a)», como en
+ *   SysIP: ver resolverBeneficiarioPreferencial y beneficiariosJuridicos [benef-juridico 16-nov-2026].
  * - Sis2000 guarda la identificación en maclient.cci_rif NUMERIC y el SP recibe
  *   @xrif_* NUMERIC. Pasaporte alfanumérico (p. ej. EM2849387): SOLO titular y tomador, con
  *   cid_* = 'P-EM2849387' (maclient.cid, el string completo) y rif_* = solo dígitos (2849387),
@@ -169,7 +170,8 @@ function assertNumerica(value: unknown, label: string): void {
 
 /**
  * Valida identidades del body de emisión de personas. Lanza 400 si:
- * - titular / asegurado / beneficiario es J, G o C;
+ * - titular / asegurado es J, G o C;
+ * - un beneficiario J/G/C no trae RIF de 9 dígitos o razón social;
  * - algún número de identificación trae letras (pasaporte alfanumérico).
  */
 export function assertIdentidadesPersonas(
@@ -190,17 +192,8 @@ export function assertIdentidadesPersonas(
     }
     assertNumerica(a?.['xrif_asegurado'] ?? a?.['identificacion'], `asegurados[${i}]`);
   });
-  (beneficiarios as Record<string, unknown>[]).forEach((x, i) => {
-    if (
-      esTipoJuridico(
-        x?.['icedula_beneficiario'] ?? x?.['tipo_cedula_beneficiario'] ?? x?.['tipoDoc'],
-      )
-    ) {
-      throw new BadRequestException(
-        `beneficiarios[${i}]: debe ser persona natural (V, E o P); J, G y C solo se admiten como tomador o beneficiario preferencial.`,
-      );
-    }
-  });
+  // [benef-juridico 16-nov-2026] Beneficiario J/G/C permitido: RIF de 9 dígitos y razón social.
+  beneficiariosJuridicos(beneficiarios);
   // Titular/tomador: letras solo con tipo P y cid_* (pasaporte alfanumérico, ver aplicarPasaportesAlfanumericos).
   for (const rol of ['tomador', 'titular'] as RolPasaporte[]) {
     const conCid =
@@ -211,12 +204,13 @@ export function assertIdentidadesPersonas(
 }
 
 // ── Beneficiario preferencial [benef-juridico 16-nov-2026] ─────────────────────
-// Vida (La Mundial): el beneficiario preferencial (adpoliza.cbeneficiario; cuadro póliza
-// SPReCpBeneficiarioPref → maclient.xcliente / maclient.cid) puede ser persona jurídica, p. ej. un
-// banco. Los beneficiarios por fallecimiento (pebenefi) siguen solo persona natural.
+// Vida (La Mundial): un beneficiario puede ser persona jurídica (p. ej. un banco o empresa), tanto en
+// la lista con porcentaje (pebenefi; cuadro SPReCpBeneficiarios → maclient.xcliente / maclient.cid y
+// parentesco «Socio (a)») como el preferencial (adpoliza.cbeneficiario; SPReCpBeneficiarioPref).
+// maclient.cid del jurídico con el formato de La Mundial: J-40084902-0 (8 dígitos + verificador).
 
 const TIPOS_PREFERENCIAL = new Set(['V', 'E', 'P', 'J', 'G', 'C']);
-/** RIF jurídico: letra + 9 dígitos (J-123456789). */
+/** RIF jurídico: letra + 9 dígitos (J-400849020 → cid J-40084902-0). */
 export const RIF_JURIDICO_DIGITOS = 9;
 /** adpoliza.cbeneficiario es numeric(9). */
 const CBENEFICIARIO_MAX = 999_999_999;
@@ -238,6 +232,14 @@ export interface BeneficiarioPreferencial {
   estado: number | null;
   ciudad: number | null;
   direccion: string | null;
+  /** maclient.cid: jurídico 'J-40084902-0'; persona natural null (lo arma el SP: 'V-12345678'). */
+  cid: string | null;
+}
+
+/** maclient.cid de un RIF jurídico: 'J' + 400849020 → 'J-40084902-0' (ceros a la izquierda incluidos). */
+export function cidRifJuridico(tipo: string, digitos: string | number): string {
+  const d = String(digitos).replace(/\D/g, '').padStart(RIF_JURIDICO_DIGITOS, '0');
+  return `${tipo}-${d.slice(0, RIF_JURIDICO_DIGITOS - 1)}-${d.slice(RIF_JURIDICO_DIGITOS - 1)}`;
 }
 
 function txtPref(v: unknown, max: number): string | null {
@@ -260,23 +262,29 @@ function intPref(v: unknown): number | null {
  * - falta la razón social (jurídico) o el nombre/apellido (natural).
  * Jurídico: apellido, sexo, estado civil y fecha de nacimiento van en null (como el tomador J).
  */
-export function resolverBeneficiarioPreferencial(raw: unknown): BeneficiarioPreferencial | null {
+export function resolverBeneficiarioPreferencial(
+  raw: unknown,
+  label = 'beneficiario_preferencial',
+): BeneficiarioPreferencial | null {
   if (!raw || typeof raw !== 'object' || Array.isArray(raw)) return null;
   const r = raw as Record<string, unknown>;
   const rawId = r['rif'] ?? r['identificacion'] ?? r['xrif'];
   if (rawId === undefined || rawId === null || String(rawId).trim() === '') return null;
 
-  const label = 'beneficiario_preferencial';
   const tipo = tipoCedula(r['tipo_cedula'] ?? r['tipoDoc'] ?? r['icedula'] ?? 'V') || 'V';
   if (!TIPOS_PREFERENCIAL.has(tipo)) {
     throw new BadRequestException(`${label}: tipo de identificación ${tipo} no válido (V, E, P, J, G o C).`);
   }
   assertNumerica(rawId, label);
-  const digitos = String(rawId).replace(/\D/g, '');
   const juridico = TIPOS_JURIDICOS.has(tipo);
+  // Llega como número (Emisión manda xrif numérico): J-00012345-6 → 123456; se recuperan los ceros.
+  const digitos =
+    juridico && typeof rawId === 'number'
+      ? String(Math.trunc(rawId)).padStart(RIF_JURIDICO_DIGITOS, '0')
+      : String(rawId).replace(/\D/g, '');
   if (juridico && digitos.length !== RIF_JURIDICO_DIGITOS) {
     throw new BadRequestException(
-      `${label}: el RIF debe tener la letra y ${RIF_JURIDICO_DIGITOS} dígitos (p. ej. J-123456789).`,
+      `${label}: el RIF debe tener la letra y ${RIF_JURIDICO_DIGITOS} dígitos (p. ej. J-400849020).`,
     );
   }
   const rif = Number(digitos);
@@ -313,7 +321,44 @@ export function resolverBeneficiarioPreferencial(raw: unknown): BeneficiarioPref
     estado: intPref(r['estado'] ?? r['cestado']),
     ciudad: intPref(r['ciudad'] ?? r['cciudad']),
     direccion: txtPref(r['direccion'], 250),
+    cid: juridico ? cidRifJuridico(tipo, digitos) : null,
   };
+}
+
+/** Beneficiario de la lista (OPENJSON del pre-SP / Emisión / API) con las claves de resolverBeneficiarioPreferencial. */
+function beneficiarioListaComoPersona(x: Record<string, unknown>): Record<string, unknown> {
+  return {
+    tipo_cedula: x?.['icedula_beneficiario'] ?? x?.['tipo_cedula_beneficiario'] ?? x?.['tipoDoc'],
+    rif: x?.['xrif_beneficiario'] ?? x?.['rif_beneficiario'] ?? x?.['identificacion'],
+    nombre: x?.['xnombre_beneficiario'] ?? x?.['nombre_beneficiario'] ?? x?.['nombre'],
+    telefono: x?.['xtelefono_beneficiario'] ?? x?.['telefono_beneficiario'] ?? x?.['telefono'],
+    correo: x?.['xcorreo_beneficiario'] ?? x?.['correo_beneficiario'] ?? x?.['email'],
+    estado: x?.['estado_beneficiario'] ?? x?.['cestado_beneficiario'] ?? x?.['cestado'] ?? x?.['estado'],
+    ciudad: x?.['ciudad_beneficiario'] ?? x?.['cciudad_beneficiario'] ?? x?.['cciudad'] ?? x?.['ciudad'],
+    direccion: x?.['direccion_beneficiario'] ?? x?.['xdireccion_beneficiario'] ?? x?.['direccion'],
+  };
+}
+
+/** El beneficiario de la lista es persona jurídica (J/G/C). */
+export function esBeneficiarioJuridico(x: unknown): boolean {
+  const r = (x ?? {}) as Record<string, unknown>;
+  return esTipoJuridico(r['icedula_beneficiario'] ?? r['tipo_cedula_beneficiario'] ?? r['tipoDoc']);
+}
+
+/**
+ * [benef-juridico 16-nov-2026] Beneficiarios J/G/C de la lista, validados (RIF de 9 dígitos y razón
+ * social; 400 si no) y normalizados para crearlos en maclient con cid 'J-40084902-0'.
+ */
+export function beneficiariosJuridicos(beneficiarios: unknown[]): BeneficiarioPreferencial[] {
+  const out: BeneficiarioPreferencial[] = [];
+  (beneficiarios as Record<string, unknown>[]).forEach((x, i) => {
+    if (!esBeneficiarioJuridico(x)) return;
+    const label = `beneficiarios[${i}]`;
+    const persona = resolverBeneficiarioPreferencial(beneficiarioListaComoPersona(x), label);
+    if (!persona) throw new BadRequestException(`${label}: el RIF es obligatorio.`);
+    out.push(persona);
+  });
+  return out;
 }
 
 /**
