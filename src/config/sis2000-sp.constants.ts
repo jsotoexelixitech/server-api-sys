@@ -83,3 +83,6 @@ export const SP_PRE_EMISION_CONDOMINIO = 'sp_pre_emision_condominio_nexus';
 // ── Productores / Brokers ───────────────────────────────────────────────────
 export const SP_OBTENER_PRODUCTORES_NEXUS = 'sp_ma_obtener_productores_nexus';
 
+
+/** Guarda adpoliza.xobserva de la póliza recién emitida (personas y RCV). No bloquea la emisión. */
+export const SP_POLIZA_OBSERVACION = 'sp_poliza_observacion_nexus';

@@ -10,6 +10,11 @@ import { MssqlService } from '../../database/mssql.service';
 import { formatValidateAutoError, parseSPError } from '../../common/helpers/sp-error.helper';
 import { buildPolicyPdfUrl, resolveClubArysPdfUrl } from '../../common/helpers/policy-url.helper';
 import {
+  guardarObservacionPoliza,
+  normalizarObservaciones,
+  validarObservaciones,
+} from '../../common/helpers/poliza-observacion.helper';
+import {
   SP_CONTADOR_NEXUS,
   SP_PRE_EMISION_AUTO_RCV,
   SP_REPAIR_RCV_COBERTURAS,
@@ -920,6 +925,9 @@ export class EmissionsService {
         );
       }
 
+      const errorObservaciones = validarObservaciones(this.pick(b, 'observaciones', 'xobserva'));
+      if (errorObservaciones) throw new BadRequestException(errorObservaciones);
+
       const isoDate = /^\d{4}-\d{2}-\d{2}$/;
       const badDates = [
         ['fecha_emision', b['fecha_emision'] ?? b['femision']],
@@ -1816,6 +1824,12 @@ export class EmissionsService {
       }
     }
 
+    // Observaciones de la póliza (adpoliza.xobserva). No bloquea: si el SP falla la emisión sigue OK.
+    const observacionesTexto = normalizarObservaciones(this.pick(b, 'observaciones', 'xobserva'));
+    const observacionesGuardada = observacionesTexto
+      ? await guardarObservacionPoliza(this.db, this.logger, cnpoliza, observacionesTexto)
+      : undefined;
+
     this.scheduleArysMembershipRegistration(cnpoliza, b);
 
     const tarjetaKeys = await this.lookupPolicyTarjetaKeys(cnpoliza);
@@ -1830,6 +1844,9 @@ export class EmissionsService {
       fanopol,
       fmespol,
       ...tarjetaKeys,
+      ...(observacionesGuardada !== undefined
+        ? { observaciones: { guardada: observacionesGuardada } }
+        : {}),
     };
   }
 

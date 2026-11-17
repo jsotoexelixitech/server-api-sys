@@ -8,6 +8,7 @@ import {
   IsNumber,
   IsOptional,
   IsString,
+  MaxLength,
   Min,
   ValidateIf,
 } from 'class-validator';
@@ -403,4 +404,17 @@ export class CreateEmissionAutoDto {
   @IsOptional()
   @IsString()
   citem?: string;
+
+  @ApiPropertyOptional({
+    example: 'Vehículo con rayón en la puerta trasera izquierda.',
+    maxLength: 255,
+    description:
+      'Observaciones de la póliza (máx. 255 caracteres; más de 255 responde 400 sin emitir). ' +
+      'Se guardan en la póliza después de emitir. Alias: `xobserva`. ' +
+      'Si no se pueden guardar, la emisión responde OK igual con `observaciones.guardada = false`.',
+  })
+  @IsOptional()
+  @IsString()
+  @MaxLength(255)
+  observaciones?: string;
 }
