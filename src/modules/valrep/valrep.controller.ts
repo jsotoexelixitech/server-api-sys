@@ -488,6 +488,7 @@ export class ValrepController {
       body.cplan,
       body.cramo,
       body.cproductor,
+      body.estricto === true,
     );
     const plan = frecuencias.map((f) => ({
       cplan: f.cplan ?? body.cplan,

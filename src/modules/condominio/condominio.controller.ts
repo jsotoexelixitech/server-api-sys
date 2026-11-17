@@ -5,7 +5,13 @@ import { GetPlanesCondominioDto } from './dto/get-planes-condominio.dto';
 import { CotizacionCondominioDto } from './dto/cotizacion-condominio.dto';
 import { CreateEmissionCondominioDto } from './dto/create-emission-condominio.dto';
 import { GetByRamoDto } from './dto/get-by-ramo.dto';
-import { GetTarificadorDto, UpdateTarificadorTasaDto } from './dto/tarificador.dto';
+import {
+  GetTarificadorDto,
+  UpdateTarificadorAntiguedadDto,
+  UpdateTarificadorDescuentosSumaDto,
+  UpdateTarificadorFrecuenciaDto,
+  UpdateTarificadorTasaDto,
+} from './dto/tarificador.dto';
 import { NestProtected } from '../auth/decorators/nest-protected.decorator';
 import { NestApiKey } from '../auth/decorators/nest-api-key.decorator';
 import { NEST_AUTH_SCOPES } from '../auth/scopes/nest-auth-scopes.constants';
@@ -47,7 +53,7 @@ export class CondominioController {
             id: 'condominio',
             nombre: 'Combinado Empresarial (Condominio)',
             cramo: 16,
-            cplan_defecto: 'CONDOM',
+            cplan_defecto: '1',
             descripcion: 'Seguro combinado multirriesgo para la protección de áreas comunes de condominios, locales comerciales y oficinas.'
           }
         ]
@@ -76,7 +82,7 @@ export class CondominioController {
           id: 'condominio',
           nombre: 'Combinado Empresarial (Condominio)',
           cramo: 16,
-          cplan_defecto: 'CONDOM',
+          cplan_defecto: '1',
           descripcion: 'Seguro combinado multirriesgo para la protección de áreas comunes de condominios, locales comerciales y oficinas.'
         }
       ]
@@ -91,7 +97,7 @@ export class CondominioController {
     
 *   **Hogar**: cramo 38 (plan por defecto: RESIDE)
 *   **Vecinos**: cramo 28 (plan por defecto: IGEMA)
-*   **Condominio**: cramo 16 (plan por defecto: CONDOM)
+*   **Condominio**: cramo 16 (plan por defecto: 1)
     
 *Nota: Si se envía el campo 'cplan', se filtrará únicamente ese plan. Si se omite, se retornarán todos los planes del ramo con sus coberturas para poder compararlos.*`,
   })
@@ -334,7 +340,7 @@ export class CondominioController {
   @Get('frecuencias')
   @ApiOperation({
     summary: 'Listar frecuencias de pago',
-    description: 'Retorna las frecuencias de pago válidas en el sistema con sus respectivos códigos y el número de cuotas fraccionadas correspondientes.',
+    description: 'Retorna el catálogo general de frecuencias de pago con sus códigos y el número de cuotas. Las frecuencias habilitadas de un plan se consultan con POST /valrep/frecuencia.',
   })
   @ApiResponse({
     status: 200,
@@ -429,6 +435,69 @@ export class CondominioController {
   })
   async updateTarificadorTasa(@Body() dto: UpdateTarificadorTasaDto) {
     const data = await this.condominioService.updateTarificadorTasa(dto);
+    return { status: true, data };
+  }
+
+  @Get('tarificador/frecuencias')
+  @ApiOperation({
+    summary: 'Frecuencias de pago de los planes (maplanes_frec)',
+    description: 'Por plan vigente del ramo 16 u 38, indica cuáles de las frecuencias A, S, T y M están habilitadas (iestado = V).',
+  })
+  async getTarificadorFrecuencias(@Query() query: GetTarificadorDto) {
+    const data = await this.condominioService.getTarificadorFrecuencias(query);
+    return { status: true, data };
+  }
+
+  @Put('tarificador/frecuencias')
+  @NestProtected(NEST_AUTH_SCOPES.TARIFAS_CONDOMINIO)
+  @ApiOperation({
+    summary: 'Habilitar o deshabilitar una frecuencia de pago de un plan',
+    description: 'Actualiza maplanes_frec.iestado (V habilitada, N deshabilitada) y registra el usuario en cusuariomod; si la frecuencia no existe y se habilita, la crea. Solo ramos 16 y 38. Requiere el scope tarifas:condominio.',
+  })
+  async updateTarificadorFrecuencia(@Body() dto: UpdateTarificadorFrecuenciaDto) {
+    const data = await this.condominioService.updateTarificadorFrecuencia(dto);
+    return { status: true, data };
+  }
+
+  @Get('tarificador/antiguedad')
+  @ApiOperation({
+    summary: 'Tasas de Condominio por antigüedad y uso, y su reparto por cobertura',
+    description: 'Tasa global por tramo de antigüedad y uso del edificio, y cómo se reparte entre las coberturas (partes fijas y porcentajes del resto).',
+  })
+  async getTarificadorAntiguedad() {
+    const data = await this.condominioService.getTarificadorAntiguedad(16);
+    return { status: true, data };
+  }
+
+  @Put('tarificador/antiguedad')
+  @NestProtected(NEST_AUTH_SCOPES.TARIFAS_CONDOMINIO)
+  @ApiOperation({
+    summary: 'Guardar las tasas por antigüedad y el reparto de Condominio',
+    description: 'Reemplaza las 8 tasas (uso × tramo) y el reparto por cobertura; registra el usuario en cusuariomod. Requiere el scope tarifas:condominio.',
+  })
+  async updateTarificadorAntiguedad(@Body() dto: UpdateTarificadorAntiguedadDto) {
+    const data = await this.condominioService.updateTarificadorAntiguedad(dto);
+    return { status: true, data };
+  }
+
+  @Get('tarificador/descuentos-suma')
+  @ApiOperation({
+    summary: 'Descuentos por rango de suma asegurada (ramos 16 y 38)',
+    description: 'Tramos desde/hasta (US$) con el % de descuento sobre la prima bruta. Se suma al descuento por dispositivos.',
+  })
+  async getTarificadorDescuentosSuma(@Query() dto: GetTarificadorDto) {
+    const data = await this.condominioService.getTarificadorDescuentosSuma(dto.cramo);
+    return { status: true, data };
+  }
+
+  @Put('tarificador/descuentos-suma')
+  @NestProtected(NEST_AUTH_SCOPES.TARIFAS_CONDOMINIO)
+  @ApiOperation({
+    summary: 'Guardar los descuentos por rango de suma asegurada',
+    description: 'Reemplaza los tramos del ramo; registra el usuario en cusuariomod. Requiere el scope tarifas:condominio.',
+  })
+  async updateTarificadorDescuentosSuma(@Body() dto: UpdateTarificadorDescuentosSumaDto) {
+    const data = await this.condominioService.updateTarificadorDescuentosSuma(dto);
     return { status: true, data };
   }
 }

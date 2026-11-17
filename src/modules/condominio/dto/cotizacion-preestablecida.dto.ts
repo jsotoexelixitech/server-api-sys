@@ -1,6 +1,8 @@
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
 import { Type } from 'class-transformer';
-import { ArrayMinSize, IsArray, IsNotEmpty, IsNumber, IsOptional, IsString, MaxLength, Min, ValidateNested } from 'class-validator';
+import { ArrayMinSize, IsArray, IsIn, IsInt, IsNotEmpty, IsNumber, IsOptional, IsString, Max, MaxLength, Min, ValidateNested,
+  IsISO8601,
+} from 'class-validator';
 
 /** Una cobertura ya calculada (valores ANUALES; el Core los reparte entre las cuotas al emitir). */
 export class CotizacionCoberturaDto {
@@ -20,6 +22,13 @@ export class CotizacionCoberturaDto {
   @IsNumber({ maxDecimalPlaces: 2 })
   @Min(0)
   suma_asegurada: number;
+
+  @ApiPropertyOptional({ example: 0.3, description: 'Tasa elegida dentro del rango de la cobertura (%). Sin rango se ignora.' })
+  @IsOptional()
+  @IsNumber({ maxDecimalPlaces: 6 })
+  @Min(0)
+  @Max(100)
+  tasa?: number;
 
   @ApiProperty({ example: 6, description: 'Prima bruta = suma × tasa / 100.' })
   @IsNumber({ maxDecimalPlaces: 2 })
@@ -54,6 +63,30 @@ export class CotizacionCoberturaDto {
   comision?: number;
 }
 
+/** Datos del edificio con los que se eligió la tasa global de Condominio (ramo 16). */
+export class TarifaAntiguedadDto {
+  @ApiProperty({ example: 1985, description: 'Año de construcción del edificio.' })
+  @IsInt()
+  @Min(1800)
+  @Max(2100)
+  anio_construccion: number;
+
+  @ApiProperty({ example: 'R', enum: ['R', 'C'], description: 'R = Residencial, C = Comercial, oficinas y centros comerciales.' })
+  @IsIn(['R', 'C'])
+  iuso: string;
+}
+
+/** Vigencia de una cotización aprobada: mientras dure, el precio cotizado se respeta. */
+export class VigenciaCotizacionDto {
+  @ApiProperty({ example: '2026-11-04T18:00:00.000Z' })
+  @IsISO8601()
+  cotizada_el: string;
+
+  @ApiProperty({ example: '2026-11-19T18:00:00.000Z' })
+  @IsISO8601()
+  vence_el: string;
+}
+
 /**
  * Cotización calculada por el producto (Condominio u Hogar) con el tarificador.
  * Si se envía en la emisión, el Core NO recalcula: valida que cuadre con sus tarifas y emite estos valores.
@@ -80,6 +113,18 @@ export class CotizacionPreestablecidaDto {
   @IsNumber({ maxDecimalPlaces: 6 })
   @Min(0)
   recargo_pct?: number;
+
+  @ApiPropertyOptional({ type: TarifaAntiguedadDto, description: 'Condominio: año y uso con los que se calculó la tasa global.' })
+  @IsOptional()
+  @ValidateNested()
+  @Type(() => TarifaAntiguedadDto)
+  tarifa_antiguedad?: TarifaAntiguedadDto;
+
+  @ApiPropertyOptional({ type: VigenciaCotizacionDto, description: 'Vigente: se emite con el precio cotizado aunque las tarifas hayan cambiado.' })
+  @IsOptional()
+  @ValidateNested()
+  @Type(() => VigenciaCotizacionDto)
+  vigencia?: VigenciaCotizacionDto;
 
   @ApiProperty({ type: [CotizacionCoberturaDto] })
   @IsArray()
