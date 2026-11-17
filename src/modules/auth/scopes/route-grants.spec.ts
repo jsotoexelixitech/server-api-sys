@@ -155,3 +155,22 @@ describe('scopeMatches (legacy)', () => {
     expect(scopeMatches(['partner:*'], 'partner:starter')).toBe(true);
   });
 });
+
+describe('emisión colectiva (emissions:colectivo)', () => {
+  it('la ruta pide emissions:colectivo y emissions:person no la concede', () => {
+    expect(
+      grantMatchesRoute(['emissions:colectivo'], 'POST', '/api/v1/personas/emision-colectiva', 'emissions:colectivo'),
+    ).toBe(true);
+    expect(
+      grantMatchesRoute(['emissions:person'], 'POST', '/api/v1/personas/emision-colectiva', 'emissions:colectivo'),
+    ).toBe(false);
+    expect(
+      grantMatchesRoute(
+        [toRouteGrantLine('POST', '/api/v1/personas/emision')],
+        'POST',
+        '/api/v1/personas/emision-colectiva',
+        'emissions:colectivo',
+      ),
+    ).toBe(false);
+  });
+});

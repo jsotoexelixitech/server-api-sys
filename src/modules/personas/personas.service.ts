@@ -16,6 +16,10 @@ import { CreateEmissionPersonDto } from './dto/create-emission-person.dto';
 import { parseSPError } from '../../common/helpers/sp-error.helper';
 import { buildPolicyPdfUrl } from '../../common/helpers/policy-url.helper';
 import {
+  guardarObservacionPoliza,
+  normalizarObservaciones,
+} from '../../common/helpers/poliza-observacion.helper';
+import {
   SP_BUSCA_DETALLE_PLAN,
   SP_CALCULO_PER,
   SP_CALCULO_VIAJERO_PRORRATA,
@@ -29,10 +33,30 @@ import {
   assertViajeroCotizacion,
   assertViajeroEmission,
   assertViajeroProrrataCotizacion,
+  assertViajeLocalAnualDias,
+  diasViajeInclusivos,
+  isViajeLocalAnualProrrataPlan,
   isViajeLocalPlan,
   isViajeroPlan,
   isViajeroProrrataPlan,
+  prorrataAnualPorDias,
+  round2,
 } from './viajero-emission.rules';
+import {
+  BeneficiarioPreferencial,
+  MSG_PASAPORTE_CHOQUE,
+  PasaporteAlfanumerico,
+  aplicarPasaportesAlfanumericos,
+  assertIdentidadesPersonas,
+  blankToNull,
+  beneficiariosJuridicos,
+  choqueBeneficiarioPreferencial,
+  esBeneficiarioJuridico,
+  cidPasaporte,
+  pasaporteSinChoque,
+  resolverBeneficiarioPreferencial,
+  tipoClienteMismaPersona,
+} from './personas-identidad.rules';
 
 class Mutex {
   private queue: Array<(release: () => void) => void> = [];
@@ -88,6 +112,10 @@ export interface CotizacionPerResult {
   ptasa: number;
   /** Coberturas del plan, sumadas entre asegurados. Vacío si el SP no trae detalle. */
   coberturas: CotizacionPerCobertura[];
+  /** VIAJE5/VIAJE6 (ramo 25): días del viaje prorrateados. */
+  ndias?: number;
+  /** VIAJE5/VIAJE6 (ramo 25): prima anual del plan en USD antes de prorratear. */
+  mprimaextAnual?: number;
 }
 
 /** Formato legacy SysIP (`/app/getCotizacionPer`, `/external/getCotizacionPer`). */
@@ -181,12 +209,30 @@ export class PersonasService {
     };
   }
 
+  /** Profesión, ocupación y actividad al SP solo con la variable (el pre-SP anterior no las conoce). */
+  private sendProfesionPersonas(): boolean {
+    return this.config.get<string>('NEST_PERSONAS_SEND_PROFESION') === '1';
+  }
+
+  /** Claves del JSON de asegurados para profesión, ocupación y actividad (pre-SP 30-oct-2026). */
+  private profesionAseguradoFields(a: Record<string, unknown>): Record<string, number> {
+    const fields: Record<string, number | null> = {
+      cprofesion_asegurado: this.intField(a.cprofesion_asegurado ?? a.cprofesion),
+      cocupacion_asegurado: this.intField(a.cocupacion_asegurado ?? a.cocupacion),
+      cactividad_asegurado: this.intField(a.cactividad_asegurado ?? a.cactividad),
+    };
+    return Object.fromEntries(
+      Object.entries(fields).filter((e): e is [string, number] => e[1] != null),
+    );
+  }
+
   /** JSON de asegurados al formato OPENJSON del pre-SP personas. */
   private mapAseguradosForSp(
     lista: Record<string, unknown>[],
     getPar: (p: unknown) => number,
   ): string | null {
     if (!lista.length) return null;
+    const sendProfesion = this.sendProfesionPersonas();
     const mapped = lista.map((a) => {
       const estado = this.intField(
         a.estado_asegurado ?? a.cestado ?? a.estado,
@@ -215,6 +261,7 @@ export class PersonasService {
         nestatura_asegurado: this.decimalField(a.nestatura_asegurado ?? a.estatura),
         // % del cuestionario (pre-SP v3 los guarda en _ASEG; v2 ignora estas claves).
         ...this.pctFields(a),
+        ...(sendProfesion ? this.profesionAseguradoFields(a) : {}),
       };
     });
     return JSON.stringify(mapped);
@@ -290,7 +337,10 @@ export class PersonasService {
     getPar: (p: unknown) => number,
   ): string | null {
     if (!lista.length) return null;
-    const mapped = lista.map((b) => ({
+    const mapped = lista.map((b) => {
+      // [benef-juridico 16-nov-2026] J/G/C: nombre = razón social, apellido vacío, sin sexo/estado civil/fnac.
+      const pj = esBeneficiarioJuridico(b);
+      return {
       tipo_cedula_beneficiario: String(
         b.icedula_beneficiario ?? b.tipo_cedula_beneficiario ?? b.tipoDoc ?? 'V',
       ).charAt(0),
@@ -298,12 +348,16 @@ export class PersonasService {
         b.xrif_beneficiario ?? b.rif_beneficiario ?? b.identificacion,
       ),
       nombre_beneficiario: b.xnombre_beneficiario ?? b.nombre_beneficiario ?? b.nombre ?? null,
-      apellido_beneficiario: b.xapellido_beneficiario ?? b.apellido_beneficiario ?? b.apellido ?? null,
-      sexo_beneficiario: String(
-        b.isexo_beneficiario ?? b.sexo_beneficiario ?? (b.sexo ? String(b.sexo)[0].toUpperCase() : 'M'),
-      ).charAt(0),
-      estado_civil_beneficiario: String(b.iestado_civil_beneficiario ?? 'S').charAt(0),
-      fnac_beneficiario: b.fnac_beneficiario ?? b.fechaNac ?? null,
+      apellido_beneficiario: pj
+        ? ''
+        : b.xapellido_beneficiario ?? b.apellido_beneficiario ?? b.apellido ?? null,
+      sexo_beneficiario: pj
+        ? null
+        : String(
+          b.isexo_beneficiario ?? b.sexo_beneficiario ?? (b.sexo ? String(b.sexo)[0].toUpperCase() : 'M'),
+        ).charAt(0),
+      estado_civil_beneficiario: pj ? null : String(b.iestado_civil_beneficiario ?? 'S').charAt(0),
+      fnac_beneficiario: pj ? null : b.fnac_beneficiario ?? b.fechaNac ?? null,
       nparentesco_beneficiario: getPar(
         b.nparentesco_beneficiario ?? b.cparen_beneficiario ?? b.parentesco,
       ),
@@ -314,7 +368,8 @@ export class PersonasService {
         b.xtelefono_beneficiario ?? b.telefono_beneficiario ?? b.telefono ?? null,
       correo_beneficiario: b.xcorreo_beneficiario ?? b.correo_beneficiario ?? b.email ?? null,
       pporce_beneficiario: Number(b.pporce_beneficiario ?? b.pporcen ?? b.pporce) || 0,
-    }));
+      };
+    });
     return JSON.stringify(mapped);
   }
 
@@ -369,6 +424,32 @@ export class PersonasService {
     req.input('casegurado', T.Numeric(9, 0), rifTitular);
     const result = await req.execute(this.spGetPolizaRecienteTitularName());
     return (result.recordset?.[0] ?? {}) as Record<string, unknown>;
+  }
+
+  /** cpoliza de la póliza recién emitida: la del SP si viene; si no, la de adpoliza por cnpoliza. */
+  private async resolveCpolizaEmitida(
+    row: Record<string, unknown>,
+    cnpoliza: string,
+  ): Promise<number | undefined> {
+    const fromSp = Number(row['cpoliza']);
+    if (Number.isFinite(fromSp) && fromSp > 0) return fromSp;
+    try {
+      const T = this.db.types;
+      const req = this.db.request();
+      req.input('cnpoliza', T.NVarChar(30), cnpoliza);
+      const result = await req.query(`
+        SELECT TOP 1 cpoliza
+        FROM adpoliza
+        WHERE cnpoliza = @cnpoliza
+        ORDER BY fingreso DESC
+      `);
+      const value = Number(result.recordset?.[0]?.['cpoliza']);
+      return Number.isFinite(value) && value > 0 ? value : undefined;
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : String(err);
+      this.logger.warn(`resolveCpolizaEmitida cnpoliza=${cnpoliza}: ${msg}`);
+      return undefined;
+    }
   }
 
   private get defaultRamo(): number {
@@ -525,7 +606,9 @@ export class PersonasService {
   ): Promise<PlanPerItem[]> {
     if (!this.isViajeroDayProduct(cproducto)) return planes;
 
-    const byCplan = new Map(planes.map((p) => [p.cplan, p]));
+    // Ramo + plan: VIAJE5/VIAJE6 existen en el ramo 5 (4 y 5 días) y en el 25 (3.000 / 5.000 $).
+    const planKey = (cramo: unknown, cplan: string) => `${Number(cramo)}|${cplan}`;
+    const byPlan = new Map(planes.map((p) => [planKey(p.cramo, p.cplan), p]));
     try {
       const T = this.db.types;
       const req = this.db.request();
@@ -564,7 +647,8 @@ export class PersonasService {
         const key = `${cplan}|${ndias}`;
         if (seen.has(key)) continue;
         seen.add(key);
-        const base = byCplan.get(cplan);
+        const base = byPlan.get(planKey(row['cramo'], cplan))
+          ?? planes.find((p) => p.cplan === cplan && !isViajeLocalAnualProrrataPlan(p.cramo, p.cplan));
         const xplanRaw = this.optionalText(row['xplan']) || base?.xplan || cplan;
         expanded.push({
           cplan,
@@ -583,10 +667,19 @@ export class PersonasService {
 
       if (!expanded.length) return planes;
 
+      // VIAJE5/VIAJE6 ramo 25 (R-095117): prorrata por los días del viaje, sin ndias en
+      // maplanes_frec. Se conservan tal como los asignó el canal (mausuplan).
+      for (const p of planes) {
+        if (!isViajeLocalAnualProrrataPlan(p.cramo, p.cplan)) continue;
+        if (expanded.some((e) => planKey(e.cramo, e.cplan) === planKey(p.cramo, p.cplan))) continue;
+        expanded.push({ ...p });
+      }
+
       // Parentescos / nmax si el SP no trajo el cplan (solo maplanes_frec).
       const missingParen = expanded.filter((p) => !(p.parentescos?.length));
       for (const plan of missingParen) {
-        const fromSp = planes.find((p) => p.cplan === plan.cplan);
+        const fromSp = byPlan.get(planKey(plan.cramo, plan.cplan))
+          ?? planes.find((p) => p.cplan === plan.cplan && !isViajeLocalAnualProrrataPlan(p.cramo, p.cplan));
         if (fromSp?.parentescos?.length) {
           plan.parentescos = fromSp.parentescos;
           continue;
@@ -663,8 +756,11 @@ export class PersonasService {
         });
         for (const row of raw ?? []) {
           const mapped = this.mapCanalPlanToPer(row as Record<string, unknown>, null);
-          if (!mapped || seen.has(mapped.cplan)) continue;
-          seen.add(mapped.cplan);
+          // Ramo + plan, como spBuscaPlanProducto: el mismo código existe en varios ramos
+          // (producto 76: plan 1 de Vida Individual y plan 1 de Masivo Vida Temporal).
+          const planKey = mapped ? `${mapped.cramo}|${mapped.cplan}` : '';
+          if (!mapped || seen.has(planKey)) continue;
+          seen.add(planKey);
           planes.push(mapped);
         }
       } catch (err) {
@@ -686,10 +782,11 @@ export class PersonasService {
     const ramos = [...new Set(planes.map((p) => p.cramo).filter((n) => Number.isFinite(n)))];
     for (const ramo of ramos) {
       const byRamo = await this.loadNmaxDepByPlan(ramo);
-      byRamo.forEach((value, key) => limits.set(key, value));
+      byRamo.forEach((value, key) => limits.set(`${ramo}|${key}`, value));
     }
     return planes.map((p) => {
-      const nmax = limits.has(p.cplan) ? limits.get(p.cplan) ?? null : (p.nmax_dep ?? null);
+      const key = `${p.cramo}|${p.cplan}`;
+      const nmax = limits.has(key) ? limits.get(key) ?? null : (p.nmax_dep ?? null);
       const maxAsegurados = nmax == null ? undefined : Math.max(1, 1 + nmax);
       return { ...p, nmax_dep: nmax, maxAsegurados };
     });
@@ -906,9 +1003,53 @@ export class PersonasService {
     }
   }
 
+  /** Días de VIAJE5/VIAJE6: fechas del viaje (inclusivas) o ndias; de 1 a 10. */
+  private resolveViajeLocalAnualNdias(body: CotizacionPerDto): number {
+    const fdesde = body.fdesde?.trim();
+    const fhasta = body.fhasta?.trim();
+    let ndias: number;
+    if (fdesde && fhasta) {
+      ndias = diasViajeInclusivos(fdesde, fhasta);
+    } else if (typeof body.ndias === 'number') {
+      ndias = body.ndias;
+    } else {
+      throw new BadRequestException('Viajero Local por días: informe fdesde y fhasta del viaje.');
+    }
+    assertViajeLocalAnualDias(ndias);
+    return ndias;
+  }
+
+  /** spCalculoPer de un asegurado: total (2.º recordset) y detalle por cobertura (1.º). */
+  private async execCalculoPer(
+    body: CotizacionPerDto,
+    ramo: number,
+    asegurado: CotizacionPerDto['asegurados'][number],
+    ptasamon: number | null,
+    ifrecuencia: string,
+    msumaaseg: number | null,
+  ): Promise<{ mprima: number; mprimaext: number; detalle: Record<string, unknown>[] }> {
+    const T = this.db.types;
+    const req = this.db.request();
+    req.input('ptasamon', T.Numeric(13, 6), ptasamon);
+    req.input('cramo', T.Int, ramo);
+    req.input('cplan', T.VarChar(10), body.cplan);
+    req.input('cparen', T.Int, asegurado.cparen);
+    req.input('xrif_asegurado', T.VarChar(10), String(asegurado.xrif_asegurado).replace(/\D/g, ''));
+    req.input('nedad_asegurado', T.Int, asegurado.nedad_asegurado);
+    req.input('ifrecuencia', T.Char(1), ifrecuencia);
+    req.input('msumaaseg', T.Numeric(18, 2), msumaaseg);
+
+    const result = await req.execute(this.spCalculoPerName());
+    const totals = (result.recordsets?.[1] ?? []) as Record<string, unknown>[];
+    return {
+      mprima: totals.length ? Number(totals[0]['mprima']) || 0 : 0,
+      mprimaext: totals.length ? Number(totals[0]['mprimaext']) || 0 : 0,
+      detalle: (result.recordsets?.[0] ?? []) as Record<string, unknown>[],
+    };
+  }
+
   async getCotizacionPer(body: CotizacionPerDto): Promise<CotizacionPerResult> {
     try {
-      const T = this.db.types;
       const ramo = body.cramo ?? this.defaultRamo;
 
       assertViajeroCotizacion(ramo, body.cplan, body.asegurados.length);
@@ -925,7 +1066,35 @@ export class PersonasService {
       let mprimatotalext = 0;
       const coberturas = new Map<string, CotizacionPerCobertura>();
 
+      // VIAJE5/VIAJE6 ramo 25 (R-095117): prima anual del plan ÷ 365 × días del viaje (1 a 10).
+      const anualProrrata = isViajeLocalAnualProrrataPlan(ramo, body.cplan);
+      const ndiasAnual = anualProrrata ? this.resolveViajeLocalAnualNdias(body) : 0;
+      let mprimaAnualExt = 0;
+
       for (const asegurado of body.asegurados) {
+        if (anualProrrata) {
+          // Prima anual con el mismo cálculo de un plan normal (spCalculoPer, frecuencia anual).
+          const anual = await this.execCalculoPer(body, ramo, asegurado, ptasamon, 'A', null);
+          const tasa = anual.mprimaext > 0 ? anual.mprima / anual.mprimaext : Number(ptasamon ?? 0);
+          mprimaAnualExt += anual.mprimaext;
+          // Se prorratea cada cobertura y se suma, como el recibo (SUM de las coberturas):
+          // así la prima cotizada y la emitida cuadran al céntimo.
+          const detalle = anual.detalle.map((row) => {
+            const extCob = prorrataAnualPorDias(Number(row['mprimaext']) || 0, ndiasAnual);
+            return { ...row, mprimaext: extCob, mprima: round2(extCob * tasa) };
+          });
+          if (detalle.length) {
+            mprimatotalext += detalle.reduce((acc, row) => acc + row.mprimaext, 0);
+            mprimatotal += detalle.reduce((acc, row) => acc + row.mprima, 0);
+          } else {
+            const ext = prorrataAnualPorDias(anual.mprimaext, ndiasAnual);
+            mprimatotalext += ext;
+            mprimatotal += round2(ext * tasa);
+          }
+          this.addCoberturas(coberturas, detalle);
+          continue;
+        }
+
         if (useProrrata) {
           const row = await this.getCotizacionViajeroProrrata(body, ramo, asegurado);
           mprimatotal += row.mprima;
@@ -933,24 +1102,13 @@ export class PersonasService {
           continue;
         }
 
-        const req = this.db.request();
-        req.input('ptasamon', T.Numeric(13, 6), ptasamon);
-        req.input('cramo', T.Int, ramo);
-        req.input('cplan', T.VarChar(10), body.cplan);
-        req.input('cparen', T.Int, asegurado.cparen);
-        req.input('xrif_asegurado', T.VarChar(10), String(asegurado.xrif_asegurado).replace(/\D/g, ''));
-        req.input('nedad_asegurado', T.Int, asegurado.nedad_asegurado);
-        req.input('ifrecuencia', T.Char(1), body.ifrecuencia);
-        req.input('msumaaseg', T.Numeric(18, 2), body.msumaaseg ?? null);
-
-        const result = await req.execute(this.spCalculoPerName());
-        const totals = (result.recordsets?.[1] ?? []) as Record<string, unknown>[];
-        if (totals.length > 0) {
-          mprimatotal += Number(totals[0]['mprima']) || 0;
-          mprimatotalext += Number(totals[0]['mprimaext']) || 0;
-        }
+        const calc = await this.execCalculoPer(
+          body, ramo, asegurado, ptasamon, body.ifrecuencia, body.msumaaseg ?? null,
+        );
+        mprimatotal += calc.mprima;
+        mprimatotalext += calc.mprimaext;
         // Primer resultado del SP: una fila por cobertura del asegurado (#temp_calculo_per).
-        this.addCoberturas(coberturas, (result.recordsets?.[0] ?? []) as Record<string, unknown>[]);
+        this.addCoberturas(coberturas, calc.detalle);
       }
 
       if (useProrrata && coberturas.size === 0) {
@@ -970,10 +1128,17 @@ export class PersonasService {
         : (body.ptasamon ?? 0);
 
       this.logger.log(
-        `getCotizacionPer: plan=${body.cplan} asegurados=${body.asegurados.length} mprimaext=$${mprimaext} mprima=Bs${mprima}`,
+        `getCotizacionPer: plan=${body.cplan} asegurados=${body.asegurados.length} mprimaext=$${mprimaext} mprima=Bs${mprima}`
+          + (anualProrrata ? ` (prorrata ${ndiasAnual}/365 de anual $${round2(mprimaAnualExt)})` : ''),
       );
 
-      return { mprima, mprimaext, ptasa, coberturas: [...coberturas.values()] };
+      return {
+        mprima,
+        mprimaext,
+        ptasa,
+        coberturas: [...coberturas.values()],
+        ...(anualProrrata ? { ndias: ndiasAnual, mprimaextAnual: round2(mprimaAnualExt) } : {}),
+      };
     } catch (err) {
       if (err instanceof BadRequestException) throw err;
       const msg = err instanceof Error ? err.message : String(err);
@@ -1103,8 +1268,241 @@ export class PersonasService {
     }
   }
 
+  // ── Pasaporte alfanumérico (titular/tomador) ───────────────────────────────
+
+  /**
+   * 400 si el pasaporte choca con otro cliente de Sis2000: OK si no hay filas, o una sola con el
+   * mismo cci_rif y cid igual (o vacío/'0'). maclient.cci_rif es la clave real; cid es único.
+   * Si choca pero es la MISMA persona (mismo cci_rif, cid V-/E- y mismo nombre y apellido),
+   * devuelve el tipo con el que ya está registrada para emitir con ese documento (no crea otro
+   * cliente ni cambia el que existe). Sin nombre/apellido se comporta como antes.
+   */
+  async assertPasaporteSinChoque(
+    cid: string,
+    digitos: number,
+    persona?: { nombre?: unknown; apellido?: unknown },
+  ): Promise<'V' | 'E' | null> {
+    const T = this.db.types;
+    const req = this.db.request();
+    req.input('dig', T.Numeric(13, 0), digitos);
+    req.input('cid', T.VarChar(30), cid);
+    const r = await req.query(
+      'SELECT cci_rif, RTRIM(cid) AS cid, RTRIM(xnombre) AS xnombre, RTRIM(xapellido) AS xapellido, ' +
+        'RTRIM(xcliente) AS xcliente FROM maclient WHERE cci_rif = @dig OR RTRIM(cid) = @cid',
+    );
+    const rows = (r.recordset ?? []) as {
+      cci_rif: unknown;
+      cid: unknown;
+      xnombre?: unknown;
+      xapellido?: unknown;
+      xcliente?: unknown;
+    }[];
+    if (pasaporteSinChoque(rows, cid, digitos)) return null;
+    const tipo = persona ? tipoClienteMismaPersona(rows, digitos, persona.nombre, persona.apellido) : null;
+    if (tipo) {
+      this.logger.log(
+        `Pasaporte ${cid} → cliente existente ${tipo}-${digitos} (misma persona): se emite con ese documento`,
+      );
+      return tipo;
+    }
+    this.logger.warn(
+      `Pasaporte ${cid} (${digitos}) choca en maclient: ${JSON.stringify(rows.slice(0, 3))}`,
+    );
+    throw new BadRequestException(MSG_PASAPORTE_CHOQUE);
+  }
+
+  /** Nombre y apellido del rol (titular/tomador) para comparar con el cliente existente. */
+  private personaPasaporte(b: Record<string, unknown>, rol: string) {
+    return { nombre: b[`nombre_${rol}`], apellido: b[`apellido_${rol}`] };
+  }
+
+  /**
+   * Misma persona ya registrada como V/E: el body pasa a ese documento (tipo y dígitos) en todos
+   * los roles y asegurados que traían ese pasaporte; no se envía cid ni se crea otro cliente.
+   */
+  private usarClienteExistente(
+    b: Record<string, unknown>,
+    p: PasaporteAlfanumerico,
+    tipo: 'V' | 'E',
+  ): void {
+    for (const rol of ['titular', 'tomador']) {
+      if (b[`cid_${rol}`] && cidPasaporte(b[`cid_${rol}`]) === p.cid) {
+        delete b[`cid_${rol}`];
+        b[`tipo_cedula_${rol}`] = tipo;
+        b[`rif_${rol}`] = p.digitos;
+      }
+    }
+    const asegurados = Array.isArray(b['asegurados']) ? (b['asegurados'] as Record<string, unknown>[]) : [];
+    for (const a of asegurados) {
+      const tipoA = String(a?.['icedula_asegurado'] ?? a?.['tipoDoc'] ?? '').trim().toUpperCase();
+      const idA = Number(String(a?.['xrif_asegurado'] ?? a?.['identificacion'] ?? '').replace(/\D/g, ''));
+      if (tipoA.startsWith('P') && idA === p.digitos) {
+        if ('icedula_asegurado' in a) a['icedula_asegurado'] = tipo;
+        if ('tipoDoc' in a) a['tipoDoc'] = tipo;
+      }
+    }
+  }
+
+  /** Titular y tomador con el mismo pasaporte se revisan/crean una sola vez. */
+  private pasaportesUnicos(lista: PasaporteAlfanumerico[]): PasaporteAlfanumerico[] {
+    const vistos = new Set<string>();
+    return lista.filter((p) => (vistos.has(p.cid) ? false : (vistos.add(p.cid), true)));
+  }
+
+  /**
+   * Crea/actualiza el cliente en Sis2000 con cid = pasaporte completo antes de emitir (como SysIP).
+   * Luego el SP de emisión llama a sp_create_maclient_nexus con @cid NULL: el cliente ya existe por
+   * cci_rif y su cid no se reemplaza.
+   */
+  private async crearClientePasaporte(
+    b: Record<string, unknown>,
+    p: PasaporteAlfanumerico,
+    canal: Record<string, unknown>,
+  ): Promise<void> {
+    const T = this.db.types;
+    const rol = p.rol;
+    const txt = (v: unknown, max: number): string | null => {
+      const s = v == null ? '' : String(v).trim();
+      return s ? s.slice(0, max) : null;
+    };
+    const nombre = txt(b[`nombre_${rol}`], 120);
+    const apellido = txt(b[`apellido_${rol}`], 120);
+    const tel = b[`telefono_${rol}`] != null ? String(b[`telefono_${rol}`]).replace(/\D/g, '').slice(0, 20) : '';
+    const req = this.db.request();
+    req.input('icedula', T.Char(1), 'P');
+    req.input('cci_rif', T.Numeric(13, 0), p.digitos);
+    req.input('xnombre', T.VarChar(120), nombre);
+    req.input('xapellido', T.VarChar(120), apellido);
+    req.input('xcliente', T.VarChar(250), txt([nombre, apellido].filter(Boolean).join(' '), 250));
+    req.input('isexo', T.Char(1), blankToNull(b[`sexo_${rol}`]));
+    req.input('iestado_civil', T.Char(1), blankToNull(b[`estado_civil_${rol}`]));
+    req.input('fnac', T.DateTime, blankToNull(b[`fnac_${rol}`]));
+    req.input('xcorreo', T.VarChar(100), txt(b[`correo_${rol}`], 100));
+    req.input('cpais', T.SmallInt, 58);
+    req.input('cestado', T.SmallInt, this.intField(b[`estado_${rol}`]));
+    req.input('cciudad', T.SmallInt, this.intField(b[`ciudad_${rol}`]));
+    req.input('xdireccion', T.VarChar(250), txt(b[`direccion_${rol}`], 250));
+    req.input('czonapos', T.VarChar(10), null);
+    req.input('xtelefono', T.VarChar(20), tel || null);
+    req.input('ifuente', T.VarChar(10), String(canal['ifuente_api'] ?? canal['ifuente'] ?? 'API').slice(0, 10));
+    req.input('cid', T.VarChar(15), p.cid);
+    this.logger.log(`createEmissionPerson: sp_create_maclient_nexus pasaporte ${p.cid} cci_rif=${p.digitos} (${rol})`);
+    try {
+      await req.execute('sp_create_maclient_nexus');
+    } catch (err) {
+      const msg = parseSPError(err);
+      this.logger.error(`sp_create_maclient_nexus pasaporte ${p.cid}: ${msg}`);
+      throw new BadRequestException(/cid|99002|duplicate/i.test(msg) ? MSG_PASAPORTE_CHOQUE : msg);
+    }
+  }
+
+  /**
+   * [benef-juridico 16-nov-2026] Crea/actualiza en maclient a un beneficiario (preferencial o de la
+   * lista) antes de emitir. Jurídico (J/G/C) igual que el tomador J: sp_create_maclient_nexus con
+   * icedula J/G deja ipersona J/G; xnombre/xcliente = razón social; apellido, sexo, estado civil y
+   * fnac en NULL; cid con el formato de La Mundial 'J-40084902-0' (el SP de emisión lo pasaría como
+   * 'J-400849020'; como el cliente ya existe, sp_create_maclient_nexus no le cambia el cid).
+   * Un cliente existente no se pisa (el SP solo completa lo que esté en NULL).
+   */
+  private async crearClienteBeneficiario(
+    pref: BeneficiarioPreferencial,
+    canal: Record<string, unknown>,
+    etiqueta = 'beneficiario_preferencial',
+  ): Promise<void> {
+    const T = this.db.types;
+    const chk = this.db.request();
+    chk.input('cci_rif', T.Numeric(13, 0), pref.rif);
+    const existentes = await chk.query(`SELECT cid FROM maclient WITH (NOLOCK) WHERE cci_rif = @cci_rif`);
+    const cidOtro = choqueBeneficiarioPreferencial(
+      (existentes.recordset ?? []) as { cid: unknown }[],
+      pref,
+    );
+    if (cidOtro) {
+      throw new BadRequestException(
+        `${etiqueta}: el número ${pref.rif} ya está registrado en Sis2000 como ${cidOtro}; revise el RIF.`,
+      );
+    }
+
+    const req = this.db.request();
+    req.input('icedula', T.Char(1), pref.tipo);
+    req.input('cci_rif', T.Numeric(13, 0), pref.rif);
+    req.input('xnombre', T.VarChar(120), pref.nombre);
+    req.input('xapellido', T.VarChar(120), pref.apellido);
+    req.input('xcliente', T.VarChar(250), pref.xcliente);
+    req.input('isexo', T.Char(1), pref.sexo);
+    req.input('iestado_civil', T.Char(1), pref.estadoCivil);
+    req.input('fnac', T.DateTime, pref.fnac);
+    req.input('xcorreo', T.VarChar(100), pref.correo);
+    req.input('cpais', T.SmallInt, 58);
+    req.input('cestado', T.SmallInt, pref.estado);
+    req.input('cciudad', T.SmallInt, pref.ciudad);
+    req.input('xdireccion', T.VarChar(250), pref.direccion);
+    req.input('czonapos', T.VarChar(10), null);
+    req.input('xtelefono', T.VarChar(20), pref.telefono);
+    req.input('ifuente', T.VarChar(10), String(canal['ifuente_api'] ?? canal['ifuente'] ?? 'API').slice(0, 10));
+    req.input('cid', T.VarChar(15), pref.cid);
+    this.logger.log(
+      `createEmissionPerson: sp_create_maclient_nexus ${etiqueta} ${pref.cid ?? `${pref.tipo}-${pref.rif}`}`,
+    );
+    try {
+      await req.execute('sp_create_maclient_nexus');
+    } catch (err) {
+      const msg = parseSPError(err);
+      this.logger.error(`sp_create_maclient_nexus ${etiqueta} ${pref.tipo}-${pref.rif}: ${msg}`);
+      throw new BadRequestException(`${etiqueta}: ${msg}`);
+    }
+  }
+
+  /**
+   * [benef-juridico 16-nov-2026] El SP de emisión llena adpoliza.cbeneficiario con un rif de
+   * TMEMISION_PERSONAS_GENERAL_BENF (beneficiarios por fallecimiento). Si vino un beneficiario
+   * preferencial, ese es el que va a póliza y recibo (cuadro: SPReCpBeneficiarioPref).
+   * Mismo patrón que clearViajeLocalBeneficiary.
+   */
+  private async asignarBeneficiarioPreferencial(
+    cnpoliza: string,
+    fanopol: number | undefined,
+    fmespol: number | undefined,
+    rif: number,
+  ): Promise<void> {
+    const T = this.db.types;
+    let fano = fanopol;
+    let fmes = fmespol;
+    if (fano == null || fmes == null) {
+      const pol = this.db.request();
+      pol.input('cnpoliza', T.NVarChar(30), cnpoliza);
+      const r = await pol.query(`
+        SELECT TOP 1 fanopol, fmespol FROM adpoliza WHERE cnpoliza = @cnpoliza ORDER BY fingreso DESC
+      `);
+      const row = r.recordset?.[0] as Record<string, unknown> | undefined;
+      if (!row) {
+        this.logger.warn(`asignarBeneficiarioPreferencial: póliza ${cnpoliza} no encontrada`);
+        return;
+      }
+      fano = Number(row['fanopol']);
+      fmes = Number(row['fmespol']);
+    }
+    const upd = this.db.request();
+    upd.input('cnpoliza', T.NVarChar(30), cnpoliza);
+    upd.input('fanopol', T.SmallInt, fano);
+    upd.input('fmespol', T.TinyInt, fmes);
+    upd.input('cbeneficiario', T.Numeric(9, 0), rif);
+    await upd.query(`
+      UPDATE adpoliza SET cbeneficiario = @cbeneficiario
+      WHERE cnpoliza = @cnpoliza AND fanopol = @fanopol AND fmespol = @fmespol;
+      UPDATE adrecibos SET cbeneficiario = @cbeneficiario
+      WHERE cnpoliza = @cnpoliza AND fanopol = @fanopol AND fmespol = @fmespol;
+    `);
+    this.logger.log(`asignarBeneficiarioPreferencial OK cnpoliza=${cnpoliza} cbeneficiario=${rif}`);
+  }
+
   // ── Validación de persona (speeValidatePersonGeneral) ──────────────────────
   async validateEmissionPerson(body: Record<string, unknown>) {
+    // Pasaporte alfanumérico de titular/tomador: rif_* = dígitos y revisión de choque ANTES de pagar.
+    for (const p of this.pasaportesUnicos(aplicarPasaportesAlfanumericos(body))) {
+      const tipo = await this.assertPasaporteSinChoque(p.cid, p.digitos, this.personaPasaporte(body, p.rol));
+      if (tipo) this.usarClienteExistente(body, p, tipo);
+    }
     const req = this.db.request();
     const T = this.db.types;
     const femision =
@@ -1260,13 +1658,43 @@ export class PersonasService {
         asegurados as Record<string, unknown>[],
         beneficiarios,
       );
+      // Pasaporte alfanumérico SOLO titular/tomador (cid_*): rif_* pasa a los dígitos.
+      const pasaportes = this.pasaportesUnicos(aplicarPasaportesAlfanumericos(b));
+      // El titular repetido como asegurado (parentesco 1) con su pasaporte completo → mismos dígitos.
+      const cidTitular = b['cid_titular'] as string | undefined;
+      if (cidTitular) {
+        for (const a of asegurados as Record<string, unknown>[]) {
+          const id = a?.['xrif_asegurado'] ?? a?.['identificacion'];
+          if (typeof id === 'string' && /[A-Za-z]/.test(id) && cidPasaporte(id) === cidTitular) {
+            a['xrif_asegurado'] = b['rif_titular'];
+            if ('identificacion' in a) a['identificacion'] = b['rif_titular'];
+          }
+        }
+      }
+      // Tomador y beneficiarios J/G/C permitidos; titular y asegurados solo persona natural.
+      // Identificación alfanumérica → 400, salvo pasaporte de titular/tomador con cid_*.
+      assertIdentidadesPersonas(
+        b,
+        asegurados as Record<string, unknown>[],
+        beneficiarios,
+      );
+      // [benef-juridico 16-nov-2026] Beneficiario preferencial: el único beneficiario que puede ser J/G/C.
+      let beneficiarioPreferencial = resolverBeneficiarioPreferencial(
+        b['beneficiario_preferencial'] ??
+          (b['funeral'] && typeof b['funeral'] === 'object'
+            ? (b['funeral'] as Record<string, unknown>)['beneficiario_preferencial']
+            : undefined),
+      );
       if (
         isViajeroPlan(cramoEmision, planEmision) ||
         isViajeLocalPlan(cramoEmision, planEmision)
       ) {
         beneficiarios = [];
         b['beneficiarios'] = [];
+        beneficiarioPreferencial = null;
       }
+      // [benef-juridico 16-nov-2026] Beneficiarios J/G/C de la lista (porcentaje / pebenefi), ya validados.
+      const beneficiariosPJ = beneficiariosJuridicos(beneficiarios);
 
       await this.assertEmissionPersonValidated(
         b,
@@ -1432,6 +1860,24 @@ export class PersonasService {
         }
 
         // Emisión local vía SP de producción (SysIP fb_organizacion_swagger / main actual).
+        // Pasaporte alfanumérico: revisar choque otra vez y crear el cliente con cid completo.
+        for (const p of pasaportes) {
+          const tipo = await this.assertPasaporteSinChoque(p.cid, p.digitos, this.personaPasaporte(b, p.rol));
+          if (tipo) {
+            this.usarClienteExistente(b, p, tipo);
+            continue;
+          }
+          await this.crearClientePasaporte(b, p, canal);
+        }
+        if (beneficiarioPreferencial) {
+          await this.crearClienteBeneficiario(beneficiarioPreferencial, canal);
+        }
+        for (const [i, pj] of beneficiariosPJ.entries()) {
+          if (beneficiariosPJ.findIndex((x) => x.rif === pj.rif) !== i) continue;
+          if (beneficiarioPreferencial?.rif === pj.rif) continue;
+          await this.crearClienteBeneficiario(pj, canal, 'beneficiarios');
+        }
+
         const preEmisionSp = SP_PRE_EMISION_PERSONAS;
         this.logger.log(`=== INICIO EMISION LOCAL SP ${preEmisionSp} ===`);
 
@@ -1447,9 +1893,9 @@ export class PersonasService {
           xrif_tomador: { type: T.Numeric(11, 0), value: this.intField(b['rif_tomador']) },
           xnombre_tomador: { type: T.NVarChar(250), value: b['nombre_tomador'] ?? null },
           xapellido_tomador: { type: T.NVarChar(250), value: b['apellido_tomador'] ?? null },
-          isexo_tomador: { type: T.Char(1), value: b['sexo_tomador'] ?? null },
-          iestado_civil_tomador: { type: T.Char(1), value: b['estado_civil_tomador'] ?? null },
-          fnac_tomador: { type: T.Date, value: b['fnac_tomador'] ?? null },
+          isexo_tomador: { type: T.Char(1), value: blankToNull(b['sexo_tomador']) },
+          iestado_civil_tomador: { type: T.Char(1), value: blankToNull(b['estado_civil_tomador']) },
+          fnac_tomador: { type: T.Date, value: blankToNull(b['fnac_tomador']) },
           cestado_tomador: { type: T.SmallInt, value: this.intField(b['estado_tomador']) },
           cciudad_tomador: { type: T.SmallInt, value: this.intField(b['ciudad_tomador']) },
           xdireccion_tomador: { type: T.NVarChar(1000), value: b['direccion_tomador'] ?? null },
@@ -1462,9 +1908,9 @@ export class PersonasService {
           xrif_titular: { type: T.Numeric(11, 0), value: this.intField(b['rif_titular']) },
           xnombre_titular: { type: T.NVarChar(250), value: b['nombre_titular'] ?? null },
           xapellido_titular: { type: T.NVarChar(250), value: b['apellido_titular'] ?? null },
-          isexo_titular: { type: T.Char(1), value: b['sexo_titular'] ?? null },
-          iestado_civil_titular: { type: T.Char(1), value: b['estado_civil_titular'] ?? null },
-          fnac_titular: { type: T.DateTime, value: b['fnac_titular'] ?? null },
+          isexo_titular: { type: T.Char(1), value: blankToNull(b['sexo_titular']) },
+          iestado_civil_titular: { type: T.Char(1), value: blankToNull(b['estado_civil_titular']) },
+          fnac_titular: { type: T.DateTime, value: blankToNull(b['fnac_titular']) },
           cestado_titular: { type: T.SmallInt, value: this.intField(b['estado_titular']) },
           cciudad_titular: { type: T.SmallInt, value: this.intField(b['ciudad_titular']) },
           xdireccion_titular: { type: T.NVarChar(1000), value: b['direccion_titular'] ?? null },
@@ -1505,7 +1951,8 @@ export class PersonasService {
           // Usuario Sis2000 del canal; sin valor el SP de emisión deja 7.
           cusuario: { type: T.Int, value: this.intField(b['cusuario']) },
           asegurados: {
-            type: T.NVarChar(5000),
+            // MAX como el parámetro del SP: un JSON cortado no pasa ISJSON y el SP descarta los asegurados.
+            type: T.NVarChar(T.MAX),
             value: this.mapAseguradosForSp(asegurados as Record<string, unknown>[], getPar),
           },
           beneficiarios: {
@@ -1521,6 +1968,15 @@ export class PersonasService {
         });
         if (titularPct.precargo) params.precargo_titular = { type: T.Numeric(13, 2), value: titularPct.precargo };
         if (titularPct.pdescuento) params.pdescuento_titular = { type: T.Numeric(13, 2), value: titularPct.pdescuento };
+
+        // Profesión, ocupación y actividad del tomador y el titular (pre-SP 30-oct-2026).
+        if (this.sendProfesionPersonas()) {
+          for (const rol of ['tomador', 'titular'] as const) {
+            params[`cprofesion_${rol}`] = { type: T.SmallInt, value: this.intField(b[`cprofesion_${rol}`]) };
+            params[`cocupacion_${rol}`] = { type: T.SmallInt, value: this.intField(b[`cocupacion_${rol}`]) };
+            params[`cactividad_${rol}`] = { type: T.Numeric(18, 0), value: this.intField(b[`cactividad_${rol}`]) };
+          }
+        }
 
         Object.entries(params).forEach(([key, field]) =>
           req.input(key, (field as { type: unknown }).type, (field as { value: unknown }).value),
@@ -1577,15 +2033,48 @@ export class PersonasService {
           }
         }
 
+        if (beneficiarioPreferencial) {
+          try {
+            await this.asignarBeneficiarioPreferencial(cnpoliza, fanopol, fmespol, beneficiarioPreferencial.rif);
+          } catch (prefErr) {
+            const msg = prefErr instanceof Error ? prefErr.message : String(prefErr);
+            this.logger.error(`asignarBeneficiarioPreferencial falló cnpoliza=${cnpoliza}: ${msg}`);
+          }
+        }
+
         try {
-          await this.syncBeneficiarioDir(beneficiarios as Record<string, unknown>[]);
+          const conPreferencial = beneficiarioPreferencial
+            ? [
+              ...(beneficiarios as Record<string, unknown>[]),
+              {
+                xrif_beneficiario: beneficiarioPreferencial.rif,
+                cestado: beneficiarioPreferencial.estado,
+                cciudad: beneficiarioPreferencial.ciudad,
+              },
+            ]
+            : (beneficiarios as Record<string, unknown>[]);
+          await this.syncBeneficiarioDir(conPreferencial);
         } catch (syncErr) {
           const msg = syncErr instanceof Error ? syncErr.message : String(syncErr);
           this.logger.error(`syncBeneficiarioDir falló cnpoliza=${cnpoliza}: ${msg}`);
         }
 
+        // cpoliza/casegurado: los pide la activación de tarjetas (cards/activate) tras emitir.
+        const cpoliza = await this.resolveCpolizaEmitida(row, cnpoliza);
+        const casegurado = rifTitular || undefined;
+
+        // Observaciones de la póliza (adpoliza.xobserva). No bloquea: si el SP falla la emisión sigue OK.
+        const observacionesTexto = normalizarObservaciones(body.observaciones);
+        const observaciones = observacionesTexto
+          ? { guardada: await guardarObservacionPoliza(this.db, this.logger, cnpoliza, observacionesTexto) }
+          : undefined;
+
         this.logger.log(`createEmissionPerson: emitida OK cnpoliza=${cnpoliza}`);
-        return { message: 'Emisión registrada exitosamente.', cnpoliza, cnrecibo, urlpoliza, ncuota, fanopol, fmespol };
+        return {
+          message: 'Emisión registrada exitosamente.',
+          cnpoliza, cnrecibo, urlpoliza, ncuota, fanopol, fmespol, cpoliza, casegurado,
+          ...(observaciones ? { observaciones } : {}),
+        };
 
     } catch (err) {
       if (err instanceof BadRequestException || err instanceof UnauthorizedException) throw err;

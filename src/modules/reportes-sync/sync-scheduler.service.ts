@@ -9,7 +9,19 @@ const PASADAS: ReadonlyArray<{ nombre: string; estado?: string }> = [
   { nombre: 'anulados (fecha de anulación)', estado: 'A' },
 ];
 
-const ENTIDADES_PROGRAMABLES = ['recibos', 'siniestros'];
+/**
+ * Pólizas: la consulta solo sincroniza el rango y los filtros que pide el usuario, así que una
+ * póliza recién emitida no llegaba a PG hasta que alguien consultara justo su vigencia. Por
+ * emisión entran las nuevas y las renovaciones emitidas por adelantado (vigencia futura); por
+ * vigencia desde, los cambios de estatus de las pólizas que empiezan en la ventana.
+ */
+const PASADAS_POLIZAS: ReadonlyArray<{ nombre: string; tipoFecha: string }> = [
+  { nombre: 'emisión', tipoFecha: 'fecha_emision' },
+  { nombre: 'vigencia desde', tipoFecha: 'fecha_desde' },
+];
+
+const ENTIDADES_PROGRAMABLES = ['recibos', 'siniestros', 'polizas'];
+const ENTIDADES_POR_DEFECTO = 'recibos,siniestros,polizas';
 const MIN_INTERVALO_MIN = 5;
 const MAX_VENTANA_DIAS = 60;
 
@@ -24,7 +36,7 @@ function clampInt(value: unknown, fallback: number, min: number, max: number): n
 }
 
 /**
- * Refresco periódico de recibos en segundo plano. Sin esto el reporte solo se actualiza
+ * Refresco periódico de recibos, siniestros y pólizas en segundo plano. Sin esto el reporte solo se actualiza
  * cuando alguien lo ejecuta, y los cambios de estado (cobros, anulaciones) llegan tarde.
  *
  * Usa ventanas cortas (no el sync completo, que vacía y recarga toda la aseguradora).
@@ -77,10 +89,10 @@ export class SyncSchedulerService implements OnModuleInit, OnModuleDestroy {
     this.timer.unref();
   }
 
-  /** Entidades que refresca el proceso (REPORTES_SYNC_SCHEDULE_ENTIDADES, defecto: recibos,siniestros). */
+  /** Entidades que refresca el proceso (REPORTES_SYNC_SCHEDULE_ENTIDADES, defecto: recibos,siniestros,polizas). */
   private entidadesActivas(): string[] {
     const crudo = String(
-      this.config.get('REPORTES_SYNC_SCHEDULE_ENTIDADES') ?? 'recibos,siniestros',
+      this.config.get('REPORTES_SYNC_SCHEDULE_ENTIDADES') ?? ENTIDADES_POR_DEFECTO,
     );
     const pedidas = crudo
       .split(',')
@@ -130,6 +142,17 @@ export class SyncSchedulerService implements OnModuleInit, OnModuleDestroy {
       // así también llegan los pagos, anulaciones y rechazos de siniestros antiguos.
       if (entidades.includes('siniestros')) {
         await this.ejecutar('siniestros (reemplazo completo)', 'siniestros', {});
+      }
+
+      if (entidades.includes('polizas')) {
+        for (const pasada of PASADAS_POLIZAS) {
+          await this.ejecutar(`polizas por ${pasada.nombre}`, 'polizas', {
+            desde,
+            hasta,
+            tipoFecha: pasada.tipoFecha,
+            refreshScope: true,
+          });
+        }
       }
     } finally {
       this.running = false;

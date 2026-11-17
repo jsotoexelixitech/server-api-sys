@@ -32,6 +32,7 @@ export const envValidationSchema = Joi.object({
   MSSQL_SP_BUSCA_FRECUENCIA_PLAN_NEXUS: Joi.string().default(
     'sp_busca_frecuencia_plan_nexus',
   ),
+  MSSQL_SP_BUSCA_PLAN_NEXUS: Joi.string().default('sp_busca_plan_nexus'),
   MSSQL_SP_BUSCA_PLAN_PRODUCTO_NEXUS: Joi.string().default(
     'sp_busca_plan_producto_nexus',
   ),
@@ -122,6 +123,20 @@ export const envValidationSchema = Joi.object({
   SMTP_REPLY_TO: Joi.string().email().optional(),
   /** Endpoint PHP sendmail_sisip (modo sisip). Mismo contrato que SysIP email_php.service.js */
   URL_API_EMAIL: Joi.string().uri().optional(),
+  /** Login de Sis2000 del ambiente: botón "Ingresar a Sis2000" del correo de alta de intermediarios (sin él, no hay botón). */
+  SIS2000_LOGIN_URL: Joi.string().uri().optional(),
+
+  /**
+   * Verificación del pago en `/external/collection/activate`: antes de registrar
+   * la referencia en `pago_movil`, se consulta la BD de Pagos (`PAGOS_DATABASE_URL`,
+   * tabla `pagos.registros_pago`) para confirmar que el pago fue verificado.
+   * `off` = sin verificar; `warn` = avisa sin bloquear; `enforce` = rechaza (402).
+   */
+  COLLECTION_VERIFY_PAYMENT: Joi.string()
+    .valid('off', 'warn', 'enforce')
+    .default('warn'),
+  /** Cadena de conexión a la BD `exelixi_nexus` de Pagos (solo lectura para verificar). */
+  PAGOS_DATABASE_URL: Joi.string().optional(),
 
   /** Reportes ET — PostgreSQL DB `reportes` (independiente de Sis2000 MSSQL). */
   REPORTES_ENABLED: Joi.boolean().default(false),
@@ -153,7 +168,10 @@ export const envValidationSchema = Joi.object({
   REPORTES_SYNC_RECIBOS_ON_EXECUTE: Joi.boolean().default(true),
   /** Igual que la de recibos, para siniestros. */
   REPORTES_SYNC_SINIESTROS_ON_EXECUTE: Joi.boolean().default(true),
+  /** Igual para pólizas: un rango ancho tarda más que el proxy (502); con false la consulta lee de PG. */
+  REPORTES_SYNC_POLIZAS_ON_EXECUTE: Joi.boolean().default(true),
   /** Recibos: escribir solo lo nuevo o modificado (false = borrar el rango e insertar todo, como antes). */
+  REPORTES_SYNC_POLIZAS_DELTA: Joi.boolean().default(true),
   REPORTES_SYNC_RECIBOS_DELTA: Joi.boolean().default(true),
   /** Segundos que un alcance (filtros del usuario) se considera sincronizado antes de volver al origen. */
   REPORTES_SYNC_SCOPE_TTL_SECONDS: Joi.number().integer().min(0).default(30),
@@ -164,7 +182,7 @@ export const envValidationSchema = Joi.object({
   /** Tamaño de paquete TDS de la conexión de origen (bytes). */
   REPORTES_SYNC_ORIGIN_PACKET_SIZE: Joi.number().integer().min(512).max(32767).default(16384),
   /** Entidades que refresca el proceso programado (separadas por coma). */
-  REPORTES_SYNC_SCHEDULE_ENTIDADES: Joi.string().default('recibos,siniestros'),
+  REPORTES_SYNC_SCHEDULE_ENTIDADES: Joi.string().default('recibos,siniestros,polizas'),
   /**
    * Conexión a la BD de ORIGEN de cada aseguradora (sync de reportes). Se convierten a boolean:
    * el driver mssql rechaza el texto "false"/"true" en `encrypt` y el sync falla con
@@ -185,4 +203,11 @@ export const envValidationSchema = Joi.object({
   RMS_GATEWAY_API_KEY: Joi.string().allow('').optional(),
   RMS_GATEWAY_RAMOS: Joi.string().allow('').default('5,7,8,9,45'),
   RMS_GATEWAY_TIMEOUT_MS: Joi.number().integer().min(1000).default(8000),
+
+  /**
+   * API de documentos del expediente (/api/v1/expedientes): URL interna de nexus-api y la clave
+   * EXPEDIENTES_INTEGRACION_KEY (o EXPEDIENTE_INTERNAL_KEY) de nexus-api. Sin ellas: 503 y sin registro.
+   */
+  NEXUS_EXPEDIENTES_URL: Joi.string().allow('').optional(),
+  NEXUS_EXPEDIENTES_KEY: Joi.string().allow('').optional(),
 });

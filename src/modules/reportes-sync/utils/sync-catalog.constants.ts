@@ -7,6 +7,7 @@ export const CATALOG_ENTIDADES = Object.freeze([
   'productores',
   'anulaciones',
   'rechazos',
+  'coberturas',
 ] as const);
 
 export type CatalogEntidad = (typeof CATALOG_ENTIDADES)[number];
@@ -20,6 +21,7 @@ export const CATALOG_TABLES: Readonly<Record<CatalogEntidad, string>> =
     productores: 'productor',
     anulaciones: 'anulacion',
     rechazos: 'rechazo',
+    coberturas: 'cobertura',
   });
 
 export function isCatalogEntidad(entidad: string): boolean {

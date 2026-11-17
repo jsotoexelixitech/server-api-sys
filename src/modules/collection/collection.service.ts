@@ -1,11 +1,14 @@
 import {
   BadRequestException,
+  HttpException,
+  HttpStatus,
   Injectable,
   InternalServerErrorException,
   Logger,
 } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { MssqlService } from '../../database/mssql.service';
+import { PaymentVerificationService } from './payment-verification.service';
 import {
   collectionPaymentCedula,
   collectionPaymentTelefono,
@@ -15,6 +18,7 @@ import {
   hasPagoMovilDuplicateLookupFields,
   PAGO_MOVIL_ALREADY_VALIDATED_MESSAGE,
 } from './pago-movil-validation.util';
+import { evaluateReferenceReuse } from './reference-reuse.util';
 import { parseSPError } from '../../common/helpers/sp-error.helper';
 import { buildIngresoCajaUrl } from '../../common/helpers/policy-url.helper';
 
@@ -88,6 +92,7 @@ export class CollectionService {
   constructor(
     private readonly db: MssqlService,
     private readonly config: ConfigService,
+    private readonly paymentVerification: PaymentVerificationService,
   ) {}
 
   /** Rechaza referencias internas Exélixi; exige ref. bancaria del pago verificado. */
@@ -149,6 +154,56 @@ export class CollectionService {
     }
   }
 
+  /**
+   * Una referencia bancaria no puede cobrar a otro asegurado ni superar el monto del movimiento.
+   * Complementa assertPagoMovilNotAlreadyValidated (que exige coincidir referencia, teléfono y banco).
+   * Solo mira cobros recientes: referencias antiguas de otros orígenes pueden coincidir por azar.
+   * COLLECTION_REFERENCE_REUSE_DAYS (default 60); 0 desactiva la validación.
+   */
+  private async assertReferenceNotReused(body: CollectionPaymentDto): Promise<void> {
+    const days = Number(process.env.COLLECTION_REFERENCE_REUSE_DAYS ?? 60);
+    if (!Number.isFinite(days) || days <= 0) return;
+
+    const referencia = body.xreferencia.trim();
+    const receipt = await this.getReceiptAmounts(body.cnrecibo);
+    const T = this.db.types;
+
+    const priorReq = this.db.request();
+    priorReq.input('referencia', T.VarChar(30), referencia);
+    priorReq.input('days', T.Int, Math.floor(days));
+    const prior = await priorReq.query(`
+      SELECT casegurado, mpago
+      FROM cbreporte_pago
+      WHERE LTRIM(RTRIM(xreferencia)) = @referencia
+        AND fingreso >= DATEADD(day, -@days, GETDATE())
+    `);
+
+    const movReq = this.db.request();
+    movReq.input('referencia', T.VarChar(50), referencia);
+    const movement = await movReq.query(`
+      SELECT TOP 1 monto
+      FROM pago_movil
+      WHERE LTRIM(RTRIM(referencia_banco)) = @referencia
+      ORDER BY id
+    `);
+
+    const monto = movement.recordset?.[0]?.['monto'];
+    const result = evaluateReferenceReuse({
+      ctenedor: receipt.ctenedor,
+      mpago: Number(body.mpago),
+      movementAmount: monto == null ? null : Number(monto),
+      prior: (prior.recordset ?? []).map((r: Record<string, unknown>) => ({
+        casegurado: Number(r['casegurado']),
+        mpago: Number(r['mpago'] ?? 0),
+      })),
+    });
+    if (!result.ok) {
+      this.logger.warn(
+        `assertReferenceNotReused: ref=${referencia} cnrecibo=${body.cnrecibo} rechazada (${result.reason})`,
+      );
+      throw new BadRequestException(result.message);
+    }
+  }
   private isEnsurePagoMovilSpMissing(err: unknown): boolean {
     const msg = err instanceof Error ? err.message : String(err);
     return /could not find stored procedure/i.test(msg)
@@ -338,12 +393,55 @@ export class CollectionService {
    * Tras verificar pago móvil vía SysIP, la fila puede no existir en la BD que usa nest-api
    * (instancia distinta o registro solo en el gateway). Inserta en pago_movil si falta.
    */
+  /**
+   * Exige que la referencia corresponda a un pago verificado por el módulo de Pagos
+   * (`pagos.registros_pago`) antes de registrarla en `pago_movil`. En modo `warn`
+   * solo deja aviso en el log; en `enforce` rechaza con 402. Una caída de la BD de
+   * Pagos nunca bloquea el cobro (fail-open con aviso).
+   */
+  private async assertPagoVerificadoPorPagos(body: CollectionPaymentDto): Promise<void> {
+    const mode = this.paymentVerification.mode;
+    if (mode === 'off') return;
+
+    const ref = body.xreferencia.trim();
+    const check = await this.paymentVerification.verify(ref, Number(body.mpago));
+    if (check.verified) return;
+
+    const detalle = `ref=${ref} cnrecibo=${body.cnrecibo} motivo=${check.reason} mpago=${body.mpago}`;
+
+    if (check.reason === 'db_unavailable') {
+      this.logger.warn(
+        `assertPagoVerificado: BD de Pagos no disponible, se deja pasar (${detalle})`,
+      );
+      return;
+    }
+
+    if (mode === 'enforce') {
+      this.logger.warn(`assertPagoVerificado (BLOQUEO): ${detalle}`);
+      throw new HttpException(
+        {
+          status: false,
+          code: 'PAYMENT_NOT_VERIFIED',
+          message:
+            'La referencia no corresponde a un pago verificado. No se puede cobrar el recibo.',
+        },
+        HttpStatus.PAYMENT_REQUIRED,
+      );
+    }
+
+    this.logger.warn(`assertPagoVerificado (AVISO, sin bloquear): ${detalle} modo=${mode}`);
+  }
+
   private async ensureMobilePaymentRegistered(body: CollectionPaymentDto): Promise<void> {
     const ref = body.xreferencia.trim();
     if (await this.hasExactPagoMovilReference(ref)) {
       await this.syncPagoMovilPagadorFromBody(ref, body);
       return;
     }
+
+    // La referencia no está en pago_movil: solo se registra si Pagos la verificó.
+    // Evita que /activate (público) cobre un recibo con una referencia no verificada.
+    await this.assertPagoVerificadoPorPagos(body);
 
     const bankRef = body.cbanco_ref?.trim();
     if (!bankRef) {
@@ -791,6 +889,7 @@ export class CollectionService {
     } else if (!isSypago) {
       await this.assertPagoMovilNotAlreadyValidated(body);
       await this.ensureMobilePaymentRegistered(body);
+      await this.assertReferenceNotReused(body);
     } else {
       await this.ensureSypagoPaymentRegistered(body);
     }

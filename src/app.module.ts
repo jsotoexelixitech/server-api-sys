@@ -9,8 +9,11 @@ import { EmissionsModule } from './modules/emissions/emissions.module';
 import { ChangesModule } from './modules/changes/changes.module';
 import { PersonasModule } from './modules/personas/personas.module';
 import { CondominioModule } from './modules/condominio/condominio.module';
+import { RiesgosGeneralesModule } from './modules/riesgos-generales/riesgos-generales.module';
+import { IntermediariosModule } from './modules/intermediarios/intermediarios.module';
 import { EndososModule } from './modules/endosos/endosos.module';
 import { RmsGatewayModule } from './modules/rms-gateway/rms-gateway.module';
+import { FlotaModule } from './modules/flota/flota.module';
 
 import { AppApiModule } from './modules/app/app.module';
 import { ExternalModule } from './modules/external/external.module';
@@ -19,6 +22,7 @@ import { CollectionModule } from './modules/collection/collection.module';
 import { PartnerHostModule } from './partner/partner-host.module';
 import { PartnerIntegrationModule } from './partner/partner-integration.module';
 import { AuthModule } from './modules/auth/auth.module';
+import { MenuSis2000Module } from './modules/menu-sis2000/menu-sis2000.module';
 import { AdminModule } from './modules/admin/admin.module';
 import { DocsModule } from './modules/docs/docs.module';
 import { PrismaModule } from './database/prisma/prisma.module';
@@ -38,6 +42,9 @@ import { SiniestrosModule } from './modules/siniestros/siniestros.module';
 import { RecibosModule } from './modules/recibos/recibos.module';
 import { PolizasModule } from './modules/polizas/polizas.module';
 import { ComponentsModule } from './modules/components/components.module';
+import { AutopagoModule } from './modules/autopago/autopago.module';
+import { ExpedientesApiModule } from './modules/expedientes-api/expedientes-api.module';
+import { CotizacionesAutoModule } from './modules/cotizaciones-auto/cotizaciones-auto.module';
 
 @Module({
   imports: [
@@ -60,8 +67,11 @@ import { ComponentsModule } from './modules/components/components.module';
     ChangesModule,
     PersonasModule,
     CondominioModule,
+    RiesgosGeneralesModule,
+    IntermediariosModule,
     EndososModule,
     RmsGatewayModule,
+    FlotaModule,
     AppApiModule,
     ExternalModule,
     DocumentsModule,
@@ -74,6 +84,7 @@ import { ComponentsModule } from './modules/components/components.module';
     MailModule,
     CanalModule,
     PortalAuthModule,
+    MenuSis2000Module,
     MonedaModule,
     ArysModule,
     MonitoringModule,
@@ -86,6 +97,9 @@ import { ComponentsModule } from './modules/components/components.module';
     RecibosModule,
     PolizasModule,
     ComponentsModule,
+    AutopagoModule,
+    ExpedientesApiModule,
+    CotizacionesAutoModule,
   ],
 })
 export class AppModule {}

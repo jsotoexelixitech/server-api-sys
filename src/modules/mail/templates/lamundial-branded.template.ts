@@ -13,6 +13,8 @@ export type LamundialBrandedParams = {
   extraNote?: string;
   fallbackUrl?: string;
   callCenterPhone?: string;
+  /** false: la introducción va solo dentro de la tarjeta (sin repetirla arriba). Por defecto true. */
+  introArriba?: boolean;
 };
 
 export type BuiltEmail = {
@@ -46,6 +48,13 @@ export function buildLamundialBrandedEmail(params: LamundialBrandedParams): Buil
   const ctaLabel = params.ctaLabel?.trim() || '';
   const extraNote = params.extraNote?.trim() || '';
   const fallbackUrl = params.fallbackUrl?.trim() || ctaUrl;
+  const introArribaHtml =
+    params.introArriba === false
+      ? ''
+      : `  <p style="margin:0 0 16px;font-size:16px;line-height:1.6;color:#111111;">
+    ${escapeHtml(params.intro)}
+  </p>
+`;
 
   const text = [
     'La Mundial de Seguros',
@@ -126,10 +135,7 @@ export function buildLamundialBrandedEmail(params: LamundialBrandedParams): Buil
   <title>${escapeHtml(params.subject)}</title>
 </head>
 <body style="margin:0;padding:24px 12px;background:#f3f4f6;font-family:Arial,Helvetica,sans-serif;color:#111111;">
-  <p style="margin:0 0 16px;font-size:16px;line-height:1.6;color:#111111;">
-    ${escapeHtml(params.intro)}
-  </p>
-  <table role="presentation" width="100%" cellspacing="0" cellpadding="0">
+${introArribaHtml}  <table role="presentation" width="100%" cellspacing="0" cellpadding="0">
     <tr>
       <td align="center">
         <table role="presentation" width="560" cellspacing="0" cellpadding="0" style="max-width:560px;width:100%;background:#ffffff;">

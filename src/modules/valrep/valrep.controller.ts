@@ -2,6 +2,8 @@ import { Body, Controller, Get, HttpCode, HttpStatus, Post, Query } from '@nestj
 import { ApiBody, ApiExcludeEndpoint, ApiOperation, ApiQuery, ApiResponse, ApiTags } from '@nestjs/swagger';
 import { GetPlanesV2Dto } from './dto/get-planes-v2.dto';
 import { GetCitiesDto } from './dto/get-cities.dto';
+import { GetStatesDto } from './dto/get-states.dto';
+import { GetVigenciasDto } from './dto/get-vigencias.dto';
 import { GetCotizacionAutoDto } from './dto/get-cotizacion-auto.dto';
 import { CalculatePlanCoberturasDto } from './dto/calculate-plan-coberturas.dto';
 import { GetFrecuenciaDto } from './dto/get-frecuencia.dto';
@@ -85,17 +87,20 @@ export class ValrepController {
 
   @Get('states')
   @ApiOperation({
-    summary: 'Paso 2a · Estados de Venezuela',
-    description: 'Listado de estados de Venezuela. Use `cestado` en la consulta de ciudades.',
+    summary: 'Paso 2a · Estados (Venezuela por defecto)',
+    description:
+      'Listado de estados. Sin `cpais` = Venezuela (58). `cpais=57` = Colombia (placa extranjera). ' +
+      'Use `cestado` (y el mismo `cpais`) en la consulta de ciudades.',
     operationId: 'valrepStates',
   })
+  @ApiQuery({ name: 'cpais', required: false, type: Number, example: 58, description: 'País (58 Venezuela, 57 Colombia).' })
   @ApiResponse({
     status: 200,
     schema: { example: { status: true, data: { states: [{ cestado: 1, xdescripcion_l: 'Distrito Capital' }, { cestado: 2, xdescripcion_l: 'Amazonas' }] } } },
   })
   @Api500()
-  async getStates() {
-    const states = await this.valrepService.getStates();
+  async getStates(@Query() dto: GetStatesDto) {
+    const states = await this.valrepService.getStates(dto.cpais);
     return { status: true, data: { states } };
   }
 
@@ -108,11 +113,29 @@ export class ValrepController {
     operationId: 'valrepCities',
   })
   @ApiQuery({ name: 'cestado', required: false, type: Number, example: 1, description: 'Código de estado (de /states). Omitir para todas.' })
+  @ApiQuery({ name: 'cpais', required: false, type: Number, example: 58, description: 'País (58 Venezuela por defecto, 57 Colombia).' })
   @ApiResponse({ status: 200, schema: { example: { status: true, data: { cities: [{ cciudad: 128, xdescripcion_l: 'Caracas' }] } } } })
   @ApiCommonErrors()
   async getCities(@Query() dto: GetCitiesDto) {
-    const cities = await this.valrepService.getCities(dto.cestado);
+    const cities = await this.valrepService.getCities(dto.cestado, dto.cpais);
     return { status: true, data: { cities } };
+  }
+
+  // ── GET /api/v1/valrep/vigencias ────────────────────────────────────────
+
+  @Get('vigencias')
+  @ApiOperation({
+    summary: 'Vigencias por tipo de placa (placa extranjera)',
+    description:
+      'Catálogo mavigencias_PR. Para `iplaca=E`: menos de un mes (15 días) a 12 meses, con el % de la ' +
+      'prima anual (`nvalor`). Enviar el `fhasta` resultante en /valrep/cotizacion y en la emisión.',
+    operationId: 'valrepVigencias',
+  })
+  @ApiQuery({ name: 'iplaca', required: false, type: String, example: 'E' })
+  @ApiCommonErrors()
+  async getVigencias(@Query() dto: GetVigenciasDto) {
+    const vigencias = await this.valrepService.getVigencias(dto.iplaca ?? 'E');
+    return { status: true, data: { vigencias } };
   }
 
   // ── POST /api/v1/valrep/getLists ───────────────────────────────────────
@@ -159,8 +182,8 @@ export class ValrepController {
 
   @Get('ocupaciones')
   @ApiOperation({
-    summary: 'Profesiones / ocupaciones (diligencia debida RCV)',
-    description: 'Ejecuta `sp_get_ocupaciones_nexus` — catálogo para el campo Profesión (`cprofesion`).',
+    summary: 'Ocupaciones (diligencia debida RCV)',
+    description: 'Ejecuta `sp_get_ocupaciones_nexus` — catálogo `maocupac` para el campo Ocupación (`cocupacion`).',
     operationId: 'valrepOcupaciones',
   })
   @ApiResponse({
@@ -177,6 +200,31 @@ export class ValrepController {
   @Api500()
   async getOcupaciones() {
     const listas = await this.valrepService.getOcupacionesNexus();
+    return { status: true, data: { listas } };
+  }
+
+  // ── GET /api/v1/valrep/profesiones ────────────────────────────────────────
+
+  @Get('profesiones')
+  @ApiOperation({
+    summary: 'Profesiones (diligencia debida RCV)',
+    description: 'Ejecuta `sp_get_profesiones_nexus` — catálogo `maprofes` para el campo Profesión (`cprofesion`).',
+    operationId: 'valrepProfesiones',
+  })
+  @ApiResponse({
+    status: 200,
+    schema: {
+      example: {
+        status: true,
+        data: {
+          listas: [{ cvalor: '7', xdescripcion: 'ABOGADO' }],
+        },
+      },
+    },
+  })
+  @Api500()
+  async getProfesiones() {
+    const listas = await this.valrepService.getProfesionesNexus();
     return { status: true, data: { listas } };
   }
 
@@ -203,6 +251,38 @@ export class ValrepController {
   async getActividades() {
     const listas = await this.valrepService.getActividadesNexus();
     return { status: true, data: { listas } };
+  }
+
+  // ── GET /api/v1/valrep/planes/riesgos-generales ─────────────────────────
+
+  @Get('planes/riesgos-generales')
+  @ApiOperation({
+    summary: 'Planes de riesgos generales (cotizador RC)',
+    description:
+      'Planes vigentes de los ramos con `maramos.ctiporamo` 1 y 6 (sin RCV, ramo 26), con su tarifa en `maplantar`. ' +
+      'Los planes nuevos de Sis2000 aparecen sin cambios de código. `cotizable = false` cuando el plan no tiene ' +
+      'coberturas con suma en `maplantar` (spCalculoRiesgoGeneral no lo puede calcular).\n\n' +
+      '**Siguiente paso:** `POST /partner/starter/patrimonial/quote` con `cramo` y `cplan`.',
+    operationId: 'valrepPlanesRiesgosGenerales',
+  })
+  @ApiResponse({
+    status: 200,
+    schema: {
+      example: {
+        status: true,
+        data: [
+          {
+            cramo: 20, xramo: 'NAVES', ctiporamo: 6, cplan: 'RCE1', xplan: 'Plan I 5.000$ Embarcación (Uso Recreo)',
+            cproducto: 'EMB', qcoberturas: 1, msumamax: 5000, mprima: 50, cotizable: true,
+          },
+        ],
+      },
+    },
+  })
+  @Api500()
+  async getPlanesRiesgosGenerales() {
+    const data = await this.valrepService.getPlanesRiesgosGenerales();
+    return { status: true, data };
   }
 
   // ── Funerario: pasos 1–3 (catálogo valrep, fb_organizacion_swagger) ───────
@@ -342,7 +422,10 @@ export class ValrepController {
       'Planes de automóvil disponibles con parentescos y coberturas. ' +
       'El `cplan` devuelto se usa en frecuencia, cotización y emisión.\n\n' +
       'Con `csubitem` + `centidad` se excluyen planes restringidos al gestor (mausuplan itipouso=E). ' +
-      'RCV (cramo 18) usa cproducto 24 para la exclusión; otros ramos requieren `cproducto` en el body.',
+      'RCV (cramo 18) usa cproducto 24 para la exclusión; otros ramos requieren `cproducto` en el body.\n\n' +
+      '`basignado`: true si el plan está asignado a la entidad consultada (`centidad` + `citem`); ' +
+      'false si es un plan general (disponible para todos) o si no se envía `citem`.\n\n' +
+      '`bexclusivos: true` (opcional, requiere `citem`): devuelve solo los planes asignados a `citem`, sin los generales.',
     operationId: 'valrepPlanesV2',
   })
   @ApiBody({ type: GetPlanesV2Dto })
@@ -353,7 +436,7 @@ export class ValrepController {
         status: true,
         data: {
           plan: [{
-            cramo: 18, cplan: 'RCVBAS', xplan: 'Plan 5.000$ (RCV)',
+            cramo: 18, cplan: 'RCVBAS', xplan: 'Plan 5.000$ (RCV)', basignado: false,
             parentescos: [{ cparen: 'T', xparentesco: 'TITULAR', min_edad: 18, max_edad: 75 }],
             coberturas:  [{ ccobertura: '17', xcobertura: 'RESPONSABILIDAD CIVIL' }],
           }],
@@ -408,6 +491,7 @@ export class ValrepController {
       body.cplan,
       body.cramo,
       body.cproductor,
+      body.estricto === true,
     );
     const plan = frecuencias.map((f) => ({
       cplan: f.cplan ?? body.cplan,
@@ -496,6 +580,7 @@ export class ValrepController {
           },
         ],
         pa: 182.61,
+        primaCuotaInicial: 36.98,
         ca: 0,
         pt: 0,
         ap: 0,

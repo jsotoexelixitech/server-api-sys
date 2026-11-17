@@ -9,6 +9,7 @@ import { MssqlService } from '../../database/mssql.service';
 import { parseSPError } from '../../common/helpers/sp-error.helper';
 import {
   SP_BUSCA_FRECUENCIA_PLAN_NEXUS,
+  SP_BUSCA_PLAN_NEXUS,
   SP_BUSCA_PLAN_PRODUCTO_NEXUS,
   SP_CALCULO_AUTO_NEXUS,
   SP_GET_SUSTANCIAS_NEXUS,
@@ -24,6 +25,9 @@ import {
 } from './repositories/mausuplan.repository';
 import { GetProductosPersonasDto } from './dto/get-productos-personas.dto';
 import { MarketplaceCanalResolver } from './marketplace-canal.resolver';
+import { parseCoberturasCuotaInicial, sumPrimaCuotaInicial } from './cuota-inicial';
+import { sumPrimaBinacional } from './prima-binacional';
+import { dedupeCities } from './ciudades';
 
 export interface CotizacionResult {
   mprimaext: number;
@@ -82,6 +86,11 @@ export interface CalculatePlanCoberturasResponse {
   status: true;
   mount: CalculatePlanCoberturasRow[];
   pa: number;
+  /**
+   * Prima anual (USD) de Daños a personas y Daños a cosas: se cobra completa en la cuota inicial
+   * cuando la frecuencia no es anual (ver cuota-inicial.ts).
+   */
+  primaCuotaInicial: number;
   ca: number;
   pt: number;
   ap: number;
@@ -92,6 +101,19 @@ export interface CalculatePlanCoberturasResponse {
   boolBl: boolean;
   boolAd: boolean;
   cproducto: string;
+}
+
+export interface PlanRiesgoGeneral {
+  cramo: number;
+  xramo: string;
+  ctiporamo: number;
+  cplan: string;
+  xplan: string;
+  cproducto: string | null;
+  qcoberturas: number;
+  msumamax: number;
+  mprima: number;
+  cotizable: boolean;
 }
 
 @Injectable()
@@ -119,6 +141,9 @@ export class ValrepService {
   }
 
   async getPlanesV2(body: GetPlanesV2Dto): Promise<PlanesQueryResult> {
+    if (body.bexclusivos === true && !body.citem) {
+      throw new BadRequestException('bexclusivos requiere citem');
+    }
     try {
       const req = this.db.request();
       const T = this.db.types;
@@ -148,22 +173,33 @@ export class ValrepService {
       req.input('centidad', T.NVarChar(6), centidad);
       req.input('bnacional', T.Bit, body.iplaca === 'B');
       req.output('mensaje', T.NVarChar(500), '');
+      // Solo si viene en true: así el override MSSQL_SP_BUSCA_PLAN_NEXUS=spBuscaPlan sigue funcionando
+      if (body.bexclusivos === true) {
+        req.input('bexclusivos', T.Bit, true);
+      }
 
-      const result = await req.execute('spBuscaPlan');
+      const spName = this.spBuscaPlanNexusName();
+      const result = await req.execute(spName);
       const mensaje: string = result.output['mensaje'] ?? '';
 
       if (mensaje) {
         const isError = !mensaje.toLowerCase().includes('encontrad');
         if (isError) {
-          this.logger.warn(`spBuscaPlan mensaje: ${mensaje}`);
+          this.logger.warn(`${spName} mensaje: ${mensaje}`);
         } else {
-          this.logger.log(`spBuscaPlan: ${mensaje}`);
+          this.logger.log(`${spName}: ${mensaje}`);
         }
       }
 
       const recordset = result.recordset ?? [];
       let planes = await this.enrichWithParentescos(recordset);
       planes = await this.enrichWithCoberturas(planes);
+      // el SP sin centidad usa las filas de productor (P)
+      planes = await this.markAssignedPlans(planes, {
+        centidad: centidad ?? 'P',
+        citem,
+        cramo: body.cramo,
+      });
 
       return this.applyCsubitemExclusion(planes, {
         csubitem: body.csubitem,
@@ -221,7 +257,10 @@ export class ValrepService {
 
   // ── Estados ──────────────────────────────────────────────────────────────
 
-  async getStates(): Promise<{ cestado: number; xdescripcion_l: string }[]> {
+  async getStates(cpais?: number): Promise<{ cestado: number; xdescripcion_l: string }[]> {
+    const pais = cpais != null && Number(cpais) > 0 ? Number(cpais) : 58;
+    // Otro país (ej. 57 Colombia, placa extranjera): maestados por cpais. Venezuela sigue con el SP.
+    if (pais !== 58) return this.getStatesByPais(pais);
     try {
       const T = this.db.types;
       const req = this.db.request();
@@ -247,7 +286,13 @@ export class ValrepService {
 
   async getCities(
     cestado?: number,
+    cpais?: number,
   ): Promise<{ cciudad: number; xdescripcion_l: string }[]> {
+    const pais = cpais != null && Number(cpais) > 0 ? Number(cpais) : 58;
+    // sp_ma_obtener_ciudades filtra solo por cestado (sin cpais): para Aragua devolvía también
+    // ciudades de otros países con el mismo cestado y el mismo cciudad ("Argelia" en vez de
+    // "Santa Cruz"). Con cestado siempre se consulta maciudades por cpais + cestado.
+    if (pais !== 58 || cestado !== undefined) return this.getCitiesByPais(pais, cestado);
     try {
       const T = this.db.types;
       const req = this.db.request();
@@ -270,6 +315,83 @@ export class ValrepService {
       const msg = err instanceof Error ? err.message : String(err);
       this.logger.error(`getCities: ${msg}`);
       throw new InternalServerErrorException('Error al obtener ciudades.');
+    }
+  }
+
+  /** Estados de un país distinto de Venezuela (maestados). */
+  private async getStatesByPais(cpais: number): Promise<{ cestado: number; xdescripcion_l: string }[]> {
+    try {
+      const T = this.db.types;
+      const req = this.db.request();
+      req.input('cpais', T.Int, cpais);
+      const result = await req.query(
+        'SELECT cestado, RTRIM(xdescripcion_l) AS xdescripcion_l FROM maestados WHERE cpais = @cpais ORDER BY xdescripcion_l',
+      );
+      return ((result.recordset ?? []) as { cestado: number; xdescripcion_l: string }[])
+        .map((r) => ({ cestado: Number(r.cestado), xdescripcion_l: String(r.xdescripcion_l ?? '').trim() }))
+        .filter((r) => r.xdescripcion_l && !ValrepService.isGeoCatalogPlaceholder(r.xdescripcion_l));
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : String(err);
+      this.logger.error(`getStatesByPais cpais=${cpais}: ${msg}`);
+      throw new InternalServerErrorException('Error al obtener estados.');
+    }
+  }
+
+  /** Ciudades de un país distinto de Venezuela (maciudades por cpais + cestado). */
+  private async getCitiesByPais(
+    cpais: number,
+    cestado?: number,
+  ): Promise<{ cciudad: number; xdescripcion_l: string }[]> {
+    try {
+      const T = this.db.types;
+      const req = this.db.request();
+      req.input('cpais', T.Int, cpais);
+      req.input('cestado', T.Int, cestado ?? null);
+      const result = await req.query(
+        'SELECT cciudad, RTRIM(xdescripcion_l) AS xdescripcion_l FROM maciudades ' +
+          'WHERE cpais = @cpais AND (@cestado IS NULL OR cestado = @cestado) ORDER BY xdescripcion_l',
+      );
+      return dedupeCities(
+        ((result.recordset ?? []) as { cciudad: number; xdescripcion_l: string }[])
+          .map((r) => ({ cciudad: Number(r.cciudad), xdescripcion_l: String(r.xdescripcion_l ?? '').trim() }))
+          .filter((r) => r.xdescripcion_l && !ValrepService.isGeoCatalogPlaceholder(r.xdescripcion_l)),
+      );
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : String(err);
+      this.logger.error(`getCitiesByPais cpais=${cpais} cestado=${cestado ?? 'todas'}: ${msg}`);
+      throw new InternalServerErrorException('Error al obtener ciudades.');
+    }
+  }
+
+  // ── Vigencias por tipo de placa (mavigencias_PR) ─────────────────────────
+
+  /**
+   * Vigencias cortas de placa extranjera (iplaca E): % de la prima anual por meses.
+   * Mismo catálogo que SysIP (quotes/automobile/searchValidity); spCalculoAuto aplica el %.
+   */
+  async getVigencias(iplaca = 'E'): Promise<
+    { cvigencia: number; xvigencia: string; imedida_tiempo: string; ntiempo: number; itipovalor: string; nvalor: number }[]
+  > {
+    try {
+      const T = this.db.types;
+      const req = this.db.request();
+      req.input('iplaca', T.Char(1), String(iplaca || 'E').trim().toUpperCase().charAt(0));
+      const result = await req.query(
+        'SELECT cvigencia, RTRIM(xvigencia) AS xvigencia, RTRIM(imedida_tiempo) AS imedida_tiempo, ' +
+          'ntiempo, RTRIM(itipovalor) AS itipovalor, nvalor FROM mavigencias_PR WHERE iplaca = @iplaca ORDER BY cvigencia',
+      );
+      return ((result.recordset ?? []) as Record<string, unknown>[]).map((r) => ({
+        cvigencia: Number(r.cvigencia),
+        xvigencia: String(r.xvigencia ?? '').trim(),
+        imedida_tiempo: String(r.imedida_tiempo ?? '').trim().toUpperCase(),
+        ntiempo: Number(r.ntiempo),
+        itipovalor: String(r.itipovalor ?? '').trim().toUpperCase(),
+        nvalor: Number(r.nvalor),
+      }));
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : String(err);
+      this.logger.error(`getVigencias iplaca=${iplaca}: ${msg}`);
+      throw new InternalServerErrorException('Error al obtener las vigencias.');
     }
   }
 
@@ -348,6 +470,10 @@ export class ValrepService {
     );
   }
 
+  private spBuscaPlanNexusName(): string {
+    return process.env.MSSQL_SP_BUSCA_PLAN_NEXUS?.trim() || SP_BUSCA_PLAN_NEXUS;
+  }
+
   private spBuscaPlanProductoNexusName(): string {
     return (
       process.env.MSSQL_SP_BUSCA_PLAN_PRODUCTO_NEXUS?.trim() ||
@@ -361,24 +487,6 @@ export class ValrepService {
     );
   }
 
-  /** Coberturas casco/AP que spCalculoAuto excluye de totalPA (ramo RCV / binacional). */
-  private static readonly COBER_EXCLUIDAS_TOTAL_PA = new Set([
-    '1', '2', '3', '4', '5', '16', '28', '69',
-  ]);
-
-  /**
-   * sp_calculo_auto_nexus con iplaca=B devuelve detalle pero a menudo NO el 2.º recordset
-   * con totalPA (a diferencia de la rama nacional). Sumamos prima del detalle con la misma
-   * regla que spCalculoAuto: coberturas fuera de casco/PT/PP/AP.
-   */
-  private sumPaFromDetalleBinacional(detalle: CalculatePlanCoberturasRow[]): number {
-    return detalle.reduce((sum, row) => {
-      const cc = String(row.ccobertura ?? '').trim();
-      if (ValrepService.COBER_EXCLUIDAS_TOTAL_PA.has(cc)) return sum;
-      return sum + Number(row.prima ?? 0);
-    }, 0);
-  }
-
   private formatLocalYmd(d: Date): string {
     const y = d.getFullYear();
     const m = String(d.getMonth() + 1).padStart(2, '0');
@@ -386,9 +494,19 @@ export class ValrepService {
     return `${y}-${m}-${day}`;
   }
 
-  /** Vigencia cotización — misma lógica que emision policyMapper.resolveVigencia. */
-  private resolveQuoteVigenciaYmd(ndias?: number | null): { fdesde: string; fhasta: string } {
+  /**
+   * Vigencia cotización — misma lógica que emision policyMapper.resolveVigencia.
+   * fhasta explícito (placa extranjera, mavigencias_PR) manda sobre ndias/anual.
+   */
+  private resolveQuoteVigenciaYmd(
+    ndias?: number | null,
+    fhastaExplicita?: string | null,
+  ): { fdesde: string; fhasta: string } {
     const fdesde = this.formatLocalYmd(new Date());
+    const fh = String(fhastaExplicita ?? '').trim();
+    if (/^\d{4}-\d{2}-\d{2}$/.test(fh) && fh > fdesde) {
+      return { fdesde, fhasta: fh };
+    }
     const fhastaDate = new Date(`${fdesde}T12:00:00`);
     const n = ndias != null ? Number(ndias) : null;
     if (n != null && !Number.isNaN(n) && n > 0) {
@@ -484,7 +602,7 @@ export class ValrepService {
         body.fano,
       );
       const mvalor = vinma.mvalor;
-      const { fdesde, fhasta } = this.resolveQuoteVigenciaYmd(body.ndias);
+      const { fdesde, fhasta } = this.resolveQuoteVigenciaYmd(body.ndias, body.fhasta);
       const ifrecuencia = String(body.ifrecuencia ?? 'A')
         .trim()
         .toUpperCase()
@@ -522,6 +640,10 @@ export class ValrepService {
         sumaAsegAd: 0,
         recargo: 0,
         recargoRcv: body.precargorcv ?? 0,
+        // RCV Binacional: tripulantes elegidos (solo con bpuestos_informados; si no, puestos del modelo).
+        ...(body.bpuestos_informados === true && body.puestos != null
+          ? { puestos: body.puestos, bpuestos_informados: true }
+          : {}),
       });
 
       const mprimaext = calc.pa;
@@ -689,18 +811,14 @@ export class ValrepService {
       .filter((item) => item.cvalor !== '' && item.xdescripcion !== '');
   }
 
-  /** Profesiones / ocupaciones — sp_get_ocupaciones_nexus (campo cprofesion). */
+  /** Ocupaciones — sp_get_ocupaciones_nexus (maocupac, campo cocupacion). */
   async getOcupacionesNexus(): Promise<{ cvalor: string; xdescripcion: string }[]> {
     try {
       const result = await this.db.request().execute('sp_get_ocupaciones_nexus');
       const rows = (result.recordset ?? []) as Record<string, unknown>[];
-      const mapped = this.mapCatalogRows(rows, ['cprofesion', 'cocupacion', 'cvalor'], [
-        'xprofesion',
-        'xocupacion',
-        'xdescripcion',
-      ]);
+      const mapped = this.mapCatalogRows(rows, ['cocupacion', 'cvalor'], ['xocupacion', 'xdescripcion']);
       if (!mapped.length) {
-        throw new BadRequestException('No se encontraron ocupaciones/profesiones.');
+        throw new BadRequestException('No se encontraron ocupaciones.');
       }
       this.logger.log(`getOcupacionesNexus: ${mapped.length} items vía SP`);
       return mapped;
@@ -708,7 +826,69 @@ export class ValrepService {
       if (err instanceof BadRequestException) throw err;
       const msg = err instanceof Error ? err.message : String(err);
       this.logger.error(`getOcupacionesNexus: ${msg}`);
+      throw new InternalServerErrorException('No se pudo obtener la lista de ocupaciones.');
+    }
+  }
+
+  /** Profesiones — sp_get_profesiones_nexus (maprofes, campo cprofesion). */
+  async getProfesionesNexus(): Promise<{ cvalor: string; xdescripcion: string }[]> {
+    try {
+      const result = await this.db.request().execute('sp_get_profesiones_nexus');
+      const rows = (result.recordset ?? []) as Record<string, unknown>[];
+      const mapped = this.mapCatalogRows(rows, ['cprofesion', 'cvalor'], ['xprofesion', 'xdescripcion']);
+      if (!mapped.length) {
+        throw new BadRequestException('No se encontraron profesiones.');
+      }
+      this.logger.log(`getProfesionesNexus: ${mapped.length} items vía SP`);
+      return mapped;
+    } catch (err) {
+      if (err instanceof BadRequestException) throw err;
+      const msg = err instanceof Error ? err.message : String(err);
+      this.logger.error(`getProfesionesNexus: ${msg}`);
       throw new InternalServerErrorException('No se pudo obtener la lista de profesiones.');
+    }
+  }
+
+  /**
+   * Planes vigentes de riesgos generales (maramos.ctiporamo 1 y 6, sin RCV ramo 26) con su tarifa en maplantar.
+   * Los planes que La Mundial cree aparecen solos; `cotizable` indica si spCalculoRiesgoGeneral puede calcularlos
+   * (coberturas en maplantar con suma > 0).
+   */
+  async getPlanesRiesgosGenerales(): Promise<PlanRiesgoGeneral[]> {
+    try {
+      const result = await this.db.request().query(`
+        SELECT r.cramo, RTRIM(r.xdescripcion_l) AS xramo, r.ctiporamo,
+               RTRIM(p.cplan) AS cplan, RTRIM(p.xplan) AS xplan, RTRIM(p.cproducto) AS cproducto,
+               t.qcoberturas, t.msumamax, t.mprima
+        FROM maplanes p WITH (NOLOCK)
+        INNER JOIN maramos r WITH (NOLOCK) ON r.cramo = p.cramo
+        CROSS APPLY (
+          SELECT COUNT(*) AS qcoberturas, MAX(c.msumamax) AS msumamax, SUM(c.mprima) AS mprima
+          FROM maplantar c WITH (NOLOCK)
+          WHERE c.cramo = p.cramo AND c.cplan = p.cplan
+        ) t
+        WHERE r.ctiporamo IN (1, 6) AND r.iestado = 'V' AND p.iestado = 'V' AND r.cramo <> 26
+        ORDER BY r.xdescripcion_l, t.mprima, p.cplan`);
+      return ((result.recordset ?? []) as Record<string, unknown>[]).map((r) => {
+        const qcoberturas = Number(r.qcoberturas ?? 0);
+        const msumamax = Number(r.msumamax ?? 0);
+        return {
+          cramo: Number(r.cramo),
+          xramo: String(r.xramo ?? '').trim(),
+          ctiporamo: Number(r.ctiporamo),
+          cplan: String(r.cplan ?? '').trim(),
+          xplan: String(r.xplan ?? '').trim(),
+          cproducto: r.cproducto ? String(r.cproducto).trim() : null,
+          qcoberturas,
+          msumamax,
+          mprima: Number(r.mprima ?? 0),
+          cotizable: qcoberturas > 0 && msumamax > 0,
+        };
+      });
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : String(err);
+      this.logger.error(`getPlanesRiesgosGenerales: ${msg}`);
+      throw new InternalServerErrorException('No se pudo obtener los planes de riesgos generales.');
     }
   }
 
@@ -772,7 +952,7 @@ export class ValrepService {
     }
   }
 
-  async getFrecuencia(cplan: string, cramo?: number, cproductor?: number) {
+  async getFrecuencia(cplan: string, cramo?: number, cproductor?: number, estricto = false) {
     const spName = this.spBuscaFrecuenciaPlanNexusName();
     try {
       const T = this.db.types;
@@ -794,6 +974,12 @@ export class ValrepService {
         cplan?: string;
       }[];
 
+      if (!rows.length && estricto) {
+        this.logger.warn(
+          `getFrecuencia: plan=${cplan} cramo=${cramo ?? 'null'} cproductor=${cproductor ?? 'null'} sin frecuencias habilitadas en ${spName}`,
+        );
+        return [];
+      }
       if ((Boolean(result.output['berror']) && !rows.length) || !rows.length) {
         this.logger.warn(
           `getFrecuencia: plan=${cplan} cramo=${cramo ?? 'null'} cproductor=${cproductor ?? 'null'} sin filas en ${spName} — fallback ANUAL`,
@@ -818,12 +1004,14 @@ export class ValrepService {
 
   /**
    * Producto Sis2000 para consultar exclusiones en mausuplan (itipouso=E).
-   * RCV nacional (cramo 18) → producto '24'.
+   * RCV nacional (cramo 18) → producto '24'. RCV binacional (iplaca B, ramo 28) sin
+   * cproducto también es RCV auto → '24' (antes respondía 400 con sesión de gestor).
    */
   private resolveCproductoForExclusion(body: {
     cramo?: number;
     cproducto?: string;
     csubitem?: string;
+    iplaca?: string;
   }): string {
     if (!body.csubitem?.trim()) {
       return body.cproducto?.trim() ?? RCV_AUTO_CPRODUCTO;
@@ -832,6 +1020,9 @@ export class ValrepService {
       return RCV_AUTO_CPRODUCTO;
     }
     const cp = body.cproducto?.trim();
+    if (!cp && String(body.iplaca ?? '').trim().toUpperCase() === 'B') {
+      return RCV_AUTO_CPRODUCTO;
+    }
     if (!cp) {
       throw new BadRequestException(
         'cproducto es requerido cuando cramo !== 18 y se envía csubitem.',
@@ -1074,6 +1265,27 @@ export class ValrepService {
     }
   }
 
+  /**
+   * basignado: true si el plan está asignado a la entidad consultada (mausuplan con su citem);
+   * false si solo llega como plan general (citem NULL) o si la consulta no trae citem.
+   */
+  private async markAssignedPlans(
+    planes: PlanItem[],
+    opts: { centidad: string; citem: string | null; cramo: number },
+  ): Promise<PlanItem[]> {
+    const asignados = opts.citem
+      ? await this.mausuplanRepo.getAssignedPlans({
+          centidad: opts.centidad,
+          citem: opts.citem,
+          cramo: opts.cramo,
+        })
+      : new Set<string>();
+    for (const plan of planes) {
+      plan.basignado = asignados.has(String(plan['cplan'] ?? '').trim());
+    }
+    return planes;
+  }
+
   private async enrichWithCoberturas(planes: PlanItem[]): Promise<PlanItem[]> {
     for (const plan of planes) {
       try {
@@ -1168,6 +1380,11 @@ export class ValrepService {
       calcReq.input('cusuario', T.Numeric(20), cusuario);
       calcReq.input('coberAdicional', T.VarChar(2), body.coberAdicional ?? 'RC');
       calcReq.input('ifrecuencia', T.Char(1), ifrecuencia);
+      // RCV Binacional: el APOV se cobra por los tripulantes elegidos (0 = sin tripulantes). Solo se envía
+      // cuando se pide, así el SP sin @bpuestos_informados sigue funcionando.
+      if (body.bpuestos_informados === true && iplaca === 'B' && body.puestos != null) {
+        calcReq.input('bpuestos_informados', T.Bit, true);
+      }
 
       const result = await calcReq.execute(spName);
       const recordsets = (result.recordsets ?? []) as CalculatePlanCoberturasRow[][];
@@ -1192,12 +1409,15 @@ export class ValrepService {
       const totalAP = Number(precioRow.totalAP ?? 0);
       const totalPP = Number(precioRow.totalPP ?? 0);
 
-      if (totalPA <= 0 && iplaca === 'B') {
-        totalPA = this.sumPaFromDetalleBinacional(detalle);
-        if (totalPA > 0) {
+      // Binacional: la emisión cobra SUM(prima) de todas las coberturas del SP (RC + APOV
+      // 67/68/69 por puesto). Se cotiza con esa misma suma para que no difiera de lo emitido.
+      if (iplaca === 'B') {
+        const totalDetalle = sumPrimaBinacional(detalle);
+        if (totalDetalle > 0 && totalDetalle !== totalPA) {
           this.logger.log(
-            `calculatePlanCoberturas: totalPA binacional derivado del detalle (${detalle.length} filas) = ${totalPA}`,
+            `calculatePlanCoberturas: totalPA binacional desde el detalle (${detalle.length} filas, puestos=${puestos}) = ${totalDetalle} (SP totalPA=${totalPA})`,
           );
+          totalPA = totalDetalle;
         }
       }
 
@@ -1213,6 +1433,10 @@ export class ValrepService {
         status: true,
         mount: detalle,
         pa: totalPA,
+        primaCuotaInicial: sumPrimaCuotaInicial(
+          detalle,
+          parseCoberturasCuotaInicial(process.env.RCV_COBERTURAS_CUOTA_INICIAL),
+        ),
         ca: totalCA,
         pt: totalPT,
         ap: totalAP,

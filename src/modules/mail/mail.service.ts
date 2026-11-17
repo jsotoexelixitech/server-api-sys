@@ -1,4 +1,4 @@
-import { Injectable, Logger } from '@nestjs/common';
+import { BadRequestException, Injectable, Logger } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import nodemailer from 'nodemailer';
 import type Transporter from 'nodemailer/lib/mailer';
@@ -11,7 +11,23 @@ import { buildFuneralPaymentLinkEmail } from './templates/funeral-payment-link.t
 import { buildFuneralReviewAlertEmail } from './templates/funeral-review-alert.template';
 import { buildFuneralRejectedEmail } from './templates/funeral-rejected.template';
 import { buildLamundialBrandedEmail } from './templates/lamundial-branded.template';
+import {
+  buildExpedienteDocumentosEmail,
+  normalizarDocumentos,
+  normalizarPolizas,
+  type ExpedienteTipoCorreo,
+} from './templates/expediente-documentos.template';
+import { buildExpedienteCodigoEmail, codigoSeguro } from './templates/expediente-codigo.template';
+import {
+  buildExpedienteReporteDiarioEmail,
+  normalizarReporteDiario,
+} from './templates/expediente-reporte-diario.template';
+import {
+  buildExpedienteReporteSimpleEmail,
+  normalizarReporteSimple,
+} from './templates/expediente-reporte-diario-simple.template';
 import type { SendTemplatedMailDto } from './dto/send-templated-mail.dto';
+import { prepararAdjuntos, type PreparedAttachment } from './mail-attachments';
 
 export type PolicyEmissionMailResult = {
   sent: boolean;
@@ -109,6 +125,10 @@ export class MailService {
   }
 
   async sendTemplatedEmail(dto: SendTemplatedMailDto): Promise<PolicyEmissionMailResult> {
+    // Adjuntos inválidos = 400 (el cliente puede reintentar sin adjunto); sin adjuntos no cambia nada.
+    const prepared = prepararAdjuntos(dto.attachments);
+    if ('error' in prepared) throw new BadRequestException(prepared.error);
+
     if (!this.isEnabled()) {
       return { sent: false, mode: 'disabled', error: 'MAIL_ENABLED=false' };
     }
@@ -130,6 +150,8 @@ export class MailService {
       html: built.html,
       text: built.text,
       logLabel: dto.template,
+      ...(prepared.adjuntos.length ? { attachments: prepared.adjuntos } : {}),
+      ...(dto.ocultarDestinatarios === true ? { ocultarDestinatarios: true } : {}),
     });
   }
 
@@ -190,6 +212,38 @@ export class MailService {
       });
     }
 
+    if (dto.template === 'expediente-codigo') {
+      const codigo = codigoSeguro(data.codigo);
+      if (!codigo) return { error: 'data.codigo es obligatorio (solo dígitos).' };
+      return buildExpedienteCodigoEmail({
+        subject: str('subject') || undefined,
+        nombre: str('nombre') || undefined,
+        codigo,
+        minutos: Number(data.minutos),
+        callCenterPhone: phone,
+      });
+    }
+
+    if (dto.template === 'expediente-reporte-diario-simple') {
+      return buildExpedienteReporteSimpleEmail(normalizarReporteSimple(data));
+    }
+
+    if (dto.template === 'expediente-reporte-diario') {
+      return buildExpedienteReporteDiarioEmail(normalizarReporteDiario(data));
+    }
+
+    if (dto.template === 'expediente-documentos') {
+      return buildExpedienteDocumentosEmail({
+        tipo: str('tipo', 'solicitud') as ExpedienteTipoCorreo,
+        subject: str('subject') || undefined,
+        nombre: str('nombre') || undefined,
+        polizas: normalizarPolizas(data.polizas, data.poliza),
+        documentos: normalizarDocumentos(data.documentos),
+        enlace: str('enlace') || undefined,
+        callCenterPhone: phone,
+      });
+    }
+
     const fieldsFromDto = Array.isArray(dto.fields)
       ? dto.fields.map((f) => ({ label: String(f.label || ''), value: String(f.value || '') }))
       : [];
@@ -215,6 +269,7 @@ export class MailService {
       ctaUrl: str('ctaUrl') || undefined,
       extraNote: str('extraNote') || undefined,
       callCenterPhone: phone,
+      introArriba: data.introArriba === false || data.introArriba === 'false' ? false : undefined,
     });
   }
 
@@ -225,25 +280,45 @@ export class MailService {
     html: string;
     text: string;
     logLabel: string;
+    attachments?: PreparedAttachment[];
+    /** true + más de un destinatario: "Para" = remitente y la lista va en CCO (BCC). */
+    ocultarDestinatarios?: boolean;
   }): Promise<PolicyEmissionMailResult> {
     const fromEmail = this.config.get<string>('SMTP_FROM', 'info@lamundialdeseguros.com');
     const fromName = this.config.get<string>('SMTP_FROM_NAME', 'La Mundial de Seguros');
     const replyTo = this.config.get<string>('SMTP_REPLY_TO', fromEmail);
     const toList = Array.isArray(opts.to) ? opts.to : [opts.to];
+    const enCco = opts.ocultarDestinatarios === true && toList.length > 1;
+    const destino = enCco
+      ? { to: { name: fromName, address: fromEmail }, bcc: toList }
+      : {
+          to: toList.length === 1 && opts.toName
+            ? { name: opts.toName, address: toList[0] }
+            : toList,
+        };
     try {
       const info = await this.getTransporter().sendMail({
         from: `"${fromName}" <${fromEmail}>`,
         replyTo,
-        to: toList.length === 1 && opts.toName
-          ? { name: opts.toName, address: toList[0] }
-          : toList,
+        ...destino,
         subject: opts.subject,
         text: opts.text,
         html: opts.html,
         encoding: 'quoted-printable',
         headers: { 'Content-Language': 'es' },
+        ...(opts.attachments?.length
+          ? {
+              attachments: opts.attachments.map((a) => ({
+                filename: a.filename,
+                content: a.content,
+                contentType: a.contentType,
+              })),
+            }
+          : {}),
       });
-      this.logger.log(`Correo ${opts.logLabel} enviado a ${toList.join(', ')}`);
+      const adj = opts.attachments?.length ? ` (${opts.attachments.length} adjunto(s))` : '';
+      const cco = enCco ? ' (CCO)' : '';
+      this.logger.log(`Correo ${opts.logLabel} enviado a ${toList.join(', ')}${cco}${adj}`);
       return { sent: true, mode: 'smtp', messageId: info.messageId };
     } catch (err) {
       const msg = err instanceof Error ? err.message : String(err);

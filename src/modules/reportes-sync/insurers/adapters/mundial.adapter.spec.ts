@@ -72,3 +72,34 @@ describe('mundialAdapter · placa y tipo de vehículo en recibos', () => {
     expect(row.tipoVehiculo ?? null).toBeNull();
   });
 });
+
+describe('mundialAdapter · catálogo de coberturas', () => {
+  it('conserva el id "<cramo>-<ccobertura>" como texto y trae ramo y código', () => {
+    const row = mundialAdapter.mapRow('coberturas', {
+      id: '5-12',
+      cramo: 5,
+      ccobertura: '12',
+      descripcion: 'MUERTE ACCIDENTAL',
+      activo: true,
+      modified_at: '2026-10-22T10:00:00Z',
+    }) as Record<string, unknown>;
+
+    expect(row.id).toBe('5-12');
+    expect(row.origenClave).toBe('5-12');
+    expect(row.cramo).toBe(5);
+    expect(row.ccobertura).toBe('12');
+    expect(row.descripcion).toBe('MUERTE ACCIDENTAL');
+    expect(row.activo).toBe(true);
+  });
+
+  it('una cobertura inactiva (activo=0) queda inactiva', () => {
+    const row = mundialAdapter.mapRow('coberturas', { id: '7-1', cramo: 7, ccobertura: '1', descripcion: 'X', activo: 0 }) as Record<string, unknown>;
+    expect(row.activo).toBe(false);
+  });
+
+  it('los otros catálogos siguen con id numérico', () => {
+    const row = mundialAdapter.mapRow('ramos', { id: 18, descripcion: 'AUTOMOVIL', activo: 1 }) as Record<string, unknown>;
+    expect(row.id).toBe(18);
+    expect(row.origenClave).toBe('18');
+  });
+});

@@ -15,6 +15,8 @@ export const SWAGGER_TAGS = {
   RENOVATIONS: '11. Renovaciones',
   PRODUCT_EMISSION: '12. Emisión genérica (product-builder)',
   REPORTES: '13. Reportes dinámicos (ET)',
+  AUTOPAGO: '14. Autopago retail (venta en caja)',
+  FLOTA: '15. Póliza de flota por viaje',
 } as const;
 
 export const SWAGGER_TAG_ORDER: string[] = Object.values(SWAGGER_TAGS);
@@ -48,4 +50,8 @@ export const SWAGGER_TAG_DESCRIPTIONS: Record<string, string> = {
     'Cotizar, validar y emitir pólizas de ramos creados en product-builder.',
   [SWAGGER_TAGS.REPORTES]:
     'Esquemas dinámicos, siniestros, recibos, pólizas, sync y aseguradoras (ET / DB reportes).',
+  [SWAGGER_TAGS.AUTOPAGO]:
+    'Venta de seguros en caja (POS): catálogo de SKU del canal, registro de la venta y enlaces de auto-emisión por unidad.',
+  [SWAGGER_TAGS.FLOTA]:
+    'Póliza de flota sin recibo por certificado; certificados = vehículos con su conductor; recibo por viaje sobre el certificado.',
 };

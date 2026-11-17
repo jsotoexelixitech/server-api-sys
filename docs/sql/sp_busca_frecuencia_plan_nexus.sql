@@ -1,4 +1,5 @@
 -- Frecuencias de pago por plan y productor (maplanes_frec y maplanes_frec_produc).
+-- maplanes_frec: solo frecuencias vigentes (iestado = 'V'); maplanes_frec_produc no tiene iestado.
 
 CREATE OR ALTER PROCEDURE [dbo].[sp_busca_frecuencia_plan_nexus]
     @cplan CHAR(10),
@@ -17,6 +18,7 @@ BEGIN
     FROM maplanes_frec
     WHERE TRIM(cplan) = TRIM(@cplan)
       AND (@cramo IS NULL OR cramo = @cramo)
+      AND iestado = 'V'
     UNION
     SELECT DISTINCT
         TRIM(ifrecuencia) AS cvalor,

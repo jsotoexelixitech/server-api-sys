@@ -5,9 +5,14 @@ import {
   IsInt,
   IsNotEmpty,
   IsNumber,
+  IsObject,
   IsOptional,
   IsString,
+  Matches,
+  MaxLength,
 } from 'class-validator';
+import { Transform } from 'class-transformer';
+import { CID_PASAPORTE_MSG, CID_PASAPORTE_RE, blankToUndefined } from '../personas-identidad.rules';
 
 /**
  * Payload de emisión de póliza de personas (ramo 9 = Funerario).
@@ -65,11 +70,14 @@ export class CreateEmissionPersonDto {
   @ApiPropertyOptional({ example: 'V' }) @IsOptional() @IsString() @IsNotEmpty() tipo_cedula_tomador?: string;
   @ApiPropertyOptional({ example: 'V' }) @IsOptional() @IsString() @IsNotEmpty() cedula_tomador?: string;
   @ApiProperty({ example: 25221952 }) @IsNotEmpty() rif_tomador: number | string;
+  @ApiPropertyOptional({ example: 'P-EM2849387', description: 'Pasaporte alfanumérico completo (maclient.cid); rif_tomador = solo los dígitos.' })
+  @Transform(blankToUndefined) @IsOptional() @IsString() @MaxLength(15) @Matches(CID_PASAPORTE_RE, { message: `cid_tomador: ${CID_PASAPORTE_MSG}` })
+  cid_tomador?: string;
   @ApiPropertyOptional({ example: 'JUAN' }) @IsOptional() @IsString() nombre_tomador?: string;
   @ApiPropertyOptional({ example: 'PEREZ' }) @IsOptional() @IsString() apellido_tomador?: string;
-  @ApiPropertyOptional({ example: 'M' }) @IsOptional() @IsString() sexo_tomador?: string;
-  @ApiPropertyOptional({ example: 'S' }) @IsOptional() @IsString() estado_civil_tomador?: string;
-  @ApiPropertyOptional({ example: '1990-01-01' }) @IsOptional() @IsDateString() fnac_tomador?: string;
+  @ApiPropertyOptional({ example: 'M' }) @Transform(blankToUndefined) @IsOptional() @IsString() sexo_tomador?: string;
+  @ApiPropertyOptional({ example: 'S' }) @Transform(blankToUndefined) @IsOptional() @IsString() estado_civil_tomador?: string;
+  @ApiPropertyOptional({ example: '1990-01-01' }) @Transform(blankToUndefined) @IsOptional() @IsDateString() fnac_tomador?: string;
   @ApiPropertyOptional({ example: 1 }) @IsOptional() estado_tomador?: number | string;
   @ApiPropertyOptional({ example: 128 }) @IsOptional() ciudad_tomador?: number | string;
   @ApiPropertyOptional({ example: 'Av. Principal' }) @IsOptional() @IsString() direccion_tomador?: string;
@@ -80,11 +88,14 @@ export class CreateEmissionPersonDto {
   @ApiPropertyOptional({ example: 'V' }) @IsOptional() @IsString() @IsNotEmpty() tipo_cedula_titular?: string;
   @ApiPropertyOptional({ example: 'V' }) @IsOptional() @IsString() @IsNotEmpty() cedula_titular?: string;
   @ApiProperty({ example: 25221952 }) @IsNotEmpty() rif_titular: number | string;
+  @ApiPropertyOptional({ example: 'P-EM2849387', description: 'Pasaporte alfanumérico completo (maclient.cid); rif_titular = solo los dígitos.' })
+  @Transform(blankToUndefined) @IsOptional() @IsString() @MaxLength(15) @Matches(CID_PASAPORTE_RE, { message: `cid_titular: ${CID_PASAPORTE_MSG}` })
+  cid_titular?: string;
   @ApiPropertyOptional({ example: 'JUAN' }) @IsOptional() @IsString() nombre_titular?: string;
   @ApiPropertyOptional({ example: 'PEREZ' }) @IsOptional() @IsString() apellido_titular?: string;
-  @ApiPropertyOptional({ example: 'M' }) @IsOptional() @IsString() sexo_titular?: string;
-  @ApiPropertyOptional({ example: 'S' }) @IsOptional() @IsString() estado_civil_titular?: string;
-  @ApiPropertyOptional({ example: '1990-01-01' }) @IsOptional() @IsDateString() fnac_titular?: string;
+  @ApiPropertyOptional({ example: 'M' }) @Transform(blankToUndefined) @IsOptional() @IsString() sexo_titular?: string;
+  @ApiPropertyOptional({ example: 'S' }) @Transform(blankToUndefined) @IsOptional() @IsString() estado_civil_titular?: string;
+  @ApiPropertyOptional({ example: '1990-01-01' }) @Transform(blankToUndefined) @IsOptional() @IsDateString() fnac_titular?: string;
   @ApiPropertyOptional({ example: 1 }) @IsOptional() estado_titular?: number | string;
   @ApiPropertyOptional({ example: 128 }) @IsOptional() ciudad_titular?: number | string;
   @ApiPropertyOptional({ example: 'Av. Principal' }) @IsOptional() @IsString() direccion_titular?: string;
@@ -118,6 +129,16 @@ export class CreateEmissionPersonDto {
   @IsOptional() @IsNumber()
   pdescuento_titular?: number;
 
+  // ── Profesión (maprofes), ocupación (maocupac) y actividad económica (maactivi) ──
+  // Solo llegan al SP con NEST_PERSONAS_SEND_PROFESION=1. Cada asegurado puede traer
+  // cprofesion / cocupacion / cactividad en `asegurados[]`.
+  @ApiPropertyOptional({ example: 36 }) @IsOptional() cprofesion_tomador?: number | string;
+  @ApiPropertyOptional({ example: 101 }) @IsOptional() cocupacion_tomador?: number | string;
+  @ApiPropertyOptional({ example: 1 }) @IsOptional() cactividad_tomador?: number | string;
+  @ApiPropertyOptional({ example: 36 }) @IsOptional() cprofesion_titular?: number | string;
+  @ApiPropertyOptional({ example: 101 }) @IsOptional() cocupacion_titular?: number | string;
+  @ApiPropertyOptional({ example: 1 }) @IsOptional() cactividad_titular?: number | string;
+
   // ── Asegurados (para trazabilidad; el cálculo de prima ya viene en `prima`) ──
   @ApiPropertyOptional({ type: [Object], description: 'Lista de asegurados (opcional, informativa).' })
   @IsOptional() @IsArray()
@@ -126,6 +147,27 @@ export class CreateEmissionPersonDto {
   @ApiPropertyOptional({ type: [Object], description: 'Lista de beneficiarios (opcional, informativa).' })
   @IsOptional() @IsArray()
   beneficiarios?: unknown[];
+
+  // [benef-juridico 16-nov-2026] Beneficiario preferencial (adpoliza.cbeneficiario). Puede ser
+  // persona jurídica J/G/C (p. ej. un banco en Vida); lo valida resolverBeneficiarioPreferencial.
+  // Los beneficiarios por fallecimiento (`beneficiarios`) siguen solo persona natural.
+  @ApiPropertyOptional({
+    type: Object,
+    description:
+      'Beneficiario preferencial (opcional). Jurídico: tipo_cedula J/G/C, rif de 9 dígitos y nombre = razón social.',
+    example: {
+      tipo_cedula: 'J',
+      rif: 123456789,
+      nombre: 'BANCO EJEMPLO, C.A.',
+      telefono: '02121234567',
+      correo: 'contacto@banco.com',
+      estado: 1,
+      ciudad: 1,
+      direccion: 'Av. Principal',
+    },
+  })
+  @IsOptional() @IsObject()
+  beneficiario_preferencial?: Record<string, unknown>;
 
   // Planos (viajero 3/7): el whitelist los borra si no están acá; el mapper arma beneficiarios[].
   @ApiPropertyOptional({ example: 'V' }) @IsOptional() @IsString() tipo_cedula_beneficiario?: string;
@@ -144,4 +186,17 @@ export class CreateEmissionPersonDto {
   @ApiPropertyOptional() @IsOptional() cparen_beneficiario?: number | string;
   @ApiPropertyOptional() @IsOptional() nparentesco_beneficiario?: number | string;
   @ApiPropertyOptional() @IsOptional() pporce_beneficiario?: number | string;
+
+  @ApiPropertyOptional({
+    example: 'Cliente solicita entrega de la póliza por correo.',
+    maxLength: 255,
+    description:
+      'Observaciones de la póliza (máx. 255 caracteres; más de 255 responde 400 sin emitir). ' +
+      'Se guardan en la póliza después de emitir. ' +
+      'Si no se pueden guardar, la emisión responde OK igual con `observaciones.guardada = false`.',
+  })
+  @IsOptional()
+  @IsString()
+  @MaxLength(255)
+  observaciones?: string;
 }

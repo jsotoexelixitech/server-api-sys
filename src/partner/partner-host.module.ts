@@ -1,6 +1,7 @@
 import { Global, Injectable, Logger, Module, OnModuleInit } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { EXELIXI_PARTNER_HOST, ExelixiPartnerHost } from '@jsotoexelixitech/nest-api-sdk';
+import { MssqlService } from '../database/mssql.service';
 import { PrismaService } from '../database/prisma/prisma.service';
 import { queryMaclientApi } from '../modules/auth/api-key-db.support';
 import { getCurrentNestAuth } from '../modules/auth/nest-request-auth.context';
@@ -23,6 +24,7 @@ export class PartnerHostService implements ExelixiPartnerHost, OnModuleInit {
   constructor(
     private readonly config: ConfigService,
     private readonly prisma: PrismaService,
+    private readonly mssql: MssqlService,
   ) { }
 
   onModuleInit(): void {
@@ -57,14 +59,30 @@ export class PartnerHostService implements ExelixiPartnerHost, OnModuleInit {
     scoped[level](message);
   }
 
+  /**
+   * Cliente API (maclient_api) por canal de venta. La tabla vive en Sis2000 (SQL Server);
+   * antes se buscaba en el PostgreSQL de nest-api (public.maclient_api), que no existe en QA
+   * ni en producción y hacía fallar las rutas de partners con 500. Prisma queda solo de respaldo.
+   */
   async queryMaclientApi(canal_venta: string): Promise<Record<string, any> | null> {
     const canal = String(canal_venta ?? '').trim();
-    const row = await queryMaclientApi(this.prisma, canal);
-    // eslint-disable-next-line no-console -- diagnóstico pm2
-    console.warn(
-      `[PartnerHost] queryMaclientApi canal=${JSON.stringify(canal)} found=${row != null} prisma=${this.prisma.isEnabled()}`,
-    );
-    return row;
+    if (!canal) return null;
+    try {
+      const req = this.mssql.request();
+      req.input('xcanal_venta', this.mssql.types.VarChar(100), canal.substring(0, 100));
+      const r = await req.query('SELECT TOP 1 * FROM dbo.maclient_api WHERE xcanal_venta = @xcanal_venta');
+      const row = (r.recordset?.[0] as Record<string, any> | undefined) ?? null;
+      // eslint-disable-next-line no-console -- diagnóstico pm2
+      console.warn(`[PartnerHost] queryMaclientApi canal=${JSON.stringify(canal)} found=${row != null} fuente=sis2000`);
+      return row;
+    } catch (err) {
+      this.logger.warn(`queryMaclientApi en Sis2000 falló (${err instanceof Error ? err.message : 'error'}); se intenta PostgreSQL`);
+    }
+    try {
+      return await queryMaclientApi(this.prisma, canal);
+    } catch {
+      return null;
+    }
   }
 }
 

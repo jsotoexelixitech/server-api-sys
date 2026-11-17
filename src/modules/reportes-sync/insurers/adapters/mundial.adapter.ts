@@ -68,6 +68,24 @@ export const mundialAdapter: InsurerAdapter = {
   },
 
   mapCatalogRow(row) {
+    // Coberturas: el id es texto "<cramo>-<ccobertura>" (ccobertura se repite entre ramos); no se convierte a número.
+    const ccobertura = toStr(pick(row, 'ccobertura'));
+    if (ccobertura) {
+      const codigo = toStr(pick(row, 'id', 'codigo'));
+      const activoCob = pick(row, 'activo');
+      return {
+        origenClave: codigo,
+        id: codigo,
+        cramo: toNum(pick(row, 'cramo', 'id_ramo')),
+        ccobertura,
+        descripcion: toStr(pick(row, 'descripcion', 'xdescripcion_l')) || ccobertura,
+        activo:
+          activoCob === undefined || activoCob === null
+            ? true
+            : Boolean(activoCob === true || activoCob === 1 || activoCob === '1'),
+        origenModifiedAt: toDate(pick(row, 'modified_at')) || new Date(),
+      };
+    }
     const id = toNum(
       pick(row, 'id', 'codigo', 'cramo', 'ccanalalt', 'cproductor', 'canula', 'crechazo'),
     );
@@ -254,6 +272,8 @@ export const mundialAdapter: InsurerAdapter = {
       primaTotal: toNum(
         pick(row, 'prima_total', 'primaTotal', 'prima_anual', 'primaAnual'),
       ),
+      // Automóvil: suma asegurada de casco (pérdida total, parcial o cobertura amplia); null si no tiene.
+      sumaAsegurada: toNum(pick(row, 'suma_asegurada', 'sumaAsegurada')),
       nombreTomador: toStr(
         pick(row, 'nombre_tomador', 'nombreTomador', 'nombre_contratante'),
       ),
@@ -284,6 +304,7 @@ export const mundialAdapter: InsurerAdapter = {
       colorVehiculo: toStr(pick(row, 'color_vehiculo', 'colorVehiculo')),
       serialCarroceria: toStr(pick(row, 'serial_carroceria', 'serialCarroceria')),
       serialMotor: toStr(pick(row, 'serial_motor', 'serialMotor')),
+      coberturas: toStr(pick(row, 'coberturas', 'cobertura', 'xcoberturas')) || '',
       idRamo,
       idProductor: toNum(pick(row, 'id_productor', 'idProductor', 'cproductor')),
       idCanal: toNum(pick(row, 'id_canal', 'idCanal', 'ccanal')),

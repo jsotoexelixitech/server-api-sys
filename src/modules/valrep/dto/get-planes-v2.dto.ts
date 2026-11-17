@@ -1,6 +1,7 @@
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
 import { Type } from 'class-transformer';
 import {
+  IsBoolean,
   IsInt,
   IsNotEmpty,
   IsNumber,
@@ -73,4 +74,13 @@ export class GetPlanesV2Dto {
   @IsOptional()
   @IsString()
   cproducto?: string;
+
+  @ApiPropertyOptional({
+    example: true,
+    description:
+      'true = solo planes asignados explícitamente a `citem` (sin los planes generales). Requiere citem. Por defecto false.',
+  })
+  @IsOptional()
+  @IsBoolean()
+  bexclusivos?: boolean;
 }

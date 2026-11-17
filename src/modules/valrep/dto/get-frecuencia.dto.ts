@@ -1,5 +1,5 @@
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
-import { IsInt, IsNotEmpty, IsOptional, IsString, MaxLength } from 'class-validator';
+import { IsBoolean, IsInt, IsNotEmpty, IsOptional, IsString, MaxLength } from 'class-validator';
 
 export class GetFrecuenciaDto {
   @ApiProperty({
@@ -23,4 +23,14 @@ export class GetFrecuenciaDto {
   @IsOptional()
   @IsInt()
   cproductor?: number;
+
+  @ApiPropertyOptional({
+    example: true,
+    description:
+      'Si es true, no se aplica el respaldo ANUAL: un plan sin frecuencias habilitadas devuelve la lista vacía. ' +
+      'Lo usan Condominio y Hogar (solo se ofrece lo configurado en maplanes_frec). RCV, Funerario y Viajero no lo envían.',
+  })
+  @IsOptional()
+  @IsBoolean()
+  estricto?: boolean;
 }

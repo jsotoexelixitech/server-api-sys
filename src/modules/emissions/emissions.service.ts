@@ -10,12 +10,25 @@ import { MssqlService } from '../../database/mssql.service';
 import { formatValidateAutoError, parseSPError } from '../../common/helpers/sp-error.helper';
 import { buildPolicyPdfUrl, resolveClubArysPdfUrl } from '../../common/helpers/policy-url.helper';
 import {
+  guardarObservacionPoliza,
+  normalizarObservaciones,
+  validarObservaciones,
+} from '../../common/helpers/poliza-observacion.helper';
+import {
   SP_CONTADOR_NEXUS,
   SP_PRE_EMISION_AUTO_RCV,
   SP_REPAIR_RCV_COBERTURAS,
   SP_SEARCH_AUTOMOBILE_PROPIETARY,
   SP_VALIDATE_AUTOMOVIL_LEGACY,
 } from '../../config/sis2000-sp.constants';
+import { esTipoCedulaJuridica } from './constants/persona-juridica.constants';
+import {
+  cotizacionErrorFromMessage,
+  parseCcertiCotizacion,
+  parseCprocesCotizacion,
+  parseMprimaEsperada,
+} from './cotizacion-emision';
+import { EmissionRow, splitEmissionRows } from './emission-rcv-aparte';
 import { SearchProprietaryDto } from './dto/search-proprietary.dto';
 import { SearchVehicleByPlateDto, SearchVehicleBySerialDto } from './dto/search-vehicle.dto';
 import { ArysService } from '../arys/arys.service';
@@ -54,7 +67,45 @@ export class EmissionsService {
     return undefined;
   }
 
+  /**
+   * Estado y ciudad del titular son obligatorios: sin ellos el cliente queda sin dirección en Sis2000
+   * y la membresía Arys falla ("Estado no encontrado: null"; 36 pólizas RCV del 1 al 8-nov-2026).
+   * Si el titular es el tomador (misma cédula o sin cédula propia) y no trae dirección, se usa la del
+   * tomador. Devuelve los campos que siguen faltando (código 0 cuenta como vacío).
+   */
+  private completarDireccionTitular(b: Record<string, unknown>): string[] {
+    const valido = (v: unknown) => Number(v) > 0;
+    const estado = this.pick(b, 'cestado_titular', 'estado_titular');
+    const ciudad = this.pick(b, 'cciudad_titular', 'ciudad_titular');
+    if (valido(estado) && valido(ciudad)) return [];
+
+    const digitos = (v: unknown) => String(v ?? '').replace(/\D/g, '');
+    const rifTitular = digitos(this.pick(b, 'xrif_titular', 'rif_titular'));
+    const rifTomador = digitos(this.pick(b, 'xrif_tomador', 'rif_tomador'));
+    const estadoTom = this.pick(b, 'cestado_tomador', 'estado_tomador');
+    const ciudadTom = this.pick(b, 'cciudad_tomador', 'ciudad_tomador');
+    if ((!rifTitular || rifTitular === rifTomador) && valido(estadoTom) && valido(ciudadTom)) {
+      b['cestado_titular'] = b['estado_titular'] = estadoTom;
+      b['cciudad_titular'] = b['ciudad_titular'] = ciudadTom;
+      if (!this.pick(b, 'xdireccion_titular', 'direccion_titular')) {
+        const dirTom = this.pick(b, 'xdireccion_tomador', 'direccion_tomador');
+        if (dirTom) b['xdireccion_titular'] = b['direccion_titular'] = dirTom;
+      }
+      return [];
+    }
+    return [
+      ...(valido(estado) ? [] : ['cestado_titular']),
+      ...(valido(ciudad) ? [] : ['cciudad_titular']),
+    ];
+  }
+
   /** Entero Sis2000 (estado/ciudad/ramo); null si vacío. */
+  /** RCV Binacional con tripulantes elegidos: bpuestos_informados true, placa B y npuestos enviado (0 vale). */
+  private puestosInformadosBinacional(b: Record<string, unknown>, iplaca: unknown): boolean {
+    const flag = ['true', '1'].includes(String(b['bpuestos_informados'] ?? '').trim().toLowerCase());
+    return flag && String(iplaca ?? '').toUpperCase() === 'B' && this.intField(this.pick(b, 'npuestos')) != null;
+  }
+
   private intField(value: unknown): number | null {
     if (value == null || String(value).trim() === '') return null;
     const n = parseInt(String(value), 10);
@@ -150,20 +201,20 @@ export class EmissionsService {
   }
 
   /** Fila devuelta por sp_pre_emision / sp_emision (recordsets anidados). */
-  private extractEmissionRow(result: {
-    recordset?: Record<string, unknown>[];
-    recordsets?: Record<string, unknown>[][];
-  }): Record<string, unknown> {
-    if (result.recordsets?.length) {
-      for (let i = result.recordsets.length - 1; i >= 0; i--) {
-        const rs = result.recordsets[i];
-        if (rs?.length && rs[0]?.['cnpoliza']) return rs[0];
-      }
-    }
-    if (result.recordset?.length && result.recordset[0]?.['cnpoliza']) {
-      return result.recordset[0];
-    }
-    return {};
+  /** Datos de la póliza de RCV aparte para la respuesta de emisión; se cobra con su propio cnrecibo. */
+  private async buildPolizaRcvAparte(row: EmissionRow, pdfBase: string | undefined) {
+    const cnpoliza = String(row['cnpoliza'] ?? '').trim();
+    const fanopol = row['fanopol'] as number | undefined;
+    const fmespol = row['fmespol'] as number | undefined;
+    return {
+      cnpoliza,
+      cnrecibo: String(row['cnrecibo'] ?? '').trim(),
+      urlpoliza: buildPolicyPdfUrl(pdfBase, cnpoliza, fanopol, fmespol),
+      ncuota: (row['qcuotas'] ?? row['ncuota']) as number | undefined,
+      fanopol,
+      fmespol,
+      ...(await this.lookupPolicyTarjetaKeys(cnpoliza)),
+    };
   }
 
   /** cpoliza + casegurado para activate tarjeta RCV post-emisión. */
@@ -853,6 +904,19 @@ export class EmissionsService {
 
       const b: Record<string, unknown> = { ...body };
 
+      // Cotización de SysIP: el plan, la suma y las primas los toma el SP de sopoltar.
+      const cprocesCotizacion = parseCprocesCotizacion(b);
+      const ccertiCotizacion = parseCcertiCotizacion(b, cprocesCotizacion);
+      const mprimaEsperada = parseMprimaEsperada(b, cprocesCotizacion);
+      delete b['cproces'];
+      delete b['cproces_cotizacion'];
+      delete b['ccerti'];
+      delete b['ccerti_cotizacion'];
+      delete b['mprima_esperada'];
+      if (cprocesCotizacion != null) b['cproces_cotizacion'] = cprocesCotizacion;
+      if (ccertiCotizacion != null) b['ccerti_cotizacion'] = ccertiCotizacion;
+      if (mprimaEsperada != null) b['mprima_esperada'] = mprimaEsperada;
+
       // cnpoliza lo genera Sis2000; string vacío bloquea el SP (no entra a IF @cnpoliza IS NULL)
       if (b['cnpoliza'] == null || String(b['cnpoliza']).trim() === '') {
         delete b['cnpoliza'];
@@ -926,13 +990,25 @@ export class EmissionsService {
       if (!b['xsercar'] && b['serial_carroceria']) b['xsercar'] = b['serial_carroceria'];
       if (!b['xsermot'] && b['serial_motor']) b['xsermot'] = b['serial_motor'];
 
+      // Persona jurídica (J/G/C): no tiene fecha de nacimiento; fnac_* pasa a ser opcional.
+      const tomadorJuridico = esTipoCedulaJuridica(
+        this.pick(b, 'icedula_tomador', 'tipo_cedula_tomador', 'cedula_tomador'),
+      );
+      const titularJuridico = esTipoCedulaJuridica(
+        this.pick(b, 'icedula_titular', 'tipo_cedula_titular', 'cedula_titular'),
+      );
+      const fnacRequeridas: Array<[string, unknown]> = [
+        ...(tomadorJuridico ? [] : ([['fnac_tomador', b['fnac_tomador']]] as Array<[string, unknown]>)),
+        ...(titularJuridico ? [] : ([['fnac_titular', b['fnac_titular']]] as Array<[string, unknown]>)),
+      ];
+
       const requiredFields: Array<[string, unknown]> = [
-        ['plan', b['cplan'] ?? b['plan']],
+        // Con cotización el plan es el de la cotización (si viene, el SP valida que coincida).
+        ...(cprocesCotizacion != null ? [] : ([['plan', b['cplan'] ?? b['plan']]] as Array<[string, unknown]>)),
         ['fecha_emision', b['fecha_emision'] ?? b['femision']],
         ['fdesde', b['fdesde']],
         ['fhasta', b['fhasta']],
-        ['fnac_tomador', b['fnac_tomador']],
-        ['fnac_titular', b['fnac_titular']],
+        ...fnacRequeridas,
         ['cestado_tomador', b['estado_tomador'] ?? b['cestado_tomador']],
         ['cciudad_tomador', b['ciudad_tomador'] ?? b['cciudad_tomador']],
         ['xplaca', b['xplaca'] ?? b['placa']],
@@ -940,20 +1016,26 @@ export class EmissionsService {
       ];
       const missing = requiredFields
         .filter(([, value]) => value == null || String(value).trim() === '')
-        .map(([name]) => name);
+        .map(([name]) => name)
+        .concat(this.completarDireccionTitular(b));
       if (missing.length > 0) {
         throw new BadRequestException(
           `Parámetros de entrada inválidos. Faltan: ${missing.join(', ')}`,
         );
       }
 
+      const errorObservaciones = validarObservaciones(this.pick(b, 'observaciones', 'xobserva'));
+      if (errorObservaciones) throw new BadRequestException(errorObservaciones);
+
       const isoDate = /^\d{4}-\d{2}-\d{2}$/;
       const badDates = [
         ['fecha_emision', b['fecha_emision'] ?? b['femision']],
         ['fdesde', b['fdesde']],
         ['fhasta', b['fhasta']],
-        ['fnac_tomador', b['fnac_tomador']],
-        ['fnac_titular', b['fnac_titular']],
+        ...fnacRequeridas,
+        // Opcionales para jurídico: solo se validan si vienen informadas.
+        ...(tomadorJuridico && b['fnac_tomador'] != null ? ([['fnac_tomador', b['fnac_tomador']]] as Array<[string, unknown]>) : []),
+        ...(titularJuridico && b['fnac_titular'] != null ? ([['fnac_titular', b['fnac_titular']]] as Array<[string, unknown]>) : []),
       ]
         .filter(([, value]) => typeof value !== 'string' || !isoDate.test(value))
         .map(([name]) => name);
@@ -968,12 +1050,17 @@ export class EmissionsService {
       ).toLowerCase();
 
       if (emissionSource === 'external') {
+        if (cprocesCotizacion != null) {
+          throw new BadRequestException('La emisión desde cotización (cproces) solo está disponible con emisión local.');
+        }
         return await this.createEmissionAutoExternal(b, canal, apikey);
       }
       return await this.emitLocalAutomobile(b, canal);
     } catch (err) {
       if (err instanceof BadRequestException) throw err;
       const msg = parseSPError(err);
+      const cotizacionError = cotizacionErrorFromMessage(msg);
+      if (cotizacionError) throw cotizacionError;
       const lower = msg.toLowerCase();
       if (
         lower.includes('poliza vigente') ||
@@ -1210,7 +1297,7 @@ export class EmissionsService {
    * Resuelve los datos de entidad provenientes del marketplace/iframe:
    * - cramo dinámico recibido.
    * - centidad = 'P' -> cproductor = citem; si viene cgestor, se asigna cgestor y se busca en magestor ccanalalt y cscanalalt.
-   * - centidad = 'C' -> ccanalalt = citem; busca en magestor filtrando por ccanalalt para obtener cgestor y cscanalalt.
+   * - centidad = 'C' -> ccanalalt = citem; busca el gestor en magestor por ccanalalt + subcanal (cscanalalt_in) o cgestor.
    */
   private async resolveMarketplaceEntity(b: Record<string, unknown>): Promise<void> {
     const centidad = String(this.pick(b, 'centidad', 'entidad') ?? '').trim().toUpperCase();
@@ -1271,14 +1358,24 @@ export class EmissionsService {
       }
       b['ctipocanal'] = 'A';
 
+      // marketplace/canal/:id/:csub manda el subcanal (cscanalalt_in); marketplace/canal/:id/user/:cgestor, el gestor.
+      // El gestor se busca dentro de ese subcanal (con preferencia por el cgestor recibido); sin subcanal, en todo el canal.
+      const cscanalaltParam = this.intField(this.pick(b, 'cscanalalt', 'cscanalalt_in', 'csub'));
+      if (cscanalaltParam != null) {
+        b['cscanalalt'] = cscanalaltParam;
+      }
+
       if (citemNum != null) {
         const req = this.db.request();
         req.input('ccanalalt', T.Int, citemNum);
+        req.input('cscanalalt', T.Int, cscanalaltParam);
+        req.input('cgestor', T.VarChar(50), cgestorParam);
         const result = await req.query(`
           SELECT TOP 1 cgestor, cscanalalt
           FROM magestor
           WHERE ccanalalt = @ccanalalt
-          ORDER BY fingreso DESC
+            AND (@cscanalalt IS NULL OR cscanalalt = @cscanalalt)
+          ORDER BY CASE WHEN LTRIM(RTRIM(cgestor)) = @cgestor THEN 0 ELSE 1 END, fingreso DESC
         `);
         const row = result.recordset?.[0];
         if (row) {
@@ -1288,6 +1385,10 @@ export class EmissionsService {
           if (row.cscanalalt != null) {
             b['cscanalalt'] = Number(row.cscanalalt);
           }
+        } else if (cscanalaltParam != null) {
+          this.logger.warn(
+            `resolveMarketplaceEntity: sin gestor en magestor para ccanalalt=${citemNum} cscanalalt=${cscanalaltParam} cgestor=${cgestorParam}`,
+          );
         }
       }
       this.logger.log(
@@ -1396,7 +1497,7 @@ export class EmissionsService {
         type: T.Char(1),
         value: this.pick(b, 'icedula_tomador', 'tipo_cedula_tomador', 'cedula_tomador'),
       },
-      xrif_tomador: { type: T.Numeric(9), value: this.pick(b, 'xrif_tomador', 'rif_tomador') },
+      xrif_tomador: { type: T.Numeric(13, 0), value: this.pick(b, 'xrif_tomador', 'rif_tomador') },
       xnombre_tomador: { type: T.NVarChar(250), value: this.pick(b, 'xnombre_tomador', 'nombre_tomador') },
       xapellido_tomador: { type: T.NVarChar(250), value: this.pick(b, 'xapellido_tomador', 'apellido_tomador') },
       isexo_tomador: { type: T.Char(1), value: this.pick(b, 'isexo_tomador', 'sexo_tomador') },
@@ -1429,7 +1530,7 @@ export class EmissionsService {
         type: T.Char(1),
         value: this.pick(b, 'icedula_titular', 'tipo_cedula_titular', 'cedula_titular'),
       },
-      xrif_titular: { type: T.Numeric(9), value: this.pick(b, 'xrif_titular', 'rif_titular') },
+      xrif_titular: { type: T.Numeric(13, 0), value: this.pick(b, 'xrif_titular', 'rif_titular') },
       xnombre_titular: { type: T.NVarChar(250), value: this.pick(b, 'xnombre_titular', 'nombre_titular') },
       xapellido_titular: { type: T.NVarChar(250), value: this.pick(b, 'xapellido_titular', 'apellido_titular') },
       isexo_titular: { type: T.Char(1), value: this.pick(b, 'isexo_titular', 'sexo_titular') },
@@ -1688,6 +1789,58 @@ export class EmissionsService {
       fhasta: { type: T.Date, value: b['fhasta'] },
     };
 
+    // País de la dirección del tomador/titular (placa extranjera, ej. 57 Colombia).
+    // Solo con NEST_RCV_SEND_CPAIS=1: el SP debe tener @cpais_tomador/@cpais_titular
+    // (docs/sql/rcv-cpais-extranjero). Sin la variable el SP no recibe nada nuevo.
+    if (this.config.get<string>('NEST_RCV_SEND_CPAIS') === '1') {
+      const cpaisTomador = this.intField(this.pick(b, 'cpais_tomador'));
+      const cpaisTitular = this.intField(this.pick(b, 'cpais_titular')) ?? cpaisTomador;
+      if (cpaisTomador != null || cpaisTitular != null) {
+        params['cpais_tomador'] = { type: T.SmallInt, value: cpaisTomador };
+        params['cpais_titular'] = { type: T.SmallInt, value: cpaisTitular };
+      }
+    }
+
+    // Profesión (maprofes) y ocupación (maocupac) por separado: el front lo indica con bocupacion_separada.
+    // Solo con NEST_RCV_SEND_OCUPACION=1: el SP debe tener @cocupacion_*/@bocupacion_separada
+    // (docs/sql/rcv-profesion-ocupacion). Sin la variable la ocupación va en @cprofesion_*, que es
+    // donde el SP actual la espera, y la profesión no se envía.
+    const ocupacionSeparada = ['true', '1'].includes(
+      String(this.pick(b, 'bocupacion_separada') ?? '').trim().toLowerCase(),
+    );
+    if (ocupacionSeparada) {
+      const cocupacionTomador = this.intField(this.pick(b, 'cocupacion_tomador')) ?? null;
+      const cocupacionTitular = this.intField(this.pick(b, 'cocupacion_titular')) ?? null;
+      if (this.config.get<string>('NEST_RCV_SEND_OCUPACION') === '1') {
+        params['cocupacion_tomador'] = { type: T.SmallInt, value: cocupacionTomador };
+        params['cocupacion_titular'] = { type: T.SmallInt, value: cocupacionTitular };
+        params['bocupacion_separada'] = { type: T.Bit, value: true };
+      } else {
+        params['cprofesion_tomador'] = { type: T.Int, value: cocupacionTomador };
+        params['cprofesion_titular'] = { type: T.Int, value: cocupacionTitular };
+      }
+    }
+
+    // Solo con cotización: el SP sin @cproces_cotizacion (antes de docs/sql/emision-auto-cotizacion) sigue funcionando.
+    const cprocesCotizacion = this.intField(b['cproces_cotizacion']);
+    if (cprocesCotizacion != null) {
+      params['cproces_cotizacion'] = { type: T.Numeric(13, 0), value: cprocesCotizacion };
+    }
+    const ccertiCotizacion = this.intField(b['ccerti_cotizacion']);
+    if (ccertiCotizacion != null) {
+      params['ccerti_cotizacion'] = { type: T.Int, value: ccertiCotizacion };
+    }
+    // Ya validado en createEmissionAuto (parseMprimaEsperada); solo existe en sp_pre_emision.
+    const mprimaEsperada = b['mprima_esperada'];
+    if (typeof mprimaEsperada === 'number') {
+      params['mprima_esperada'] = { type: T.Numeric(18, 2), value: mprimaEsperada };
+    }
+    // RCV Binacional: npuestos son los tripulantes elegidos (0 = sin tripulantes) y el APOV se cobra por
+    // ellos. Solo si el front lo pide en placa B; el SP sin @bpuestos_informados no recibe nada nuevo.
+    if (this.puestosInformadosBinacional(b, params['iplaca']?.value)) {
+      params['bpuestos_informados'] = { type: T.Bit, value: true };
+    }
+
     Object.entries(params).forEach(([key, field]) =>
       req.input(key, (field as { type: unknown }).type, (field as { value: unknown }).value),
     );
@@ -1730,9 +1883,8 @@ export class EmissionsService {
       spResult = await retryReq.execute(preEmisionSp);
     }
 
-    let row = this.extractEmissionRow(
-      spResult as { recordset?: Record<string, unknown>[]; recordsets?: Record<string, unknown>[][] },
-    );
+    const { principal, rcvAparte } = splitEmissionRows(spResult);
+    let row = principal;
     if (!row['cnpoliza'] && xplaca) {
       this.logger.warn(`emitLocal: SP sin cnpoliza en recordset; lookup placa=${xplaca}`);
       row = await this.lookupEmissionByPlaca(xplaca);
@@ -1755,10 +1907,16 @@ export class EmissionsService {
       this.config.get<string>('POLICY_PDF_URL') ?? this.config.get<string>('URLPoliza');
     const urlpoliza = buildPolicyPdfUrl(pdfBase, cnpoliza, fanopol, fmespol);
     const url_club_arys = await this.resolveClubArysPdfForEmission(cnpoliza, b);
+    const polizaRcv = rcvAparte ? await this.buildPolizaRcvAparte(rcvAparte, pdfBase) : undefined;
 
-    this.logger.log(`emitLocal OK cnpoliza=${cnpoliza} cnrecibo=${cnrecibo}`);
+    this.logger.log(
+      `emitLocal OK cnpoliza=${cnpoliza} cnrecibo=${cnrecibo}${cprocesCotizacion != null ? ` cotizacion=${cprocesCotizacion}${ccertiCotizacion != null ? `/${ccertiCotizacion}` : ''}` : ''}${polizaRcv ? ` rcv_aparte=${polizaRcv.cnpoliza}` : ''}`,
+    );
 
-    await this.repairRcvCoberturasIfEmpty(cnpoliza);
+    // El repair recotiza la póliza: con cotización las primas deben quedar las cotizadas.
+    if (cprocesCotizacion == null) {
+      await this.repairRcvCoberturasIfEmpty(cnpoliza);
+    }
 
     if (this.extractBeneficiario(b)) {
       try {
@@ -1781,17 +1939,30 @@ export class EmissionsService {
     const cscanalalt = this.intField(this.pick(b, 'cscanalalt', 'cscanalalt_in'));
 
     if (cgestor || ccanalalt != null || cproductor != null || cscanalalt != null) {
-      try {
-        await this.applyPolicyGestorAndCanal(
-          cnpoliza,
-          cgestor,
-          ccanalalt,
-          cscanalalt,
-          cproductor,
-        );
-      } catch (err) {
-        const msg = err instanceof Error ? err.message : String(err);
-        this.logger.warn(`applyPolicyGestorAndCanal falló cnpoliza=${cnpoliza}: ${msg}`);
+      for (const poliza of polizaRcv ? [cnpoliza, polizaRcv.cnpoliza] : [cnpoliza]) {
+        try {
+          await this.applyPolicyGestorAndCanal(
+            poliza,
+            cgestor,
+            ccanalalt,
+            cscanalalt,
+            cproductor,
+          );
+        } catch (err) {
+          const msg = err instanceof Error ? err.message : String(err);
+          this.logger.warn(`applyPolicyGestorAndCanal falló cnpoliza=${poliza}: ${msg}`);
+        }
+      }
+    }
+
+    // Observaciones de la póliza (adpoliza.xobserva). No bloquea: si el SP falla la emisión sigue OK.
+    const observacionesTexto = normalizarObservaciones(this.pick(b, 'observaciones', 'xobserva'));
+    let observacionesGuardada: boolean | undefined;
+    if (observacionesTexto) {
+      observacionesGuardada = true;
+      for (const poliza of polizaRcv ? [cnpoliza, polizaRcv.cnpoliza] : [cnpoliza]) {
+        const ok = await guardarObservacionPoliza(this.db, this.logger, poliza, observacionesTexto);
+        observacionesGuardada = observacionesGuardada && ok;
       }
     }
 
@@ -1808,7 +1979,12 @@ export class EmissionsService {
       ncuota,
       fanopol,
       fmespol,
+      cproces: cprocesCotizacion ?? undefined,
+      poliza_rcv: polizaRcv,
       ...tarjetaKeys,
+      ...(observacionesGuardada !== undefined
+        ? { observaciones: { guardada: observacionesGuardada } }
+        : {}),
     };
   }
 

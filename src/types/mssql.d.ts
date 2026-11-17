@@ -37,7 +37,15 @@ declare module 'mssql' {
     on(event: 'error', listener: (err: Error) => void): this;
   }
 
+  export class Transaction {
+    constructor(pool: ConnectionPool);
+    begin(): Promise<Transaction>;
+    commit(): Promise<void>;
+    rollback(): Promise<void>;
+  }
+
   export class Request {
+    constructor(parent?: ConnectionPool | Transaction);
     input(name: string, type: any, value: any): this;
     output(name: string, type: any, value?: any): this;
     query<T = Record<string, any>>(sql: string): Promise<IResult<T>>;

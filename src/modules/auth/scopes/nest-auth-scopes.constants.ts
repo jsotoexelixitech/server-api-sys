@@ -3,6 +3,18 @@ export const NEST_AUTH_SCOPES = {
   EMISSIONS_AUTO: 'emissions:auto',
   EMISSIONS_PERSON: 'emissions:person',
   EMISSIONS_CONDOMINIO: 'emissions:condominio',
+  /** Emisión por coberturas de riesgos generales (cotizador RC, ramos 16 y 38). */
+  EMISSIONS_RIESGOS_GENERALES: 'emissions:riesgos-generales',
+  /**
+   * Emisión de riesgos generales con la prima informada por el cotizador RC o Técnico (`modo: cotizador`). Se exige
+   * tal cual en la key: los comodines (`*`, `emissions:*`) no la otorgan.
+   */
+  EMISSIONS_RIESGOS_GENERALES_PRIMA: 'emissions:riesgos-generales-prima',
+  /**
+   * Emisión colectiva con la prima del cotizador colectivo (POST /api/v1/personas/emision-colectiva). Se exige tal cual
+   * en la key: los comodines (`*`, `emissions:*`) no la otorgan.
+   */
+  EMISSIONS_COLECTIVO: 'emissions:colectivo',
   /** Replicar tasas del tarificador de Condominio/Hogar (matarifa_d, ramos 16 y 38). */
   TARIFAS_CONDOMINIO: 'tarifas:condominio',
   COLLECTION_WRITE: 'collection:write',
@@ -22,6 +34,14 @@ export const NEST_AUTH_SCOPES = {
   REPORT_WRITE: 'report:write',
   /** Login de usuarios Sis2000 (seusuariosweb) para el portal La Mundial. */
   PORTAL_LOGIN: 'portal:login',
+  /** Alta de intermediarios (corredor / productor) en Sis2000. */
+  INTERMEDIARIOS_WRITE: 'intermediarios:write',
+  /** Administración del menú lateral de Sis2000 (desplegables, opciones y permisos por rol). */
+  MENU_SIS2000_ADMIN: 'menu-sis2000:admin',
+  /** Autopago retail (/api/v1/autopago/*): catálogo SKU y registro de ventas en caja. */
+  AUTOPAGO_WRITE: 'autopago:write',
+  /** Póliza de flota con recibo por viaje (Ridery): póliza, certificados y recibos por certificado. */
+  FLOTA_WRITE: 'flota:write',
 } as const;
 
 export type NestAuthScopeId =
@@ -61,6 +81,26 @@ export const NEST_AUTH_SCOPE_CATALOG: NestAuthScopeMeta[] = [
     label: 'Emisión condominio',
     description: 'Emitir pólizas de condominio',
     routes: ['POST /api/v1/condominio/emision'],
+  },
+  {
+    id: NEST_AUTH_SCOPES.EMISSIONS_RIESGOS_GENERALES,
+    label: 'Emisión riesgos generales',
+    description: 'Emitir pólizas de riesgos generales con las coberturas elegidas (cotizador RC)',
+    routes: ['POST /api/v1/riesgos-generales/emision'],
+  },
+  {
+    id: NEST_AUTH_SCOPES.EMISSIONS_RIESGOS_GENERALES_PRIMA,
+    label: 'Emisión riesgos generales con prima informada',
+    description: 'Emitir con la prima que fija el cotizador RC o Técnico (modo cotizador). Además requiere emissions:riesgos-generales '
+      + 'y RIESGOS_GENERALES_EMISION_COTIZADOR=true; los comodines no la otorgan',
+    routes: [],
+  },
+  {
+    id: NEST_AUTH_SCOPES.EMISSIONS_COLECTIVO,
+    label: 'Emisión colectiva',
+    description: 'Emitir pólizas colectivas con la prima del cotizador colectivo y la plantilla modelo del producto; '
+      + 'los comodines no la otorgan',
+    routes: ['POST /api/v1/personas/emision-colectiva'],
   },
   {
     id: NEST_AUTH_SCOPES.TARIFAS_CONDOMINIO,
@@ -146,6 +186,62 @@ export const NEST_AUTH_SCOPE_CATALOG: NestAuthScopeMeta[] = [
     description:
       'Validar usuario/clave Sis2000 (seusuariosweb) y resolver entidad del marketplace',
     routes: [],
+  },
+  {
+    id: NEST_AUTH_SCOPES.INTERMEDIARIOS_WRITE,
+    label: 'Alta de intermediarios',
+    description: 'Crear intermediarios, canales Alterno/Directo y gestores (agencias / asesores) en Sis2000',
+    routes: [
+      'POST /api/v1/intermediarios',
+      'POST /api/v1/intermediarios/canal',
+      'POST /api/v1/intermediarios/gestor',
+      'GET /api/v1/intermediarios/gestores',
+    ],
+  },
+  {
+    id: NEST_AUTH_SCOPES.MENU_SIS2000_ADMIN,
+    label: 'Menú lateral Sis2000',
+    description: 'Crear desplegables y opciones del menú y asignar permisos por rol (solo departamento de Desarrollo)',
+    routes: [
+      'GET /api/v1/menu-sis2000/arbol',
+      'GET /api/v1/menu-sis2000/roles',
+      'GET /api/v1/menu-sis2000/plantilla',
+      'PUT /api/v1/menu-sis2000/plantilla',
+      'POST /api/v1/menu-sis2000/principal',
+      'PATCH /api/v1/menu-sis2000/principal/:cmenuPrincipal',
+      'POST /api/v1/menu-sis2000/opcion',
+      'PATCH /api/v1/menu-sis2000/opcion/:cmenu',
+      'POST /api/v1/menu-sis2000/iconos',
+      'GET /api/v1/menu-sis2000/usuarios',
+      'GET /api/v1/menu-sis2000/usuarios/:cusuario/menu',
+      'POST /api/v1/menu-sis2000/usuarios/:cusuario/sincronizar',
+    ],
+  },
+  {
+    id: NEST_AUTH_SCOPES.AUTOPAGO_WRITE,
+    label: 'Autopago retail (venta en caja)',
+    description:
+      'Catálogo de SKU del canal y registro de ventas en caja que generan enlaces de emisión (Farmatodo)',
+    routes: [
+      'GET /api/v1/autopago/productos',
+      'POST /api/v1/autopago/ventas',
+      'GET /api/v1/autopago/ventas/{nfactura}',
+      'POST /api/v1/autopago/emisiones/{token}/reenviar',
+    ],
+  },
+  {
+    id: NEST_AUTH_SCOPES.FLOTA_WRITE,
+    label: 'Póliza de flota por viaje',
+    description:
+      'Póliza de flota sin recibo por certificado, inclusión de vehículos/conductores y recibo por viaje sobre el certificado',
+    routes: [
+      'GET /api/flota/polizas/{cnpoliza}',
+      'GET /api/flota/polizas/{cnpoliza}/certificados/{ccerti}/recibos',
+      'POST /api/flota/polizas',
+      'POST /api/flota/polizas/{cnpoliza}/certificados',
+      'POST /api/flota/polizas/{cnpoliza}/certificados/{ccerti}/excluir',
+      'POST /api/flota/polizas/{cnpoliza}/certificados/{ccerti}/recibos',
+    ],
   },
 ];
 

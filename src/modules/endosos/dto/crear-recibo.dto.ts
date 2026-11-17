@@ -9,7 +9,7 @@ import {
   IsString,
   Min,
 } from 'class-validator';
-import { AUTO_IFRECUENCIA_VALUES } from '../../valrep/constants/auto-ifrecuencia.constants';
+import { AUTO_IFRECUENCIA_ENDOSO_VALUES } from '../../valrep/constants/auto-ifrecuencia.constants';
 
 function toOptionalBoolean(value: unknown): boolean | undefined {
   if (value === true || value === 'true' || value === 1 || value === '1') return true;
@@ -59,21 +59,21 @@ export class CrearReciboEndosoDto {
   @ApiPropertyOptional({
     example: 'S',
     description: 'Frecuencia de pago Sis2000 (ifrecuencia). Actualiza la póliza al crear el recibo.',
-    enum: AUTO_IFRECUENCIA_VALUES,
+    enum: AUTO_IFRECUENCIA_ENDOSO_VALUES,
   })
   @IsOptional()
   @IsString()
-  @IsIn([...AUTO_IFRECUENCIA_VALUES])
+  @IsIn([...AUTO_IFRECUENCIA_ENDOSO_VALUES])
   ifrecuencia?: string;
 
   @ApiPropertyOptional({
     example: 'S',
     description: 'Alias de ifrecuencia / frecuencia de pago.',
-    enum: AUTO_IFRECUENCIA_VALUES,
+    enum: AUTO_IFRECUENCIA_ENDOSO_VALUES,
   })
   @IsOptional()
   @IsString()
-  @IsIn([...AUTO_IFRECUENCIA_VALUES])
+  @IsIn([...AUTO_IFRECUENCIA_ENDOSO_VALUES])
   frecuencia?: string;
 
   @ApiPropertyOptional({ example: 2, description: 'Número de cuotas del fraccionamiento' })

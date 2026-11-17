@@ -1,4 +1,4 @@
-import { Body, Controller, HttpCode, HttpStatus, Post } from '@nestjs/common';
+import { Body, Controller, HttpCode, HttpStatus, Post, Req } from '@nestjs/common';
 import { ApiBody, ApiHeader, ApiOperation, ApiResponse, ApiSecurity, ApiTags } from '@nestjs/swagger';
 import { PersonasService } from './personas.service';
 import { GetPlanesPerDto } from './dto/get-planes-per.dto';
@@ -6,6 +6,8 @@ import { CotizacionPerDto } from './dto/cotizacion-per.dto';
 import { CreateEmissionPersonDto } from './dto/create-emission-person.dto';
 import { ValidateEmissionPersonDto } from '../emissions/dto/validate-emission-person.dto';
 import { CheckPolizaVigenteDto } from './dto/check-poliza-vigente.dto';
+import { CreateEmissionColectivoDto } from './dto/create-emission-colectivo.dto';
+import { EmisionColectivoService } from './emision-colectivo.service';
 import { Api401, Api500, ApiCommonErrors } from '../../common/swagger/api-error-responses';
 import { APIKEY_HEADER } from '../../common/swagger/api-docs.constants';
 import { NestProtected } from '../auth/decorators/nest-protected.decorator';
@@ -15,7 +17,10 @@ import { NestApiKey } from '../auth/decorators/nest-api-key.decorator';
 @ApiTags('6. Emisión personas')
 @Controller('v1/personas')
 export class PersonasController {
-  constructor(private readonly personasService: PersonasService) {}
+  constructor(
+    private readonly personasService: PersonasService,
+    private readonly emisionColectivo: EmisionColectivoService,
+  ) {}
 
   // ── POST /api/v1/personas/planes ──────────────────────────────────────────
 
@@ -140,6 +145,68 @@ export class PersonasController {
   @ApiCommonErrors()
   async emitir(@NestApiKey() apikey: string, @Body() dto: CreateEmissionPersonDto) {
     const result = await this.personasService.createEmissionPerson(apikey ?? '', dto);
+    return { status: true, result };
+  }
+
+  // ── POST /api/v1/personas/emision-colectiva ───────────────────────────────
+
+  @Post('emision-colectiva')
+  @HttpCode(HttpStatus.OK)
+  @NestProtected(NEST_AUTH_SCOPES.EMISSIONS_COLECTIVO)
+  @ApiOperation({
+    summary: 'Emitir póliza colectiva (cotizador colectivo)',
+    description:
+      'Crea la póliza colectiva de la empresa: copia la estructura de la plantilla modelo del producto ' +
+      '(`cpoliza_plantilla` + `cnpoliza_plantilla`) y cobra la `prima` anual cotizada, repartida entre los recibos de la ' +
+      'frecuencia y entre las coberturas por su suma asegurada. Numeración `C-<ramo>-<5 dígitos>`. ' +
+      'Exige el scope `emissions:colectivo` escrito tal cual en la key (los comodines no lo otorgan). ' +
+      'Los rechazos de negocio responden 400 con `code` (`COLECTIVO_*`).',
+    operationId: 'personasEmisionColectiva',
+  })
+  @ApiHeader(APIKEY_HEADER)
+  @ApiBody({ type: CreateEmissionColectivoDto })
+  @ApiResponse({
+    status: 200,
+    schema: {
+      example: {
+        status: true,
+        result: {
+          message: 'Emisión colectiva registrada exitosamente.',
+          cnpoliza: 'C-6-33141',
+          cnrecibo: '6-1100375627',
+          cpoliza: '6000000000000233141',
+          cproces: 202600309716,
+          fanopol: 2026,
+          fmespol: 11,
+          urlpoliza: 'https://qaapi.lamundialdeseguros.com/sis2000/poliza/C-6-33141/2026/11/',
+          prima: 1200.5,
+          cmoneda: 'USD',
+          titulares: 2,
+          asegurados: 4,
+        },
+      },
+    },
+  })
+  @ApiResponse({
+    status: 400,
+    description: 'Rechazo de negocio con `code` (plantilla, plan, edades, tasa, nómina repetida…).',
+    schema: {
+      example: {
+        success: false,
+        code: 'COLECTIVO_EDAD_FUERA_DE_RANGO',
+        message: '1 asegurado(s) del grupo fuera del rango de edad permitido para este plan colectivo.',
+      },
+    },
+  })
+  @ApiResponse({ status: 403, description: 'La key no tiene `emissions:colectivo` explícito.' })
+  @Api401()
+  @ApiCommonErrors()
+  async emitirColectivo(
+    @NestApiKey() apikey: string,
+    @Body() dto: CreateEmissionColectivoDto,
+    @Req() req: { nestAuth?: { scopes?: string[] } },
+  ) {
+    const result = await this.emisionColectivo.emitir(apikey ?? '', dto, req?.nestAuth?.scopes);
     return { status: true, result };
   }
 }

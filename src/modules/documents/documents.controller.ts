@@ -123,4 +123,66 @@ export class DocumentsController {
     const fileStream = fs.createReadStream(filePath);
     fileStream.pipe(res);
   }
+
+  /** Anexo Arys Club Plan Básico (PDF fijo de marketing) para emisiones por tarjeta. */
+  private anexoArysPlanBasicoPath(): string {
+    return path.join(process.cwd(), 'src', 'assets', 'anexos', 'anexo-plan-basico-arys.pdf');
+  }
+
+  @Post('anexo-arys-plan-basico')
+  @NestProtected(NEST_AUTH_SCOPES.DOCUMENTS_WRITE)
+  @ApiHeader({
+    name: 'apikey',
+    description: 'Clave de acceso a la API (requerida en emisión, cobranza y documentos en producción).',
+    required: false,
+  })
+  @ApiOperation({
+    summary: 'Anexo Arys Club Plan Básico (PDF)',
+    description:
+      'Devuelve la URL pública del anexo Arys Club Plan Básico que se entrega con las ' +
+      'pólizas emitidas por tarjeta (La Tarjetica). Documento fijo validado por marketing.',
+    operationId: 'rcvAnexoArysPlanBasico',
+  })
+  @ApiResponse({
+    status: 201,
+    description: 'URL del anexo.',
+    schema: {
+      example: {
+        success: true,
+        url: 'https://nexusqa.exelixitech.com/nest-api-docs/api/v1/documents/anexo-arys-plan-basico',
+      },
+    },
+  })
+  getAnexoArysPlanBasicoUrl(@Res() res: Response) {
+    if (!fs.existsSync(this.anexoArysPlanBasicoPath())) {
+      this.logger.error('[DocumentsController] Falta src/assets/anexos/anexo-plan-basico-arys.pdf');
+      return res.status(HttpStatus.INTERNAL_SERVER_ERROR).json({
+        success: false,
+        message: 'El anexo Arys Plan Básico no está disponible.',
+      });
+    }
+    const url = `${this.resolveDocumentPublicBase()}/api/v1/documents/anexo-arys-plan-basico`;
+    return res.status(HttpStatus.CREATED).json({ success: true, url });
+  }
+
+  @Get('anexo-arys-plan-basico')
+  @Public()
+  @ApiExcludeEndpoint()
+  @ApiOperation({ summary: 'Descarga o visualiza el anexo Arys Club Plan Básico (sin auth)' })
+  getAnexoArysPlanBasico(@Req() req: Request, @Res() res: Response) {
+    const filePath = this.anexoArysPlanBasicoPath();
+    if (!fs.existsSync(filePath)) {
+      return res.status(HttpStatus.NOT_FOUND).json({
+        success: false,
+        message: 'El anexo Arys Plan Básico no está disponible.',
+      });
+    }
+    const disposition = req.query.download === 'true' ? 'attachment' : 'inline';
+    res.set({
+      'Content-Type': 'application/pdf',
+      'Content-Disposition': `${disposition}; filename="Anexo-Arys-Plan-Basico.pdf"`,
+      'Cache-Control': 'public, max-age=86400',
+    });
+    fs.createReadStream(filePath).pipe(res);
+  }
 }

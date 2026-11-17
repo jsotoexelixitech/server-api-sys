@@ -1,5 +1,6 @@
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
 import {
+  IsBoolean,
   IsDateString,
   IsIn,
   IsInt,
@@ -7,8 +8,11 @@ import {
   IsNumber,
   IsOptional,
   IsString,
+  MaxLength,
   Min,
+  ValidateIf,
 } from 'class-validator';
+import { esTipoCedulaJuridica } from '../constants/persona-juridica.constants';
 import { AUTO_IFRECUENCIA_VALUES } from '../../valrep/constants/auto-ifrecuencia.constants';
 
 export class CreateEmissionAutoDto {
@@ -75,9 +79,14 @@ export class CreateEmissionAutoDto {
   @IsString()
   iestado_civil_tomador?: string;
 
-  @ApiProperty({ example: '1996-10-13', description: 'Fecha de nacimiento del tomador (YYYY-MM-DD)' })
+  @ApiPropertyOptional({
+    example: '1996-10-13',
+    description:
+      'Fecha de nacimiento del tomador (YYYY-MM-DD). Obligatoria para persona natural; opcional si tipo_cedula_tomador es J, G o C (jurídico).',
+  })
+  @ValidateIf((o: CreateEmissionAutoDto) => !esTipoCedulaJuridica(o.tipo_cedula_tomador) || o.fnac_tomador != null && o.fnac_tomador !== '')
   @IsDateString()
-  fnac_tomador: string;
+  fnac_tomador?: string;
 
   @ApiProperty({ example: 1, description: 'Código de estado del tomador (de /valrep/states)' })
   @IsInt()
@@ -136,26 +145,67 @@ export class CreateEmissionAutoDto {
   @IsDateString()
   fnac_titular?: string;
 
-  @ApiProperty({ example: 1, description: 'Código de estado del titular' })
+  @ApiProperty({
+    example: 1,
+    description:
+      'Código de estado del titular (> 0). Obligatorio si el titular no es el tomador; ' +
+      'si es la misma persona y no se envía, se usa el del tomador.',
+  })
   @IsInt()
   estado_titular: number;
 
-  @ApiProperty({ example: 128, description: 'Código de ciudad del titular' })
+  @ApiProperty({ example: 128, description: 'Código de ciudad del titular (> 0); misma regla que estado_titular.' })
   @IsInt()
   ciudad_titular: number;
+
+  @ApiPropertyOptional({
+    example: 57,
+    description:
+      'País de la dirección del tomador (mapaises.cpais). Solo placa extranjera; 58 Venezuela por defecto. ' +
+      'Se envía al SP si NEST_RCV_SEND_CPAIS=1.',
+  })
+  @IsOptional()
+  @IsInt()
+  cpais_tomador?: number;
+
+  @ApiPropertyOptional({ example: 57, description: 'País de la dirección del titular. Si se omite, el del tomador.' })
+  @IsOptional()
+  @IsInt()
+  cpais_titular?: number;
+
+  @ApiPropertyOptional({
+    example: true,
+    description:
+      'true: `cprofesion_*` es la profesión (maprofes, GET /valrep/profesiones) y `cocupacion_*` la ocupación ' +
+      '(maocupac, GET /valrep/ocupaciones). Sin el flag, `cprofesion_*` se interpreta como ocupación. ' +
+      'Se envía al SP si NEST_RCV_SEND_OCUPACION=1.',
+  })
+  @IsOptional()
+  @IsBoolean()
+  bocupacion_separada?: boolean;
+
+  @ApiPropertyOptional({ example: 120, description: 'Ocupación del tomador (maocupac.cocupacion). Requiere bocupacion_separada.' })
+  @IsOptional()
+  @IsInt()
+  cocupacion_tomador?: number;
+
+  @ApiPropertyOptional({ example: 120, description: 'Ocupación del titular. Si se omite, la del tomador.' })
+  @IsOptional()
+  @IsInt()
+  cocupacion_titular?: number;
 
   @ApiProperty({ example: 'Av norte 8 amadores a planas', description: 'Dirección del titular' })
   @IsString()
   direccion_titular: string;
 
   @ApiPropertyOptional({
-    description: 'Conductor habitual (anexo). Omitir si no aplica.',
+    description: 'Conductor habitual (anexo). Opcional; omitir si no aplica (p. ej. tomador jurídico).',
   })
   @IsOptional()
   conductor?: unknown;
 
   @ApiPropertyOptional({
-    description: 'Beneficiario preferencial. Omitir si no aplica.',
+    description: 'Beneficiario preferencial. Opcional; omitir si no aplica (p. ej. tomador jurídico).',
   })
   @IsOptional()
   beneficiario?: unknown;
@@ -218,6 +268,16 @@ export class CreateEmissionAutoDto {
   @IsOptional()
   @IsInt()
   npuestos?: number;
+
+  @ApiPropertyOptional({
+    example: true,
+    description:
+      'RCV Binacional (iplaca B): true = npuestos son los tripulantes elegidos (0 = sin tripulantes) y el APOV ' +
+      'se cobra por ellos. Sin el campo se usa la regla de siempre.',
+  })
+  @IsOptional()
+  @IsBoolean()
+  bpuestos_informados?: boolean;
 
   @ApiPropertyOptional({ example: 60, description: 'Toneladas del vehículo (para carga)' })
   @IsOptional()
@@ -330,6 +390,40 @@ export class CreateEmissionAutoDto {
   @IsNumber()
   tasaPp?: number;
 
+  @ApiPropertyOptional({
+    example: '2026000236751',
+    description:
+      'Número de cotización del cotizador de SysIP (sopoliza.cproces). Con él se emite con el plan, la suma y las ' +
+      'primas cotizadas (USD, con su recargo/descuento), sin recalcular; `plan` pasa a ser opcional y, si viene, debe ' +
+      'ser el de la cotización. El vehículo y la vigencia deben coincidir. También se acepta como `cproces_cotizacion`. ' +
+      'Errores 400, según `code`: COTIZACION_NO_EXISTE, COTIZACION_EMITIDA, COTIZACION_NO_COINCIDE.',
+  })
+  @IsOptional()
+  @IsString()
+  cproces?: string;
+
+  @ApiPropertyOptional({
+    example: 2,
+    description:
+      'Opción de cobertura de la cotización (ccerti). Solo junto con `cproces`; también se acepta como ' +
+      '`ccerti_cotizacion`. Sin él se emite la única opción. Con varias opciones sin indicar cuál: ' +
+      '400 COTIZACION_NO_COINCIDE. Si la opción no existe: 400 COTIZACION_NO_EXISTE.',
+  })
+  @IsOptional()
+  @IsInt()
+  ccerti?: number;
+
+  @ApiPropertyOptional({
+    example: 152.4,
+    description:
+      'Prima en USD de la opción elegida (`ccerti`), con hasta 2 decimales. Solo junto con `cproces`. ' +
+      'El SP la compara con la prima cotizada: si no coincide, 400 COTIZACION_NO_COINCIDE.',
+  })
+  @IsOptional()
+  @IsNumber({ maxDecimalPlaces: 2 })
+  @Min(0.01)
+  mprima_esperada?: number;
+
   @ApiPropertyOptional({ description: 'Canal alterno (Marketplace / SSO).' })
   @IsOptional()
   @IsInt()
@@ -354,4 +448,17 @@ export class CreateEmissionAutoDto {
   @IsOptional()
   @IsString()
   citem?: string;
+
+  @ApiPropertyOptional({
+    example: 'Vehículo con rayón en la puerta trasera izquierda.',
+    maxLength: 255,
+    description:
+      'Observaciones de la póliza (máx. 255 caracteres; más de 255 responde 400 sin emitir). ' +
+      'Se guardan en la póliza después de emitir. Alias: `xobserva`. ' +
+      'Si no se pueden guardar, la emisión responde OK igual con `observaciones.guardada = false`.',
+  })
+  @IsOptional()
+  @IsString()
+  @MaxLength(255)
+  observaciones?: string;
 }

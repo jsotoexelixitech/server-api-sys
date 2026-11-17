@@ -1,6 +1,7 @@
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
 import { Type } from 'class-transformer';
 import {
+  IsBoolean,
   IsDateString,
   IsIn,
   IsInt,
@@ -140,6 +141,16 @@ export class CalculatePlanCoberturasDto {
   @IsInt()
   @Min(0)
   puestos?: number;
+
+  @ApiPropertyOptional({
+    example: true,
+    description:
+      'RCV Binacional (iplaca B): true = puestos son los tripulantes elegidos (0 = sin tripulantes) y el APOV ' +
+      'se cobra por ellos. Sin el campo se usa la regla de siempre.',
+  })
+  @IsOptional()
+  @IsBoolean()
+  bpuestos_informados?: boolean;
 
   @ApiPropertyOptional({ example: 0, description: 'Toneladas de carga' })
   @IsOptional()

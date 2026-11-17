@@ -9,7 +9,8 @@ const ROUTE_LABELS: Record<string, string> = {
   'POST /api/v1/inma/categorias-uso': 'Categorías de uso del vehículo',
   // catalog:read — valrep
   'GET /api/v1/valrep/states': 'Estados (geo)',
-  'GET /api/v1/valrep/cities': 'Ciudades por estado',
+  'GET /api/v1/valrep/cities': 'Ciudades por estado (cpais opcional, 57 Colombia)',
+  'GET /api/v1/valrep/vigencias': 'Vigencias por tipo de placa (mavigencias_PR, placa extranjera)',
   'POST /api/v1/valrep/getLists': 'Listas auxiliares del tarificador',
   'POST /api/v1/valrep/productos': 'Productos RCV disponibles',
   'POST /api/v1/valrep/matipoemision': 'Tipo de emisión por canal/productor',
@@ -37,6 +38,7 @@ const ROUTE_LABELS: Record<string, string> = {
   'POST /api/v1/client/search/coverages': 'Coberturas de pólizas del cliente',
   // documents:write
   'POST /api/v1/documents/conductor-habitual': 'Generar PDF conductor habitual',
+  'POST /api/v1/documents/anexo-arys-plan-basico': 'URL del anexo Arys Club Plan Básico (tarjetas)',
   'GET /api/v1/documents/pdf/:param': 'Descargar PDF generado',
   // emissions:auto
   'POST /api/v1/emissions/automobile_new/propietary': 'Emisión RCV — datos propietario',
@@ -56,6 +58,13 @@ const ROUTE_LABELS: Record<string, string> = {
     'Correo: envío de póliza emitida al tomador',
   'POST /api/v1/mail/send':
     'Correo: envío genérico con plantilla',
+  // autopago:write — venta en caja (Farmatodo)
+  'GET /api/v1/autopago/productos': 'Autopago: catálogo de SKU del canal',
+  'POST /api/v1/autopago/ventas': 'Autopago: registrar venta en caja y enviar enlaces de emisión',
+  'GET /api/v1/autopago/ventas/:param': 'Autopago: estado de una venta por factura',
+  'POST /api/v1/autopago/emisiones/:param/reenviar': 'Autopago: reenviar correo del enlace',
+  'GET /api/v1/autopago/emisiones/:param': 'Autopago: datos del enlace de emisión (público)',
+  'POST /api/v1/autopago/emisiones/:param/emitida': 'Autopago: marcar enlace como emitido',
   // emissions:condominio
   'GET /api/v1/condominio/productos': 'Productos de condominio',
   'GET /api/v1/condominio/frecuencias': 'Frecuencias de pago condominio',
@@ -77,6 +86,7 @@ const ROUTE_LABELS: Record<string, string> = {
   'POST /api/v1/personas/validacion': 'Validación pre-emisión personas',
   'POST /api/v1/personas/poliza-vigente': 'Consultar póliza funeraria vigente por cédula',
   'POST /api/v1/personas/emision': 'Emitir póliza personas / viajero',
+  'POST /api/v1/personas/emision-colectiva': 'Emitir póliza colectiva con la prima del cotizador colectivo',
   'POST /api/v1/viajero-nacional/emision': 'Emitir viajero 3 días',
   'POST /api/v1/viajero-margarita/emision': 'Emitir viajero 7 días',
   'POST /api/v1/viajero-3-dias/emision': 'Emitir viajero 3 días',

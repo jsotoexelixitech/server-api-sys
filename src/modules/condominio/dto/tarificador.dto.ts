@@ -1,6 +1,6 @@
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
 import { Type } from 'class-transformer';
-import { IsIn, IsInt, IsNotEmpty, IsNumber, IsOptional, IsString, Max, MaxLength, Min } from 'class-validator';
+import { ArrayMinSize, IsArray, IsBoolean, IsIn, IsInt, IsNotEmpty, IsNumber, IsOptional, IsString, Max, MaxLength, Min, ValidateNested } from 'class-validator';
 
 /** Ramos cuyo tarifario puede consultarse/editarse desde el tarificador de Técnica. */
 export const TARIFICADOR_RAMOS = [16, 38] as const;
@@ -43,6 +43,218 @@ export class UpdateTarificadorTasaDto {
   @Min(0)
   @Max(100)
   pprima: number;
+
+  @ApiPropertyOptional({ example: 0.2, description: 'Tasa mínima del rango (%). Va junto con ptasa_max.' })
+  @IsOptional()
+  @Type(() => Number)
+  @IsNumber({ maxDecimalPlaces: 6 })
+  @Min(0)
+  @Max(100)
+  ptasa_min?: number;
+
+  @ApiPropertyOptional({ example: 0.5, description: 'Tasa máxima del rango (%). Igual a la mínima retira el rango.' })
+  @IsOptional()
+  @Type(() => Number)
+  @IsNumber({ maxDecimalPlaces: 6 })
+  @Min(0)
+  @Max(100)
+  ptasa_max?: number;
+
+  @ApiPropertyOptional({ example: 10, description: 'Deducible: % del siniestro (matarifa_d.pdedu_fran). Va junto con mdedu_franext.' })
+  @IsOptional()
+  @Type(() => Number)
+  @IsNumber({ maxDecimalPlaces: 4 })
+  @Min(0)
+  @Max(100)
+  pdedu_fran?: number;
+
+  @ApiPropertyOptional({ example: 500, description: 'Deducible: monto mínimo en US$ (matarifa_d.mdedu_franext). Va junto con pdedu_fran.' })
+  @IsOptional()
+  @Type(() => Number)
+  @IsNumber({ maxDecimalPlaces: 2 })
+  @Min(0)
+  @Max(999999999)
+  mdedu_franext?: number;
+
+  @ApiProperty({ example: 20364172, description: 'Código de usuario Sis2000 de quien modifica (auditoría cusuariomod).' })
+  @Type(() => Number)
+  @IsInt()
+  @Min(1)
+  cusuario: number;
+
+  @ApiPropertyOptional({ example: 'Nombre Apellido', description: 'Nombre del usuario, solo para el log.' })
+  @IsOptional()
+  @IsString()
+  @MaxLength(120)
+  xusuario?: string;
+}
+
+/** Frecuencias de pago que se pueden habilitar o deshabilitar por plan desde el panel de Técnica. */
+export const FRECUENCIAS_CONFIGURABLES = ['A', 'S', 'T', 'M'] as const;
+
+/** Habilita o deshabilita una frecuencia de pago de un plan (maplanes_frec.iestado: V = habilitada). */
+export class UpdateTarificadorFrecuenciaDto {
+  @ApiProperty({ example: 38 })
+  @Type(() => Number)
+  @IsIn(TARIFICADOR_RAMOS as unknown as number[])
+  cramo: number;
+
+  @ApiProperty({ example: '2', description: 'Código de plan vigente del ramo (maplanes.cplan).' })
+  @IsString()
+  @IsNotEmpty()
+  @MaxLength(6)
+  cplan: string;
+
+  @ApiProperty({ example: 'T', enum: FRECUENCIAS_CONFIGURABLES as unknown as string[] })
+  @IsIn(FRECUENCIAS_CONFIGURABLES as unknown as string[])
+  ifrecuencia: string;
+
+  @ApiProperty({ example: true, description: 'true = habilitada (iestado V); false = deshabilitada (iestado N).' })
+  @IsBoolean()
+  habilitada: boolean;
+
+  @ApiProperty({ example: 20364172, description: 'Código de usuario Sis2000 de quien modifica (auditoría cusuariomod).' })
+  @Type(() => Number)
+  @IsInt()
+  @Min(1)
+  cusuario: number;
+
+  @ApiPropertyOptional({ example: 'Nombre Apellido', description: 'Nombre del usuario, solo para el log.' })
+  @IsOptional()
+  @IsString()
+  @MaxLength(120)
+  xusuario?: string;
+}
+
+export class TasaAntiguedadDto {
+  @ApiProperty({ example: 'R', enum: ['R', 'C'] })
+  @IsIn(['R', 'C'])
+  iuso: string;
+
+  @ApiProperty({ example: 1, description: '1 = 1967 o antes, 2 = 1968-1993, 3 = 1994-2018, 4 = 2019 en adelante.' })
+  @Type(() => Number)
+  @IsIn([1, 2, 3, 4])
+  itramo: number;
+
+  @ApiProperty({ example: 0.25125, description: 'Tasa global en porcentaje (incluye terremoto).' })
+  @Type(() => Number)
+  @IsNumber({ maxDecimalPlaces: 6 })
+  @Min(0)
+  @Max(100)
+  pprima: number;
+}
+
+export class RepartoCoberturaDto {
+  @ApiProperty({ example: '1' })
+  @IsString()
+  @IsNotEmpty()
+  @MaxLength(4)
+  ccober: string;
+
+  @ApiProperty({ example: '1' })
+  @IsString()
+  @IsNotEmpty()
+  @MaxLength(4)
+  ctarifa: string;
+
+  @ApiProperty({
+    example: 'P',
+    enum: ['F', 'P', 'M'],
+    description:
+      'F = parte fija de la tasa global; P = porcentaje de lo que queda tras las partes fijas; M = monto fijo anual, fuera de la tasa global.',
+  })
+  @IsIn(['F', 'P', 'M'])
+  itipo: string;
+
+  @ApiProperty({ example: 80, description: 'F: tasa en %. P: porcentaje (0–100). M: monto en la moneda de la póliza.' })
+  @Type(() => Number)
+  @IsNumber({ maxDecimalPlaces: 6 })
+  @Min(0)
+  @Max(99999999)
+  pvalor: number;
+
+  @ApiPropertyOptional({ example: false, description: 'true = el cliente puede quitarla y deja de pagar su parte.' })
+  @IsOptional()
+  @IsBoolean()
+  iopcional?: boolean;
+
+  @ApiPropertyOptional({ example: 2.5, description: 'Límite asegurado en % de la suma asegurada. Vacío = 100 %.' })
+  @IsOptional()
+  @Type(() => Number)
+  @IsNumber({ maxDecimalPlaces: 4 })
+  @Min(0.0001)
+  @Max(100)
+  plimite?: number | null;
+}
+
+/** Tasas por antigüedad y reparto por cobertura de Condominio. Reemplaza la configuración completa. */
+export class UpdateTarificadorAntiguedadDto {
+  @ApiProperty({ example: 16, description: 'Solo Condominio (ramo 16).' })
+  @Type(() => Number)
+  @IsIn([16])
+  cramo: number;
+
+  @ApiProperty({ type: [TasaAntiguedadDto] })
+  @IsArray()
+  @ArrayMinSize(8)
+  @ValidateNested({ each: true })
+  @Type(() => TasaAntiguedadDto)
+  tasas: TasaAntiguedadDto[];
+
+  @ApiProperty({ type: [RepartoCoberturaDto] })
+  @IsArray()
+  @ValidateNested({ each: true })
+  @Type(() => RepartoCoberturaDto)
+  reparto: RepartoCoberturaDto[];
+
+  @ApiProperty({ example: 20364172, description: 'Código de usuario Sis2000 de quien modifica (auditoría cusuariomod).' })
+  @Type(() => Number)
+  @IsInt()
+  @Min(1)
+  cusuario: number;
+
+  @ApiPropertyOptional({ example: 'Nombre Apellido', description: 'Nombre del usuario, solo para el log.' })
+  @IsOptional()
+  @IsString()
+  @MaxLength(120)
+  xusuario?: string;
+}
+
+/** Tramo de descuento por suma asegurada: msuma_desde <= suma < msuma_hasta (null = sin tope). */
+export class DescuentoSumaDto {
+  @ApiProperty({ example: 100000, description: 'Suma asegurada desde (US$, incluida).' })
+  @Type(() => Number)
+  @IsNumber({ maxDecimalPlaces: 2 })
+  @Min(0)
+  msuma_desde: number;
+
+  @ApiPropertyOptional({ example: 500000, nullable: true, description: 'Suma asegurada hasta (US$, excluida). Vacío = sin tope.' })
+  @IsOptional()
+  @Type(() => Number)
+  @IsNumber({ maxDecimalPlaces: 2 })
+  @Min(0)
+  msuma_hasta?: number | null;
+
+  @ApiProperty({ example: 5, description: '% de descuento sobre la prima bruta de cada cobertura.' })
+  @Type(() => Number)
+  @IsNumber({ maxDecimalPlaces: 4 })
+  @Min(0)
+  @Max(99.9999)
+  pdescuento: number;
+}
+
+/** Reemplaza los tramos de descuento por suma asegurada de un ramo. Lista vacía = sin descuento por suma. */
+export class UpdateTarificadorDescuentosSumaDto {
+  @ApiProperty({ example: 16 })
+  @Type(() => Number)
+  @IsIn(TARIFICADOR_RAMOS as unknown as number[])
+  cramo: number;
+
+  @ApiProperty({ type: [DescuentoSumaDto] })
+  @IsArray()
+  @ValidateNested({ each: true })
+  @Type(() => DescuentoSumaDto)
+  tramos: DescuentoSumaDto[];
 
   @ApiProperty({ example: 20364172, description: 'Código de usuario Sis2000 de quien modifica (auditoría cusuariomod).' })
   @Type(() => Number)

@@ -25,6 +25,9 @@ export const SP_PRE_EMISION_PERSONAS = 'sp_pre_emision_personas_general_nexus';
 /** Invocado al final del pre-SP personas (no desde nest-api directamente). */
 export const SP_EMISION_PERSONAS = 'sp_emision_personas_general_nexus';
 
+/** Emisión colectiva (docs/sql/emision-colectivo-nexus). Llama a sp_emision_personas_colectivo_nexus al final. */
+export const SP_PRE_EMISION_COLECTIVO = 'sp_pre_emision_personas_colectivo_nexus';
+
 /** Prorrata viajero por días (fdesde/fhasta o ndias × tarifa diaria). */
 export const SP_CALCULO_VIAJERO_PRORRATA = 'spCalculoViajeroProrrata';
 
@@ -55,6 +58,9 @@ export const SP_GET_SUSTANCIAS_NEXUS = 'sp_get_sustancias_nexus';
 
 /** Frecuencias de pago por plan RCV (POST /valrep/frecuencia). */
 export const SP_BUSCA_FRECUENCIA_PLAN_NEXUS = 'sp_busca_frecuencia_plan_nexus';
+
+/** Planes RCV de POST /valrep/planes/v2: copia de spBuscaPlan con @bexclusivos (override: MSSQL_SP_BUSCA_PLAN_NEXUS). */
+export const SP_BUSCA_PLAN_NEXUS = 'sp_busca_plan_nexus';
 
 /** Planes funerarios por producto + canal (POST /personas/planes y /valrep/planes/producto). */
 export const SP_BUSCA_PLAN_PRODUCTO_NEXUS = 'sp_busca_plan_producto_nexus';
@@ -88,3 +94,6 @@ export const SP_PRE_EMISION_CONDOMINIO = 'sp_pre_emision_condominio_nexus';
 // ── Productores / Brokers ───────────────────────────────────────────────────
 export const SP_OBTENER_PRODUCTORES_NEXUS = 'sp_ma_obtener_productores_nexus';
 
+
+/** Guarda adpoliza.xobserva de la póliza recién emitida (personas y RCV). No bloquea la emisión. */
+export const SP_POLIZA_OBSERVACION = 'sp_poliza_observacion_nexus';

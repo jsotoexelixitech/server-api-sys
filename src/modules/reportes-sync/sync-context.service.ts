@@ -11,6 +11,7 @@ import { SyncService, type SyncResult } from './sync.service';
 const SYNC_ON_EXECUTE_VAR: Record<string, string> = {
   recibos: 'REPORTES_SYNC_RECIBOS_ON_EXECUTE',
   siniestros: 'REPORTES_SYNC_SINIESTROS_ON_EXECUTE',
+  polizas: 'REPORTES_SYNC_POLIZAS_ON_EXECUTE',
 };
 
 export type SyncFiltrosBuilt = Record<string, unknown> & {
@@ -139,7 +140,7 @@ export class SyncContextService {
         const result = {
           skipped: true,
           reason:
-            'sync al consultar desactivado (REPORTES_SYNC_RECIBOS_ON_EXECUTE=false): lo hace el refresco programado',
+            `sync al consultar desactivado (${SYNC_ON_EXECUTE_VAR[entidad]}=false): lo hace el refresco programado`,
         };
         this.syncLog(`${entidad}: omitido (${result.reason})`);
         return result;
@@ -226,7 +227,8 @@ export class SyncContextService {
       const force = Boolean(
         body?.forceSync || (body?.sync as Record<string, unknown>)?.force,
       );
-      const catalogs = await Promise.all(
+      // Cada catálogo es independiente: si uno falla (p. ej. una tabla local sin id_aseguradora) los demás se sincronizan igual.
+      const settled = await Promise.allSettled(
         CATALOG_ENTIDADES.map((entidad) =>
           this.syncService.syncIncremental(entidad, filtros, {
             force,
@@ -235,6 +237,15 @@ export class SyncContextService {
           }),
         ),
       );
+      const catalogs = settled.map((res, i) => {
+        if (res.status === 'fulfilled') return res.value;
+        const message =
+          res.reason instanceof Error ? res.reason.message : String(res.reason);
+        this.syncLog(`catálogo ${CATALOG_ENTIDADES[i]}: error en sync, se continúa`, {
+          message,
+        });
+        return { entidad: CATALOG_ENTIDADES[i], skipped: true, error: message };
+      });
 
       return {
         skipped: false,
