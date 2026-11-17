@@ -272,6 +272,8 @@ export const mundialAdapter: InsurerAdapter = {
       primaTotal: toNum(
         pick(row, 'prima_total', 'primaTotal', 'prima_anual', 'primaAnual'),
       ),
+      // Automóvil: suma asegurada de casco (pérdida total, parcial o cobertura amplia); null si no tiene.
+      sumaAsegurada: toNum(pick(row, 'suma_asegurada', 'sumaAsegurada')),
       nombreTomador: toStr(
         pick(row, 'nombre_tomador', 'nombreTomador', 'nombre_contratante'),
       ),
