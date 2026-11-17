@@ -6,7 +6,14 @@ import { SearchVehiclePoliciesDto } from './dto/search-vehicle-policies.dto';
 import { SearchTitularContactoDto } from './dto/search-titular-contacto.dto';
 import { ValidateSiniestroDto } from './dto/validate-siniestro.dto';
 import { SearchCausasDto } from './dto/search-causas.dto';
+import { buildCiudadesQuery, buildEstadosQuery, limpiarGeo, type GeoItem } from './geo-catalogo';
 import { agruparCausas, buildCausasQuery, type CausaSiniestro } from './causas-siniestro';
+import { SearchSiniestrosExistentesDto } from './dto/search-siniestros-existentes.dto';
+import {
+  buildSiniestrosExistentesQuery,
+  mapearSiniestrosExistentes,
+  type SiniestroExistente,
+} from './siniestros-existentes';
 import { buildCorreoEmisionQuery, buildPolizaYCorreoMaestroQuery, type TitularContactoSql } from './titular-contacto';
 import {
   buildCoberturasQuery,
@@ -343,6 +350,59 @@ export class ClientService {
       const msg = err instanceof Error ? err.message : String(err);
       this.logger.error(`listCausasSiniestro: ${msg}`);
       throw new InternalServerErrorException('Error al consultar las causas de siniestro.');
+    }
+  }
+
+  // ── GET /api/v1/client/siniestros/existentes ─────────────────────────────
+
+  /** Siniestros registrados para una póliza y/o placa (por defecto solo los abiertos). Solo lectura. */
+  async listSiniestrosExistentes(
+    q: SearchSiniestrosExistentesDto,
+  ): Promise<{ hayAbiertos: boolean; total: number; siniestros: SiniestroExistente[] }> {
+    if (!q.cnpoliza && !q.placa) throw new BadRequestException('Indique la póliza (cnpoliza) o la placa.');
+    if (q.focurrencia && q.focurrencia > new Date().toISOString().slice(0, 10)) {
+      throw new BadRequestException('La fecha de ocurrencia no puede ser futura.');
+    }
+    try {
+      const built = buildSiniestrosExistentesQuery(q);
+      const req = this.db.request();
+      this.bindParams(req, built.params);
+      const r = await req.query(built.sql);
+      const siniestros = mapearSiniestrosExistentes((r.recordset ?? []) as Record<string, unknown>[]);
+      return { hayAbiertos: siniestros.some((s) => s.abierto), total: siniestros.length, siniestros };
+    } catch (err) {
+      this.logger.error(`listSiniestrosExistentes: ${err instanceof Error ? err.message : String(err)}`);
+      throw new InternalServerErrorException('Error al consultar los siniestros existentes.');
+    }
+  }
+
+  // ── GET /api/v1/client/geo/estados y /ciudades ───────────────────────────
+
+  /** Estados de Venezuela (catálogo de Sis2000, sin datos personales). */
+  async listEstados(): Promise<GeoItem[]> {
+    try {
+      const built = buildEstadosQuery();
+      const req = this.db.request();
+      this.bindParams(req, built.params);
+      const r = await req.query(built.sql);
+      return limpiarGeo((r.recordset ?? []) as { codigo: unknown; nombre: unknown }[]);
+    } catch (err) {
+      this.logger.error(`listEstados: ${err instanceof Error ? err.message : String(err)}`);
+      throw new InternalServerErrorException('Error al consultar los estados.');
+    }
+  }
+
+  /** Ciudades de un estado. */
+  async listCiudades(cestado: number): Promise<GeoItem[]> {
+    try {
+      const built = buildCiudadesQuery(cestado);
+      const req = this.db.request();
+      this.bindParams(req, built.params);
+      const r = await req.query(built.sql);
+      return limpiarGeo((r.recordset ?? []) as { codigo: unknown; nombre: unknown }[]);
+    } catch (err) {
+      this.logger.error(`listCiudades: ${err instanceof Error ? err.message : String(err)}`);
+      throw new InternalServerErrorException('Error al consultar las ciudades.');
     }
   }
 }

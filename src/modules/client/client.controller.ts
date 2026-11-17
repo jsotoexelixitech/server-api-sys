@@ -10,6 +10,8 @@ import { SearchVehiclePoliciesDto } from './dto/search-vehicle-policies.dto';
 import { SearchTitularContactoDto } from './dto/search-titular-contacto.dto';
 import { ValidateSiniestroDto } from './dto/validate-siniestro.dto';
 import { SearchCausasDto } from './dto/search-causas.dto';
+import { SearchCiudadesDto } from './dto/search-ciudades.dto';
+import { SearchSiniestrosExistentesDto } from './dto/search-siniestros-existentes.dto';
 
 @ApiTags('7. Consulta de clientes')
 @Controller('v1/client')
@@ -55,6 +57,30 @@ export class ClientController {
     return { status: true, result };
   }
 
+  @Get('geo/estados')
+  @ApiHeader(APIKEY_HEADER)
+  @ApiOperation({
+    summary: 'Estados de Venezuela',
+    description: 'Catálogo de estados (`maestados`) con su código de Sis2000. Sin datos personales. **Seguridad**: requiere API Key con scope `client:read`.',
+  })
+  @ApiResponse({ status: 200, schema: { example: { status: true, result: { estados: [{ codigo: 24, nombre: 'Miranda' }] } } } })
+  @ApiCommonErrors()
+  async estados() {
+    return { status: true, result: { estados: await this.clientService.listEstados() } };
+  }
+
+  @Get('geo/ciudades')
+  @ApiHeader(APIKEY_HEADER)
+  @ApiOperation({
+    summary: 'Ciudades de un estado',
+    description: 'Catálogo de ciudades (`maciudades`) del estado indicado. Sin datos personales. **Seguridad**: requiere API Key con scope `client:read`.',
+  })
+  @ApiResponse({ status: 200, schema: { example: { status: true, result: { ciudades: [{ codigo: 28, nombre: 'Caracas' }] } } } })
+  @ApiCommonErrors()
+  async ciudades(@Query() query: SearchCiudadesDto) {
+    return { status: true, result: { ciudades: await this.clientService.listCiudades(query.cestado) } };
+  }
+
   @Get('siniestros/causas')
   @ApiHeader(APIKEY_HEADER)
   @ApiOperation({
@@ -69,6 +95,52 @@ export class ClientController {
   async causasSiniestro(@Query() query: SearchCausasDto) {
     const causas = await this.clientService.listCausasSiniestro(query);
     return { status: true, result: { causas } };
+  }
+
+  @Get('siniestros/existentes')
+  @ApiHeader(APIKEY_HEADER)
+  @ApiOperation({
+    summary: 'Siniestros existentes (abiertos) de una póliza o placa',
+    description:
+      'Busca en `snsinies` los siniestros de Automóvil/RCV de la póliza (`cnpoliza`) y/o la placa (`placa`); al menos uno es ' +
+      'obligatorio. Con `focurrencia` (YYYY-MM-DD) solo devuelve los ocurridos ese día, útil para saber si el siniestro ya ' +
+      'está declarado. Por defecto solo los **abiertos** (P pendiente); con `soloAbiertos=false` devuelve todos ' +
+      'con su estatus (F finalizado, A anulado, Z rechazado). Incluye los declarados desde el Sis2000 de escritorio: la placa ' +
+      'sale del certificado (`vhcerti`). Máximo 50, del más reciente al más antiguo. Solo lectura. ' +
+      '**Seguridad**: requiere API Key con scope `client:read`.',
+  })
+  @ApiResponse({
+    status: 200,
+    schema: {
+      example: {
+        status: true,
+        result: {
+          hayAbiertos: true,
+          total: 1,
+          siniestros: [
+            {
+              csinies: '1800000000000002301',
+              cnsinies: '18-0000000002160',
+              cnpoliza: '18-1-1000031086',
+              placa: 'AT9A03M',
+              cramo: 18,
+              ccausa: 18126,
+              xcausa: 'CHOQUE O COLISION ENTRE VEHICULOS',
+              focurrencia: '2026-08-10',
+              fnotificacion: '2026-08-11',
+              istatsin: 'P',
+              estatus: 'Pendiente',
+              abierto: true,
+            },
+          ],
+        },
+      },
+    },
+  })
+  @ApiResponse({ status: 400, description: 'Falta póliza y placa, formato inválido o fecha futura' })
+  @ApiCommonErrors()
+  async siniestrosExistentes(@Query() query: SearchSiniestrosExistentesDto) {
+    return { status: true, result: await this.clientService.listSiniestrosExistentes(query) };
   }
 
   @Get('siniestros/validar')
