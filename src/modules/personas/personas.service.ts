@@ -16,6 +16,10 @@ import { CreateEmissionPersonDto } from './dto/create-emission-person.dto';
 import { parseSPError } from '../../common/helpers/sp-error.helper';
 import { buildPolicyPdfUrl } from '../../common/helpers/policy-url.helper';
 import {
+  guardarObservacionPoliza,
+  normalizarObservaciones,
+} from '../../common/helpers/poliza-observacion.helper';
+import {
   SP_BUSCA_DETALLE_PLAN,
   SP_CALCULO_PER,
   SP_CALCULO_VIAJERO_PRORRATA,
@@ -2059,10 +2063,17 @@ export class PersonasService {
         const cpoliza = await this.resolveCpolizaEmitida(row, cnpoliza);
         const casegurado = rifTitular || undefined;
 
+        // Observaciones de la póliza (adpoliza.xobserva). No bloquea: si el SP falla la emisión sigue OK.
+        const observacionesTexto = normalizarObservaciones(body.observaciones);
+        const observaciones = observacionesTexto
+          ? { guardada: await guardarObservacionPoliza(this.db, this.logger, cnpoliza, observacionesTexto) }
+          : undefined;
+
         this.logger.log(`createEmissionPerson: emitida OK cnpoliza=${cnpoliza}`);
         return {
           message: 'Emisión registrada exitosamente.',
           cnpoliza, cnrecibo, urlpoliza, ncuota, fanopol, fmespol, cpoliza, casegurado,
+          ...(observaciones ? { observaciones } : {}),
         };
 
     } catch (err) {

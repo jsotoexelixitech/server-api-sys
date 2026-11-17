@@ -186,4 +186,17 @@ export class CreateEmissionPersonDto {
   @ApiPropertyOptional() @IsOptional() cparen_beneficiario?: number | string;
   @ApiPropertyOptional() @IsOptional() nparentesco_beneficiario?: number | string;
   @ApiPropertyOptional() @IsOptional() pporce_beneficiario?: number | string;
+
+  @ApiPropertyOptional({
+    example: 'Cliente solicita entrega de la póliza por correo.',
+    maxLength: 255,
+    description:
+      'Observaciones de la póliza (máx. 255 caracteres; más de 255 responde 400 sin emitir). ' +
+      'Se guardan en la póliza después de emitir. ' +
+      'Si no se pueden guardar, la emisión responde OK igual con `observaciones.guardada = false`.',
+  })
+  @IsOptional()
+  @IsString()
+  @MaxLength(255)
+  observaciones?: string;
 }
