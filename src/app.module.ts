@@ -44,6 +44,7 @@ import { PolizasModule } from './modules/polizas/polizas.module';
 import { ComponentsModule } from './modules/components/components.module';
 import { AutopagoModule } from './modules/autopago/autopago.module';
 import { ExpedientesApiModule } from './modules/expedientes-api/expedientes-api.module';
+import { CotizacionesAutoModule } from './modules/cotizaciones-auto/cotizaciones-auto.module';
 
 @Module({
   imports: [
@@ -98,6 +99,7 @@ import { ExpedientesApiModule } from './modules/expedientes-api/expedientes-api.
     ComponentsModule,
     AutopagoModule,
     ExpedientesApiModule,
+    CotizacionesAutoModule,
   ],
 })
 export class AppModule {}
