@@ -25,7 +25,7 @@ export class SearchSiniestrosExistentesDto {
   @ApiPropertyOptional({
     example: true,
     default: true,
-    description: 'true (por defecto): solo abiertos (P pendiente, R reabierto). false: todos, con su estatus.',
+    description: 'true (por defecto): solo abiertos (P pendiente). false: todos, con su estatus.',
   })
   @IsOptional()
   @Transform(({ value }) => (value === 'false' || value === false ? false : value === 'true' || value === true ? true : value))

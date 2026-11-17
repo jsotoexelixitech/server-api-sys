@@ -2,16 +2,15 @@ import { RAMOS_AUTO, type SqlParam } from './vehicle-policy-search';
 
 /**
  * Estatus de `snsinies.istatsin`, deducidos de los datos (ver docs de git-web-siniestros-backend, integracion-snsinies.md).
- * `R` aparece una sola vez en QA (ramo 25, sin pagos ni rechazo): se trata como reabierto, por eso cuenta como abierto.
+ * Abierto = solo Pendiente (`P`), decisión de Luis del 2026-11-17. `R` (un caso en QA, ramo 25) no tiene significado confirmado.
  */
 export const ESTATUS_SINIESTRO: Record<string, string> = {
   P: 'Pendiente',
-  R: 'Reabierto',
   F: 'Finalizado',
   A: 'Anulado',
   Z: 'Rechazado',
 };
-export const ESTATUS_ABIERTOS = ['P', 'R'] as const;
+export const ESTATUS_ABIERTOS = ['P'] as const;
 export const MAX_SINIESTROS_EXISTENTES = 50;
 
 export interface FiltrosSiniestrosExistentes {

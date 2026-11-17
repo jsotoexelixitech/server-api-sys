@@ -22,8 +22,8 @@ describe('buildSiniestrosExistentesQuery', () => {
     expect(buildSiniestrosExistentesQuery({ placa: 'X1' }).sql).toContain('CAST(s.csinies AS varchar(20))');
   });
 
-  it('por defecto filtra los abiertos (P, R); con soloAbiertos=false trae todos', () => {
-    expect(buildSiniestrosExistentesQuery({ placa: 'X1' }).sql).toContain("s.istatsin IN ('P', 'R')");
+  it('por defecto filtra los abiertos (solo P); con soloAbiertos=false trae todos', () => {
+    expect(buildSiniestrosExistentesQuery({ placa: 'X1' }).sql).toContain("s.istatsin IN ('P')");
     expect(buildSiniestrosExistentesQuery({ placa: 'X1', soloAbiertos: false }).sql).not.toContain('s.istatsin IN');
   });
 

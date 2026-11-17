@@ -104,7 +104,7 @@ export class ClientController {
     description:
       'Busca en `snsinies` los siniestros de Automóvil/RCV de la póliza (`cnpoliza`) y/o la placa (`placa`); al menos uno es ' +
       'obligatorio. Con `focurrencia` (YYYY-MM-DD) solo devuelve los ocurridos ese día, útil para saber si el siniestro ya ' +
-      'está declarado. Por defecto solo los **abiertos** (P pendiente, R reabierto); con `soloAbiertos=false` devuelve todos ' +
+      'está declarado. Por defecto solo los **abiertos** (P pendiente); con `soloAbiertos=false` devuelve todos ' +
       'con su estatus (F finalizado, A anulado, Z rechazado). Incluye los declarados desde el Sis2000 de escritorio: la placa ' +
       'sale del certificado (`vhcerti`). Máximo 50, del más reciente al más antiguo. Solo lectura. ' +
       '**Seguridad**: requiere API Key con scope `client:read`.',
