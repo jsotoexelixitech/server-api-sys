@@ -3,12 +3,15 @@ import { of, lastValueFrom } from 'rxjs';
 import type { NestAuthContext } from '../auth/auth.types';
 import {
   integradorDe,
+  itemsDelLote,
+  MAX_ARCHIVOS_LOTE,
   puedeUsarExpedientes,
   registroDesdeEmision,
   rutaDeHandler,
   tipoArchivo,
 } from './expedientes-api.rules';
-import { ExpedientesApiService } from './expedientes-api.service';
+import { ExpedientesApiController } from './expedientes-api.controller';
+import { ExpedientesApiService, mapConcurrencia } from './expedientes-api.service';
 import { ExpedientesRegistroInterceptor } from './expedientes-registro.interceptor';
 
 const JPG = Buffer.concat([Buffer.from([0xff, 0xd8, 0xff, 0xe0]), Buffer.alloc(100, 1)]);
@@ -259,5 +262,188 @@ describe('ExpedientesRegistroInterceptor', () => {
       }),
     );
     expect(svc.registrarEmision).not.toHaveBeenCalled();
+  });
+});
+
+describe('Documentos en lote (varios archivos por envío)', () => {
+  let fetchMock: jest.Mock;
+  beforeEach(() => {
+    fetchMock = jest.fn();
+    (global as any).fetch = fetchMock;
+  });
+
+  const GIF = Buffer.from('GIF89a-no-permitido');
+  const archivo = (nombre: string, buffer: Buffer = JPG, fieldname = 'archivos') => ({
+    fieldname,
+    originalname: nombre,
+    buffer,
+    size: buffer.length,
+  });
+  function controlador() {
+    const { svc } = crearServicio();
+    const res = { status: jest.fn() } as any;
+    const req = { nestAuth: AUTH_VIAJERO } as any;
+    return { ctrl: new ExpedientesApiController(svc), res, req };
+  }
+  const recibido = (tipo: string, documento: string) =>
+    respuesta(201, { data: { tipo, documento, estado: 'recibido' } });
+
+  it('items: valida forma, cantidad y máximo de 10', () => {
+    expect(itemsDelLote('[{"tipo":" Cedula ","documento":12345678},{"tipo":"rif"}]', 2)).toEqual([
+      { tipo: 'cedula', documento: '12345678' },
+      { tipo: 'rif' },
+    ]);
+    expect(itemsDelLote('[{"tipo":"cedula"}]', 2)).toMatch(/deben coincidir/);
+    expect(itemsDelLote(undefined, 2)).toMatch(/items es obligatorio/);
+    expect(itemsDelLote('{no json', 1)).toMatch(/JSON array válido/);
+    expect(itemsDelLote('{"tipo":"cedula"}', 1)).toMatch(/JSON array/);
+    expect(itemsDelLote('[{"tipo":"foto"}]', 1)).toMatch(/items\[0\]\.tipo/);
+    expect(itemsDelLote('[]', 0)).toMatch(/al menos un archivo/);
+    expect(itemsDelLote('[]', MAX_ARCHIVOS_LOTE + 1)).toMatch(/Máximo 10 archivos/);
+  });
+
+  it('mapConcurrencia: conserva el orden y no pasa de 2 en curso', async () => {
+    let enCurso = 0;
+    let maximo = 0;
+    const out = await mapConcurrencia([30, 5, 20, 1, 10], 2, async (ms, i) => {
+      enCurso++;
+      maximo = Math.max(maximo, enCurso);
+      await new Promise((r) => setTimeout(r, ms));
+      enCurso--;
+      return i;
+    });
+    expect(out).toEqual([0, 1, 2, 3, 4]);
+    expect(maximo).toBe(2);
+  });
+
+  it('un solo archivo con campos sueltos: idéntico a hoy (200 y { status, data })', async () => {
+    const { ctrl, res, req } = controlador();
+    fetchMock.mockResolvedValueOnce(recibido('cedula', '11222333'));
+    const out = await ctrl.subir(req, res, '2501-9', { tipo: 'cedula', documento: '11222333' } as any, [
+      archivo('ced.jpg', JPG, 'archivo'),
+    ]);
+    expect(out).toEqual({ status: true, data: { tipo: 'cedula', documento: '11222333', estado: 'recibido' } });
+    expect(res.status).not.toHaveBeenCalled();
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+    expect((fetchMock.mock.calls[0][1].body as FormData).get('documento')).toBe('11222333');
+    // Sin archivo: el mismo 400 de siempre.
+    await expect(ctrl.subir(req, res, '2501-9', { tipo: 'cedula' } as any, undefined)).rejects.toMatchObject({
+      status: 400,
+      message: 'archivo es obligatorio.',
+    });
+  });
+
+  it('lote ok: 201 con resultado por archivo, en orden', async () => {
+    const { ctrl, res, req } = controlador();
+    fetchMock
+      .mockResolvedValueOnce(recibido('cedula', '11222333'))
+      .mockResolvedValueOnce(recibido('pasaporte', 'EM2849387'));
+    const items = JSON.stringify([
+      { tipo: 'cedula', documento: 'V11222333' },
+      { tipo: 'pasaporte', documento: 'P-EM2849387' },
+    ]);
+    const out = await ctrl.subir(req, res, '2501-9', { items } as any, [archivo('ced.jpg'), archivo('pas.webp', WEBP)]);
+    expect(res.status).toHaveBeenCalledWith(201);
+    expect(out).toEqual({
+      status: true,
+      data: {
+        cnpoliza: '2501-9',
+        recibidos: 2,
+        fallidos: 0,
+        resultados: [
+          { indice: 0, archivo: 'ced.jpg', tipo: 'cedula', documento: '11222333', ok: true, estado: 'recibido' },
+          { indice: 1, archivo: 'pas.webp', tipo: 'pasaporte', documento: 'EM2849387', ok: true, estado: 'recibido' },
+        ],
+      },
+    });
+    const forms = fetchMock.mock.calls.map((c) => c[1].body as FormData);
+    expect(forms.map((f) => [f.get('tipo'), f.get('documento')])).toEqual([
+      ['cedula', 'V11222333'],
+      ['pasaporte', 'P-EM2849387'],
+    ]);
+  });
+
+  it('lote mixto: 207; un archivo malo o rechazado por Nexus no tumba a los demás', async () => {
+    const { ctrl, res, req } = controlador();
+    fetchMock
+      .mockResolvedValueOnce(recibido('cedula', '11222333'))
+      .mockResolvedValueOnce(respuesta(400, { message: 'documento es obligatorio en Viajero (número de la persona).' }));
+    const items = JSON.stringify([{ tipo: 'cedula', documento: '11222333' }, { tipo: 'rif' }, { tipo: 'cedula' }]);
+    const out = await ctrl.subir(req, res, '2501-9', { items } as any, [
+      archivo('ced.jpg', JPG, 'archivo'),
+      archivo('rif.gif', GIF, 'archivo'),
+      archivo('otra.jpg', JPG, 'archivo'),
+    ]);
+    expect(res.status).toHaveBeenCalledWith(207);
+    expect(out.status).toBe(false);
+    expect(out.data).toMatchObject({ recibidos: 1, fallidos: 2 });
+    expect((out.data as any).resultados).toEqual([
+      expect.objectContaining({ indice: 0, ok: true, estado: 'recibido' }),
+      {
+        indice: 1,
+        archivo: 'rif.gif',
+        tipo: 'rif',
+        ok: false,
+        status: 415,
+        message: 'Formato no permitido. Use PDF, JPG, PNG o WEBP.',
+      },
+      expect.objectContaining({
+        indice: 2,
+        ok: false,
+        status: 400,
+        message: 'documento es obligatorio en Viajero (número de la persona).',
+      }),
+    ]);
+    // El GIF no llega a Nexus.
+    expect(fetchMock).toHaveBeenCalledTimes(2);
+  });
+
+  it('lote donde todos fallan: status del primer error', async () => {
+    const { ctrl, res, req } = controlador();
+    fetchMock.mockImplementation(async () => respuesta(404, { message: 'Póliza no encontrada.' }));
+    const out = await ctrl.subir(req, res, '2501-9', { items: '[{"tipo":"cedula"},{"tipo":"rif"}]' } as any, [
+      archivo('a.jpg'),
+      archivo('b.jpg'),
+    ]);
+    expect(res.status).toHaveBeenCalledWith(404);
+    expect(out.data).toMatchObject({ recibidos: 0, fallidos: 2 });
+  });
+
+  it('errores de forma del lote: 400 sin procesar nada', async () => {
+    const { ctrl, res, req } = controlador();
+    const dos = [archivo('a.jpg'), archivo('b.jpg')];
+    // items desalineado
+    await expect(ctrl.subir(req, res, '2501-9', { items: '[{"tipo":"cedula"}]' } as any, dos)).rejects.toMatchObject({
+      status: 400,
+    });
+    // varios archivos sin items
+    await expect(ctrl.subir(req, res, '2501-9', { tipo: 'cedula' } as any, dos)).rejects.toMatchObject({ status: 400 });
+    // items y campos sueltos a la vez
+    await expect(
+      ctrl.subir(req, res, '2501-9', { items: '[{"tipo":"cedula"},{"tipo":"rif"}]', tipo: 'cedula' } as any, dos),
+    ).rejects.toMatchObject({ status: 400 });
+    // más de 10 archivos
+    const once = Array.from({ length: MAX_ARCHIVOS_LOTE + 1 }, (_, i) => archivo(`f${i}.jpg`));
+    const items = JSON.stringify(once.map(() => ({ tipo: 'cedula' })));
+    await expect(ctrl.subir(req, res, '2501-9', { items } as any, once)).rejects.toMatchObject({
+      status: 400,
+      message: 'Máximo 10 archivos por envío.',
+    });
+    // campo de archivo desconocido
+    await expect(
+      ctrl.subir(req, res, '2501-9', { tipo: 'cedula' } as any, [archivo('a.jpg', JPG, 'foto')]),
+    ).rejects.toMatchObject({ status: 400 });
+    // key sin scope: 403 antes de procesar
+    await expect(
+      ctrl.subir(
+        { nestAuth: { ...AUTH_VIAJERO, scopes: ['emissions:auto'] } } as any,
+        res,
+        '2501-9',
+        { items: '[{"tipo":"cedula"},{"tipo":"rif"}]' } as any,
+        dos,
+      ),
+    ).rejects.toBeInstanceOf(ForbiddenException);
+    expect(fetchMock).not.toHaveBeenCalled();
+    expect(res.status).not.toHaveBeenCalled();
   });
 });

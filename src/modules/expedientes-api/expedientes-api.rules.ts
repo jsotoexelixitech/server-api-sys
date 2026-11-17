@@ -22,6 +22,57 @@ export type TipoDocumento = (typeof TIPOS_DOCUMENTO)[number];
 
 export const MAX_ARCHIVO_BYTES = 10 * 1024 * 1024;
 
+/** Envío en lote: máximo de archivos por llamada y campos multipart aceptados para el archivo. */
+export const MAX_ARCHIVOS_LOTE = 10;
+export const CAMPOS_ARCHIVO = ['archivo', 'archivos', 'file'] as const;
+
+/** Metadatos de un archivo del lote (`items[i]` ↔ i-ésimo archivo, en el orden en que llegan). */
+export interface ItemLote {
+  tipo: TipoDocumento;
+  documento?: string;
+}
+
+/**
+ * Valida el campo `items` (JSON array alineado por índice con los archivos). Devuelve los items o el
+ * mensaje del error de forma del lote (→ 400 sin procesar ningún archivo).
+ */
+export function itemsDelLote(raw: unknown, cantidadArchivos: number): ItemLote[] | string {
+  if (cantidadArchivos === 0) return 'Envíe al menos un archivo (campo archivos, archivo o file).';
+  if (cantidadArchivos > MAX_ARCHIVOS_LOTE) return `Máximo ${MAX_ARCHIVOS_LOTE} archivos por envío.`;
+  if (raw == null || String(raw).trim() === '') {
+    return 'items es obligatorio cuando se envía más de un archivo (JSON array, uno por archivo).';
+  }
+  let lista: unknown;
+  try {
+    lista = typeof raw === 'string' ? JSON.parse(raw) : raw;
+  } catch {
+    return 'items debe ser un JSON array válido.';
+  }
+  if (!Array.isArray(lista)) return 'items debe ser un JSON array.';
+  if (lista.length !== cantidadArchivos) {
+    return `items trae ${lista.length} elemento(s) y se enviaron ${cantidadArchivos} archivo(s); deben coincidir en cantidad y orden.`;
+  }
+  const items: ItemLote[] = [];
+  for (let i = 0; i < lista.length; i++) {
+    const it = lista[i] as Record<string, unknown> | null;
+    if (!it || typeof it !== 'object' || Array.isArray(it)) return `items[${i}] debe ser un objeto { tipo, documento? }.`;
+    const tipo = typeof it.tipo === 'string' ? it.tipo.trim().toLowerCase() : '';
+    if (!(TIPOS_DOCUMENTO as readonly string[]).includes(tipo)) {
+      return `items[${i}].tipo debe ser uno de: ${TIPOS_DOCUMENTO.join(', ')}.`;
+    }
+    let documento: string | undefined;
+    if (it.documento != null) {
+      if (typeof it.documento !== 'string' && typeof it.documento !== 'number') {
+        return `items[${i}].documento debe ser texto.`;
+      }
+      documento = String(it.documento).trim() || undefined;
+      if (documento && documento.length > 32) return `items[${i}].documento admite máximo 32 caracteres.`;
+    }
+    items.push({ tipo: tipo as TipoDocumento, ...(documento ? { documento } : {}) });
+  }
+  return items;
+}
+
 export type ProductoIntegracion = 'pastora' | 'viajero';
 
 /** Pastora: riesgos-generales ramo 25 (Pastora Seguros). */
