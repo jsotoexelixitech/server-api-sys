@@ -133,6 +133,8 @@ export const POLIZA_COLUMNAS: ReadonlyArray<{
   { col: 'estatus_poliza', keys: ['estatusPoliza'] },
   { col: 'moneda', keys: ['moneda'] },
   { col: 'prima_total', keys: ['primaTotal', 'primaAnual'] },
+  // Requiere la columna en PG (docs/sql/postgres/reportes/poliza_suma_asegurada.sql) antes de desplegar.
+  { col: 'suma_asegurada', keys: ['sumaAsegurada'] },
   { col: 'nombre_tomador', keys: ['nombreTomador', 'nombreContratante'] },
   { col: 'cedula_tomador', keys: ['cedulaTomador', 'documentoContratante'] },
   { col: 'nombre_asegurado', keys: ['nombreAsegurado'] },
