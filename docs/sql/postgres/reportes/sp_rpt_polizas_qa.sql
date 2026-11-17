@@ -1,9 +1,6 @@
--- sp_rpt_polizas para QA/desarrollo (PG reportes 192.168.8.121 y 192.168.8.120). Los catálogos de esos ambientes no tienen id_aseguradora.
--- Versión unificada (2026-10-22): columna coberturas + filtro ccobertura (poliza.coberturas_codigos) + cruce con canal seguro
--- (el ::integer va dentro de un CASE; PostgreSQL no garantiza el orden de evaluación de los AND).
--- Es la versión oficial: cualquier otro script que recree sp_rpt_polizas debe partir de esta.
--- Requiere poliza.coberturas (ddl_coberturas_poliza.sql) y poliza.coberturas_codigos (poliza_cobertura_filtro_qa.sql).
-
+-- sp_rpt_polizas para QA (PG reportes 192.168.8.121). Definición vigente exportada de la BD.
+-- 2026-11-11: fdesdeemi/fhastaemi filtran por vigencia desde (fecha_desde_poliza), no por emisión.
+-- 2026-11-17: columna suma_asegurada (casco de Automóvil). Requiere ddl_suma_asegurada_poliza.sql.
 CREATE OR REPLACE FUNCTION public.sp_rpt_polizas(p_payload_json jsonb DEFAULT '{}'::jsonb, p_usuario numeric DEFAULT NULL::numeric)
  RETURNS SETOF jsonb
  LANGUAGE plpgsql
@@ -66,6 +63,7 @@ BEGIN
             TRIM(p.estado) AS estado,
             TRIM(p.estatus_poliza) AS estatus_poliza,
             p.prima_total,
+            p.suma_asegurada,
             COALESCE(TRIM(p.coberturas), '') AS coberturas,
             TRIM(p.marca_vehiculo) AS marca_vehiculo,
             TRIM(p.modelo_vehiculo) AS modelo_vehiculo,
@@ -95,10 +93,10 @@ BEGIN
             AND (v_cproductor IS NULL OR p.id_productor = v_cproductor)
             AND (v_ccanal IS NULL OR TRIM(p.canal_alterno) = v_ccanal)
             AND (v_moneda IS NULL OR p.moneda = v_moneda)
-            AND (v_fdesdeemi IS NULL OR p.fecha_emision_poliza >= v_fdesdeemi)
-            AND (v_fhastaemi IS NULL OR p.fecha_emision_poliza <= v_fhastaemi)
+            AND (v_fdesdeemi IS NULL OR p.fecha_desde_poliza::date >= v_fdesdeemi)
+            AND (v_fhastaemi IS NULL OR p.fecha_desde_poliza::date <= v_fhastaemi)
             AND (v_ccobertura IS NULL OR p.coberturas_codigos @> ARRAY[v_ccobertura])
-        ORDER BY p.fecha_emision_poliza DESC NULLS LAST, p.numero_poliza
+        ORDER BY p.fecha_desde_poliza DESC NULLS LAST, p.numero_poliza
     ) t;
 END;
 $function$
