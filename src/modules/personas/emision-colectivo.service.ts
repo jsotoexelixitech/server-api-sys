@@ -8,7 +8,7 @@ import {
 import { ConfigService } from '@nestjs/config';
 import { MssqlService } from '../../database/mssql.service';
 import { ApiChannelService } from '../auth/api-channel.service';
-import { NEST_AUTH_SCOPES } from '../auth/scopes/nest-auth-scopes.constants';
+import { NEST_AUTH_SCOPES, normalizeHttpPath } from '../auth/scopes/nest-auth-scopes.constants';
 import { buildPolicyPdfUrl } from '../../common/helpers/policy-url.helper';
 import { parseSPError, toUserFacingError } from '../../common/helpers/sp-error.helper';
 import { SP_PRE_EMISION_COLECTIVO } from '../../config/sis2000-sp.constants';
@@ -41,12 +41,34 @@ export interface EmisionColectivoResultado {
   asegurados: number;
 }
 
+/** Ruta de la emisión colectiva tal como la guarda el panel de keys (grant por endpoint). */
+const RUTA_EMISION_COLECTIVA = '/api/v1/personas/emision-colectiva';
+
+/**
+ * Permiso explícito para emitir colectivos: el scope `emissions:colectivo` escrito tal cual o el grant
+ * de esta ruta exacta (`POST /api/v1/personas/emision-colectiva`), que es como lo guarda el panel al
+ * elegir el endpoint. No valen comodines ni rutas con parámetros.
+ */
+export function tienePermisoEmisionColectiva(scopes: string[] | undefined): boolean {
+  return (scopes ?? []).some((raw) => {
+    const grant = String(raw ?? '').trim();
+    if (grant === NEST_AUTH_SCOPES.EMISSIONS_COLECTIVO) return true;
+    const espacio = grant.indexOf(' ');
+    if (espacio < 0) return false;
+    return (
+      grant.slice(0, espacio).toUpperCase() === 'POST' &&
+      normalizeHttpPath(grant.slice(espacio + 1).trim()) === normalizeHttpPath(RUTA_EMISION_COLECTIVA)
+    );
+  });
+}
+
 const toDate = (iso: string | null): Date | null => (iso ? new Date(`${iso.slice(0, 10)}T00:00:00Z`) : null);
 
 /**
  * Emisión colectiva en Sis2000 (sp_pre_emision_personas_colectivo_nexus → sp_emision_personas_colectivo_nexus).
- * La prima viene del cotizador, así que la ruta exige el scope `emissions:colectivo` escrito tal cual en la key: los
- * comodines (`*`, `emissions:*`) no lo otorgan y con la autenticación apagada tampoco pasa.
+ * La prima viene del cotizador, así que la ruta exige un permiso explícito en la key (`emissions:colectivo` o el
+ * endpoint elegido en el panel): los comodines (`*`, `emissions:*`) no lo otorgan y con la autenticación apagada
+ * tampoco pasa.
  */
 @Injectable()
 export class EmisionColectivoService {
@@ -63,9 +85,9 @@ export class EmisionColectivoService {
     dto: CreateEmissionColectivoDto,
     scopes: string[] | undefined,
   ): Promise<EmisionColectivoResultado> {
-    if (!(scopes ?? []).includes(NEST_AUTH_SCOPES.EMISSIONS_COLECTIVO)) {
+    if (!tienePermisoEmisionColectiva(scopes)) {
       throw new ForbiddenException(
-        `Permiso requerido: ${NEST_AUTH_SCOPES.EMISSIONS_COLECTIVO} (explícito en la key) para emitir colectivos con prima informada.`,
+        `Permiso requerido: ${NEST_AUTH_SCOPES.EMISSIONS_COLECTIVO} o el endpoint POST ${RUTA_EMISION_COLECTIVA} (explícito en la key) para emitir colectivos con prima informada.`,
       );
     }
     assertVigenciaColectivo(dto.fdesde, dto.fhasta);
