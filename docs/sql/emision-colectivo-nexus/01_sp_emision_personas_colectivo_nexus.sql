@@ -593,6 +593,10 @@ BEGIN
 				@msumarecext = CASE WHEN MAX(CASE WHEN isuma = '>' THEN 1 ELSE 0 END) = 1 THEN MAX(msumaasegext) ELSE SUM(msumaasegext) END
 			FROM dbo.adpolcob WHERE crecibo = @crecibo
 
+			-- [colectivo-nexus 18-nov-2026] Montos a cobrar del recibo (mmontorec/mmontoapag) = prima, y el
+			-- resto de montos en 0, como el escritorio (ADBPCOLECTIVO) y sp_emision_personas_general_nexus.
+			-- En NULL, el cuadro-recibo y el recibo salían con prima 0 y spCobroSis_Ad cobraba 0
+			-- (calcula el pago desde mmontorec/mmontorecext).
 			INSERT INTO dbo.ADRECIBOS
 			(crecibo, u_version, cnpoliza, cnrecibo, cpoliza, fanopol, fmespol, cramo, itipoprod, itiponegocio, itipopol,
 			iestadoren, cpoliza_mae, ccerti_mae, itiporec, imodcobro, cdoccob, csucur, csucurrec, criesgo, ccerti, cproces,
@@ -601,7 +605,12 @@ BEGIN
 			idevolucion, iformadevo, msumabruta, msumabrutaext, msumacoa, msumacoaext, msumaneta, msumanetaext,
 			mprimabruta, mprimabrutaext, pcoa, mprimaneta, mprimanetaext, mprimabruta_emi, pcomision, mcomision,
 			mcomisionext, mmontoneto, mmontonetoext, qcuotas, cprog, ifuente, fingreso, cusuario, ifrecuencia,
-			cnrecibo_rel, ctipocanal, ccanalalt, cscanalalt)
+			cnrecibo_rel, ctipocanal, ccanalalt, cscanalalt,
+			mmontorec, mmontorecext, mmontoapag, mmontoapagext,
+			pimpuesto, mimpuesto, mimpuestoext, mabono, mabonoext, mpagado, mpagadoext, mpendiente, mpendientext,
+			pgastos, mgastos, mgastosext, potrosgas, motrosgas, motrosgasext, potrosrec, motrosrec, motrosrecext,
+			potrosdes, motrosdes, motrosdesext, pgemi, mgemi, mgemiext, pbono, mbono, mbonoext,
+			iestadoimp, itipocta, itarjeta)
 			SELECT
 			@crecibo, '!', @cnpoliza, @cnrecibo, @cpoliza, @fano, @fmes, @cramo, 'NU', 'DI', 'C', 'N', 0, 0, 'P', 'IN',
 			0, @csucur, @csucurrec, 3, 0, @cproces, 0, @xrif_titular, @xrif_tomador, @xrif_titular, 0, 0, @cplan,
@@ -609,7 +618,12 @@ BEGIN
 			@fcobro, @iestadorec, 0, 'P', 'N', @msumarec, @msumarecext, 0, 0, @msumarec, @msumarecext, @mprimarec,
 			@mprimarecext, 0, @mprimarec, @mprimarecext, @mprimarec, @pcomision, @mcomision, @mcomisionext,
 			@mprimarec, @mprimarecext, @ncuo, @cprog, @ifuente, GETDATE(), 7, @ifrecuencia, NULL, @ctipocanal,
-			@ccanalalt, @cscanalalt
+			@ccanalalt, @cscanalalt,
+			@mprimarec, @mprimarecext, @mprimarec, @mprimarecext,
+			0, 0, 0, 0, 0, 0, 0, 0, 0,
+			0, 0, 0, 0, 0, 0, 0, 0, 0,
+			0, 0, 0, 0, 0, 0, 0, 0, 0,
+			'N', 'N', 'N'
 
 			-- [colectivo-nexus 11-nov-2026] Versión _nexus: no inventa fcobro/fpago_aseg en un recibo pendiente.
 			EXEC dbo.sp_genera_adpolrea_nexus @crecibo

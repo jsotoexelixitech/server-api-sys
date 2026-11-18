@@ -69,3 +69,4 @@ No se llama a `sp_registrar_proveedor_poliza_nexus`, que sí usa la emisión ind
 - Aplicados en Sis2000_QA (`.80`) el 11-nov-2026 a las 14:51 (01) y 14:52 (02). Probados con una emisión completa y ROLLBACK: 2 titulares y 2 cargas, prima 1.200,50 mensual; los 12 recibos y las coberturas por asegurado suman la prima exacta. No están en producción.
 - Técnica tiene que definir la plantilla modelo de cada producto del cotizador antes de la primera emisión.
 - Falta una emisión real por la API.
+- 18-nov-2026: el 01 dejaba `mmontorec`/`mmontoapag` del recibo en NULL. Por eso el cuadro-recibo y el recibo salían con prima 0, y `spCobroSis_Ad` cobraba 0. Ahora los llena con la prima y deja los demás montos en 0, como el escritorio. `03_reparar_montos_recibos_nexus_colectivo.sql` repara los recibos ya emitidos y su detalle de cobro (`cbreporte_pago_d`). Solo toca filas en NULL.
