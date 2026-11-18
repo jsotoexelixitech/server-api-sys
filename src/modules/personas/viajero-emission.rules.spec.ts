@@ -6,6 +6,7 @@ import {
   diasViajePlan,
   isPlanViajeroDias,
   VIAJE_LOCAL_ANUAL_MAX_DIAS,
+  VIAJE_LOCAL_ANUAL_MIN_DIAS,
   isViajeLocalAnualProrrataPlan,
   isViajeLocalPlan,
   isViajeroProrrataPlan,
@@ -61,7 +62,9 @@ describe('VIAJE5/VIAJE6 ramo 25: prorrata de la prima anual por días (R-095117)
     expect(diasViajeInclusivos('2026-11-20', '2026-11-29')).toBe(10);
     expect(() => assertViajeLocalAnualDias(10)).not.toThrow();
     expect(() => assertViajeLocalAnualDias(11)).toThrow('Viajero Local por días: máximo 10 días.');
-    expect(() => assertViajeLocalAnualDias(0)).toThrow(/mínimo 1 día/);
+    expect(() => assertViajeLocalAnualDias(0)).toThrow(/mínimo 3 días/);
+    expect(() => assertViajeLocalAnualDias(2)).toThrow('Viajero Local por días: mínimo 3 días.');
+    expect(() => assertViajeLocalAnualDias(3)).not.toThrow();
     expect(() => diasViajeInclusivos('2026-11-20', '2026-11-19')).toThrow(/anterior/);
   });
 
@@ -93,8 +96,8 @@ describe('diasViajePlan: días del viaje según la configuración del plan', () 
   });
 
   it('VIAJE5/VIAJE6 del ramo 25: de 1 a 10 días (regla de emisión), aunque no tengan frecuencias', () => {
-    expect(diasViajePlan(25, 'VIAJE5', [])).toEqual({ ndiasMin: 1, ndiasMax: VIAJE_LOCAL_ANUAL_MAX_DIAS });
-    expect(diasViajePlan(25, 'VIAJE6', [])).toEqual({ ndiasMin: 1, ndiasMax: 10 });
+    expect(diasViajePlan(25, 'VIAJE5', [])).toEqual({ ndiasMin: VIAJE_LOCAL_ANUAL_MIN_DIAS, ndiasMax: VIAJE_LOCAL_ANUAL_MAX_DIAS });
+    expect(diasViajePlan(25, 'VIAJE6', [])).toEqual({ ndiasMin: 3, ndiasMax: 10 });
     // El VIAJE5 del ramo 5 es el de 4 días fijos.
     expect(diasViajePlan(5, 'VIAJE5', [{ ifrecuencia: 'E', ndias: '4' }])).toEqual({ ndias: 4 });
   });
