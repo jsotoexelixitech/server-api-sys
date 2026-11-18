@@ -905,8 +905,10 @@ export class ConfiguradorService {
       } catch (err) {
         // spMantPlanes inserta mapledades_per una vez por cobertura y parentesco: con varias coberturas, desde la
         // segunda choca con la PK (cramo, cplan, fdesde, cparen). El resto del plan se graba igual (sin XACT_ABORT).
-        if (dto.type === 'personas' && operation === 'C' && soloEdadesRepetidas(err) && (await this.planPersonasExiste(dto.cramo, dto.cplan))) {
-          this.logger.warn(`spMantPlanes C ${dto.cramo}/${dto.cplan}: edades repetidas por cobertura (mapledades_per_pk); el plan quedó creado.`);
+        // Pasa igual en 'U' (borra y reinserta). Queda una fila por parentesco (la de la primera cobertura); las edades
+        // se corrigen con PUT planes/:cramo/:cplan/edades/:cparen (configurador-edades.service).
+        if (dto.type === 'personas' && (operation === 'C' || operation === 'U') && soloEdadesRepetidas(err) && (await this.planPersonasExiste(dto.cramo, dto.cplan))) {
+          this.logger.warn(`spMantPlanes ${operation} ${dto.cramo}/${dto.cplan}: edades repetidas por cobertura (mapledades_per_pk); el plan quedó grabado.`);
           return { recordset: [{}] } as unknown as Awaited<ReturnType<typeof req.execute>>;
         }
         throw err;

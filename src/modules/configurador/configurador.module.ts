@@ -12,16 +12,18 @@ import { ConfiguradorFase2Controller } from './configurador-fase2.controller';
 import { ConfiguradorPatrimonialService } from './configurador-patrimonial.service';
 import { ConfiguradorTarifaDiasService } from './configurador-tarifa-dias.service';
 import { ConfiguradorTasaCascoService } from './configurador-tasa-casco.service';
+import { CONTROLLERS_FASE2_EDICION, PROVIDERS_FASE2_EDICION } from './configurador-fase2-edicion.registro';
 
 @Module({
   imports: [DatabaseModule],
   controllers: [
     ConfiguradorController, ConfiguradorCobroDiasController, ConfiguradorPlanFase1Controller,
-    ConfiguradorFase2Controller,
+    ConfiguradorFase2Controller, ...CONTROLLERS_FASE2_EDICION,
   ],
   providers: [
     ConfiguradorService, ConfiguradorCobroDiasService, ConfiguradorComisionesService, ConfiguradorAutoService, ConfiguradorRevisionService,
     ConfiguradorPatrimonialService, ConfiguradorTarifaDiasService, ConfiguradorTasaCascoService,
+    ...PROVIDERS_FASE2_EDICION,
   ],
 })
 export class ConfiguradorModule {}

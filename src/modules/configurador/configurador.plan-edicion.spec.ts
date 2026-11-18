@@ -37,7 +37,7 @@ describe('montos de la tarifa del plan', () => {
     expect(edicionTarifaPlan({}).errores.join(' ')).toMatch(/No hay campos/);
   });
 
-  it('cobertura de cosas: códigos de 1 a 4', () => {
+  it('cobertura de patrimonial/auto: códigos de 1 a 4', () => {
     expect(validarCoberturaCosas({ ccobertura: '1', ctarifa: '1', mprima: 10 })).toEqual([]);
     expect(validarCoberturaCosas({ ccobertura: '', ctarifa: '12345' }).join(' ')).toMatch(/ccobertura.*ctarifa/);
   });

@@ -1,5 +1,5 @@
 // Reglas puras de la edición del plan sin JSON: cabecera (maplanes / maplanes_per) y coberturas (maplancob +
-// maplantar en cosas y auto; maplcober_per + mapltarifas_per en personas). Sin BD.
+// maplantar en patrimonial y auto; maplcober_per + mapltarifas_per en personas). Sin BD.
 
 export interface CabeceraPlanEntrada {
   xplan?: string | null;

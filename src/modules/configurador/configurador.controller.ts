@@ -2,7 +2,7 @@ import { BadRequestException, Body, Controller, Delete, Get, HttpCode, HttpStatu
 import { ApiBody, ApiHeader, ApiOperation, ApiTags } from '@nestjs/swagger';
 import { ConfiguradorService } from './configurador.service';
 import {
-  BajaProveedorPlanDto, CanalesPlanDto, CanalesQueryDto, CrearCoberturaDto, CrearDetalleTarifaDto, CrearProductoDto, CrearTablaEdadDto,
+  BajaProveedorPlanDto, CanalesPlanDto, CanalesQueryDto, CrearCoberturaDto, CrearDetalleTarifaDto, CrearTablaEdadDto,
   CrearTarifaDto, DeducibleCoberturaPlanDto, EditarDetalleTarifaDto,
   EditarCoberturaDto, EditarProveedorPlanDto, EditarTarifaDto, PlanDto, ProductoresQueryDto, ProductosQueryDto, ProveedoresQueryDto,
   ProveedorPlanDto, RamoQueryDto, TarifasQueryDto, TramosEdadDto,
@@ -12,6 +12,8 @@ import { NEST_AUTH_SCOPES } from '../auth/scopes/nest-auth-scopes.constants';
 import { APIKEY_HEADER } from '../../common/swagger/api-docs.constants';
 import { SWAGGER_TAGS } from '../../common/swagger/swagger-tags.constants';
 import { ApiCommonErrors } from '../../common/swagger/api-error-responses';
+import { ConfiguradorProductosEscrituraService } from './configurador-productos-escritura.service';
+import { CrearProductoCompletoDto } from './dto/configurador-productos-escritura.dto';
 
 const SCOPE = NEST_AUTH_SCOPES.CONFIGURADOR_WRITE;
 
@@ -28,7 +30,10 @@ export function fechaRuta(v: string): string {
 @ApiCommonErrors()
 @Controller('v1/configurador')
 export class ConfiguradorController {
-  constructor(private readonly service: ConfiguradorService) {}
+  constructor(
+    private readonly service: ConfiguradorService,
+    private readonly productosEscritura: ConfiguradorProductosEscrituraService,
+  ) {}
 
   // ── Ramos y productos ──────────────────────────────────────────────────────
 
@@ -86,15 +91,16 @@ export class ConfiguradorController {
   @Post('productos')
   @NestProtected(SCOPE)
   @ApiOperation({
-    summary: 'Crear producto (sp_CrearProducto)',
+    summary: 'Crear producto (sp_CrearProducto + UPDATE de igestor, xform, campos comerciales y cprog en la misma transacción)',
     description:
-      'Requiere CONFIGURADOR_PRODUCTOS_ESCRITURA=1 (si no, 403). Valida que el ramo exista y llama a sp_CrearProducto; ' +
-      'si el SP responde status 0 (p. ej. código ya registrado) devuelve 400 con su mensaje. Solo alta: no hay edición.',
+      'Requiere CONFIGURADOR_PRODUCTOS_ESCRITURA=1 (si no, 403). Valida que el ramo exista; 409 si el código ya existe. ' +
+      'Si el SP responde status 0 devuelve 400 con su mensaje. advertencias si el código tiene más de 6 caracteres (no sirve para planes). ' +
+      'Edición: PATCH productos/:cproducto.',
     operationId: 'configuradorCrearProducto',
   })
-  @ApiBody({ type: CrearProductoDto })
-  async crearProducto(@Body() dto: CrearProductoDto) {
-    return { status: true, data: await this.service.crearProducto(dto) };
+  @ApiBody({ type: CrearProductoCompletoDto })
+  async crearProducto(@Body() dto: CrearProductoCompletoDto) {
+    return { status: true, data: await this.productosEscritura.crear(dto) };
   }
 
   // ── Productores ────────────────────────────────────────────────────────────
