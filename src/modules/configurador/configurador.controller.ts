@@ -4,7 +4,7 @@ import { ConfiguradorService } from './configurador.service';
 import {
   BajaProveedorPlanDto, CanalesPlanDto, CanalesQueryDto, CrearCoberturaDto, CrearDetalleTarifaDto, CrearProductoDto, CrearTablaEdadDto,
   CrearTarifaDto, DeducibleCoberturaPlanDto, EditarDetalleTarifaDto,
-  EditarCoberturaDto, EditarProveedorPlanDto, EditarTarifaDto, PlanDto, ProductoresQueryDto, ProveedoresQueryDto,
+  EditarCoberturaDto, EditarProveedorPlanDto, EditarTarifaDto, PlanDto, ProductoresQueryDto, ProductosQueryDto, ProveedoresQueryDto,
   ProveedorPlanDto, RamoQueryDto, TarifasQueryDto, TramosEdadDto,
 } from './dto/configurador.dto';
 import { NestProtected } from '../auth/decorators/nest-protected.decorator';
@@ -53,6 +53,29 @@ export class ConfiguradorController {
   })
   async ramo(@Param('cramo', ParseIntPipe) cramo: number) {
     return { status: true, data: await this.service.obtenerRamo(cramo) };
+  }
+
+  @Get('productos')
+  @NestProtected(SCOPE)
+  @ApiOperation({
+    summary: 'Productos de Sis2000 (maproductos) — solo lectura',
+    description:
+      'Mismas columnas que /api/v1/partner/products/list (cproducto, cramo, xdescripcion_l, xabreviatura, xform, iproductor, ' +
+      'icanal, ctiporamo, fingreso…), con textos recortados. Filtros opcionales: cramo y q (código, nombre o abreviatura).',
+    operationId: 'configuradorProductos',
+  })
+  async productos(@Query() q: ProductosQueryDto) {
+    return { status: true, data: await this.service.listarProductos(q.cramo, q.q) };
+  }
+
+  @Get('productos/:cproducto')
+  @NestProtected(SCOPE)
+  @ApiOperation({
+    summary: 'Un producto de Sis2000 (maproductos) — solo lectura; 404 si no existe',
+    operationId: 'configuradorProducto',
+  })
+  async producto(@Param('cproducto') cproducto: string) {
+    return { status: true, data: await this.service.obtenerProducto(cproducto) };
   }
 
   @Post('productos')

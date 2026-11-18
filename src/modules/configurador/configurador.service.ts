@@ -4,6 +4,7 @@ import { MssqlService } from '../../database/mssql.service';
 import { validarPlan, validarProveedorPlan, validarTramos } from './configurador.reglas';
 import { reconstruirPlan, type FilasPlan, type PlanLeido } from './configurador.plan-lectura';
 import { familiaDelRamo, seccionesDeFamilia, type FamiliaRamo } from './configurador.familia';
+import { COLUMNAS_PRODUCTO, filaProducto, filtroProductos, type ProductoSis2000 } from './configurador.productos';
 import { bfradedBd, traeDeducible, validarDeducible, validarEdicionDetalle } from './configurador.deducibles';
 import {
   CPROG, CUSUARIO, SQL_CONFLICTO, SQL_NO_EXISTE, SQL_VERSION_VIGENTE, errorSql, exigirBandera, lote, rtrim, throwSql, type TipoSql,
@@ -141,6 +142,36 @@ export class ConfiguradorService {
     }
     this.logger.log(`sp_CrearProducto ${cproducto} ramo ${dto.cramo}: creado`);
     return { cproducto: rtrim(fila.cproducto) || cproducto, cramo: dto.cramo, message: mensaje || 'Producto creado.' };
+  }
+
+  /**
+   * Productos de Sis2000 (maproductos) — solo lectura. Mismas columnas que la lista del paquete partner; filtro
+   * opcional por ramo y por código, nombre o abreviatura.
+   */
+  async listarProductos(cramo?: number | null, q?: string | null): Promise<ProductoSis2000[]> {
+    const f = filtroProductos(cramo, q);
+    const req = this.db.request();
+    req.input('cramo', sql.Numeric(5, 0), f.cramo);
+    req.input('q', sql.VarChar(60), f.q);
+    req.input('q2', sql.VarChar(62), `%${f.q}%`);
+    const r = await req.query(`
+      SELECT ${COLUMNAS_PRODUCTO.join(', ')}
+      FROM maproductos WITH (NOLOCK)
+      WHERE (@cramo IS NULL OR cramo = @cramo)
+        AND (@q = '' OR cproducto LIKE @q2 OR xdescripcion_l LIKE @q2 OR xabreviatura LIKE @q2)
+      ORDER BY cramo, cproducto`);
+    return ((r.recordset ?? []) as Record<string, unknown>[]).map(filaProducto);
+  }
+
+  /** Un producto de maproductos — solo lectura. 404 si no existe. */
+  async obtenerProducto(cproducto: string): Promise<ProductoSis2000> {
+    const codigo = String(cproducto ?? '').trim();
+    const req = this.db.request();
+    req.input('cproducto', sql.Char(40), codigo);
+    const r = await req.query(`SELECT TOP (1) ${COLUMNAS_PRODUCTO.join(', ')} FROM maproductos WITH (NOLOCK) WHERE cproducto = @cproducto`);
+    const fila = r.recordset?.[0] as Record<string, unknown> | undefined;
+    if (!codigo || !fila) throw new NotFoundException(`No existe el producto ${codigo} en maproductos.`);
+    return filaProducto(fila);
   }
 
   // ── Productores ────────────────────────────────────────────────────────────

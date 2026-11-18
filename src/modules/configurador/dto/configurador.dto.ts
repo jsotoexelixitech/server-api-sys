@@ -23,6 +23,21 @@ export class CanalesQueryDto {
   q?: string;
 }
 
+export class ProductosQueryDto {
+  @ApiPropertyOptional({ example: 18, description: 'Solo productos de este ramo (maproductos.cramo)' })
+  @IsOptional()
+  @Type(() => Number)
+  @IsInt()
+  @Min(1)
+  cramo?: number;
+
+  @ApiPropertyOptional({ example: 'RCV', description: 'Filtro por código, nombre o abreviatura del producto' })
+  @IsOptional()
+  @IsString()
+  @MaxLength(60)
+  q?: string;
+}
+
 export class RamoQueryDto {
   @ApiProperty({ example: 28 })
   @Type(() => Number)
