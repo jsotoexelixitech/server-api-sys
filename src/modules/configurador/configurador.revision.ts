@@ -1,8 +1,8 @@
 // Revisión «¿se puede emitir?» de un plan (solo lectura). Función pura: el service junta los datos de Sis2000
 // y aquí se arman los ítems con su nivel y la sección del configurador a la que llevan.
 
-import { esCasco, validarTramosAntiguedad, type TramoAntiguedad } from './configurador.auto';
-import { duplicadosVigentes, type FilaArancel } from './configurador.comisiones';
+import { avisosTramosAntiguedad, esCasco, validarTramosAntiguedad, type TramoAntiguedad } from './configurador.auto';
+import { SP_UNEN_ARANCEL, duplicadosLlave, duplicadosVigentes, type FilaArancel } from './configurador.comisiones';
 import type { FamiliaRamo } from './configurador.familia';
 
 export type NivelRevision = 'error' | 'aviso' | 'ok';
@@ -59,8 +59,11 @@ export interface DatosRevision {
   };
 }
 
-/** Letras de frecuencia que los SP entienden (A/E=1, S=2, C=3, T=4, M=12, K=4 postpago solo auto). */
-const LETRAS_FRECUENCIA = ['A', 'S', 'T', 'C', 'M', 'E', 'K'];
+/**
+ * Letras de frecuencia que los SP entienden (A/E=1, S=2, C=3, T=4, M=12, K=4 postpago solo auto, D = por días /
+ * binacional). En Sis2000_QA hay 'V': A, S, M, T, D, E, K y una 's' minúscula.
+ */
+const LETRAS_FRECUENCIA = ['A', 'S', 'T', 'C', 'M', 'E', 'K', 'D'];
 
 export function revisarPlan(d: DatosRevision): RevisionPlan {
   const items: ItemRevision[] = [];
@@ -83,9 +86,12 @@ export function revisarPlan(d: DatosRevision): RevisionPlan {
     add('PLAN_VIGENTE', 'ok', `El plan ${plan} está vigente en ${tablaEsperada}.`, 'plan');
   }
 
+  // En Sis2000_QA ya hay cplan repetidos entre ramos (BINAC en 18 y 28, RCGGEN en 27/28/37, ...): en un plan existente
+  // es aviso; al crear un plan nuevo el código repetido sigue siendo bloqueante (crearPlan responde 409).
   if (d.ramosConMismoPlan.length) {
-    add('PLAN_CODIGO_REPETIDO', 'error',
-      `El código ${plan} también existe en el/los ramo(s) ${d.ramosConMismoPlan.join(', ')}: los SP buscan el plan solo por cplan.`, 'plan');
+    add('PLAN_CODIGO_REPETIDO', 'aviso',
+      `El código ${plan} también existe en el/los ramo(s) ${d.ramosConMismoPlan.join(', ')}: los SP que buscan el plan solo por ` +
+        'cplan (sin cramo) pueden tomar el plan del otro ramo.', 'plan');
   } else {
     add('PLAN_CODIGO_UNICO', 'ok', `El código ${plan} es único entre ramos.`, 'plan');
   }
@@ -121,21 +127,34 @@ export function revisarPlan(d: DatosRevision): RevisionPlan {
   const aplicables = vigentes.filter((a) => [plan, '0'].includes(String(a.cplan ?? '').trim()));
   if (!aplicables.length) add('COMISION_FALTA', 'error', `No hay comisión 'V' en maarancel para el plan ${plan} ni para el ramo (cplan '0').`, 'comisiones');
   else add('COMISION_OK', 'ok', `Hay ${aplicables.length} comisión(es) vigente(s) aplicable(s) al plan.`, 'comisiones');
-  const dupCober = duplicadosVigentes(vigentes, 'ccober', d.coberturas.map((c) => c.ccobertura));
-  for (const x of dupCober) {
-    add('COMISION_DUPLICADA_COBERTURA', 'error',
-      `maarancel tiene ${x.filas} filas 'V' para la cobertura ${x.codigo} en el ramo ${d.cramo}: los SP que unen por cramo+ccober la duplican.`, 'comisiones');
+  // Error: la misma llave lógica (sin fdesde) repetida en filas que aplican al plan. Las filas comodín '0' por cobertura
+  // del ramo 18/26/28 son el patrón normal y no se repiten.
+  for (const x of duplicadosLlave(aplicables)) {
+    add('COMISION_DUPLICADA', 'error',
+      `maarancel tiene ${x.filas} filas 'V' con la misma llave (plan ${x.cplan}, tipo de productor ${x.ctipoprod}, productor ` +
+        `${x.cproductor}, cobertura ${x.ccober}, tarifa ${x.ctarifa}) en el ramo ${d.cramo}: deja solo una.`, 'comisiones');
   }
-  const dupTarifa = duplicadosVigentes(vigentes, 'ctarifa', d.coberturas.map((c) => c.ctarifa));
-  for (const x of dupTarifa) {
-    add('COMISION_DUPLICADA_TARIFA', 'error',
-      `maarancel tiene ${x.filas} filas 'V' para la tarifa ${x.codigo} en el ramo ${d.cramo}: los SP que unen por cramo+ctarifa la duplican.`, 'comisiones');
+  // Avisos: varias filas 'V' en el ramo para la misma cobertura o tarifa (sin el comodín '0').
+  for (const x of duplicadosVigentes(vigentes, 'ccober', d.coberturas.map((c) => c.ccobertura))) {
+    add('COMISION_DUPLICADA_COBERTURA', 'aviso',
+      `maarancel tiene ${x.filas} filas 'V' para la cobertura ${x.codigo} en el ramo ${d.cramo}: ${SP_UNEN_ARANCEL.ccober}.`, 'comisiones');
+  }
+  if (d.familia === 'cosas') {
+    for (const x of duplicadosVigentes(vigentes, 'ctarifa', d.coberturas.map((c) => c.ctarifa))) {
+      add('COMISION_DUPLICADA_TARIFA', 'aviso',
+        `maarancel tiene ${x.filas} filas 'V' para la tarifa ${x.codigo} en el ramo ${d.cramo}: ${SP_UNEN_ARANCEL.ctarifa}.`, 'comisiones');
+    }
   }
 
   // ── Frecuencias ──
   const letras = [...new Set(d.frecuenciasV.map((f) => f.trim().toUpperCase()).filter(Boolean))];
   if (!letras.length) add('FRECUENCIA_FALTA', 'error', "El plan no tiene frecuencias 'V' en maplanes_frec.", 'frecuencias');
   else {
+    const minusculas = [...new Set(d.frecuenciasV.map((f) => f.trim()).filter((f) => f && f !== f.toUpperCase()))];
+    if (minusculas.length) {
+      add('FRECUENCIA_MINUSCULA', 'aviso',
+        `Frecuencias en minúscula: ${minusculas.join(', ')}. Se normalizan a mayúscula al revisar, pero los SP comparan la letra exacta.`, 'frecuencias');
+    }
     const raras = letras.filter((l) => !LETRAS_FRECUENCIA.includes(l));
     if (raras.length) add('FRECUENCIA_DESCONOCIDA', 'aviso', `Frecuencias que los SP no reconocen (se cobran en 1 cuota): ${raras.join(', ')}.`, 'frecuencias');
     if (letras.includes('K') && d.familia !== 'auto') add('FRECUENCIA_K_NO_AUTO', 'aviso', 'La frecuencia K (postpago) solo la entienden los SP de auto.', 'frecuencias');
@@ -174,6 +193,9 @@ export function revisarPlan(d: DatosRevision): RevisionPlan {
       const errores = validarTramosAntiguedad(tramos);
       if (errores.length) add('AUTO_TASAS_HUECOS', 'error', `Tasas por antigüedad de la cobertura ${ccober} (tarifa ${ctarifa}): ${errores.join(' ')}`, 'tasas-antiguedad');
       else add('AUTO_TASAS_OK', 'ok', `Tasas por antigüedad de la cobertura ${ccober} (tarifa ${ctarifa}) sin huecos.`, 'tasas-antiguedad');
+      for (const aviso of avisosTramosAntiguedad(tramos)) {
+        add('AUTO_TASAS_TOPE', 'aviso', `Tasas por antigüedad de la cobertura ${ccober} (tarifa ${ctarifa}): ${aviso}`, 'tasas-antiguedad');
+      }
     }
 
     if (d.cramo !== 18) {

@@ -9,20 +9,30 @@ export interface TramoAntiguedad {
 
 /** smallint de nantiguedad_desde/hasta. */
 const MAX_ANTIGUEDAD = 32767;
+/**
+ * Antigüedad mínima: -1 = vehículo del año siguiente (sp_calculo_auto_nexus calcula YEAR(GETDATE()) - año del vehículo).
+ * Datos reales de Sis2000_QA (18/RIES1 y RIES2): tramos -1..2, 3..6, 7..11.
+ */
+export const MIN_ANTIGUEDAD = -1;
+/** Si el último tramo termina antes de esta antigüedad se avisa: los vehículos más viejos no cotizan (THROW 99012). */
+export const ANTIGUEDAD_ALTA = 20;
 
 /**
- * Tramos de antigüedad del vehículo (años): empiezan en 0, sin huecos ni solapes (el siguiente desde = hasta + 1),
- * hasta ≥ desde y tasa > 0. Lista vacía = sin tramos (válida: el SP cae a la tasa del plan).
+ * Tramos de antigüedad del vehículo (años): el primero empieza en -1 (vehículo del año siguiente) o en 0, sin huecos
+ * ni solapes (el siguiente desde = hasta + 1), hasta ≥ desde y tasa > 0. Lista vacía = sin tramos (válida: el SP cae a
+ * la tasa del plan).
  */
 export function validarTramosAntiguedad(tramos: TramoAntiguedad[]): string[] {
   const errores: string[] = [];
   if (!tramos.length) return errores;
   const orden = [...tramos].sort((a, b) => a.desde - b.desde);
-  if (orden[0].desde !== 0) errores.push(`El primer tramo debe empezar en 0 años (empieza en ${orden[0].desde}).`);
+  if (orden[0].desde !== MIN_ANTIGUEDAD && orden[0].desde !== 0) {
+    errores.push(`El primer tramo debe empezar en -1 (vehículo del año siguiente) o en 0 años (empieza en ${orden[0].desde}).`);
+  }
   orden.forEach((t, i) => {
     const n = `Tramo ${t.desde}-${t.hasta}`;
-    if (![t.desde, t.hasta].every((v) => Number.isInteger(v) && v >= 0 && v <= MAX_ANTIGUEDAD)) {
-      errores.push(`${n}: desde y hasta deben ser enteros entre 0 y ${MAX_ANTIGUEDAD}.`);
+    if (![t.desde, t.hasta].every((v) => Number.isInteger(v) && v >= MIN_ANTIGUEDAD && v <= MAX_ANTIGUEDAD)) {
+      errores.push(`${n}: desde y hasta deben ser enteros entre ${MIN_ANTIGUEDAD} y ${MAX_ANTIGUEDAD}.`);
     }
     if (t.hasta < t.desde) errores.push(`${n}: hasta es menor que desde.`);
     if (!(typeof t.pprima === 'number' && t.pprima > 0)) errores.push(`${n}: la tasa (pprima) debe ser mayor a 0.`);
@@ -32,6 +42,20 @@ export function validarTramosAntiguedad(tramos: TramoAntiguedad[]): string[] {
     else if (t.desde > previo.hasta + 1) errores.push(`Hueco entre ${previo.hasta} y ${t.desde} años: el siguiente tramo debe empezar en ${previo.hasta + 1}.`);
   });
   return errores;
+}
+
+/**
+ * Avisos (no bloquean): si el último tramo termina antes de ANTIGUEDAD_ALTA años, los vehículos más viejos no podrán
+ * cotizar el plan (sp_calculo_auto_nexus da THROW 99012 cuando la antigüedad no cae en ningún tramo 'V').
+ */
+export function avisosTramosAntiguedad(tramos: TramoAntiguedad[]): string[] {
+  if (!tramos.length) return [];
+  const ultimo = Math.max(...tramos.map((t) => t.hasta));
+  if (!Number.isFinite(ultimo) || ultimo >= ANTIGUEDAD_ALTA) return [];
+  return [
+    `El último tramo llega hasta ${ultimo} años: los vehículos con más de ${ultimo} años no podrán cotizar este plan ` +
+      '(sp_calculo_auto_nexus responde THROW 99012).',
+  ];
 }
 
 /** Coberturas de casco del ramo 18 que usan maplantar_ano: 1 CA, 2 PT, 28 PP. */

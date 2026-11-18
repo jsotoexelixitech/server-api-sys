@@ -47,7 +47,8 @@ export class ConfiguradorPlanFase1Controller {
     summary: 'Agregar una comisión al plan (maarancel)',
     description:
       "Requiere CONFIGURADOR_COMISIONES_ESCRITURA=1 (si no, 403). pcomision 0-100. 409 si ya hay una fila 'V' con la misma llave " +
-      "(sin fdesde) o una fila con la misma llave y fecha. `advertencias` si el ramo queda con más de una fila 'V' por cobertura o tarifa.",
+      "(sin fdesde) o una fila con la misma llave y fecha. `advertencias` (no bloquean) si el ramo queda con más de " +
+      "una fila 'V' por cobertura, o por tarifa en la familia cosas (sin contar el comodín '0').",
     operationId: 'configuradorCrearComisionPlan',
   })
   @ApiBody({ type: ComisionPlanDto })
@@ -129,9 +130,10 @@ export class ConfiguradorPlanFase1Controller {
   @ApiOperation({
     summary: "Reemplazar los tramos 'V' de una cobertura y tarifa del plan (maplantar_ano)",
     description:
-      'Requiere CONFIGURADOR_AUTO_ESCRITURA=1 (si no, 403). Tramos desde 0, sin huecos ni solapes, pprima > 0; la cobertura y tarifa ' +
+      'Requiere CONFIGURADOR_AUTO_ESCRITURA=1 (si no, 403). Tramos desde -1 (vehículo del año siguiente) o 0, sin huecos ni solapes, pprima > 0; la cobertura y tarifa ' +
       "deben estar en maplantar del plan. Los 'V' anteriores pasan a 'I'. Si la cobertura no es casco (1/2/28 del ramo 18) responde " +
-      'grabado: false con advertencias; con confirmar: true graba. tramos: [] inactiva todos.',
+      'grabado: false con advertencias; con confirmar: true graba. Si el último tramo no llega a 20 años avisa (no bloquea). ' +
+      'tramos: [] inactiva todos.',
     operationId: 'configuradorReemplazarTasasAntiguedad',
   })
   @ApiBody({ type: TasasAntiguedadDto })

@@ -573,6 +573,13 @@ export class ConfiguradorService {
   async crearPlan(dto: PlanDto) {
     await this.validarPlanEnBd(dto);
     if (await this.planExiste(dto.cramo, dto.cplan)) throw new ConflictException(`El plan ${dto.cplan} ya existe en el ramo ${dto.cramo}.`);
+    const otros = await this.ramosConPlan(dto.cplan, dto.cramo);
+    if (otros.length) {
+      throw new ConflictException(
+        `El código de plan ${dto.cplan.trim()} ya existe en el/los ramo(s) ${otros.join(', ')}: usa otro código ` +
+          '(los SP que buscan el plan solo por cplan tomarían el del otro ramo).',
+      );
+    }
     await this.mantPlan('C', dto);
     if (!(await this.planExiste(dto.cramo, dto.cplan))) {
       throw new BadRequestException('spMantPlanes terminó sin crear el plan. Revisa los datos enviados.');
@@ -954,6 +961,16 @@ export class ConfiguradorService {
       'SELECT 1 FROM maplanes WHERE cramo = @cramo AND cplan = @cplan UNION ALL SELECT 1 FROM maplanes_per WHERE cramo = @cramo AND cplan = @cplan',
       { cramo, cplan },
     );
+  }
+
+  /** Ramos distintos de `cramo` donde ya existe el cplan (maplanes o maplanes_per). */
+  private async ramosConPlan(cplan: string, cramo: number): Promise<number[]> {
+    const req = this.db.request();
+    req.input('cramo', sql.SmallInt, cramo);
+    req.input('cplan', sql.Char(6), cplan.trim());
+    const r = await req.query(`SELECT cramo FROM maplanes WITH (NOLOCK) WHERE cplan = @cplan AND cramo <> @cramo
+      UNION SELECT cramo FROM maplanes_per WITH (NOLOCK) WHERE cplan = @cplan AND cramo <> @cramo ORDER BY cramo`);
+    return (r.recordset ?? []).map((f) => Number(f.cramo));
   }
 
   private async exigirRamo(cramo: number) {

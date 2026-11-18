@@ -41,8 +41,8 @@ export class TipoUsoDto {
 }
 
 export class TramoAntiguedadDto {
-  @ApiProperty({ example: 0, description: 'Antigüedad desde (años).' }) @Type(() => Number) @IsInt() @Min(0) @Max(32767) desde: number;
-  @ApiProperty({ example: 5, description: 'Antigüedad hasta (años, inclusive).' }) @Type(() => Number) @IsInt() @Min(0) @Max(32767) hasta: number;
+  @ApiProperty({ example: 0, description: 'Antigüedad desde (años; -1 = vehículo del año siguiente).' }) @Type(() => Number) @IsInt() @Min(-1) @Max(32767) desde: number;
+  @ApiProperty({ example: 5, description: 'Antigüedad hasta (años, inclusive).' }) @Type(() => Number) @IsInt() @Min(-1) @Max(32767) hasta: number;
   @ApiProperty({ example: 2.5, description: 'Tasa de casco en % (> 0).' }) @IsNumber({ maxDecimalPlaces: 6 }) @Min(0) pprima: number;
 }
 

@@ -1,10 +1,11 @@
 import { BadRequestException, Injectable, Logger } from '@nestjs/common';
 import * as sql from 'mssql';
 import { MssqlService } from '../../database/mssql.service';
-import { aplicaA, duplicadosVigentes, validarBajaComision, validarComision, type FilaArancel } from './configurador.comisiones';
+import { SP_UNEN_ARANCEL, aplicaA, duplicadosVigentes, validarBajaComision, validarComision, type FilaArancel } from './configurador.comisiones';
 import {
   CUSUARIO, SQL_CONFLICTO, SQL_NO_EXISTE, auditoriaSql, escribirSql, exigirBandera, exigirPlanSql, existeSql, lote, rtrim, throwSql,
 } from './configurador.comun';
+import { ConfiguradorService } from './configurador.service';
 import { BajaComisionPlanDto, ComisionPlanDto, LlaveComisionDto } from './dto/configurador-comisiones.dto';
 
 /** Bandera de escritura de comisiones (maarancel). Apagada por defecto. */
@@ -34,7 +35,10 @@ export interface ComisionLeida {
 export class ConfiguradorComisionesService {
   private readonly logger = new Logger(ConfiguradorComisionesService.name);
 
-  constructor(private readonly db: MssqlService) {}
+  constructor(
+    private readonly db: MssqlService,
+    private readonly configurador: ConfiguradorService,
+  ) {}
 
   async listar(cramo: number, cplan: string): Promise<ComisionLeida[]> {
     await exigirPlanSql(this.db.request(), cramo, cplan);
@@ -65,8 +69,9 @@ export class ConfiguradorComisionesService {
 
   /**
    * Alta de una comisión del plan ('V'). 409 si ya hay una fila 'V' con la misma llave (sin fdesde) o una fila con la
-   * misma llave y fecha. Devuelve advertencias si queda más de una fila 'V' en el ramo para la misma cobertura o tarifa
-   * (los SP que unen maarancel por cramo+ccober o cramo+ctarifa la duplicarían).
+   * misma llave y fecha. Devuelve advertencias (no bloquean) si queda más de una fila 'V' en el ramo para la misma
+   * cobertura (emisión auto/flota une por cramo+ccober) o, en la familia cosas, para la misma tarifa (cotización de
+   * condominio une por cramo+ctarifa). El comodín '0' no cuenta.
    */
   async crear(cramo: number, cplan: string, dto: ComisionPlanDto) {
     exigirBandera(BANDERA_COMISIONES, 'comisiones');
@@ -172,10 +177,13 @@ export class ConfiguradorComisionesService {
     const filas = (r.recordset ?? []) as FilaArancel[];
     const avisos: string[] = [];
     for (const d of duplicadosVigentes(filas, 'ccober', [dto.ccober])) {
-      avisos.push(`El ramo ${cramo} tiene ${d.filas} comisiones 'V' para la cobertura ${d.codigo}: los SP que unen por cramo+ccober la duplican.`);
+      avisos.push(`El ramo ${cramo} tiene ${d.filas} comisiones 'V' para la cobertura ${d.codigo}: ${SP_UNEN_ARANCEL.ccober}.`);
     }
-    for (const d of duplicadosVigentes(filas, 'ctarifa', [dto.ctarifa])) {
-      avisos.push(`El ramo ${cramo} tiene ${d.filas} comisiones 'V' para la tarifa ${d.codigo}: los SP que unen por cramo+ctarifa la duplican.`);
+    const { familia } = await this.configurador.familiaDeRamo(cramo);
+    if (familia === 'cosas') {
+      for (const d of duplicadosVigentes(filas, 'ctarifa', [dto.ctarifa])) {
+        avisos.push(`El ramo ${cramo} tiene ${d.filas} comisiones 'V' para la tarifa ${d.codigo}: ${SP_UNEN_ARANCEL.ctarifa}.`);
+      }
     }
     return avisos;
   }

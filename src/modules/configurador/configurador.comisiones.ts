@@ -43,13 +43,43 @@ export interface FilaArancel {
   cplan: string;
   ccober: string;
   ctarifa: string;
+  ctipoprod?: number | string | null;
+  cproductor?: number | string | null;
   iestado?: string | null;
 }
 
+const txt = (v: unknown) => String(v ?? '').trim();
+const esV = (f: FilaArancel) => txt(f.iestado) === 'V';
+
 /**
- * Valores de `campo` (sin el comodín '0') con más de una fila 'V' en el ramo. Los SP unen maarancel por
- * cramo+ccober o cramo+ctarifa sin el plan: dos filas 'V' duplican la cobertura en el recibo. `soloEn` limita a los
- * códigos que interesan (p. ej. las coberturas del plan).
+ * Error real: más de una fila 'V' con la misma llave lógica sin fdesde (cplan, ctipoprod, cproductor, ccober, ctarifa)
+ * dentro del ramo. Las filas comodín ('0') cuentan como valores normales: el patrón de Sis2000_QA (una fila 'V' por
+ * cobertura con cplan/ctipoprod/cproductor/ctarifa '0', más filas por productor) no repite la llave.
+ */
+export function duplicadosLlave(filas: FilaArancel[]): Array<{ cplan: string; ctipoprod: string; cproductor: string; ccober: string; ctarifa: string; filas: number }> {
+  const cuenta = new Map<string, number>();
+  for (const f of filas) {
+    if (!esV(f)) continue;
+    const k = [f.cplan, f.ctipoprod ?? '0', f.cproductor ?? '0', f.ccober, f.ctarifa].map(txt).join('|');
+    cuenta.set(k, (cuenta.get(k) ?? 0) + 1);
+  }
+  return [...cuenta.entries()].filter(([, n]) => n > 1).map(([k, n]) => {
+    const [cplan, ctipoprod, cproductor, ccober, ctarifa] = k.split('|');
+    return { cplan, ctipoprod, cproductor, ccober, ctarifa, filas: n };
+  });
+}
+
+/** SP de Sis2000 que unen maarancel sin el plan (solo por cramo + campo) y podrían duplicar la comisión. */
+export const SP_UNEN_ARANCEL: Record<'ccober' | 'ctarifa', string> = {
+  ccober: 'los SP de emisión de auto/flota y endosos (sp_flota_incluir_certificado_nexus, sp_crear_recibo_endoso_nexus, ' +
+    'sp_genera_coberturas_endoso_nexus) unen maarancel por cramo+ccober y podrían duplicar la comisión',
+  ctarifa: 'la cotización de condominio (sp_calculo_cotizacion_condominio_nexus, solo familia cosas) une maarancel por ' +
+    'cramo+ctarifa y podría duplicar la comisión',
+};
+
+/**
+ * Aviso (no error): valores de `campo` con más de una fila 'V' en el ramo, ignorando el comodín '0'. Ver
+ * SP_UNEN_ARANCEL. `soloEn` limita a los códigos que interesan (p. ej. las coberturas del plan).
  */
 export function duplicadosVigentes(filas: FilaArancel[], campo: 'ccober' | 'ctarifa', soloEn?: string[]): Array<{ codigo: string; filas: number }> {
   const filtro = soloEn ? new Set(soloEn.map((s) => s.trim())) : null;

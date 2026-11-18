@@ -1,4 +1,4 @@
-import { aplicaA, duplicadosVigentes, validarBajaComision, validarComision } from './configurador.comisiones';
+import { aplicaA, duplicadosLlave, duplicadosVigentes, validarBajaComision, validarComision } from './configurador.comisiones';
 
 describe('validarComision', () => {
   const ok = { ctipoprod: 0, cproductor: 0, ccober: '0', ctarifa: '0', fdesde: '2026-01-01', pcomision: 15 };
@@ -59,5 +59,28 @@ describe('duplicadosVigentes', () => {
 
   it('se limita a los códigos pedidos', () => {
     expect(duplicadosVigentes(filas, 'ccober', ['2', '3'])).toEqual([]);
+  });
+
+  it('datos reales ramo 18: una fila comodín por cobertura (ctarifa 0) no repite tarifa ni cobertura', () => {
+    const r18 = ['1', '2', '28', '6'].map((ccober) => ({ cplan: '0', ccober, ctarifa: '0', iestado: 'V' }));
+    expect(duplicadosVigentes(r18, 'ctarifa')).toEqual([]);
+    expect(duplicadosVigentes(r18, 'ccober')).toEqual([]);
+  });
+});
+
+describe('duplicadosLlave', () => {
+  it('datos reales ramo 18: comodín por cobertura + RCVPRU por productor no repite la llave', () => {
+    const filas = [
+      ...['1', '2', '28'].map((ccober) => ({ cplan: '0', ctipoprod: 0, cproductor: 0, ccober, ctarifa: '0', iestado: 'V' })),
+      { cplan: 'RCVPRU', ctipoprod: 0, cproductor: 410948843, ccober: '0', ctarifa: '0', iestado: 'V' },
+    ];
+    expect(duplicadosLlave(filas)).toEqual([]);
+  });
+
+  it('agrupa por la llave completa sin fdesde y solo filas V', () => {
+    const fila = { cplan: 'A     ', ctipoprod: 0, cproductor: 0, ccober: '1 ', ctarifa: '0', iestado: 'V' };
+    expect(duplicadosLlave([fila, { ...fila, ccober: '1' }, { ...fila, cproductor: 5 }, { ...fila, iestado: 'I' }])).toEqual([
+      { cplan: 'A', ctipoprod: '0', cproductor: '0', ccober: '1', ctarifa: '0', filas: 2 },
+    ]);
   });
 });

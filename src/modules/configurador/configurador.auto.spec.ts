@@ -1,4 +1,4 @@
-import { equivalenteRamo18, esCasco, validarTipoUso, validarTramosAntiguedad } from './configurador.auto';
+import { avisosTramosAntiguedad, equivalenteRamo18, esCasco, validarTipoUso, validarTramosAntiguedad } from './configurador.auto';
 
 describe('validarTramosAntiguedad', () => {
   it('acepta tramos contiguos desde 0 (en cualquier orden) y la lista vacía', () => {
@@ -11,8 +11,17 @@ describe('validarTramosAntiguedad', () => {
     expect(validarTramosAntiguedad([])).toEqual([]);
   });
 
-  it('exige empezar en 0', () => {
-    expect(validarTramosAntiguedad([{ desde: 1, hasta: 5, pprima: 2 }]).join(' ')).toMatch(/empezar en 0/);
+  it('datos reales (18/RIES1 y RIES2): -1..2, 3..6, 7..11 es válido (-1 = vehículo del año siguiente)', () => {
+    expect(validarTramosAntiguedad([
+      { desde: -1, hasta: 2, pprima: 4 },
+      { desde: 3, hasta: 6, pprima: 4.2 },
+      { desde: 7, hasta: 11, pprima: 5 },
+    ])).toEqual([]);
+  });
+
+  it('exige empezar en -1 o 0', () => {
+    expect(validarTramosAntiguedad([{ desde: 1, hasta: 5, pprima: 2 }]).join(' ')).toMatch(/empezar en -1 .* o en 0/);
+    expect(validarTramosAntiguedad([{ desde: -2, hasta: 5, pprima: 2 }]).join(' ')).toMatch(/enteros entre -1 y 32767/);
   });
 
   it('detecta huecos y solapes', () => {
@@ -26,6 +35,13 @@ describe('validarTramosAntiguedad', () => {
     ]).join(' ')).toMatch(/se solapa/);
   });
 
+  it('avisa (no es error) si el último tramo no llega a una antigüedad alta', () => {
+    const tramos = [{ desde: -1, hasta: 2, pprima: 4 }, { desde: 3, hasta: 11, pprima: 5 }];
+    expect(avisosTramosAntiguedad(tramos).join(' ')).toMatch(/más de 11 años no podrán cotizar.*99012/);
+    expect(avisosTramosAntiguedad([{ desde: 0, hasta: 99, pprima: 1 }])).toEqual([]);
+    expect(avisosTramosAntiguedad([])).toEqual([]);
+  });
+
   it('rechaza hasta < desde, tasa 0 y valores fuera de smallint', () => {
     const errores = validarTramosAntiguedad([
       { desde: 0, hasta: 3, pprima: 0 },
@@ -34,7 +50,7 @@ describe('validarTramosAntiguedad', () => {
     ]).join(' ');
     expect(errores).toMatch(/tasa \(pprima\) debe ser mayor a 0/);
     expect(errores).toMatch(/hasta es menor que desde/);
-    expect(errores).toMatch(/enteros entre 0 y 32767/);
+    expect(errores).toMatch(/enteros entre -1 y 32767/);
   });
 });
 

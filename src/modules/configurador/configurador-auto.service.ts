@@ -2,7 +2,7 @@ import { BadRequestException, Injectable, Logger } from '@nestjs/common';
 import * as sql from 'mssql';
 import { MssqlService } from '../../database/mssql.service';
 import {
-  MONTOS_TIPO_USO, PORCENTAJES_TIPO_USO, equivalenteRamo18, esCasco, validarTipoUso, validarTramosAntiguedad,
+  MONTOS_TIPO_USO, PORCENTAJES_TIPO_USO, avisosTramosAntiguedad, equivalenteRamo18, esCasco, validarTipoUso, validarTramosAntiguedad,
   type CoberturaInt,
 } from './configurador.auto';
 import {
@@ -172,7 +172,8 @@ export class ConfiguradorAutoService {
    * Reemplaza los tramos 'V' de (plan, cobertura, tarifa) en una transacción: los 'V' actuales pasan a 'I' y los nuevos
    * quedan 'V' (si ya había una fila con el mismo desde, se reutiliza: es parte de la PK). Lista vacía = inactivar todos.
    * Si la cobertura no es de casco (1/2/28 del ramo 18 por ccoberturaint), devuelve la advertencia y solo graba con
-   * confirmar: true.
+   * confirmar: true. Si el último tramo no llega a una antigüedad alta, avisa (no bloquea): los vehículos más viejos no
+   * cotizan (THROW 99012).
    */
   async reemplazarTasas(cramo: number, cplan: string, ccober: string, ctarifa: string, dto: TasasAntiguedadDto) {
     exigirBandera(BANDERA_AUTO, 'auto (tasas por antigüedad)');
@@ -210,7 +211,10 @@ export class ConfiguradorAutoService {
       );
     }
     const tramosAntes = antes.map((f) => ({ desde: Number(f.desde), hasta: Number(f.hasta), pprima: Number(f.pprima) }));
-    if (advertencias.length && dto.confirmar !== true) {
+    // Solo la cobertura que no es casco exige confirmar; el aviso del último tramo no bloquea.
+    const exigeConfirmar = advertencias.length > 0;
+    advertencias.push(...avisosTramosAntiguedad(dto.tramos));
+    if (exigeConfirmar && dto.confirmar !== true) {
       return { cramo, cplan: plan, ccober: cob, ctarifa: tar, cob18, grabado: false, tramos: 0, antes: tramosAntes, advertencias };
     }
 

@@ -54,7 +54,7 @@ export class ConfiguradorRevisionService {
       FROM cob c
       OUTER APPLY (SELECT TOP 1 ccontrea, cramorea, ccoberturaint FROM macoberturas WITH (NOLOCK) WHERE cramo = @cramo AND ccobertura = c.ccober) m
       ORDER BY TRY_CAST(RTRIM(c.ccober) AS INT), c.ccober;
-      SELECT RTRIM(cplan) AS cplan, RTRIM(ccober) AS ccober, RTRIM(ctarifa) AS ctarifa, RTRIM(iestado) AS iestado
+      SELECT RTRIM(cplan) AS cplan, ctipoprod, cproductor, RTRIM(ccober) AS ccober, RTRIM(ctarifa) AS ctarifa, RTRIM(iestado) AS iestado
       FROM maarancel WITH (NOLOCK) WHERE cramo = @cramo AND iestado = 'V';
       SELECT RTRIM(ifrecuencia) AS ifrecuencia FROM maplanes_frec WITH (NOLOCK) WHERE cramo = @cramo AND cplan = @cplan AND iestado = 'V';
       SELECT COUNT(*) AS n FROM mausuplan WITH (NOLOCK) WHERE cramo = @cramo AND RTRIM(cplan) = @cplanv AND itipouso = 'A';
@@ -101,7 +101,10 @@ export class ConfiguradorRevisionService {
         cramorea: numOrNull(c.cramorea),
         cob18: equivalenteRamo18(cramo, { ccobertura: rtrim(c.ccobertura), ccoberturaint: numOrNull(c.ccoberturaint) }, coberturas18),
       })),
-      aranceles: aranceles.map((a) => ({ cplan: rtrim(a.cplan), ccober: rtrim(a.ccober), ctarifa: rtrim(a.ctarifa), iestado: rtrim(a.iestado) })),
+      aranceles: aranceles.map((a) => ({
+        cplan: rtrim(a.cplan), ctipoprod: Number(a.ctipoprod ?? 0), cproductor: Number(a.cproductor ?? 0),
+        ccober: rtrim(a.ccober), ctarifa: rtrim(a.ctarifa), iestado: rtrim(a.iestado),
+      })),
       frecuenciasV: frecuencias.map((f) => rtrim(f.ifrecuencia)),
       usuariosPermitidos: Number(usuarios[0]?.n ?? 0),
       auto: familia === 'auto'
