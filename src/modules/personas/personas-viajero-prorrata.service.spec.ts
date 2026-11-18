@@ -124,8 +124,8 @@ describe('PersonasService.getCotizacionPer — Viajero Local por días', () => {
 describe('PersonasService.getPlanesPer — producto 25 con VIAJE5/VIAJE6 del ramo 25', () => {
   it('conserva VIAJE5/VIAJE6 del ramo 25 junto a los planes por días de maplanes_frec', async () => {
     const frec = [
-      { cplan: 'VIAJE4', cramo: 5, ndias: 3, xplan: 'Plan 1.500$ Viajero', nmax_dep: 0, cmoneda: '$' },
-      { cplan: 'VIAJE5', cramo: 5, ndias: 4, xplan: 'Plan 1.500$ Viajero', nmax_dep: 0, cmoneda: '$' },
+      { cplan: 'VIAJE4', ifrecuencia: 'E', ndias: 3 },
+      { cplan: 'VIAJE5', ifrecuencia: 'E', ndias: 4 },
     ];
     const db = {
       types: { Int: 'Int', NVarChar: () => 'NVarChar', VarChar: () => 'VarChar' },
@@ -135,7 +135,9 @@ describe('PersonasService.getPlanesPer — producto 25 con VIAJE5/VIAJE6 del ram
           input: (name: string, _t: unknown, value: unknown) => {
             inputs[name] = value;
           },
-          query: async () => ({ recordset: inputs['cproducto'] ? frec : [] }),
+          query: async (sql: string) => ({
+            recordset: sql.includes('maplanes_frec') && inputs['cramo'] === 5 ? frec : [],
+          }),
         };
       },
     };
@@ -154,12 +156,14 @@ describe('PersonasService.getPlanesPer — producto 25 con VIAJE5/VIAJE6 del ram
     const service = new PersonasService(db as never, config as never, valrep as never);
     const planes = await service.getPlanesPer({ cproducto: '25', centidad: 'C', citem: '8' } as never);
 
-    expect(planes.map((p) => `${p.cramo}|${p.cplan}|${p.ndias ?? '-'}`)).toEqual([
-      '5|VIAJE4|3',
-      '5|VIAJE5|4',
-      '25|VIAJE5|-',
-      '25|VIAJE6|-',
+    // Cada plan con sus días: fijos de maplanes_frec (ramo 5) y 1 a 10 días en VIAJE5/VIAJE6 del ramo 25.
+    expect(
+      planes.map((p) => `${p.cramo}|${p.cplan}|${p.ndias ?? '-'}|${p.ndiasMin ?? '-'}-${p.ndiasMax ?? '-'}`),
+    ).toEqual([
+      '5|VIAJE4|3|---',
+      '5|VIAJE5|4|---',
+      '25|VIAJE5|-|1-10',
+      '25|VIAJE6|-|1-10',
     ]);
-    expect(planes.find((p) => p.cramo === 5 && p.cplan === 'VIAJE5')?.xplan).toBe('Plan 1.500$ Viajero · 4 días');
   });
 });

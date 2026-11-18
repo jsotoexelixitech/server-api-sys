@@ -129,6 +129,62 @@ export function isViajeroPlan(
   return code.startsWith('VIAJ');
 }
 
+/** Planes VIAJ* de viajero (ramo 5) y de viajero local (ramo 25). */
+export function isPlanViajeroDias(
+  cramo: number | null | undefined,
+  plan: string | null | undefined,
+): boolean {
+  if (isViajeroPlan(cramo, plan)) return true;
+  return cramo === VIAJERO_LOCAL_RAMO && String(plan ?? '').trim().toUpperCase().startsWith('VIAJ');
+}
+
+/** Fila de maplanes_frec (frecuencia y días) de un plan. */
+export interface FrecuenciaDiasRow {
+  ifrecuencia: string | null | undefined;
+  ndias: number | string | null | undefined;
+}
+
+/** Días de viaje que cubre un plan, para listar los planes que aplican a los días del viaje. */
+export interface DiasViajePlan {
+  /** Plan de días fijos: cubre exactamente esos días. */
+  ndias?: number;
+  /** Rango de días que admite el plan. */
+  ndiasMin?: number;
+  ndiasMax?: number;
+}
+
+/**
+ * Días de viaje de un plan según su configuración y las reglas de emisión:
+ * - VIAJE5/VIAJE6 del ramo 25: de 1 a VIAJE_LOCAL_ANUAL_MAX_DIAS (la misma regla que valida la cotización).
+ * - maplanes_frec E (única) con ndias > 0: plan de esos días exactos (ramo 5: VIAJE4 = 3 … VIAJE9 = 8).
+ *   Si el plan tiene varias filas E con días distintos, de la menor a la mayor.
+ * - maplanes_frec D con ndias > 0 («hasta N días»): de 1 al mayor ndias.
+ * - Sin días en la configuración (ndias 0, p. ej. VIAJ10): null.
+ */
+export function diasViajePlan(
+  cramo: number | null | undefined,
+  plan: string | null | undefined,
+  frecuencias: readonly FrecuenciaDiasRow[],
+): DiasViajePlan | null {
+  if (isViajeLocalAnualProrrataPlan(cramo, plan)) {
+    return { ndiasMin: 1, ndiasMax: VIAJE_LOCAL_ANUAL_MAX_DIAS };
+  }
+  const diasDe = (letra: string): number[] => [
+    ...new Set(
+      frecuencias
+        .filter((f) => String(f.ifrecuencia ?? '').trim().toUpperCase() === letra)
+        .map((f) => Number(f.ndias))
+        .filter((n) => Number.isInteger(n) && n > 0),
+    ),
+  ];
+  const unica = diasDe('E');
+  if (unica.length === 1) return { ndias: unica[0] };
+  if (unica.length > 1) return { ndiasMin: Math.min(...unica), ndiasMax: Math.max(...unica) };
+  const hasta = diasDe('D');
+  if (hasta.length) return { ndiasMin: 1, ndiasMax: Math.max(...hasta) };
+  return null;
+}
+
 function rifDigits(value: unknown): string {
   return String(value ?? '').replace(/\D/g, '');
 }

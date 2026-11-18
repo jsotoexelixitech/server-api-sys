@@ -3,6 +3,9 @@ import {
   assertViajeLocalEmission,
   assertViajeroCotizacion,
   diasViajeInclusivos,
+  diasViajePlan,
+  isPlanViajeroDias,
+  VIAJE_LOCAL_ANUAL_MAX_DIAS,
   isViajeLocalAnualProrrataPlan,
   isViajeLocalPlan,
   isViajeroProrrataPlan,
@@ -76,5 +79,40 @@ describe('VIAJE5/VIAJE6 ramo 25: prorrata de la prima anual por días (R-095117)
     expect(() =>
       assertViajeLocalEmission({ ...base, plan: 'VIAJE', fhasta: '2026-11-30' }, aseg, []),
     ).not.toThrow();
+  });
+});
+
+describe('diasViajePlan: días del viaje según la configuración del plan', () => {
+  it('maplanes_frec E con ndias > 0: plan de días fijos (VIAJE4 = 3 días, ramo 5)', () => {
+    expect(diasViajePlan(5, 'VIAJE4', [{ ifrecuencia: 'E', ndias: 3 }])).toEqual({ ndias: 3 });
+  });
+
+  it('E con ndias 0 (VIAJ10) o sin filas: sin días en la configuración', () => {
+    expect(diasViajePlan(5, 'VIAJ10', [{ ifrecuencia: 'E', ndias: 0 }])).toBeNull();
+    expect(diasViajePlan(25, 'VIAJE1', [])).toBeNull();
+  });
+
+  it('VIAJE5/VIAJE6 del ramo 25: de 1 a 10 días (regla de emisión), aunque no tengan frecuencias', () => {
+    expect(diasViajePlan(25, 'VIAJE5', [])).toEqual({ ndiasMin: 1, ndiasMax: VIAJE_LOCAL_ANUAL_MAX_DIAS });
+    expect(diasViajePlan(25, 'VIAJE6', [])).toEqual({ ndiasMin: 1, ndiasMax: 10 });
+    // El VIAJE5 del ramo 5 es el de 4 días fijos.
+    expect(diasViajePlan(5, 'VIAJE5', [{ ifrecuencia: 'E', ndias: '4' }])).toEqual({ ndias: 4 });
+  });
+
+  it('D («hasta N días»): de 1 al mayor; los negativos («más de N») no cuentan', () => {
+    expect(
+      diasViajePlan(5, 'VIAJX', [
+        { ifrecuencia: 'D', ndias: 3 },
+        { ifrecuencia: 'D', ndias: 7 },
+        { ifrecuencia: 'D', ndias: -30 },
+      ]),
+    ).toEqual({ ndiasMin: 1, ndiasMax: 7 });
+  });
+
+  it('solo VIAJ* de los ramos 5 y 25 son planes de viajero por días', () => {
+    expect(isPlanViajeroDias(5, 'VIAJ10')).toBe(true);
+    expect(isPlanViajeroDias(25, 'viaje6')).toBe(true);
+    expect(isPlanViajeroDias(9, 'VIAJE4')).toBe(false);
+    expect(isPlanViajeroDias(5, 'PLAN1')).toBe(false);
   });
 });
