@@ -202,7 +202,34 @@ export class EditarCoberturaDto {
 
 // ── Tarifas (matarifa / matarifa_d) ─────────────────────────────────────────
 
-export class DetalleTarifaDto {
+/** Deducible o franquicia (matarifa_d / maplancob). null = sin deducible ('0' en la BD). */
+export class DeducibleDto {
+  @ApiPropertyOptional({ enum: ['D', 'F'], nullable: true, description: "D = deducible, F = franquicia, null = sin deducible (se guarda '0')." })
+  @IsOptional()
+  @IsIn(['D', 'F'])
+  bfraded?: 'D' | 'F' | null;
+
+  @ApiPropertyOptional({ example: 500, description: 'Monto del deducible en moneda local.' })
+  @IsOptional()
+  @IsNumber({ maxDecimalPlaces: 2 })
+  @Min(0)
+  mdedu_fran?: number | null;
+
+  @ApiPropertyOptional({ example: 50, description: 'Monto del deducible en divisa.' })
+  @IsOptional()
+  @IsNumber({ maxDecimalPlaces: 2 })
+  @Min(0)
+  mdedu_franext?: number | null;
+
+  @ApiPropertyOptional({ example: 2, description: 'Deducible en % (0 a 100).' })
+  @IsOptional()
+  @IsNumber({ maxDecimalPlaces: 6 })
+  @Min(0)
+  @Max(100)
+  pdedu_fran?: number | null;
+}
+
+export class DetalleTarifaDto extends DeducibleDto {
   @ApiProperty({ example: '2026-01-01' })
   @Matches(FECHA)
   fdesde: string;
@@ -280,6 +307,39 @@ export class EditarTarifaDto {
   @ApiPropertyOptional() @IsOptional() @IsString() @MaxLength(60) xtarifa?: string;
   @ApiPropertyOptional() @IsOptional() @IsBoolean() bobligatoria?: boolean;
   @ApiPropertyOptional({ enum: ['V', 'I'] }) @IsOptional() @IsIn(['V', 'I']) iestado?: 'V' | 'I';
+}
+
+/** Edición de un detalle de tarifa (matarifa_d). Solo cambian los campos enviados. */
+export class EditarDetalleTarifaDto extends DeducibleDto {
+  @ApiPropertyOptional({ example: 0.5, description: 'Tasa en %.' }) @IsOptional() @IsNumber({ maxDecimalPlaces: 6 }) @Min(0) pprima?: number;
+  @ApiPropertyOptional({ example: 0 }) @IsOptional() @IsNumber({ maxDecimalPlaces: 2 }) @Min(0) mprima?: number;
+  @ApiPropertyOptional({ example: 1000 }) @IsOptional() @IsNumber({ maxDecimalPlaces: 2 }) @Min(0) msumamin?: number;
+  @ApiPropertyOptional({ example: 50000 }) @IsOptional() @IsNumber({ maxDecimalPlaces: 2 }) @Min(0) msumamax?: number;
+
+  @ApiPropertyOptional({ example: '2026-12-31', description: 'Cierra la vigencia (la emisión solo mira iestado: para sacarla de uso, iestado I).' })
+  @IsOptional()
+  @Matches(FECHA)
+  fhasta?: string;
+
+  @ApiPropertyOptional({ enum: ['V', 'I'], description: "I = inactivar. Reactivar (V) da 409 si otro detalle de la tarifa ya está 'V'." })
+  @IsOptional()
+  @IsIn(['V', 'I'])
+  iestado?: 'V' | 'I';
+}
+
+/** Deducible y desembolso máximo de una cobertura del plan (maplancob, versión vigente). */
+export class DeducibleCoberturaPlanDto extends DeducibleDto {
+  @ApiPropertyOptional({ example: 0, description: 'Desembolso máximo en moneda local.' })
+  @IsOptional()
+  @IsNumber({ maxDecimalPlaces: 2 })
+  @Min(0)
+  mmax_desem?: number | null;
+
+  @ApiPropertyOptional({ example: 0, description: 'Desembolso máximo en divisa.' })
+  @IsOptional()
+  @IsNumber({ maxDecimalPlaces: 2 })
+  @Min(0)
+  mmax_desemext?: number | null;
 }
 
 // ── Tablas de tasas por edad (mapltabedad / mapltabedad_d) ──────────────────

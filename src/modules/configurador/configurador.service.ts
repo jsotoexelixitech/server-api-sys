@@ -1,14 +1,21 @@
 import { BadRequestException, ConflictException, ForbiddenException, Injectable, Logger, NotFoundException } from '@nestjs/common';
 import * as sql from 'mssql';
 import { MssqlService } from '../../database/mssql.service';
-import { parseSPError } from '../../common/helpers/sp-error.helper';
 import { validarPlan, validarProveedorPlan, validarTramos } from './configurador.reglas';
 import { reconstruirPlan, type FilasPlan, type PlanLeido } from './configurador.plan-lectura';
+import { familiaDelRamo, seccionesDeFamilia, type FamiliaRamo } from './configurador.familia';
+import { bfradedBd, traeDeducible, validarDeducible, validarEdicionDetalle } from './configurador.deducibles';
+import {
+  CPROG, CUSUARIO, SQL_CONFLICTO, SQL_NO_EXISTE, SQL_VERSION_VIGENTE, errorSql, exigirBandera, lote, rtrim, throwSql, type TipoSql,
+} from './configurador.comun';
 import {
   BajaProveedorPlanDto, CanalesPlanDto, CrearCoberturaDto, CrearDetalleTarifaDto, CrearProductoDto, CrearTablaEdadDto, CrearTarifaDto,
-  DetalleTarifaDto,
-  EditarCoberturaDto, EditarProveedorPlanDto, EditarTarifaDto, PlanDto, ProveedorPlanDto, TramoEdadDto,
+  DeducibleCoberturaPlanDto, DetalleTarifaDto, EditarCoberturaDto, EditarDetalleTarifaDto, EditarProveedorPlanDto, EditarTarifaDto,
+  PlanDto, ProveedorPlanDto, TramoEdadDto,
 } from './dto/configurador.dto';
+
+/** Bandera de escritura de deducibles (detalle de tarifa y cobertura del plan). Apagada por defecto. */
+export const BANDERA_DEDUCIBLES = 'CONFIGURADOR_DEDUCIBLES_ESCRITURA';
 
 /**
  * Escritura de proveedores del plan (maplprov_per). Apagada por defecto: no hay SP de mantenimiento conocido y la
@@ -35,16 +42,19 @@ const AUDITORIA_MOD: Array<[string, string]> = [['fultmod', 'GETDATE()'], ['cusu
 /** Columnas de maclient_prov que el catálogo puede mostrar (si existen); el resto no sale de Sis2000. */
 const COLUMNAS_CATALOGO_PROVEEDOR = ['cclave_num', 'xclave', 'xdescripcion', 'itiposerv', 'iestado', 'bactivo'];
 
-/** Usuario Sis2000 de la integración Exelixi (mismo de las emisiones Nexus). */
-const CUSUARIO = 20364172;
-/** Marca de auditoría en las filas que crea el configurador. */
-const CPROG = 'NEXUS-CONFIG';
+/** ifuente de las altas anteriores a la fase 1 (coberturas, tarifas, tablas de edad); las nuevas usan IFUENTE_SQL. */
 const IFUENTE = 'NEXUS';
 
-const rtrim = (v: unknown) => String(v ?? '').trim();
+/** maramos con los indicadores de familia (tipos de auto, iplanpers, planes de personas). Termina sin WHERE/ORDER. */
+const SQL_RAMOS_FAMILIA = `
+  SELECT r.cramo, LTRIM(RTRIM(r.xdescripcion_l)) AS xdescripcion, r.iplanpers,
+    CASE WHEN EXISTS (SELECT 1 FROM matipos t WITH (NOLOCK) WHERE t.cramo = r.cramo)
+           OR EXISTS (SELECT 1 FROM macattip a WITH (NOLOCK) WHERE a.cramo = r.cramo) THEN 1 ELSE 0 END AS tiene_auto,
+    CASE WHEN EXISTS (SELECT 1 FROM maplanes_per p WITH (NOLOCK) WHERE p.cramo = r.cramo) THEN 1 ELSE 0 END AS tiene_personas
+  FROM maramos r WITH (NOLOCK)`;
 
-/** Un solo lote en transacción: con XACT_ABORT cualquier error revierte todo (no depende de sql.Transaction del pool). */
-const lote = (sentencias: string[]) => `SET XACT_ABORT ON;\nBEGIN TRAN;\n${sentencias.join('\n')}\nCOMMIT TRAN;`;
+const familiaDeFila = (f: Record<string, unknown>) =>
+  familiaDelRamo({ tieneTiposAuto: Number(f.tiene_auto) === 1, iplanpers: f.iplanpers, tienePlanesPersonas: Number(f.tiene_personas) === 1 });
 
 /**
  * Sentencias para agregar n canales al plan en mausuplan (parámetros @cramo, @cplan, @it0..@itN-1; @id y @nuevos
@@ -74,12 +84,28 @@ export class ConfiguradorService {
 
   // ── Ramos y productos ──────────────────────────────────────────────────────
 
-  /** Ramos de Sis2000 (maramos) — solo lectura. */
+  /** Ramos de Sis2000 (maramos) con su familia (auto, personas o cosas) — solo lectura. */
   async listarRamos() {
-    const r = await this.db.request().query(
-      'SELECT cramo, LTRIM(RTRIM(xdescripcion_l)) AS xdescripcion FROM maramos WITH (NOLOCK) ORDER BY cramo',
-    );
-    return r.recordset ?? [];
+    const r = await this.db.request().query(`${SQL_RAMOS_FAMILIA} ORDER BY r.cramo`);
+    return ((r.recordset ?? []) as Record<string, unknown>[]).map((f) => ({
+      cramo: Number(f.cramo), xdescripcion: rtrim(f.xdescripcion), familia: familiaDeFila(f),
+    }));
+  }
+
+  /** Un ramo con su familia y las secciones del configurador que aplican (orden fijo). 404 si no existe. */
+  async obtenerRamo(cramo: number): Promise<{ cramo: number; xdescripcion_l: string; familia: FamiliaRamo; secciones: string[] }> {
+    const familia = await this.familiaDeRamo(cramo);
+    return { ...familia, secciones: seccionesDeFamilia(familia.familia) };
+  }
+
+  /** Familia de un ramo (también la usan los services de comisiones, auto y revisión). */
+  async familiaDeRamo(cramo: number): Promise<{ cramo: number; xdescripcion_l: string; familia: FamiliaRamo }> {
+    const req = this.db.request();
+    req.input('cramo', sql.SmallInt, cramo);
+    const r = await req.query(`${SQL_RAMOS_FAMILIA} WHERE r.cramo = @cramo`);
+    const f = r.recordset?.[0] as Record<string, unknown> | undefined;
+    if (!f) throw new NotFoundException(`No existe el ramo ${cramo}.`);
+    return { cramo, xdescripcion_l: rtrim(f.xdescripcion), familia: familiaDeFila(f) };
   }
 
   /**
@@ -237,6 +263,13 @@ export class ConfiguradorService {
   }
 
   async crearTarifa(dto: CrearTarifaDto) {
+    if ((dto.detalles?.length ?? 0) > 1) {
+      throw new BadRequestException(
+        "Una tarifa lleva un solo detalle 'V' en matarifa_d (la emisión no filtra vigencias): envía uno; para cambiar la tasa después, " +
+          'inactiva el vigente (PATCH tarifas/:cramo/:ccober/:ctarifa/detalles/:fdesde) y agrega el nuevo.',
+      );
+    }
+    this.exigirDeducibles(dto.detalles ?? []);
     await this.exigirCobertura(dto.cramo, dto.ccober);
     const claves = { cramo: dto.cramo, ccob: dto.ccober, ctar: dto.ctarifa };
     if (await this.existe('SELECT 1 FROM matarifa WHERE cramo = @cramo AND ccober = @ccob AND ctarifa = @ctar', claves)) {
@@ -262,7 +295,9 @@ export class ConfiguradorService {
     return { cramo: dto.cramo, ccober: dto.ccober.trim(), ctarifa: dto.ctarifa.trim(), detalles: dto.detalles?.length ?? 0 };
   }
 
+  /** Agrega un detalle 'V'. 409 si la tarifa ya tiene uno 'V' (nunca dos filas vigentes para la misma tarifa). */
   async crearDetalleTarifa(dto: CrearDetalleTarifaDto) {
+    this.exigirDeducibles([dto]);
     const claves = { cramo: dto.cramo, ccob: dto.ccober, ctar: dto.ctarifa };
     if (!(await this.existe('SELECT 1 FROM matarifa WHERE cramo = @cramo AND ccober = @ccob AND ctarifa = @ctar', claves))) {
       throw new NotFoundException(`No existe la tarifa ${dto.ctarifa} de la cobertura ${dto.ccober} del ramo ${dto.cramo}.`);
@@ -271,8 +306,107 @@ export class ConfiguradorService {
     this.claveTarifa(req, dto);
     this.auditoria(req);
     const insert = this.sqlDetalle(req, dto, 0);
-    await this.escribir('crear detalle de tarifa', () => req.query(insert));
+    await this.escribir('crear detalle de tarifa', () => req.query(lote([
+      `IF EXISTS (SELECT 1 FROM matarifa_d WITH (UPDLOCK, HOLDLOCK) WHERE cramo = @cramo AND ccober = @ccob AND ctarifa = @ctar AND iestado = 'V')`,
+      throwSql(SQL_CONFLICTO, "La tarifa ya tiene un detalle 'V' en matarifa_d: inactiva el vigente (iestado I) antes de agregar otro."),
+      insert,
+    ])));
     return { cramo: dto.cramo, ccober: dto.ccober.trim(), ctarifa: dto.ctarifa.trim(), fdesde: dto.fdesde };
+  }
+
+  /**
+   * Edita un detalle de tarifa (matarifa_d) identificado por su fdesde (fecha): tasa, prima, sumas, deducible, cierre
+   * de vigencia (fhasta) o estado. Al reactivar ('V') responde 409 si otra fila de la tarifa ya está 'V'.
+   */
+  async editarDetalleTarifa(cramo: number, ccober: string, ctarifa: string, fdesde: string, dto: EditarDetalleTarifaDto) {
+    exigirBandera(BANDERA_DEDUCIBLES, 'deducibles y detalles de tarifa');
+    this.exigirReglas([...validarDeducible(dto), ...validarEdicionDetalle(fdesde, dto)]);
+    const sets: string[] = [];
+    const req = this.db.request();
+    const num = (col: string, tipo: TipoSql, v: number | null | undefined) => {
+      if (v === undefined) return;
+      sets.push(`${col} = @${col}`);
+      req.input(col, tipo, v);
+    };
+    num('pprima', sql.Numeric(13, 6), dto.pprima);
+    num('mprima', sql.Numeric(17, 2), dto.mprima);
+    num('msumamin', sql.Numeric(17, 2), dto.msumamin);
+    num('msumamax', sql.Numeric(17, 2), dto.msumamax);
+    num('mdedu_fran', sql.Numeric(17, 2), dto.mdedu_fran);
+    num('mdedu_franext', sql.Numeric(17, 2), dto.mdedu_franext);
+    num('pdedu_fran', sql.Numeric(13, 6), dto.pdedu_fran);
+    if (dto.bfraded !== undefined) { sets.push('bfraded = @bfraded'); req.input('bfraded', sql.Char(1), bfradedBd(dto.bfraded)); }
+    if (dto.fhasta !== undefined) { sets.push('fhasta = @fhasta'); req.input('fhasta', sql.Date, dto.fhasta); }
+    if (dto.iestado !== undefined) { sets.push('iestado = @iestado'); req.input('iestado', sql.Char(1), dto.iestado); }
+    if (!sets.length) throw new BadRequestException('No hay campos para actualizar.');
+    this.claveTarifa(req, { cramo, ccober, ctarifa });
+    req.input('fdesde', sql.Date, fdesde);
+    req.input('cusuario', sql.Numeric(11, 0), CUSUARIO);
+    const donde = 'cramo = @cramo AND ccober = @ccob AND ctarifa = @ctar';
+    const sentencias = [
+      `DECLARE @n INT = (SELECT COUNT(*) FROM matarifa_d WITH (UPDLOCK, HOLDLOCK) WHERE ${donde} AND CONVERT(date, fdesde) = @fdesde);`,
+      'IF @n = 0',
+      throwSql(SQL_NO_EXISTE, `No existe el detalle ${fdesde} de la tarifa ${ctarifa.trim()} (cobertura ${ccober.trim()}, ramo ${cramo}).`),
+      'IF @n > 1',
+      throwSql(SQL_CONFLICTO, `Hay más de un detalle de la tarifa ${ctarifa.trim()} con fecha ${fdesde}: corrígelo en Sis2000.`),
+    ];
+    if (dto.iestado === 'V') {
+      sentencias.push(
+        `IF EXISTS (SELECT 1 FROM matarifa_d WITH (UPDLOCK, HOLDLOCK) WHERE ${donde} AND iestado = 'V' AND CONVERT(date, fdesde) <> @fdesde)`,
+        throwSql(SQL_CONFLICTO, `La tarifa ${ctarifa.trim()} ya tiene otro detalle 'V': inactívalo antes de reactivar este.`),
+      );
+    }
+    sentencias.push(`UPDATE matarifa_d SET ${sets.join(', ')}, fultmod = GETDATE(), cusuariomod = @cusuario, ccategoriamod = 1
+      WHERE ${donde} AND CONVERT(date, fdesde) = @fdesde;`);
+    await this.escribir('editar detalle de tarifa', () => req.query(lote(sentencias)));
+    return { cramo, ccober: ccober.trim(), ctarifa: ctarifa.trim(), fdesde };
+  }
+
+  /**
+   * Deducible y desembolso máximo de una cobertura del plan en maplancob (versión vigente del plan: MAX fdesde_plan 'V'
+   * en maplanes; dentro de ella, la fila de la cobertura con fdesde_cob más reciente). Solo planes de cosas/auto:
+   * los de personas no usan maplancob.
+   */
+  async editarCoberturaPlan(cramo: number, cplan: string, ccobertura: string, dto: DeducibleCoberturaPlanDto) {
+    exigirBandera(BANDERA_DEDUCIBLES, 'deducibles');
+    this.exigirReglas(validarDeducible(dto));
+    const sets: string[] = [];
+    const req = this.db.request();
+    const num = (col: string, tipo: TipoSql, v: number | null | undefined) => {
+      if (v === undefined) return;
+      sets.push(`${col} = @${col}`);
+      req.input(col, tipo, v);
+    };
+    num('mdedu_fran', sql.Numeric(17, 2), dto.mdedu_fran);
+    num('mdedu_franext', sql.Numeric(17, 2), dto.mdedu_franext);
+    num('pdedu_fran', sql.Numeric(13, 6), dto.pdedu_fran);
+    num('mmax_desem', sql.Numeric(17, 2), dto.mmax_desem);
+    num('mmax_desemext', sql.Numeric(17, 2), dto.mmax_desemext);
+    if (dto.bfraded !== undefined) { sets.push('bfraded = @bfraded'); req.input('bfraded', sql.Char(1), bfradedBd(dto.bfraded)); }
+    if (!sets.length) throw new BadRequestException('No hay campos para actualizar.');
+    req.input('cramo', sql.SmallInt, cramo);
+    req.input('cplan', sql.Char(6), cplan.trim());
+    req.input('ccob', sql.Char(4), ccobertura.trim());
+    req.input('cusuario', sql.Numeric(11, 0), CUSUARIO);
+    const r = await this.escribir('editar el deducible de la cobertura del plan', () => req.query(lote([
+      `DECLARE @vig DATETIME = ${SQL_VERSION_VIGENTE('maplanes')};`,
+      'IF @vig IS NULL',
+      throwSql(SQL_NO_EXISTE, `El plan ${cplan.trim()} no tiene versión 'V' en maplanes del ramo ${cramo} (los planes de personas no usan maplancob).`),
+      `DECLARE @cob DATETIME = (SELECT MAX(fdesde_cob) FROM maplancob WITH (UPDLOCK, HOLDLOCK)
+        WHERE cramo = @cramo AND cplan = @cplan AND fdesde_plan = @vig AND ccobertura = @ccob);`,
+      'IF @cob IS NULL',
+      throwSql(SQL_NO_EXISTE, `La cobertura ${ccobertura.trim()} no está en maplancob de la versión vigente del plan ${cplan.trim()}.`),
+      `UPDATE maplancob SET ${sets.join(', ')}, fultmod = GETDATE(), cusuariomod = @cusuario, ccategoriamod = 1
+        WHERE cramo = @cramo AND cplan = @cplan AND fdesde_plan = @vig AND ccobertura = @ccob AND fdesde_cob = @cob;`,
+    ]) + '\nSELECT CONVERT(varchar(10), @vig, 23) AS fdesde_plan, CONVERT(varchar(10), @cob, 23) AS fdesde_cob;'));
+    const f = (r.recordset?.[0] ?? {}) as Record<string, unknown>;
+    return { cramo, cplan: cplan.trim(), ccobertura: ccobertura.trim(), fdesde_plan: rtrim(f.fdesde_plan), fdesde_cob: rtrim(f.fdesde_cob) };
+  }
+
+  /** Deducibles al crear tarifa/detalle: reglas siempre; si traen datos de deducible, exige la bandera. */
+  private exigirDeducibles(detalles: DetalleTarifaDto[]) {
+    this.exigirReglas(detalles.flatMap((d) => validarDeducible(d)));
+    if (detalles.some((d) => traeDeducible(d))) exigirBandera(BANDERA_DEDUCIBLES, 'deducibles');
   }
 
   async editarTarifa(cramo: number, ccober: string, ctarifa: string, dto: EditarTarifaDto) {
@@ -378,9 +512,11 @@ export class ConfiguradorService {
     req.input('cramo', sql.SmallInt, cramo);
     req.input('cplan', sql.Char(6), cplan.trim());
     const donde = 'WITH (NOLOCK) WHERE cramo = @cramo AND cplan = @cplan';
+    // Cabecera: la versión vigente primero (V y fdesde_plan más reciente). maplantar_ano y maarancel del plan, y
+    // macattip del ramo (afecta a todos sus planes), para que el builder respalde y restaure también esos temas.
     const r = await req.query(`
-      SELECT TOP 1 * FROM maplanes ${donde};
-      SELECT TOP 1 * FROM maplanes_per ${donde};
+      SELECT TOP 1 * FROM maplanes ${donde} ORDER BY CASE WHEN iestado = 'V' THEN 0 ELSE 1 END, fdesde_plan DESC;
+      SELECT TOP 1 * FROM maplanes_per ${donde} ORDER BY CASE WHEN iestado = 'V' THEN 0 ELSE 1 END, fdesde_plan DESC;
       SELECT * FROM maplantar ${donde};
       SELECT * FROM maplcober_per ${donde};
       SELECT * FROM mapltarifas_per ${donde};
@@ -388,11 +524,17 @@ export class ConfiguradorService {
       SELECT * FROM maplanes_frec ${donde};
       SELECT cramo, RTRIM(cplan) AS cplan, RTRIM(centidad) AS centidad, RTRIM(citem) AS citem, RTRIM(itipouso) AS itipouso
       FROM mausuplan ${donde};
-      SELECT * FROM maplprov_per ${donde};`);
-    const [maplanes, maplanes_per, maplantar, maplcober_per, mapltarifas_per, mapledades_per, maplanes_frec, mausuplan, maplprov_per] =
-      r.recordsets as unknown as Record<string, unknown>[][];
+      SELECT * FROM maplprov_per ${donde};
+      SELECT * FROM maplantar_ano ${donde} ORDER BY ccober, ctarifa, nantiguedad_desde;
+      SELECT * FROM maarancel ${donde} ORDER BY ctipoprod, cproductor, ccober, ctarifa, fdesde;
+      SELECT * FROM macattip WITH (NOLOCK) WHERE cramo = @cramo ORDER BY ctipo, ccategotr;`);
+    const [
+      maplanes, maplanes_per, maplantar, maplcober_per, mapltarifas_per, mapledades_per, maplanes_frec, mausuplan, maplprov_per,
+      maplantar_ano, maarancel, macattip,
+    ] = r.recordsets as unknown as Record<string, unknown>[][];
     const filas: FilasPlan = {
       maplanes, maplanes_per, maplantar, maplcober_per, mapltarifas_per, mapledades_per, maplanes_frec, mausuplan, maplprov_per,
+      maplantar_ano, maarancel, macattip,
     };
     return reconstruirPlan(filas);
   }
@@ -418,9 +560,8 @@ export class ConfiguradorService {
   }
 
   async eliminarPlan(cramo: number, cplan: string) {
+    if (!(await this.planExiste(cramo, cplan))) throw new NotFoundException(`No existe el plan ${cplan} en el ramo ${cramo}.`);
     // spMantPlanes borra datos en Sis2000 (incidente en mantenimiento de planes): desde aquí nunca se borra.
-    void cramo;
-    void cplan;
     throw new ForbiddenException('Borrar planes en Sis2000 no está permitido desde el configurador.');
   }
 
@@ -757,7 +898,10 @@ export class ConfiguradorService {
     return fila;
   }
 
-  /** spMantPlanes no recibe tasa por cobertura: en cosas se graba maplantar.pprima después. */
+  /**
+   * spMantPlanes no recibe tasa por cobertura: en cosas se graba maplantar.pprima después, solo en la versión vigente
+   * del plan (MAX fdesde_plan 'V' de maplanes), sin tocar versiones anteriores.
+   */
   private async grabarTasasPlan(dto: PlanDto) {
     if (dto.type !== 'cosas') return;
     for (const c of dto.coberturas.filter((x) => x.pprima !== undefined)) {
@@ -769,12 +913,16 @@ export class ConfiguradorService {
       req.input('cusuario', sql.Numeric(11, 0), CUSUARIO);
       await this.escribir('grabar tasa del plan', () => req.query(`
         UPDATE maplantar SET pprima = @pprima, fultmod = GETDATE(), cusuariomod = @cusuario, ccategoriamod = 1
-        WHERE cramo = @cramo AND cplan = @cplan AND ccober = @ccob`));
+        WHERE cramo = @cramo AND cplan = @cplan AND ccober = @ccob AND fdesde_plan = ${SQL_VERSION_VIGENTE('maplanes')}`));
     }
   }
 
+  /** El plan existe en maplanes (cosas/auto) o en maplanes_per (personas). */
   private planExiste(cramo: number, cplan: string) {
-    return this.existe('SELECT 1 FROM maplanes WHERE cramo = @cramo AND cplan = @cplan', { cramo, cplan });
+    return this.existe(
+      'SELECT 1 FROM maplanes WHERE cramo = @cramo AND cplan = @cplan UNION ALL SELECT 1 FROM maplanes_per WHERE cramo = @cramo AND cplan = @cplan',
+      { cramo, cplan },
+    );
   }
 
   private async exigirRamo(cramo: number) {
@@ -822,11 +970,15 @@ export class ConfiguradorService {
     req.input(`msumamax${i}`, sql.Numeric(17, 2), d.msumamax ?? 0);
     req.input(`mprima${i}`, sql.Numeric(17, 2), d.mprima ?? 0);
     req.input(`pprima${i}`, sql.Numeric(13, 6), d.pprima ?? 0);
+    req.input(`bfraded${i}`, sql.Char(1), bfradedBd(d.bfraded));
+    req.input(`mdedu${i}`, sql.Numeric(17, 2), d.mdedu_fran ?? 0);
+    req.input(`mdeduext${i}`, sql.Numeric(17, 2), d.mdedu_franext ?? 0);
+    req.input(`pdedu${i}`, sql.Numeric(13, 6), d.pdedu_fran ?? 0);
     return `
       INSERT INTO matarifa_d (cramo, ccober, ctarifa, fdesde, u_version, fhasta, msumamin, msumamax, mprima, pprima, bfraded,
         mdedu_fran, mdedu_franext, pdedu_fran, iestado, cprog, ifuente, fingreso, cusuario, ccategoria)
-      VALUES (@cramo, @ccob, @ctar, @fdesde${i}, '!', @fhasta${i}, @msumamin${i}, @msumamax${i}, @mprima${i}, @pprima${i}, '0', 0, 0, 0,
-        'V', @cprog, @ifuente, GETDATE(), @cusuario, 1);`;
+      VALUES (@cramo, @ccob, @ctar, @fdesde${i}, '!', @fhasta${i}, @msumamin${i}, @msumamax${i}, @mprima${i}, @pprima${i}, @bfraded${i},
+        @mdedu${i}, @mdeduext${i}, @pdedu${i}, 'V', @cprog, @ifuente, GETDATE(), @cusuario, 1);`;
   }
 
   /** INSERT de mapltabedad_d con parámetros sufijados `i`; @ctab y la auditoría ya están en req. */
@@ -861,39 +1013,10 @@ export class ConfiguradorService {
     return Number(r.recordset?.[0]?.n ?? 0) > 0;
   }
 
+  /** 409/404 de los THROW propios (51000/51404); el resto → 400 con el detalle del driver. */
   private errorSql(accion: string, err: unknown) {
-    if (err instanceof BadRequestException || err instanceof ConflictException || err instanceof NotFoundException) return err;
-    const msg = parseSPError(err) || detalleErrorSqlVacio(err);
-    this.logger.error(`${accion}: ${msg}`);
-    return new BadRequestException(`No se pudo ${accion}: ${msg}`);
+    return errorSql(this.logger, accion, err);
   }
-}
-
-/**
- * Sis2000 a veces lanza el error del SP con el texto vacío (p. ej. RAISERROR de un mensaje NULL). Se arma lo que
- * traiga el driver: errores previos, número, línea y procedimiento, para no mostrar «No se pudo …:» sin causa.
- */
-function detalleErrorSqlVacio(err: unknown): string {
-  const e = (err ?? {}) as {
-    number?: number; lineNumber?: number; procName?: string; state?: number;
-    precedingErrors?: { message?: string; number?: number }[];
-    originalError?: { info?: { message?: string; number?: number; procName?: string; lineNumber?: number } };
-  };
-  const previos = (e.precedingErrors ?? []).map((p) => (p?.message ?? '').trim()).filter(Boolean);
-  if (previos.length) return previos.join(' | ');
-  const info = e.originalError?.info;
-  if (info?.message?.trim()) return info.message.trim();
-  const numero = e.number ?? info?.number;
-  const proc = e.procName || info?.procName;
-  const linea = e.lineNumber ?? info?.lineNumber;
-  const partes = [
-    numero != null ? `error SQL ${numero}` : '',
-    proc ? `en ${proc}` : '',
-    linea != null ? `línea ${linea}` : '',
-  ].filter(Boolean);
-  return partes.length
-    ? `${partes.join(' ')} (Sis2000 no envió el texto del error)`
-    : 'Sis2000 devolvió un error sin texto';
 }
 
 /** true si todos los errores del driver son la PK de mapledades_per (edades repetidas por cobertura en spMantPlanes). */

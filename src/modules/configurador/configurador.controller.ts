@@ -1,9 +1,9 @@
-import { Body, Controller, Delete, Get, HttpCode, HttpStatus, Param, ParseIntPipe, Patch, Post, Put, Query } from '@nestjs/common';
+import { BadRequestException, Body, Controller, Delete, Get, HttpCode, HttpStatus, Param, ParseIntPipe, Patch, Post, Put, Query } from '@nestjs/common';
 import { ApiBody, ApiHeader, ApiOperation, ApiTags } from '@nestjs/swagger';
 import { ConfiguradorService } from './configurador.service';
 import {
   BajaProveedorPlanDto, CanalesPlanDto, CanalesQueryDto, CrearCoberturaDto, CrearDetalleTarifaDto, CrearProductoDto, CrearTablaEdadDto,
-  CrearTarifaDto,
+  CrearTarifaDto, DeducibleCoberturaPlanDto, EditarDetalleTarifaDto,
   EditarCoberturaDto, EditarProveedorPlanDto, EditarTarifaDto, PlanDto, ProductoresQueryDto, ProveedoresQueryDto,
   ProveedorPlanDto, RamoQueryDto, TarifasQueryDto, TramosEdadDto,
 } from './dto/configurador.dto';
@@ -14,6 +14,13 @@ import { SWAGGER_TAGS } from '../../common/swagger/swagger-tags.constants';
 import { ApiCommonErrors } from '../../common/swagger/api-error-responses';
 
 const SCOPE = NEST_AUTH_SCOPES.CONFIGURADOR_WRITE;
+
+/** Fecha YYYY-MM-DD de un parámetro de ruta (400 si no lo es). */
+export function fechaRuta(v: string): string {
+  const s = String(v ?? '').trim();
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(s) || Number.isNaN(Date.parse(s))) throw new BadRequestException(`Fecha inválida en la ruta: ${s} (usa YYYY-MM-DD).`);
+  return s;
+}
 
 /** Configurador de productos y planes en Sis2000 (proyecto-product-builder). Todo requiere `configurador:write`. */
 @ApiTags(SWAGGER_TAGS.CONFIGURADOR)
@@ -27,9 +34,25 @@ export class ConfiguradorController {
 
   @Get('ramos')
   @NestProtected(SCOPE)
-  @ApiOperation({ summary: 'Ramos de Sis2000 (maramos) para elegir el ramo de un producto o plan', operationId: 'configuradorRamos' })
+  @ApiOperation({
+    summary: 'Ramos de Sis2000 (maramos) para elegir el ramo de un producto o plan',
+    description: 'Cada ramo trae `familia`: auto (filas en matipos/macattip), personas (iplanpers o planes en maplanes_per) o cosas.',
+    operationId: 'configuradorRamos',
+  })
   async ramos() {
     return { status: true, data: await this.service.listarRamos() };
+  }
+
+  @Get('ramos/:cramo')
+  @NestProtected(SCOPE)
+  @ApiOperation({
+    summary: 'Ramo con su familia y las secciones del configurador que aplican',
+    description:
+      'secciones (orden fijo): coberturas, tarifas, deducibles, frecuencias, canales, comisiones, [tipos-uso, tasas-antiguedad solo auto], revision.',
+    operationId: 'configuradorRamo',
+  })
+  async ramo(@Param('cramo', ParseIntPipe) cramo: number) {
+    return { status: true, data: await this.service.obtenerRamo(cramo) };
   }
 
   @Post('productos')
@@ -131,6 +154,26 @@ export class ConfiguradorController {
     @Body() dto: EditarTarifaDto,
   ) {
     return { status: true, data: await this.service.editarTarifa(cramo, ccober, ctarifa, dto) };
+  }
+
+  @Patch('tarifas/:cramo/:ccober/:ctarifa/detalles/:fdesde')
+  @NestProtected(SCOPE)
+  @ApiOperation({
+    summary: 'Editar un detalle de tarifa (matarifa_d): tasa, prima, sumas, deducible, cierre (fhasta) o estado',
+    description:
+      'Requiere CONFIGURADOR_DEDUCIBLES_ESCRITURA=1 (si no, 403). fdesde = YYYY-MM-DD del detalle. 404 si no existe; ' +
+      "409 si al reactivar (iestado V) otro detalle de la tarifa ya está 'V'.",
+    operationId: 'configuradorEditarDetalleTarifa',
+  })
+  @ApiBody({ type: EditarDetalleTarifaDto })
+  async editarDetalleTarifa(
+    @Param('cramo', ParseIntPipe) cramo: number,
+    @Param('ccober') ccober: string,
+    @Param('ctarifa') ctarifa: string,
+    @Param('fdesde') fdesde: string,
+    @Body() dto: EditarDetalleTarifaDto,
+  ) {
+    return { status: true, data: await this.service.editarDetalleTarifa(cramo, ccober, ctarifa, fechaRuta(fdesde), dto) };
   }
 
   // ── Tablas de tasas por edad ───────────────────────────────────────────────
@@ -242,6 +285,25 @@ export class ConfiguradorController {
   @ApiBody({ type: CanalesPlanDto })
   async agregarCanalesPlan(@Param('cramo', ParseIntPipe) cramo: number, @Param('cplan') cplan: string, @Body() dto: CanalesPlanDto) {
     return { status: true, data: await this.service.agregarCanalesPlan(cramo, cplan, dto) };
+  }
+
+  @Patch('planes/:cramo/:cplan/coberturas/:ccobertura')
+  @NestProtected(SCOPE)
+  @ApiOperation({
+    summary: 'Deducible y desembolso máximo de una cobertura del plan (maplancob, versión vigente)',
+    description:
+      "Requiere CONFIGURADOR_DEDUCIBLES_ESCRITURA=1 (si no, 403). Actualiza la versión vigente del plan (MAX fdesde_plan 'V' en maplanes). " +
+      '404 si el plan no tiene versión vigente en maplanes (personas no usa maplancob) o la cobertura no está.',
+    operationId: 'configuradorDeducibleCoberturaPlan',
+  })
+  @ApiBody({ type: DeducibleCoberturaPlanDto })
+  async deducibleCoberturaPlan(
+    @Param('cramo', ParseIntPipe) cramo: number,
+    @Param('cplan') cplan: string,
+    @Param('ccobertura') ccobertura: string,
+    @Body() dto: DeducibleCoberturaPlanDto,
+  ) {
+    return { status: true, data: await this.service.editarCoberturaPlan(cramo, cplan, ccobertura, dto) };
   }
 
   // ── Proveedores del plan (maplprov_per) ────────────────────────────────────
