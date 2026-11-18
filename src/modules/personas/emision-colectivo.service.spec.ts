@@ -1,6 +1,6 @@
 import { BadRequestException, ForbiddenException } from '@nestjs/common';
 import * as sql from 'mssql';
-import { EmisionColectivoService } from './emision-colectivo.service';
+import { EmisionColectivoService, tienePermisoEmisionColectiva } from './emision-colectivo.service';
 import type { CreateEmissionColectivoDto } from './dto/create-emission-colectivo.dto';
 
 const dtoBase = (): CreateEmissionColectivoDto =>
@@ -108,5 +108,22 @@ describe('EmisionColectivoService', () => {
     dto.titulares[0].asegurados![0].rif_asegurado = 12345678;
     await expect(service.emitir('k', dto, SCOPE)).rejects.toMatchObject({ response: { code: 'COLECTIVO_PERSONA_DUPLICADA' } });
     expect(execute).not.toHaveBeenCalled();
+  });
+});
+
+describe('tienePermisoEmisionColectiva (grant por endpoint del panel, 18-nov-2026)', () => {
+  it('acepta el scope literal y el endpoint exacto elegido en el panel', () => {
+    expect(tienePermisoEmisionColectiva(['emissions:colectivo'])).toBe(true);
+    expect(tienePermisoEmisionColectiva(['POST /api/v1/external/collection/activate', 'POST /api/v1/personas/emision-colectiva'])).toBe(true);
+    expect(tienePermisoEmisionColectiva(['post /api/v1/personas/emision-colectiva/'])).toBe(true);
+  });
+
+  it('no acepta comodines, otro método, rutas con parámetros ni otros endpoints', () => {
+    expect(tienePermisoEmisionColectiva(['*'])).toBe(false);
+    expect(tienePermisoEmisionColectiva(['emissions:*'])).toBe(false);
+    expect(tienePermisoEmisionColectiva(['GET /api/v1/personas/emision-colectiva'])).toBe(false);
+    expect(tienePermisoEmisionColectiva(['POST /api/v1/personas/:id'])).toBe(false);
+    expect(tienePermisoEmisionColectiva(['POST /api/v1/personas/emision'])).toBe(false);
+    expect(tienePermisoEmisionColectiva(undefined)).toBe(false);
   });
 });
