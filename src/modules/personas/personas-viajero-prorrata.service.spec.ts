@@ -81,12 +81,12 @@ describe('PersonasService.getCotizacionPer — Viajero Local por días', () => {
     expect(r.mprima).toBe(1508.13);
   });
 
-  it('VIAJE6 con 1 día y por ndias sin fechas', async () => {
+  it('VIAJE6 con 3 días (mínimo) y por ndias sin fechas', async () => {
     const { service } = buildService({ mprimaext: 200, tasa: 1 });
     const r = await service.getCotizacionPer({
-      cramo: 25, cplan: 'VIAJE6', ifrecuencia: 'E', ndias: 1, asegurados: titular,
+      cramo: 25, cplan: 'VIAJE6', ifrecuencia: 'E', ndias: 3, asegurados: titular,
     } as never);
-    expect(r.mprimaext).toBe(0.55);
+    expect(r.mprimaext).toBe(1.64);
   });
 
   it('VIAJE5 con 11 días → 400 «máximo 10 días» sin llamar al SP', async () => {

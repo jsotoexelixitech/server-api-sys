@@ -99,7 +99,7 @@ describe('PersonasService.getPlanesPer — viajero por días', () => {
     expect(de(5, 'VIAJE4')).toMatchObject({ ndias: 3, nmax_dep: 0, maxAsegurados: 1 });
     expect(de(5, 'VIAJ10')?.ndias ?? null).toBeNull();
     expect(de(5, 'VIAJ10')).toMatchObject({ nmax_dep: 0, maxAsegurados: 1 });
-    expect(de(25, 'VIAJE5')).toMatchObject({ ndiasMin: 1, ndiasMax: 10, nmax_dep: 0, maxAsegurados: 1 });
+    expect(de(25, 'VIAJE5')).toMatchObject({ ndiasMin: 3, ndiasMax: 10, nmax_dep: 0, maxAsegurados: 1 });
     // VIAJE1 del ramo 25 no es prorrata ni tiene días: se queda como está.
     expect(de(25, 'VIAJE1')).toMatchObject({ nmax_dep: 5, maxAsegurados: 6 });
     expect(de(25, 'VIAJE1')?.ndias ?? null).toBeNull();

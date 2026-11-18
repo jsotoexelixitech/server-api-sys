@@ -22,6 +22,9 @@ export const VIAJE_LOCAL_PLANES: readonly string[] = [VIAJE_LOCAL_PLAN, 'VIAJE5'
  */
 export const VIAJE_LOCAL_ANUAL_PLANES: readonly string[] = ['VIAJE5', 'VIAJE6'];
 
+/** Mínimo de días del viaje para VIAJE5/VIAJE6 del ramo 25 (La Mundial, 18-nov-2026: «desde 3 hasta 10»). */
+export const VIAJE_LOCAL_ANUAL_MIN_DIAS = 3;
+
 /** Tope de días del viaje para VIAJE5/VIAJE6 del ramo 25. */
 export const VIAJE_LOCAL_ANUAL_MAX_DIAS = 10;
 
@@ -88,10 +91,10 @@ export function diasViajeInclusivos(fdesde: string, fhasta: string): number {
   return Math.round((hasta - desde) / 86400000) + 1;
 }
 
-/** VIAJE5/VIAJE6: de 1 a 10 días. */
+/** VIAJE5/VIAJE6: de 3 a 10 días. */
 export function assertViajeLocalAnualDias(ndias: number): void {
-  if (!Number.isInteger(ndias) || ndias < 1) {
-    throw new BadRequestException('Viajero Local por días: mínimo 1 día.');
+  if (!Number.isInteger(ndias) || ndias < VIAJE_LOCAL_ANUAL_MIN_DIAS) {
+    throw new BadRequestException(`Viajero Local por días: mínimo ${VIAJE_LOCAL_ANUAL_MIN_DIAS} días.`);
   }
   if (ndias > VIAJE_LOCAL_ANUAL_MAX_DIAS) {
     throw new BadRequestException(
@@ -155,7 +158,7 @@ export interface DiasViajePlan {
 
 /**
  * Días de viaje de un plan según su configuración y las reglas de emisión:
- * - VIAJE5/VIAJE6 del ramo 25: de 1 a VIAJE_LOCAL_ANUAL_MAX_DIAS (la misma regla que valida la cotización).
+ * - VIAJE5/VIAJE6 del ramo 25: de VIAJE_LOCAL_ANUAL_MIN_DIAS a VIAJE_LOCAL_ANUAL_MAX_DIAS (la misma regla que valida la cotización).
  * - maplanes_frec E (única) con ndias > 0: plan de esos días exactos (ramo 5: VIAJE4 = 3 … VIAJE9 = 8).
  *   Si el plan tiene varias filas E con días distintos, de la menor a la mayor.
  * - maplanes_frec D con ndias > 0 («hasta N días»): de 1 al mayor ndias.
@@ -167,7 +170,7 @@ export function diasViajePlan(
   frecuencias: readonly FrecuenciaDiasRow[],
 ): DiasViajePlan | null {
   if (isViajeLocalAnualProrrataPlan(cramo, plan)) {
-    return { ndiasMin: 1, ndiasMax: VIAJE_LOCAL_ANUAL_MAX_DIAS };
+    return { ndiasMin: VIAJE_LOCAL_ANUAL_MIN_DIAS, ndiasMax: VIAJE_LOCAL_ANUAL_MAX_DIAS };
   }
   const diasDe = (letra: string): number[] => [
     ...new Set(
