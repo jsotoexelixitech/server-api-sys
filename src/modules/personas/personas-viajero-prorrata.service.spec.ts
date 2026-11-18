@@ -162,8 +162,8 @@ describe('PersonasService.getPlanesPer — producto 25 con VIAJE5/VIAJE6 del ram
     ).toEqual([
       '5|VIAJE4|3|---',
       '5|VIAJE5|4|---',
-      '25|VIAJE5|-|1-10',
-      '25|VIAJE6|-|1-10',
+      '25|VIAJE5|-|3-10',
+      '25|VIAJE6|-|3-10',
     ]);
   });
 });
