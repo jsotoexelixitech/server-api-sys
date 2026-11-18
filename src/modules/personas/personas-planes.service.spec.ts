@@ -49,3 +49,59 @@ describe('PersonasService.getPlanesPer — mismo cplan en distintos ramos', () =
     expect(planes.find((p) => p.cramo === 47 && p.cplan === '1')?.nmax_dep).toBe(0);
   });
 });
+
+describe('PersonasService.getPlanesPer — viajero por días', () => {
+  function buildService() {
+    const porTabla: Record<string, Record<number, Record<string, unknown>[]>> = {
+      maplanes_per: {
+        5: [{ cplan: 'VIAJE4', nmax_dep: 5 }, { cplan: 'VIAJ10', nmax_dep: 6 }],
+        25: [{ cplan: 'VIAJE5', nmax_dep: 6 }, { cplan: 'VIAJE1', nmax_dep: 5 }],
+      },
+      maplanes_frec: {
+        5: [{ cplan: 'VIAJE4', ifrecuencia: 'E', ndias: 3 }, { cplan: 'VIAJ10', ifrecuencia: 'E', ndias: 0 }],
+        25: [{ cplan: 'VIAJE1', ifrecuencia: 'E', ndias: 0 }],
+      },
+    };
+    const db = {
+      types: { Int: 'Int', NVarChar: () => 'NVarChar' },
+      request: () => {
+        const inputs: Record<string, unknown> = {};
+        return {
+          input: (name: string, _t: unknown, value: unknown) => {
+            inputs[name] = value;
+          },
+          query: async (sql: string) => {
+            const tabla = sql.includes('maplanes_frec') ? 'maplanes_frec' : 'maplanes_per';
+            return { recordset: porTabla[tabla][Number(inputs['cramo'])] ?? [] };
+          },
+        };
+      },
+    };
+    const config = { get: (_k: string, def?: string) => def };
+    const valrep = {
+      getPlanesProducto: jest.fn().mockResolvedValue({
+        planes: [
+          { cplan: 'VIAJE4', cramo: 5, xplan: 'Plan II 1.500$ Viajero por 3 días' },
+          { cplan: 'VIAJ10', cramo: 5, xplan: 'Plan II 1.500$ Viajero por 15 días' },
+          { cplan: 'VIAJE5', cramo: 25, xplan: 'Plan 3.000$ Viajero Local por Días' },
+          { cplan: 'VIAJE1', cramo: 25, xplan: 'Plan I 1.500$ Viajero Local' },
+        ],
+        mensaje: '',
+      }),
+    };
+    return new PersonasService(db as never, config as never, valrep as never);
+  }
+
+  it('informa los días de cada plan y deja solo al titular en los planes prorrata', async () => {
+    const planes = await buildService().getPlanesPer({ cproducto: '26', centidad: 'C', citem: '1' } as never);
+    const de = (ramo: number, cplan: string) => planes.find((p) => p.cramo === ramo && p.cplan === cplan);
+
+    expect(de(5, 'VIAJE4')).toMatchObject({ ndias: 3, nmax_dep: 0, maxAsegurados: 1 });
+    expect(de(5, 'VIAJ10')?.ndias).toBeUndefined();
+    expect(de(5, 'VIAJ10')).toMatchObject({ nmax_dep: 0, maxAsegurados: 1 });
+    expect(de(25, 'VIAJE5')).toMatchObject({ ndiasMin: 1, ndiasMax: 10, nmax_dep: 0, maxAsegurados: 1 });
+    // VIAJE1 del ramo 25 no es prorrata ni tiene días: se queda como está.
+    expect(de(25, 'VIAJE1')).toMatchObject({ nmax_dep: 5, maxAsegurados: 6 });
+    expect(de(25, 'VIAJE1')?.ndias).toBeUndefined();
+  });
+});
