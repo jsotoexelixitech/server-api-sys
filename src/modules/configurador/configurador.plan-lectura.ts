@@ -16,6 +16,12 @@ export interface FilasPlan {
   mausuplan: Fila[];
   /** Proveedores del plan: solo informativo (spMantPlanes no los recibe; se restauran por su propio camino). */
   maplprov_per?: Fila[];
+  /** Tasas por antigüedad del plan (auto). Informativo: se restauran con PUT tasas-antiguedad. */
+  maplantar_ano?: Fila[];
+  /** Comisiones del plan (cplan = el plan; las del ramo con cplan '0' no se incluyen). Se restauran con comisiones. */
+  maarancel?: Fila[];
+  /** Tipo y uso del ramo (macattip, afecta a todos los planes del ramo). Se restauran con PUT tipos-uso. */
+  macattip?: Fila[];
 }
 
 export interface PlanLeido {
@@ -194,12 +200,13 @@ export function reconstruirPlan(filas: FilasPlan): PlanLeido | null {
   const cab = (type === 'personas' ? cabPersonas ?? cabCosas : cabCosas ?? cabPersonas) as Fila;
   const adv: string[] = [];
 
-  let fhasta = fechaIso(cab.fhasta);
+  // En maplanes/maplanes_per las columnas son fdesde_plan/fhasta_plan.
+  let fhasta = fechaIso(cab.fhasta_plan ?? cab.fhasta);
   if (!fhasta) {
     fhasta = '2099-12-31';
     adv.push('El plan no tiene fhasta: se usa 2099-12-31.');
   }
-  const fdesde = fechaIso(cab.fdesde);
+  const fdesde = fechaIso(cab.fdesde_plan ?? cab.fdesde);
   if (!fdesde) adv.push('El plan no tiene fdesde; complétala antes de restaurar.');
 
   const coberturas = type === 'cosas' ? coberturasCosas(filas.maplantar) : coberturasPersonas(filas, adv);

@@ -10,6 +10,22 @@ describe('reconstruirPlan', () => {
     expect(reconstruirPlan(vacio())).toBeNull();
   });
 
+  it('lee fdesde_plan/fhasta_plan (columnas reales de maplanes) y conserva las filas extra del respaldo', () => {
+    const filas: FilasPlan = {
+      ...vacio(),
+      maplanes: [{ cramo: 18, cplan: 'AUT1', fdesde_plan: new Date('2025-03-01T00:00:00Z'), fhasta_plan: new Date('2030-12-31T00:00:00Z') }],
+      maplantar_ano: [{ ccober: '1', ctarifa: '1', nantiguedad_desde: 0, nantiguedad_hasta: 5, pprima: 2 }],
+      maarancel: [{ cplan: 'AUT1', ccober: '0', pcomision: 10 }],
+      macattip: [{ ctipo: 1, ccategotr: 1, mprimbas: 20 }],
+    };
+    const r = reconstruirPlan(filas)!;
+    expect(r.plan).toMatchObject({ fdesde: '2025-03-01', fhasta: '2030-12-31' });
+    expect(r.advertencias.join(' ')).not.toMatch(/no tiene fdesde|no tiene fhasta/);
+    expect(r.filas.maplantar_ano).toHaveLength(1);
+    expect(r.filas.maarancel).toHaveLength(1);
+    expect(r.filas.macattip).toHaveLength(1);
+  });
+
   it('cosas: cabecera, maplantar, frecuencias y productores/canales de mausuplan', () => {
     const filas: FilasPlan = {
       ...vacio(),
