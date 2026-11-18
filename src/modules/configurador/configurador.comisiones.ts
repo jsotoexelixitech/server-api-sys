@@ -73,7 +73,7 @@ export function duplicadosLlave(filas: FilaArancel[]): Array<{ cplan: string; ct
 export const SP_UNEN_ARANCEL: Record<'ccober' | 'ctarifa', string> = {
   ccober: 'los SP de emisión de auto/flota y endosos (sp_flota_incluir_certificado_nexus, sp_crear_recibo_endoso_nexus, ' +
     'sp_genera_coberturas_endoso_nexus) unen maarancel por cramo+ccober y podrían duplicar la comisión',
-  ctarifa: 'la cotización de condominio (sp_calculo_cotizacion_condominio_nexus, solo familia cosas) une maarancel por ' +
+  ctarifa: 'la cotización de condominio (sp_calculo_cotizacion_condominio_nexus, solo familia patrimonial) une maarancel por ' +
     'cramo+ctarifa y podría duplicar la comisión',
 };
 

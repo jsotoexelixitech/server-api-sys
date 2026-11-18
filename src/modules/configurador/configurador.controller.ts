@@ -36,7 +36,10 @@ export class ConfiguradorController {
   @NestProtected(SCOPE)
   @ApiOperation({
     summary: 'Ramos de Sis2000 (maramos) para elegir el ramo de un producto o plan',
-    description: 'Cada ramo trae `familia`: auto (filas en matipos/macattip), personas (iplanpers o planes en maplanes_per) o cosas.',
+    description:
+      'Cada ramo trae familia (por ctiporamo: 7 auto, 2/4 personas, 5 fianzas, 1/6 patrimonial; auto también si tiene matipos/macattip ' +
+      'o si todas sus coberturas equivalen al ramo 18, como el 26), colectivo, emisionNexus, estado (activo, sin-planes, inactivo), ' +
+      'planes y productos (conteos), soloLectura, avisos, condominio, tarifaDias y secciones.',
     operationId: 'configuradorRamos',
   })
   async ramos() {
@@ -48,7 +51,9 @@ export class ConfiguradorController {
   @ApiOperation({
     summary: 'Ramo con su familia y las secciones del configurador que aplican',
     description:
-      'secciones (orden fijo): coberturas, tarifas, deducibles, frecuencias, canales, comisiones, [tipos-uso, tasas-antiguedad solo auto], revision.',
+      'Misma forma que cada fila de GET ramos más xdescripcion_l. secciones (orden fijo): producto, plan, coberturas, tarifas, ' +
+      'deducibles (no en personas), frecuencias, quien-vende, comisiones, [auto: tipos-uso, tasas-antiguedad, tasa-casco, tarifa-dias] ' +
+      '[personas: edades-parentesco, tablas-edad, proveedores] [patrimonial: descuentos-recargos, condominio y tarifa-dias si hay filas], revision.',
     operationId: 'configuradorRamo',
   })
   async ramo(@Param('cramo', ParseIntPipe) cramo: number) {

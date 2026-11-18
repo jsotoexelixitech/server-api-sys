@@ -4,6 +4,7 @@
 import { avisosTramosAntiguedad, esCasco, validarTramosAntiguedad, type TramoAntiguedad } from './configurador.auto';
 import { SP_UNEN_ARANCEL, duplicadosLlave, duplicadosVigentes, type FilaArancel } from './configurador.comisiones';
 import type { FamiliaRamo } from './configurador.familia';
+import { revisarFase2, type DatosRevisionFase2 } from './configurador-revision-fase2';
 
 export type NivelRevision = 'error' | 'aviso' | 'ok';
 
@@ -38,6 +39,11 @@ export interface DatosRevision {
   cramo: number;
   cplan: string;
   familia: FamiliaRamo;
+  /**
+   * Tabla de cabecera donde se revisa el plan. Por defecto la de la familia (maplanes_per en personas); en un ramo
+   * mixto (p. ej. 25: PAS en maplanes y VIAJE en maplanes_per) el service la toma de donde está el plan.
+   */
+  tablaPlan?: 'maplanes' | 'maplanes_per';
   /** Cabeceras del plan en maplanes / maplanes_per (todas las versiones). */
   cabeceras: Array<{ tabla: 'maplanes' | 'maplanes_per'; iestado: string | null; cproducto: string | null }>;
   /** Otros ramos donde existe el mismo cplan. */
@@ -57,6 +63,8 @@ export interface DatosRevision {
     /** Tramos 'V' de maplantar_ano del plan. */
     tasasAntiguedad: Array<TramoAntiguedad & { ccober: string; ctarifa: string }>;
   };
+  /** Fase 2: edades (personas), descuentos y recargos (patrimonial) e insramo. */
+  fase2?: DatosRevisionFase2;
 }
 
 /**
@@ -72,7 +80,7 @@ export function revisarPlan(d: DatosRevision): RevisionPlan {
   const fin = () => ({ familia: d.familia, listo: !items.some((i) => i.nivel === 'error'), items });
 
   // ── Cabecera del plan ──
-  const tablaEsperada = d.familia === 'personas' ? 'maplanes_per' : 'maplanes';
+  const tablaEsperada = d.tablaPlan ?? (d.familia === 'personas' ? 'maplanes_per' : 'maplanes');
   const propias = d.cabeceras.filter((c) => c.tabla === tablaEsperada);
   if (!d.cabeceras.length) {
     add('PLAN_NO_EXISTE', 'error', `El plan ${plan} no existe en el ramo ${d.cramo} (ni en maplanes ni en maplanes_per).`, 'plan');
@@ -139,7 +147,7 @@ export function revisarPlan(d: DatosRevision): RevisionPlan {
     add('COMISION_DUPLICADA_COBERTURA', 'aviso',
       `maarancel tiene ${x.filas} filas 'V' para la cobertura ${x.codigo} en el ramo ${d.cramo}: ${SP_UNEN_ARANCEL.ccober}.`, 'comisiones');
   }
-  if (d.familia === 'cosas') {
+  if (d.familia === 'patrimonial') {
     for (const x of duplicadosVigentes(vigentes, 'ctarifa', d.coberturas.map((c) => c.ctarifa))) {
       add('COMISION_DUPLICADA_TARIFA', 'aviso',
         `maarancel tiene ${x.filas} filas 'V' para la tarifa ${x.codigo} en el ramo ${d.cramo}: ${SP_UNEN_ARANCEL.ctarifa}.`, 'comisiones');
@@ -162,8 +170,8 @@ export function revisarPlan(d: DatosRevision): RevisionPlan {
   }
 
   // ── Quién vende ──
-  if (d.usuariosPermitidos > 0) add('CANALES_OK', 'ok', `mausuplan tiene ${d.usuariosPermitidos} fila(s) permitida(s) (A).`, 'canales');
-  else add('CANALES_FALTAN', 'error', "mausuplan no tiene ninguna fila con itipouso 'A': nadie puede vender el plan.", 'canales');
+  if (d.usuariosPermitidos > 0) add('CANALES_OK', 'ok', `mausuplan tiene ${d.usuariosPermitidos} fila(s) permitida(s) (A).`, 'quien-vende');
+  else add('CANALES_FALTAN', 'error', "mausuplan no tiene ninguna fila con itipouso 'A': nadie puede vender el plan.", 'quien-vende');
 
   // ── Auto ──
   if (d.familia === 'auto' && d.auto) {
@@ -206,6 +214,8 @@ export function revisarPlan(d: DatosRevision): RevisionPlan {
       }
     }
   }
+
+  if (d.fase2) items.push(...revisarFase2(d.familia, d.fase2));
 
   return fin();
 }

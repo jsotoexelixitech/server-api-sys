@@ -48,7 +48,7 @@ export class ConfiguradorPlanFase1Controller {
     description:
       "Requiere CONFIGURADOR_COMISIONES_ESCRITURA=1 (si no, 403). pcomision 0-100. 409 si ya hay una fila 'V' con la misma llave " +
       "(sin fdesde) o una fila con la misma llave y fecha. `advertencias` (no bloquean) si el ramo queda con más de " +
-      "una fila 'V' por cobertura, o por tarifa en la familia cosas (sin contar el comodín '0').",
+      "una fila 'V' por cobertura, o por tarifa en la familia patrimonial (sin contar el comodín '0').",
     operationId: 'configuradorCrearComisionPlan',
   })
   @ApiBody({ type: ComisionPlanDto })

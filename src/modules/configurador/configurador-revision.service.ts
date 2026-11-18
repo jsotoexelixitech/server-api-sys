@@ -4,6 +4,7 @@ import { MssqlService } from '../../database/mssql.service';
 import { equivalenteRamo18 } from './configurador.auto';
 import { rtrim } from './configurador.comun';
 import { revisarPlan, type DatosRevision, type RevisionPlan } from './configurador.revision';
+import type { DatosRevisionFase2 } from './configurador-revision-fase2';
 import { ConfiguradorService } from './configurador.service';
 
 type Fila = Record<string, unknown>;
@@ -22,8 +23,8 @@ export class ConfiguradorRevisionService {
 
   async revisar(cramo: number, cplan: string): Promise<RevisionPlan> {
     const { familia } = await this.configurador.familiaDeRamo(cramo);
-    const personas = familia === 'personas';
-    const cab = personas ? 'maplanes_per' : 'maplanes';
+    const cab = await this.tablaDelPlan(cramo, cplan, familia === 'personas' ? 'maplanes_per' : 'maplanes');
+    const personas = cab === 'maplanes_per';
     // Coberturas de la versión vigente del plan (la 'V' más reciente; si no hay 'V', la más reciente).
     const coberturas = personas
       ? `SELECT DISTINCT ccobertura AS ccober, ctarifa FROM mapltarifas_per WITH (NOLOCK)
@@ -116,8 +117,60 @@ export class ConfiguradorRevisionService {
             })),
           }
         : undefined,
+      tablaPlan: cab,
+      fase2: await this.datosFase2(cramo, cplan, personas, familia === 'patrimonial'),
     };
     return revisarPlan(datos);
+  }
+
+  /**
+   * Tabla de cabecera del plan: la de la familia; si el plan no está ahí pero sí en la otra (ramo mixto, p. ej. 25 con
+   * PAS en maplanes y VIAJE en maplanes_per), la otra.
+   */
+  private async tablaDelPlan(cramo: number, cplan: string, porFamilia: 'maplanes' | 'maplanes_per'): Promise<'maplanes' | 'maplanes_per'> {
+    const req = this.db.request();
+    req.input('cramo', sql.SmallInt, cramo);
+    req.input('cplan', sql.Char(6), cplan.trim());
+    const r = await req.query(`SELECT
+      CASE WHEN EXISTS (SELECT 1 FROM maplanes WITH (NOLOCK) WHERE cramo = @cramo AND cplan = @cplan) THEN 1 ELSE 0 END AS cosas,
+      CASE WHEN EXISTS (SELECT 1 FROM maplanes_per WITH (NOLOCK) WHERE cramo = @cramo AND cplan = @cplan) THEN 1 ELSE 0 END AS per`);
+    const f = (r.recordset?.[0] ?? {}) as Fila;
+    const enPropia = Number(porFamilia === 'maplanes' ? f.cosas : f.per) === 1;
+    const enOtra = Number(porFamilia === 'maplanes' ? f.per : f.cosas) === 1;
+    if (enPropia || !enOtra) return porFamilia;
+    return porFamilia === 'maplanes' ? 'maplanes_per' : 'maplanes';
+  }
+
+  /** Fase 2: insramo; parentescos de tarifas y edades (plan de personas); % de madisseg/masustac (patrimonial). */
+  private async datosFase2(cramo: number, cplan: string, personas: boolean, patrimonial: boolean): Promise<DatosRevisionFase2> {
+    const req = this.db.request();
+    req.input('cramo', sql.SmallInt, cramo);
+    req.input('cplan', sql.Char(6), cplan.trim());
+    const r = await req.query(`
+      DECLARE @vig DATETIME = ISNULL(
+        (SELECT MAX(fdesde_plan) FROM maplanes_per WITH (NOLOCK) WHERE cramo = @cramo AND cplan = @cplan AND iestado = 'V'),
+        (SELECT MAX(fdesde_plan) FROM maplanes_per WITH (NOLOCK) WHERE cramo = @cramo AND cplan = @cplan));
+      SELECT COUNT(*) AS n FROM insramo WITH (NOLOCK) WHERE cramo = @cramo;
+      SELECT DISTINCT cparen FROM mapltarifas_per WITH (NOLOCK) WHERE cramo = @cramo AND cplan = @cplan AND fdesde_plan = @vig;
+      SELECT DISTINCT cparen FROM mapledades_per WITH (NOLOCK) WHERE cramo = @cramo AND cplan = @cplan AND fdesde_plan = @vig;
+      SELECT 'madisseg' AS tabla, cdisseg AS codigo, RTRIM(xdisseg) AS descripcion, pdisseg AS porcentaje FROM madisseg WITH (NOLOCK) WHERE cramo = @cramo
+      UNION ALL
+      SELECT 'masustac', csustanc, RTRIM(xsustanc), porcenta FROM masustac WITH (NOLOCK) WHERE cramo = @cramo;`);
+    const [insramo, parTarifa, parEdades, porcentajes] = r.recordsets as unknown as Fila[][];
+    return {
+      tieneInsramo: Number(insramo[0]?.n ?? 0) > 0,
+      edades: personas
+        ? { parentescosTarifa: parTarifa.map((f) => Number(f.cparen)), parentescosEdades: parEdades.map((f) => Number(f.cparen)) }
+        : undefined,
+      porcentajes: patrimonial
+        ? porcentajes.map((p) => ({
+            tabla: p.tabla === 'madisseg' ? 'madisseg' : 'masustac',
+            codigo: Number(p.codigo),
+            descripcion: rtrim(p.descripcion),
+            porcentaje: numOrNull(p.porcentaje),
+          }))
+        : undefined,
+    };
   }
 
   private async productoExiste(cproducto: string) {

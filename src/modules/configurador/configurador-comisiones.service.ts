@@ -70,7 +70,7 @@ export class ConfiguradorComisionesService {
   /**
    * Alta de una comisión del plan ('V'). 409 si ya hay una fila 'V' con la misma llave (sin fdesde) o una fila con la
    * misma llave y fecha. Devuelve advertencias (no bloquean) si queda más de una fila 'V' en el ramo para la misma
-   * cobertura (emisión auto/flota une por cramo+ccober) o, en la familia cosas, para la misma tarifa (cotización de
+   * cobertura (emisión auto/flota une por cramo+ccober) o, en la familia patrimonial, para la misma tarifa (cotización de
    * condominio une por cramo+ctarifa). El comodín '0' no cuenta.
    */
   async crear(cramo: number, cplan: string, dto: ComisionPlanDto) {
@@ -180,7 +180,7 @@ export class ConfiguradorComisionesService {
       avisos.push(`El ramo ${cramo} tiene ${d.filas} comisiones 'V' para la cobertura ${d.codigo}: ${SP_UNEN_ARANCEL.ccober}.`);
     }
     const { familia } = await this.configurador.familiaDeRamo(cramo);
-    if (familia === 'cosas') {
+    if (familia === 'patrimonial') {
       for (const d of duplicadosVigentes(filas, 'ctarifa', [dto.ctarifa])) {
         avisos.push(`El ramo ${cramo} tiene ${d.filas} comisiones 'V' para la tarifa ${d.codigo}: ${SP_UNEN_ARANCEL.ctarifa}.`);
       }

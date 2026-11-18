@@ -3,7 +3,7 @@ import * as sql from 'mssql';
 import { MssqlService } from '../../database/mssql.service';
 import { validarPlan, validarProveedorPlan, validarTramos } from './configurador.reglas';
 import { reconstruirPlan, type FilasPlan, type PlanLeido } from './configurador.plan-lectura';
-import { familiaDelRamo, seccionesDeFamilia, type FamiliaRamo } from './configurador.familia';
+import { leerRamo, leerRamos, type RamoConSecciones } from './configurador-ramos';
 import { COLUMNAS_PRODUCTO, filaProducto, filtroProductos, type ProductoSis2000 } from './configurador.productos';
 import { bfradedBd, traeDeducible, validarDeducible, validarEdicionDetalle } from './configurador.deducibles';
 import {
@@ -46,17 +46,6 @@ const COLUMNAS_CATALOGO_PROVEEDOR = ['cclave_num', 'xclave', 'xdescripcion', 'it
 /** ifuente de las altas anteriores a la fase 1 (coberturas, tarifas, tablas de edad); las nuevas usan IFUENTE_SQL. */
 const IFUENTE = 'NEXUS';
 
-/** maramos con los indicadores de familia (tipos de auto, iplanpers, planes de personas). Termina sin WHERE/ORDER. */
-const SQL_RAMOS_FAMILIA = `
-  SELECT r.cramo, LTRIM(RTRIM(r.xdescripcion_l)) AS xdescripcion, r.iplanpers,
-    CASE WHEN EXISTS (SELECT 1 FROM matipos t WITH (NOLOCK) WHERE t.cramo = r.cramo)
-           OR EXISTS (SELECT 1 FROM macattip a WITH (NOLOCK) WHERE a.cramo = r.cramo) THEN 1 ELSE 0 END AS tiene_auto,
-    CASE WHEN EXISTS (SELECT 1 FROM maplanes_per p WITH (NOLOCK) WHERE p.cramo = r.cramo) THEN 1 ELSE 0 END AS tiene_personas
-  FROM maramos r WITH (NOLOCK)`;
-
-const familiaDeFila = (f: Record<string, unknown>) =>
-  familiaDelRamo({ tieneTiposAuto: Number(f.tiene_auto) === 1, iplanpers: f.iplanpers, tienePlanesPersonas: Number(f.tiene_personas) === 1 });
-
 /**
  * Sentencias para agregar n canales al plan en mausuplan (parámetros @cramo, @cplan, @it0..@itN-1; @id y @nuevos
  * declarados antes). Solo INSERT si la fila no está; no hay DELETE ni UPDATE.
@@ -85,28 +74,24 @@ export class ConfiguradorService {
 
   // ── Ramos y productos ──────────────────────────────────────────────────────
 
-  /** Ramos de Sis2000 (maramos) con su familia (auto, personas o cosas) — solo lectura. */
-  async listarRamos() {
-    const r = await this.db.request().query(`${SQL_RAMOS_FAMILIA} ORDER BY r.cramo`);
-    return ((r.recordset ?? []) as Record<string, unknown>[]).map((f) => ({
-      cramo: Number(f.cramo), xdescripcion: rtrim(f.xdescripcion), familia: familiaDeFila(f),
-    }));
+  /**
+   * Ramos de Sis2000 (maramos) clasificados — solo lectura: familia (auto, personas, patrimonial, fianzas), colectivo,
+   * emisionNexus, estado, planes y productos (conteos), avisos y secciones.
+   */
+  async listarRamos(): Promise<RamoConSecciones[]> {
+    return leerRamos(this.db);
   }
 
-  /** Un ramo con su familia y las secciones del configurador que aplican (orden fijo). 404 si no existe. */
-  async obtenerRamo(cramo: number): Promise<{ cramo: number; xdescripcion_l: string; familia: FamiliaRamo; secciones: string[] }> {
-    const familia = await this.familiaDeRamo(cramo);
-    return { ...familia, secciones: seccionesDeFamilia(familia.familia) };
+  /** Un ramo clasificado con las secciones del configurador que aplican (orden fijo). 404 si no existe. */
+  async obtenerRamo(cramo: number): Promise<RamoConSecciones & { xdescripcion_l: string }> {
+    return this.familiaDeRamo(cramo);
   }
 
-  /** Familia de un ramo (también la usan los services de comisiones, auto y revisión). */
-  async familiaDeRamo(cramo: number): Promise<{ cramo: number; xdescripcion_l: string; familia: FamiliaRamo }> {
-    const req = this.db.request();
-    req.input('cramo', sql.SmallInt, cramo);
-    const r = await req.query(`${SQL_RAMOS_FAMILIA} WHERE r.cramo = @cramo`);
-    const f = r.recordset?.[0] as Record<string, unknown> | undefined;
-    if (!f) throw new NotFoundException(`No existe el ramo ${cramo}.`);
-    return { cramo, xdescripcion_l: rtrim(f.xdescripcion), familia: familiaDeFila(f) };
+  /** Familia y clasificación de un ramo (también la usan los services de comisiones, auto, revisión y fase 2). 404 si no existe. */
+  async familiaDeRamo(cramo: number): Promise<RamoConSecciones & { xdescripcion_l: string }> {
+    const ramo = await leerRamo(this.db, cramo);
+    if (!ramo) throw new NotFoundException(`No existe el ramo ${cramo}.`);
+    return { ...ramo, xdescripcion_l: ramo.xdescripcion };
   }
 
   /**

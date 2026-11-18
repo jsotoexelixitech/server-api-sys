@@ -44,7 +44,7 @@ describe('revisarPlan', () => {
 
   it('genéricas: plan no vigente, cplan repetido, producto largo e inexistente, tarifas, reaseguro, comisión, frecuencias y canales', () => {
     const d = base();
-    d.familia = 'cosas';
+    d.familia = 'patrimonial';
     d.auto = undefined;
     d.cabeceras = [{ tabla: 'maplanes', iestado: 'I', cproducto: 'PRODUCTO7' }];
     d.ramosConMismoPlan = [28];
@@ -109,8 +109,8 @@ describe('revisarPlan', () => {
     expect(item?.mensaje).toMatch(/sp_flota_incluir_certificado_nexus/);
   });
 
-  it('familia cosas: tarifa repetida en el ramo es aviso (cotización de condominio)', () => {
-    const d = { ...base(), familia: 'cosas' as const, auto: undefined };
+  it('familia patrimonial: tarifa repetida en el ramo es aviso (cotización de condominio)', () => {
+    const d = { ...base(), familia: 'patrimonial' as const, auto: undefined };
     d.aranceles = [
       { cplan: 'RCV01', ccober: '1', ctarifa: '1', iestado: 'V' },
       { cplan: 'OTRO', ccober: '9', ctarifa: '1', iestado: 'V' },
