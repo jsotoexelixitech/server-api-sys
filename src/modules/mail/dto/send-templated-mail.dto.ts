@@ -9,7 +9,9 @@ import {
   IsObject,
   IsOptional,
   IsString,
+  IsUrl,
   MaxLength,
+  ValidateIf,
   ValidateNested,
 } from 'class-validator';
 import {
@@ -44,21 +46,45 @@ export class BrandedMailFieldDto {
   value!: string;
 }
 
-/** Adjunto opcional (xlsx, csv o pdf); el servicio valida base64, tamaño total (8 MB) y nombre. */
+/**
+ * Adjunto opcional (xlsx, csv o pdf). Dos formas:
+ * - `{ filename, contentType, contentBase64 }`: el archivo va en el body (como siempre);
+ * - `{ filename, url }`: nest-api lo descarga (solo https y hosts de `MAIL_ATTACHMENT_URL_HOSTS`).
+ * El servicio valida el contenido real, el tamaño (15 MB en total) y sanea el nombre.
+ */
 export class MailAttachmentDto {
-  @ApiProperty({ example: 'control-documental-2026-11-09.xlsx' })
+  @ApiProperty({
+    example: 'control-documental-2026-11-09.xlsx',
+    description: 'Nombre del archivo (se sanea; la extensión la pone el tipo real del contenido).',
+  })
   @IsString()
   @MaxLength(150)
   filename!: string;
 
-  @ApiProperty({ description: 'Contenido del archivo en base64.' })
+  @ApiPropertyOptional({
+    description:
+      'URL del archivo; nest-api lo descarga. Solo https y hosts permitidos (MAIL_ATTACHMENT_URL_HOSTS). ' +
+      'Si viene, no hace falta contentBase64.',
+    example: 'https://qaapi.lamundialdeseguros.com/sis2000/poliza/26-1-0000137516/2026/11/',
+  })
+  @IsOptional()
+  @IsUrl({ protocols: ['https', 'http'], require_protocol: true, require_tld: false })
+  @MaxLength(2048)
+  url?: string;
+
+  @ApiPropertyOptional({ description: 'Contenido del archivo en base64 (obligatorio si no viene url).' })
+  @ValidateIf((o: MailAttachmentDto) => !o.url)
   @IsString()
   @MaxLength(MAIL_ATTACHMENT_MAX_BASE64)
-  contentBase64!: string;
+  contentBase64?: string;
 
-  @ApiProperty({ enum: MAIL_ATTACHMENT_CONTENT_TYPES })
+  @ApiPropertyOptional({
+    enum: MAIL_ATTACHMENT_CONTENT_TYPES,
+    description: 'Tipo del archivo: obligatorio con base64; opcional con url (ayuda a reconocer xlsx/csv).',
+  })
+  @ValidateIf((o: MailAttachmentDto) => !o.url || o.contentType != null)
   @IsIn(MAIL_ATTACHMENT_CONTENT_TYPES)
-  contentType!: MailAttachmentType;
+  contentType?: MailAttachmentType;
 }
 
 export class SendTemplatedMailDto {
@@ -125,7 +151,9 @@ export class SendTemplatedMailDto {
 
   @ApiPropertyOptional({
     type: [MailAttachmentDto],
-    description: 'Adjuntos opcionales: xlsx, csv o pdf; máximo 5 y 8 MB en total.',
+    description:
+      'Adjuntos opcionales: xlsx, csv o pdf, en base64 o por url (https, hosts permitidos); máximo 8 y 15 MB en total. ' +
+      'En /mail/send un adjunto inválido o que no se pueda descargar responde 400 sin enviar el correo.',
   })
   @IsOptional()
   @IsArray()

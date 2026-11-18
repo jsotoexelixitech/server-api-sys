@@ -9,6 +9,8 @@ Formato basado en [Keep a Changelog](https://keepachangelog.com/es/1.0.0/).
 
 ### Añadido
 
+- **`MailModule`**: `POST /api/v1/mail/policy-emission` acepta una segunda póliza (`cnpoliza_rcv`, `cnrecibo_rcv`, `fanopol_rcv`, `fmespol_rcv`, `urlpoliza_rcv`, `producto_rcv`; `producto` para la principal), `url_beneficiario_preferencial` y `attachments` (`{ filename, url }` o base64). Con dos pólizas el asunto y el texto nombran ambas y se adjuntan los dos cuadros; con una sola el correo no cambia. Lo que no se pueda adjuntar se omite y se informa en `adjuntos.enviados` / `adjuntos.omitidos` (campo nuevo de la respuesta, modo smtp). Pedido de Auto Casco (emisión con Pérdida Total + RCV).
+- **`MailModule`**: adjuntos por `url` también en `POST /api/v1/mail/send` (400 si no se puede usar). Descarga protegida contra SSRF: solo https, lista blanca `MAIL_ATTACHMENT_URL_HOSTS` (por defecto qaapi/sys2000/qasys2000.lamundialdeseguros.com, `*.lamundialdeseguros.com`, `*.exelixitech.com` + hosts de `POLICY_PDF_URL`/`ARYS_*`), sin IP privada para hosts por comodín, redirecciones revalidadas, `MAIL_ATTACHMENT_URL_TIMEOUT_MS` (30 s), 8 MB por archivo y contenido pdf/xlsx/csv por magic bytes. Los PDFs de `urlpoliza`, recibo, club Arys, etc. pasan por la misma descarga.
 - **`ClientModule`**: `GET /api/v1/client/siniestros/existentes?cnpoliza=&placa=&focurrencia=&soloAbiertos=` (scope `client:read`) — siniestros de Automóvil/RCV registrados en `snsinies` para una póliza y/o placa (placa desde `vhcerti`); por defecto solo abiertos (pendientes, `P`). Solo lectura, sin SP ni DDL.
 - **`ClientModule`**: `GET /api/v1/client/geo/estados` y `GET /api/v1/client/geo/ciudades?cestado=` (scope `client:read`) — catálogos de ubicación de Sis2000 (`maestados`, `maciudades`) para que el portal de Siniestros elija estado y ciudad con sus códigos.
 - **ClientModule**: POST /api/v1/client/siniestros/rechazar (scope siniestros:write) — rechaza un siniestro pendiente en Sis2000 con su motivo de marechazo y libera la reserva (sp_rechaza_siniestro_nexus, **aplicar docs/sql/sp_rechaza_siniestro_nexus.sql**). Idempotente con el mismo motivo.
@@ -24,6 +26,7 @@ Formato basado en [Keep a Changelog](https://keepachangelog.com/es/1.0.0/).
 
 ### Cambiado
 
+- **`MailModule`**: máximo de adjuntos de 5 a 8 y tope total de 8 a 15 MB (≈ 20 MB codificados, bajo el límite usual de 25 MB de los buzones); body JSON de `/mail/send` y `/mail/policy-emission` hasta 22 MB.
 - **`EmissionsModule`**: `POST /api/v1/emissions/automobile/vehicle` — alineado a SysIP Express (`validatePlaca` / `dbo.fn_validar_placa`) con body `xplaca`|`placa`, `fdesde` y `type`.
 - **`EmissionsModule`**: `POST /api/v1/emissions/automobile/serial` — alineado a SysIP Express (`validateSerial` / `dbo.fn_validar_serialCar`) con body `xsercar`|`xserialcarroceria`, `fdesde` y `type`.
 

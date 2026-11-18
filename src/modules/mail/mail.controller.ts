@@ -23,6 +23,10 @@ export class MailController {
     summary: 'Enviar documentos de póliza emitida por correo',
     description:
       'Modo `smtp`: plantilla welcome (SysIP) + adjuntos PDF desde URLs. ' +
+      'Acepta una segunda póliza (`cnpoliza_rcv`, `urlpoliza_rcv`, `producto_rcv`…): el asunto y el texto nombran las dos y se adjuntan ambos cuadros. ' +
+      'También `url_beneficiario_preferencial` y `attachments` (por url https de hosts permitidos o base64). ' +
+      'Máximo 8 adjuntos y 15 MB en total; lo que no se pueda adjuntar se omite sin tumbar el correo y se informa en `adjuntos.omitidos`. ' +
+      'Con una sola póliza el correo es el mismo de siempre. ' +
       'Modo `sisip`: proxy a `URL_API_EMAIL` (sendmail_sisip PHP). ' +
       'Requiere `MAIL_ENABLED=true`.',
     operationId: 'sendPolicyEmissionEmail',
@@ -31,7 +35,16 @@ export class MailController {
   @ApiResponse({
     status: 200,
     schema: {
-      example: { sent: true, mode: 'smtp', messageId: '<...@mail.lamundialdeseguros.com>' },
+      example: {
+        success: true,
+        sent: true,
+        mode: 'smtp',
+        messageId: '<...@mail.lamundialdeseguros.com>',
+        adjuntos: {
+          enviados: ['poliza-18-1-0000137515.pdf', 'poliza-26-1-0000137516.pdf', 'recibo-12345678.pdf'],
+          omitidos: [{ archivo: 'beneficiario-preferencial-18-1-0000137515.pdf', motivo: 'HTTP 404' }],
+        },
+      },
     },
   })
   async sendPolicyEmission(@Body() dto: SendPolicyEmailDto) {
@@ -92,7 +105,8 @@ export class MailController {
     summary: 'Enviar correo con plantilla registrada (reutilizable)',
     description:
       'No acepta HTML libre. `template` elige el diseño (funeral-payment-link, funeral-review-alert, funeral-rejected, branded, expediente-documentos, expediente-codigo, expediente-reporte-diario o expediente-reporte-diario-simple). ' +
-      'Adjuntos opcionales en `attachments` (xlsx, csv o pdf en base64; máx. 5 y 8 MB en total). ' +
+      'Adjuntos opcionales en `attachments` (xlsx, csv o pdf, en base64 o por `url` https de un host permitido; máx. 8 y 15 MB en total; ' +
+      'si uno no es válido o no se puede descargar responde 400 sin enviar). ' +
       'Los endpoints específicos de funerario siguen vigentes.',
     operationId: 'sendTemplatedEmail',
   })

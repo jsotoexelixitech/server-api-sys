@@ -123,6 +123,14 @@ export const envValidationSchema = Joi.object({
   SMTP_REPLY_TO: Joi.string().email().optional(),
   /** Endpoint PHP sendmail_sisip (modo sisip). Mismo contrato que SysIP email_php.service.js */
   URL_API_EMAIL: Joi.string().uri().optional(),
+  /**
+   * Hosts desde donde el correo puede descargar adjuntos por URL (coma o espacio). `host.exacto` o `*.dominio`.
+   * Vacío = qaapi/sys2000/qasys2000.lamundialdeseguros.com, *.lamundialdeseguros.com y *.exelixitech.com.
+   * Siempre se suman los hosts de POLICY_PDF_URL/URLPoliza y ARYS_*_PDF_URL.
+   */
+  MAIL_ATTACHMENT_URL_HOSTS: Joi.string().allow('').optional(),
+  /** Tiempo máximo por adjunto descargado por URL (ms). Por defecto 30000 (igual que la descarga de urlpoliza). */
+  MAIL_ATTACHMENT_URL_TIMEOUT_MS: Joi.number().integer().min(1000).max(120000).optional(),
   /** Login de Sis2000 del ambiente: botón "Ingresar a Sis2000" del correo de alta de intermediarios (sin él, no hay botón). */
   SIS2000_LOGIN_URL: Joi.string().uri().optional(),
 
