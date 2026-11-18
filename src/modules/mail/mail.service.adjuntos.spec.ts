@@ -109,7 +109,7 @@ describe('MailService: adjuntos en /mail/send', () => {
     expect(sanearNombreAdjunto('C:\\tmp\\Reporte ñandú (1).exe', 'pdf')).toBe('Reporte-nandu-1.pdf');
     expect(sanearNombreAdjunto('', 'csv')).toBe('adjunto.csv');
     expect(sanearNombreAdjunto('../../etc/passwd', 'xlsx')).toBe('passwd.xlsx');
-    expect(prepararAdjuntos(undefined)).toEqual({ adjuntos: [] });
-    expect(prepararAdjuntos(new Array(6).fill({}))).toEqual({ error: 'Máximo 5 adjuntos.' });
+    expect(prepararAdjuntos(undefined)).toEqual({ pendientes: [] });
+    expect(prepararAdjuntos(new Array(9).fill({}))).toEqual({ error: 'Máximo 8 adjuntos.' });
   });
 });

@@ -92,11 +92,11 @@ async function bootstrap(): Promise<void> {
     app.getHttpAdapter().getInstance().use(`${publicPaths.prefix}/assets`, staticAssets);
   }
   const httpServerEarly = app.getHttpAdapter().getInstance();
-  // Correo con adjuntos (Excel del control documental): body JSON más grande solo en esta ruta.
+  // Correo con adjuntos (Excel del control documental, PDFs de póliza en base64): body JSON más grande solo en estas rutas.
   // Función con nombre propio: Nest no registra su jsonParser global si ve otra capa «jsonParser».
   const mailSendJson = express.json({ limit: MAIL_SEND_BODY_LIMIT });
   httpServerEarly.use(
-    '/api/v1/mail/send',
+    ['/api/v1/mail/send', '/api/v1/mail/policy-emission'],
     function mailSendBodyParser(req: express.Request, res: express.Response, next: express.NextFunction) {
       mailSendJson(req, res, next);
     },
