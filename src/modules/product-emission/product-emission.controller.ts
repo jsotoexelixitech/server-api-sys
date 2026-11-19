@@ -1,3 +1,4 @@
+import { EmisionUnicaInterceptor } from '../../common/interceptors/emision-unica.interceptor';
 import {
   Body,
   Controller,
@@ -8,6 +9,7 @@ import {
   Post,
   Req,
   Res,
+  UseInterceptors,
 } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import {
@@ -67,6 +69,7 @@ export class ProductEmissionController {
     return this.service.validate(dto);
   }
 
+  @UseInterceptors(EmisionUnicaInterceptor)
   @Post('emit')
   @NestProtected(NEST_AUTH_SCOPES.PRODUCT_EMISSION_WRITE)
   @ApiHeader({ name: 'apikey', required: false })
