@@ -288,12 +288,21 @@ describe('motivos', () => {
     build({ sp: { cotizaciones: [spRow(sp)], coberturas }, complemento: complemento(comp) }).service.getCotizacion(CPROCES, now);
   const codigos = (c: { motivos: { codigo: string }[] }) => c.motivos.map((m) => m.codigo);
 
-  it('CASCO si alguna opción tiene Amplia, Pérdida total o Pérdida parcial', async () => {
+  it('CASCO solo si ninguna opción es Solo RCV (Amplia, Pérdida total o Pérdida parcial en todas)', async () => {
+    for (const codigo of [1, 2, 28]) {
+      const c = await contrato({}, {}, ANTES_DE_VENCER, [cob(1, codigo, 'CASCO', 300, 20000), cob(1, 10, 'RCV', 50, 5000)]);
+      expect(codigos(c)).toEqual(['CASCO']);
+      expect(c.motivos[0].mensaje).toBe('Esta cotización no tiene opción Solo RCV: se emite en Auto Casco.');
+      expect(c.emitible).toBe(false);
+    }
+  });
+
+  it('con una opción Solo RCV y otras con casco es emitible (se emite la Solo RCV)', async () => {
     for (const codigo of [1, 2, 28]) {
       const c = await contrato({}, {}, ANTES_DE_VENCER, [cob(1, 10, 'RCV', 50, 5000), cob(2, codigo, 'CASCO', 300, 20000)]);
-      expect(codigos(c)).toEqual(['CASCO']);
-      expect(c.motivos[0].mensaje).toBe('Esta cotización incluye casco: se emite en Auto Casco.');
-      expect(c.emitible).toBe(false);
+      expect(codigos(c)).toEqual([]);
+      expect(c.emitible).toBe(true);
+      expect(c.opciones.some((o) => o.soloRcv)).toBe(true);
     }
   });
 
@@ -331,7 +340,7 @@ describe('motivos', () => {
   });
 
   it('acumula motivos en orden fijo', async () => {
-    const c = await contrato({ emitida: true, polizaNumero: 'X' }, { cramo: 28, ramoRcvAparte: 26 }, new Date('2027-01-01'), COBERTURAS_CASCO_Y_RCV);
+    const c = await contrato({ emitida: true, polizaNumero: 'X' }, { cramo: 28, ramoRcvAparte: 26 }, new Date('2027-01-01'), [cob(1, 1, 'CASCO', 300, 20000)]);
     expect(codigos(c)).toEqual(['CASCO', 'EMITIDA', 'VENCIDA', 'RAMO', 'RCVA']);
   });
 });

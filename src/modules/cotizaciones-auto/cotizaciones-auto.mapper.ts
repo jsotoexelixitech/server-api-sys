@@ -235,7 +235,8 @@ export function toCotizacionAutoContrato(
 
   const motivos: CotizacionAutoContrato['motivos'] = [];
   const motivo = (codigo: MotivoNoEmitible, mensaje: string) => motivos.push({ codigo, mensaje });
-  if (opciones.some((o) => !o.soloRcv)) motivo('CASCO', 'Esta cotización incluye casco: se emite en Auto Casco.');
+  // Riobueno (19-nov): con una opción «Solo RCV» se emite esa opción; las de casco se ignoran (van por Auto Casco).
+  if (!opciones.some((o) => o.soloRcv)) motivo('CASCO', 'Esta cotización no tiene opción Solo RCV: se emite en Auto Casco.');
   if (emitida) motivo('EMITIDA', poliza ? `La cotización ya fue emitida (póliza ${poliza}).` : 'La cotización ya fue emitida.');
   if (vencida && venceEl) {
     motivo('VENCIDA', `La cotización venció el ${formatDdMmYyyy(venceEl)} (vale ${DIAS_VIGENCIA_COTIZACION} días desde que se creó).`);
