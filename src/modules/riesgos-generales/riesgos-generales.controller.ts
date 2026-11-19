@@ -1,4 +1,5 @@
-import { Body, Controller, Get, HttpCode, HttpStatus, Post, Query, Req } from '@nestjs/common';
+import { EmisionUnicaInterceptor } from '../../common/interceptors/emision-unica.interceptor';
+import { Body, Controller, Get, HttpCode, HttpStatus, Post, Query, Req, UseInterceptors } from '@nestjs/common';
 import { ApiBody, ApiHeader, ApiOperation, ApiTags } from '@nestjs/swagger';
 import { RiesgosGeneralesService } from './riesgos-generales.service';
 import { CoberturasRamoDto, CotizarCoberturasDto, EmitirCoberturasDto, TarifaPlanDto } from './dto/riesgos-generales.dto';
@@ -92,6 +93,7 @@ export class RiesgosGeneralesController {
     return { status: true, data: await this.service.cotizar(dto) };
   }
 
+  @UseInterceptors(EmisionUnicaInterceptor)
   @Post('emision')
   @HttpCode(HttpStatus.OK)
   @NestProtected(NEST_AUTH_SCOPES.EMISSIONS_RIESGOS_GENERALES)
