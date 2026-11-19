@@ -1,4 +1,5 @@
-import { Body, Controller, HttpCode, HttpStatus, Post } from '@nestjs/common';
+import { EmisionUnicaInterceptor } from '../../common/interceptors/emision-unica.interceptor';
+import { Body, Controller, HttpCode, HttpStatus, Post, UseInterceptors } from '@nestjs/common';
 import {
   ApiBody,
   ApiHeader,
@@ -259,6 +260,7 @@ export class EmissionsController {
     return { status: result.status, result };
   }
 
+  @UseInterceptors(EmisionUnicaInterceptor)
   @Post('external/createEmissionAuto')
   @HttpCode(HttpStatus.OK)
   @NestProtected(NEST_AUTH_SCOPES.EMISSIONS_AUTO)

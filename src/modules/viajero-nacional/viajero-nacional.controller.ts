@@ -1,4 +1,5 @@
-import { Body, Controller, HttpCode, HttpStatus, Post } from '@nestjs/common';
+import { EmisionUnicaInterceptor } from '../../common/interceptors/emision-unica.interceptor';
+import { Body, Controller, HttpCode, HttpStatus, Post, UseInterceptors } from '@nestjs/common';
 import { ApiBody, ApiHeader, ApiOperation, ApiTags } from '@nestjs/swagger';
 import { Api401, ApiCommonErrors } from '../../common/swagger/api-error-responses';
 import { APIKEY_HEADER } from '../../common/swagger/api-docs.constants';
@@ -13,6 +14,7 @@ import { ViajeroNacionalService } from './viajero-nacional.service';
 export class ViajeroNacionalController {
   constructor(private readonly svc: ViajeroNacionalService) {}
 
+  @UseInterceptors(EmisionUnicaInterceptor)
   @Post('emision')
   @HttpCode(HttpStatus.OK)
   @NestProtected(NEST_AUTH_SCOPES.EMISSIONS_PERSON)

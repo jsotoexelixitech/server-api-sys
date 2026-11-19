@@ -1,4 +1,5 @@
-import { Body, Controller, HttpCode, HttpStatus, Post } from '@nestjs/common';
+import { EmisionUnicaInterceptor } from '../../common/interceptors/emision-unica.interceptor';
+import { Body, Controller, HttpCode, HttpStatus, Post, UseInterceptors } from '@nestjs/common';
 import {
   ApiBody,
   ApiHeader,
@@ -85,6 +86,7 @@ export class ExternalController {
     return { status: result.status, result };
   }
 
+  @UseInterceptors(EmisionUnicaInterceptor)
   @Post('createEmissionPerson')
   @HttpCode(HttpStatus.OK)
   @NestProtected(NEST_AUTH_SCOPES.EMISSIONS_PERSON)

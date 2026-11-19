@@ -1,4 +1,5 @@
-import { Body, Controller, Get, HttpCode, HttpStatus, Post, Put, Query } from '@nestjs/common';
+import { EmisionUnicaInterceptor } from '../../common/interceptors/emision-unica.interceptor';
+import { Body, Controller, Get, HttpCode, HttpStatus, Post, Put, Query, UseInterceptors } from '@nestjs/common';
 import { ApiBody, ApiHeader, ApiOperation, ApiResponse, ApiTags } from '@nestjs/swagger';
 import { CondominioService } from './condominio.service';
 import { GetPlanesCondominioDto } from './dto/get-planes-condominio.dto';
@@ -242,6 +243,7 @@ export class CondominioController {
     return { status: true, data };
   }
 
+  @UseInterceptors(EmisionUnicaInterceptor)
   @Post('emision')
   @HttpCode(HttpStatus.OK)
   @NestProtected(NEST_AUTH_SCOPES.EMISSIONS_CONDOMINIO)
