@@ -22,7 +22,7 @@ export class RechazarSiniestroDto {
 
   @ApiProperty({ example: 15504158, description: 'Usuario de Sis2000 que rechaza: el de la sesión (personal/productor) o la cédula del cliente. Obligatorio. Nunca 999 (reservado a RMS).' })
   @IsInt({ message: 'cusuario es obligatorio y debe ser un número entero' })
-  @Min(1)
+  @Min(1, { message: 'cusuario debe ser mayor que 0' })
   @NotEquals(999, { message: 'cusuario 999 está reservado a RMS' })
   cusuario: number;
 }

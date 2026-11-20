@@ -28,7 +28,7 @@ export class RegistrarSiniestroDto {
 
   @ApiProperty({ example: 18126, description: 'Causa del siniestro (macausasin)' })
   @IsInt()
-  @Min(1)
+  @Min(1, { message: 'ccausa debe ser mayor que 0' })
   ccausa: number;
 
   @ApiPropertyOptional({
@@ -49,12 +49,12 @@ export class RegistrarSiniestroDto {
   @ApiPropertyOptional({ example: 10, description: 'Cobertura afectada (ccobertura). La reserva se carga solo en ella; si falta, en la de menor código que cubra la causa.' })
   @IsOptional()
   @IsInt()
-  @Min(1)
+  @Min(1, { message: 'ccobertura debe ser mayor que 0' })
   ccobertura?: number;
 
   @ApiProperty({ example: 15504158, description: 'Usuario de Sis2000 que registra: el de la sesión (personal/productor) o la cédula del cliente. Obligatorio. Nunca 999 (reservado a RMS).' })
   @IsInt({ message: 'cusuario es obligatorio y debe ser un número entero' })
-  @Min(1)
+  @Min(1, { message: 'cusuario debe ser mayor que 0' })
   @NotEquals(999, { message: 'cusuario 999 está reservado a RMS' })
   cusuario: number;
 
