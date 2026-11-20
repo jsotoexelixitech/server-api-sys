@@ -126,3 +126,14 @@ describe('SiniestrosRegistroService.rechazar', () => {
     expect(b.inputs).not.toHaveProperty('__sp');
   });
 });
+
+describe('DTO de siniestros: mensajes en español', () => {
+  it('sin cusuario: todos los mensajes en español', async () => {
+    const { plainToInstance } = await import('class-transformer');
+    const { validate } = await import('class-validator');
+    const errores = await validate(plainToInstance(RegistrarSiniestroDto, { cnpoliza: '18-1-1', placa: 'AB123CD', focurrencia: hoy, ccausa: 0 }));
+    const msgs = errores.flatMap((e) => Object.values(e.constraints ?? {}));
+    expect(msgs).toEqual(expect.arrayContaining(['cusuario es obligatorio y debe ser un número entero', 'cusuario debe ser mayor que 0', 'ccausa debe ser mayor que 0']));
+    expect(msgs.filter((m) => /must|should/.test(m))).toEqual([]);
+  });
+});
