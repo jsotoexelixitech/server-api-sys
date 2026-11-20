@@ -705,9 +705,11 @@ export class EmissionsService {
 
     const placaReq = this.db.request();
     placaReq.input('xplaca', T.VarChar(15), xplaca);
+    // vhcerti sin índice por placa ni serial: se lee sin bloqueos para no esperar certificados sin confirmar de otro
+    // proceso (también ve los de una emisión en curso, que es lo prudente para detectar la placa repetida).
     const placaResult = await placaReq.query(`
       SELECT CASE WHEN EXISTS (
-        SELECT 1 FROM vhcerti
+        SELECT 1 FROM vhcerti WITH (NOLOCK)
         WHERE xplaca = @xplaca AND istatcer = 'V' AND fhasta >= GETDATE()
       ) THEN 1 ELSE 0 END AS existsPlaca
     `);
@@ -722,7 +724,7 @@ export class EmissionsService {
     serialReq.input('xsercar', T.VarChar(60), xsercar);
     const serialResult = await serialReq.query(`
       SELECT CASE WHEN EXISTS (
-        SELECT 1 FROM vhcerti
+        SELECT 1 FROM vhcerti WITH (NOLOCK)
         WHERE xsercar = @xsercar AND istatcer = 'V' AND fhasta >= GETDATE()
       ) THEN 1 ELSE 0 END AS existsSerial
     `);
@@ -1148,7 +1150,7 @@ export class EmissionsService {
     const polReq = this.db.request();
     polReq.input('cnpoliza', T.NVarChar(30), cnpoliza);
     const polResult = await polReq.query(`
-      SELECT TOP 1 fanopol, fmespol, cpoliza
+      SELECT TOP 1 fanopol, fmespol, CONVERT(VARCHAR(20), cpoliza) AS cpoliza
       FROM adpoliza
       WHERE cnpoliza = @cnpoliza
       ORDER BY fingreso DESC
@@ -1161,21 +1163,25 @@ export class EmissionsService {
 
     const fano = fanopol ?? Number(polRow['fanopol']);
     const fmes = fmespol ?? Number(polRow['fmespol']);
-    const cpoliza = polRow['cpoliza'];
+    // cpoliza como texto: NUMERIC(19) pasa de 2^53 y como number de JS se redondea (1800000000000234032 → …234000).
+    const cpoliza = String(polRow['cpoliza'] ?? '').trim() || null;
 
     const upd = this.db.request();
     upd.input('rif', T.Numeric(13, 0), rif);
     upd.input('cnpoliza', T.NVarChar(30), cnpoliza);
     upd.input('fanopol', T.SmallInt, fano);
     upd.input('fmespol', T.TinyInt, fmes);
-    upd.input('cpoliza', T.Numeric(19, 0), cpoliza);
+    upd.input('cpoliza', T.VarChar(20), cpoliza);
+    // vhcerti por cpoliza (su clave) y no solo por cnpoliza: sin índice por cnpoliza, el UPDATE recorría toda la
+    // tabla con bloqueos y esperaba a cualquier certificado sin confirmar de otro proceso (bloqueo 20-nov-2026).
     await upd.query(`
+      DECLARE @cpoliza_num NUMERIC(19, 0) = TRY_CONVERT(NUMERIC(19, 0), @cpoliza);
       UPDATE adpoliza SET cbeneficiario = @rif
       WHERE cnpoliza = @cnpoliza AND fanopol = @fanopol AND fmespol = @fmespol;
       UPDATE adrecibos SET cbeneficiario = @rif
       WHERE cnpoliza = @cnpoliza AND fanopol = @fanopol AND fmespol = @fmespol;
-      UPDATE vhofcert SET cbeneficiario = @rif WHERE cpoliza = @cpoliza;
-      UPDATE vhcerti SET cbeneficiario = @rif WHERE cnpoliza = @cnpoliza;
+      UPDATE vhofcert SET cbeneficiario = @rif WHERE cpoliza = @cpoliza_num;
+      UPDATE vhcerti SET cbeneficiario = @rif WHERE cpoliza = @cpoliza_num AND cnpoliza = @cnpoliza;
     `);
 
     this.logger.log(`applyBeneficiario OK cnpoliza=${cnpoliza} rif=${rif}`);
