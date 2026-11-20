@@ -1,8 +1,8 @@
-import { BadRequestException, InternalServerErrorException, ServiceUnavailableException } from '@nestjs/common';
+import { BadRequestException, InternalServerErrorException } from '@nestjs/common';
 import { RegistrarSiniestroDto } from './dto/registrar-siniestro.dto';
 import { SiniestrosRegistroService } from './siniestros-registro.service';
 
-function crear(salida: Record<string, unknown> | Error, cusuario: unknown = 4321) {
+function crear(salida: Record<string, unknown> | Error) {
   const inputs: Record<string, unknown> = {};
   const db: any = {
     types: {
@@ -19,13 +19,12 @@ function crear(salida: Record<string, unknown> | Error, cusuario: unknown = 4321
       }),
     }),
   };
-  const config: any = { get: () => cusuario };
-  return { service: new SiniestrosRegistroService(db, config), inputs };
+  return { service: new SiniestrosRegistroService(db), inputs };
 }
 
 const hoy = new Date().toISOString().slice(0, 10);
 const dto = (extra: Partial<RegistrarSiniestroDto> = {}): RegistrarSiniestroDto => ({
-  cnpoliza: '18-1-1130480727', placa: 'ab123cd', focurrencia: hoy, ccausa: 18126, ...extra,
+  cnpoliza: '18-1-1130480727', placa: 'ab123cd', focurrencia: hoy, ccausa: 18126, cusuario: 4321, ...extra,
 });
 const ok = { csinies: 1800000000002301, cnsinies: '18-00000002288                ', bexistia: false, cerror: 0, msj: 'Siniestro registrado exitosamente.' };
 
@@ -50,23 +49,16 @@ describe('SiniestrosRegistroService (D14: snsinies es el registro)', () => {
     for (const k of ['mmonto', 'ctipoperdida', 'cpais', 'cestado', 'cciudad', 'xobserva']) expect(inputs).not.toHaveProperty(k);
   });
 
-  it('el usuario de la sesión (o la cédula del cliente) tiene prioridad sobre el de servicio', async () => {
-    const a = crear(ok, 4321);
-    await a.service.registrar(dto({ cusuario: 15504158 }));
-    expect(a.inputs.cusuario).toBe(15504158);
-    const b = crear(ok, 4321);
-    await b.service.registrar(dto());
-    expect(b.inputs.cusuario).toBe(4321);
+  it('registra con el usuario de la sesión (o la cédula del cliente)', async () => {
+    const { service, inputs } = crear(ok);
+    await service.registrar(dto({ cusuario: 15504158 }));
+    expect(inputs.cusuario).toBe(15504158);
   });
 
-  it('sin cusuario del solicitante ni de servicio no registra; el 999 tampoco', async () => {
-    const a = crear(ok, null);
-    await a.service.registrar(dto({ cusuario: 777 })); // el de la sesión basta aunque no haya usuario de servicio
-    expect(a.inputs.cusuario).toBe(777);
-    const b = crear(ok, null);
-    await expect(b.service.registrar(dto())).rejects.toBeInstanceOf(ServiceUnavailableException);
-    const c = crear(ok, 4321);
-    await expect(c.service.registrar(dto({ cusuario: 999 }))).rejects.toBeInstanceOf(ServiceUnavailableException);
+  it.each([undefined, null, 0, 999, 'abc'])('cusuario es obligatorio (%p): 400 y no llama a SIS2000', async (u) => {
+    const { service, inputs } = crear(ok);
+    await expect(service.registrar(dto({ cusuario: u as any }))).rejects.toBeInstanceOf(BadRequestException);
+    expect(inputs).not.toHaveProperty('__sp');
   });
 
   it('la cobertura declarada se envía al SP (la reserva va solo en ella)', async () => {
@@ -94,12 +86,6 @@ describe('SiniestrosRegistroService (D14: snsinies es el registro)', () => {
     expect(JSON.stringify(err.getResponse())).not.toContain('Login failed');
   });
 
-  it.each([null, 0, 999, 'abc'])('sin SINIESTROS_CUSUARIO válido (%p) no registra: 503', async (u) => {
-    const { service, inputs } = crear(ok, u);
-    await expect(service.registrar(dto())).rejects.toBeInstanceOf(ServiceUnavailableException);
-    expect(inputs).not.toHaveProperty('__sp');
-  });
-
   it('rechaza fechas incoherentes antes de llamar a SIS2000', async () => {
     const { service, inputs } = crear(ok);
     await expect(service.registrar(dto({ focurrencia: hoy, fnotificacion: '2020-01-01' }))).rejects.toBeInstanceOf(BadRequestException);
@@ -109,7 +95,7 @@ describe('SiniestrosRegistroService (D14: snsinies es el registro)', () => {
 });
 
 describe('SiniestrosRegistroService.rechazar', () => {
-  const dtoR = { csinies: '18000000002301', motivo: 'FALTA_DE_RECAUDOS' as const };
+  const dtoR = { csinies: '18000000002301', motivo: 'FALTA_DE_RECAUDOS' as const, cusuario: 4321 };
 
   it('rechaza con el motivo de marechazo y el usuario de la sesión', async () => {
     const { service, inputs } = crear({ cerror: 0, msj: 'Siniestro rechazado.' });
@@ -130,13 +116,13 @@ describe('SiniestrosRegistroService.rechazar', () => {
     expect(err.message).toContain('pendientes');
   });
 
-  it('error de BD: 500 sin detalles; sin usuario válido: 503 y no llama a SIS2000', async () => {
+  it('error de BD: 500 sin detalles; sin cusuario: 400 y no llama a SIS2000', async () => {
     const a = crear(new Error('Login failed for user x'));
     const err = await a.service.rechazar(dtoR).catch((e) => e);
     expect(err).toBeInstanceOf(InternalServerErrorException);
     expect(JSON.stringify(err.getResponse())).not.toContain('Login failed');
-    const b = crear({ cerror: 0, msj: '' }, null);
-    await expect(b.service.rechazar(dtoR)).rejects.toBeInstanceOf(ServiceUnavailableException);
+    const b = crear({ cerror: 0, msj: '' });
+    await expect(b.service.rechazar({ ...dtoR, cusuario: undefined as any })).rejects.toBeInstanceOf(BadRequestException);
     expect(b.inputs).not.toHaveProperty('__sp');
   });
 });

@@ -7,6 +7,10 @@ Formato basado en [Keep a Changelog](https://keepachangelog.com/es/1.0.0/).
 
 ## [Unreleased]
 
+### Cambiado
+
+- **Siniestros**: `cusuario` es **obligatorio** en `POST /api/v1/client/siniestros` y `POST /api/v1/client/siniestros/rechazar` (400 si falta o es 999). Se elimina el respaldo `SINIESTROS_CUSUARIO`: todo siniestro queda con el usuario real de quien lo declara o rechaza. Antes, sin ninguno de los dos, respondía 503.
+
 ### Añadido
 
 - **`MailModule`**: `POST /api/v1/mail/policy-emission` acepta una segunda póliza (`cnpoliza_rcv`, `cnrecibo_rcv`, `fanopol_rcv`, `fmespol_rcv`, `urlpoliza_rcv`, `producto_rcv`; `producto` para la principal), `url_beneficiario_preferencial` y `attachments` (`{ filename, url }` o base64). Con dos pólizas el asunto y el texto nombran ambas y se adjuntan los dos cuadros; con una sola el correo no cambia. Lo que no se pueda adjuntar se omite y se informa en `adjuntos.enviados` / `adjuntos.omitidos` (campo nuevo de la respuesta, modo smtp). Pedido de Auto Casco (emisión con Pérdida Total + RCV).

@@ -1,5 +1,5 @@
-import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
-import { IsIn, IsInt, IsOptional, Matches, Min, NotEquals } from 'class-validator';
+import { ApiProperty } from '@nestjs/swagger';
+import { IsIn, IsInt, Matches, Min, NotEquals } from 'class-validator';
 
 /** Motivos de rechazo de SIS2000 (`marechazo`). */
 export const MOTIVOS_RECHAZO = {
@@ -20,10 +20,9 @@ export class RechazarSiniestroDto {
   @IsIn(Object.keys(MOTIVOS_RECHAZO))
   motivo: keyof typeof MOTIVOS_RECHAZO;
 
-  @ApiPropertyOptional({ example: 15504158, description: 'Usuario de Sis2000 que rechaza (el de la sesión). Si falta se usa SINIESTROS_CUSUARIO. Nunca 999.' })
-  @IsOptional()
-  @IsInt()
+  @ApiProperty({ example: 15504158, description: 'Usuario de Sis2000 que rechaza: el de la sesión (personal/productor) o la cédula del cliente. Obligatorio. Nunca 999 (reservado a RMS).' })
+  @IsInt({ message: 'cusuario es obligatorio y debe ser un número entero' })
   @Min(1)
   @NotEquals(999, { message: 'cusuario 999 está reservado a RMS' })
-  cusuario?: number;
+  cusuario: number;
 }
