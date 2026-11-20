@@ -2006,7 +2006,12 @@ export class PersonasService {
         // Observaciones de la póliza (adpoliza.xobserva). No bloquea: si el SP falla la emisión sigue OK.
         const observacionesTexto = normalizarObservaciones(body.observaciones);
         const observaciones = observacionesTexto
-          ? { guardada: await guardarObservacionPoliza(this.db, this.logger, cnpoliza, observacionesTexto) }
+          ? {
+              guardada: await guardarObservacionPoliza(this.db, this.logger, cnpoliza, observacionesTexto, {
+                origen: 'emision_personas',
+                cusuario: body.cusuario,
+              }),
+            }
           : undefined;
 
         this.logger.log(`createEmissionPerson: emitida OK cnpoliza=${cnpoliza}`);

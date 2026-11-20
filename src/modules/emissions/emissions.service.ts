@@ -1968,7 +1968,10 @@ export class EmissionsService {
     if (observacionesTexto) {
       observacionesGuardada = true;
       for (const poliza of polizaRcv ? [cnpoliza, polizaRcv.cnpoliza] : [cnpoliza]) {
-        const ok = await guardarObservacionPoliza(this.db, this.logger, poliza, observacionesTexto);
+        const ok = await guardarObservacionPoliza(this.db, this.logger, poliza, observacionesTexto, {
+          origen: 'emision_rcv',
+          cusuario: this.pick(b, 'cusuario'),
+        });
         observacionesGuardada = observacionesGuardada && ok;
       }
     }

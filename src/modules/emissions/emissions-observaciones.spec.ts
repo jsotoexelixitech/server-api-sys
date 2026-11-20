@@ -85,7 +85,18 @@ describe('Observaciones — emisión RCV', () => {
     expect(res.cnpoliza).toBe(plan.cnpoliza);
     expect(res).toMatchObject({ observaciones: { guardada: true } });
     expect(obsCalls(calls)).toEqual([
-      { sp: SP_OBS, inputs: { cnpoliza: plan.cnpoliza, xobserva: 'Rayón puerta trasera' } },
+      {
+        sp: SP_OBS,
+        inputs: {
+          cnpoliza: plan.cnpoliza,
+          xobserva: 'Rayón puerta trasera',
+          cusuario: null,
+          ifuente: 'NEXUS_API',
+          xorigen: 'emision_rcv',
+          xcanal: null,
+          xapikey_id: null,
+        },
+      },
     ]);
     expect(calls.findIndex((c) => c.sp === SP_OBS)).toBeGreaterThan(calls.findIndex((c) => c.sp === SP_PRE));
   });

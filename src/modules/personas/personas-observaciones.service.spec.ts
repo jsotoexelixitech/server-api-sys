@@ -78,7 +78,12 @@ describe('Observaciones — emisión de personas', () => {
     expect(res).toMatchObject({ observaciones: { guardada: true } });
     const obs = calls.filter((c) => c.sp === SP_OBS);
     expect(obs).toHaveLength(1);
-    expect(obs[0].inputs).toEqual({ cnpoliza: '1-1-1', xobserva: 'Entregar por correo' });
+    expect(obs[0].inputs).toMatchObject({
+      cnpoliza: '1-1-1',
+      xobserva: 'Entregar por correo',
+      ifuente: 'NEXUS_API',
+      xorigen: 'emision_personas',
+    });
     // Va después de la emisión.
     expect(calls.findIndex((c) => c.sp === SP_OBS)).toBe(calls.length - 1);
   });
