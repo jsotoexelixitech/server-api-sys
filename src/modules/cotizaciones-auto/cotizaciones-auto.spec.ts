@@ -143,7 +143,7 @@ const complemento = (extra: Partial<CotizacionAutoComplemento> = {}): Cotizacion
   xcliente: 'JUAN PEREZ',
   cproductor: 80080,
   xproductor: 'PRODUCTOR DE EJEMPLO',
-  cpoliza: 0,
+  cpoliza: null,
   cnpoliza: null,
   xtipo: 'PARTICULARES',
   xuso: 'PARTICULAR',
@@ -307,13 +307,13 @@ describe('motivos', () => {
   });
 
   it('EMITIDA con su póliza y la opción emitida', async () => {
-    const c = await contrato({ emitida: true, polizaNumero: '1-18-0001234', opcionEmitida: 1 }, { cpoliza: 99 });
+    const c = await contrato({ emitida: true, polizaNumero: '1-18-0001234', opcionEmitida: 1 }, { cpoliza: '99' });
     expect(codigos(c)).toEqual(['EMITIDA']);
     expect(c).toMatchObject({ emitida: true, poliza: '1-18-0001234', opcionEmitida: 1, emitible: false });
   });
 
   it('EMITIDA también si sopoliza ya tiene cpoliza', async () => {
-    const c = await contrato({}, { cpoliza: 99, cnpoliza: '1-18-0009999' });
+    const c = await contrato({}, { cpoliza: '99', cnpoliza: '1-18-0009999' });
     expect(codigos(c)).toEqual(['EMITIDA']);
     expect(c.poliza).toBe('1-18-0009999');
     expect(c.opcionEmitida).toBe(1);
