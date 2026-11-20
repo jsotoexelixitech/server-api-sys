@@ -76,7 +76,8 @@ export interface CotizacionAutoComplemento {
   xcliente: string | null;
   cproductor: number | null;
   xproductor: string | null;
-  cpoliza: number | null;
+  /** Texto: NUMERIC(19) se redondea como number de JS. null = cotización sin emitir (sopoliza.cpoliza 0). */
+  cpoliza: string | null;
   cnpoliza: string | null;
   xtipo: string | null;
   xuso: string | null;

@@ -29,6 +29,7 @@ import {
   parseMprimaEsperada,
 } from './cotizacion-emision';
 import { EmissionRow, splitEmissionRows } from './emission-rcv-aparte';
+import { cpolizaTexto } from '../../common/helpers/cpoliza';
 import { SearchProprietaryDto } from './dto/search-proprietary.dto';
 import { SearchVehicleByPlateDto, SearchVehicleBySerialDto } from './dto/search-vehicle.dto';
 import { ArysService } from '../arys/arys.service';
@@ -217,10 +218,14 @@ export class EmissionsService {
     };
   }
 
-  /** cpoliza + casegurado para activate tarjeta RCV post-emisión. */
+  /**
+   * cpoliza + casegurado para activate tarjeta RCV post-emisión.
+   * cpoliza va como texto: es NUMERIC(19) y la mayoría de las pólizas de 2026 pasan de 2^53, así que como
+   * number de JS se redondea (1800000000000234032 → 1800000000000234000) y apunta a otra póliza.
+   */
   private async lookupPolicyTarjetaKeys(
     cnpoliza: string,
-  ): Promise<{ cpoliza?: number; casegurado?: number }> {
+  ): Promise<{ cpoliza?: string; casegurado?: number }> {
     const poliza = String(cnpoliza ?? '').trim();
     if (!poliza) return {};
 
@@ -228,7 +233,7 @@ export class EmissionsService {
     const req = this.db.request();
     req.input('cnpoliza', T.NVarChar(30), poliza);
     const result = await req.query(`
-      SELECT TOP 1 p.cpoliza, p.casegurado
+      SELECT TOP 1 CONVERT(VARCHAR(20), p.cpoliza) AS cpoliza, p.casegurado
       FROM adpoliza p
       WHERE RTRIM(p.cnpoliza) = RTRIM(@cnpoliza)
       ORDER BY p.fingreso DESC
@@ -236,10 +241,10 @@ export class EmissionsService {
     const row = result.recordset?.[0] as Record<string, unknown> | undefined;
     if (!row) return {};
 
-    const cpoliza = Number(row['cpoliza']);
+    const cpoliza = cpolizaTexto(row['cpoliza']);
     const casegurado = Number(row['casegurado']);
     return {
-      ...(Number.isFinite(cpoliza) && cpoliza > 0 ? { cpoliza } : {}),
+      ...(cpoliza ? { cpoliza } : {}),
       ...(Number.isFinite(casegurado) && casegurado > 0 ? { casegurado } : {}),
     };
   }
@@ -1259,8 +1264,9 @@ export class EmissionsService {
 
     const polReq = this.db.request();
     polReq.input('cnpoliza', T.NVarChar(30), cnpoliza);
+    // cpoliza como texto: NUMERIC(19) pasa de 2^53 y como number de JS se redondea (ver lookupPolicyTarjetaKeys).
     const polResult = await polReq.query(`
-      SELECT TOP 1 fanopol, fmespol, cpoliza
+      SELECT TOP 1 fanopol, fmespol, CONVERT(VARCHAR(20), cpoliza) AS cpoliza
       FROM adpoliza
       WHERE cnpoliza = @cnpoliza
       ORDER BY fingreso DESC
@@ -1273,20 +1279,21 @@ export class EmissionsService {
 
     const fano = fanopol ?? Number(polRow['fanopol']);
     const fmes = fmespol ?? Number(polRow['fmespol']);
-    const cpoliza = polRow['cpoliza'];
+    const cpoliza = cpolizaTexto(polRow['cpoliza']);
 
     const upd = this.db.request();
     upd.input('rif', T.Numeric(13, 0), rif);
     upd.input('cnpoliza', T.NVarChar(30), cnpoliza);
     upd.input('fanopol', T.SmallInt, fano);
     upd.input('fmespol', T.TinyInt, fmes);
-    upd.input('cpoliza', T.Numeric(19, 0), cpoliza);
+    // Texto y conversión en SQL: un parámetro Numeric(19) también pasa por number de JS y se redondea.
+    upd.input('cpoliza', T.VarChar(20), cpoliza);
     await upd.query(`
       UPDATE adpoliza SET cbeneficiario = @rif
       WHERE cnpoliza = @cnpoliza AND fanopol = @fanopol AND fmespol = @fmespol;
       UPDATE adrecibos SET cbeneficiario = @rif
       WHERE cnpoliza = @cnpoliza AND fanopol = @fanopol AND fmespol = @fmespol;
-      UPDATE vhofcert SET cbeneficiario = @rif WHERE cpoliza = @cpoliza;
+      UPDATE vhofcert SET cbeneficiario = @rif WHERE cpoliza = TRY_CONVERT(NUMERIC(19, 0), @cpoliza);
       UPDATE vhcerti SET cbeneficiario = @rif WHERE cnpoliza = @cnpoliza;
     `);
 

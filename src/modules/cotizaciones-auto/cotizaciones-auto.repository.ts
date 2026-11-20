@@ -1,4 +1,5 @@
 import { Injectable } from '@nestjs/common';
+import { cpolizaTexto } from '../../common/helpers/cpoliza';
 import { MssqlService } from '../../database/mssql.service';
 import type { CotizacionAutoComplemento } from './cotizaciones-auto.types';
 
@@ -22,7 +23,7 @@ SELECT TOP (1)
   LTRIM(RTRIM(c.xcliente))           AS xcliente,
   p.cproductor,
   LTRIM(RTRIM(m.xproductor))         AS xproductor,
-  p.cpoliza,
+  CONVERT(VARCHAR(20), p.cpoliza) AS cpoliza,
   NULLIF(LTRIM(RTRIM(p.cnpoliza)), '') AS cnpoliza,
   t.xtipo,
   u.xuso,
@@ -113,7 +114,7 @@ export class CotizacionesAutoRepository {
       xcliente: textOrNull(row['xcliente']),
       cproductor: numberOrNull(row['cproductor']),
       xproductor: textOrNull(row['xproductor']),
-      cpoliza: numberOrNull(row['cpoliza']),
+      cpoliza: cpolizaTexto(row['cpoliza']) ?? null,
       cnpoliza: textOrNull(row['cnpoliza']),
       xtipo: textOrNull(row['xtipo']),
       xuso: textOrNull(row['xuso']),

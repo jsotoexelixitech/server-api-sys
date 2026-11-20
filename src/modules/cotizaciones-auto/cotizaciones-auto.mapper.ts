@@ -219,9 +219,9 @@ export function toCotizacionAutoContrato(
   const hasta = toYmd(source.vigencia?.hasta);
   const opciones = opcionesDeFuente(source).map(toOpcionContrato).sort((a, b) => a.opcion - b.opcion);
 
-  const emitida = Boolean(source.emitida) || (complemento.cpoliza ?? 0) !== 0;
+  const emitida = Boolean(source.emitida) || complemento.cpoliza != null;
   const poliza = emitida
-    ? toText(source.poliza?.numero) ?? complemento.cnpoliza ?? toText(complemento.cpoliza)
+    ? toText(source.poliza?.numero) ?? complemento.cnpoliza ?? complemento.cpoliza
     : null;
   const opcionEmitidaFuente = toNullableNumber(source.opcionEmitida);
   const opcionEmitida = !emitida
