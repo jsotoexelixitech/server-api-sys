@@ -800,9 +800,11 @@ export class EmissionsService {
 
     const placaReq = this.db.request();
     placaReq.input('xplaca', T.VarChar(15), xplaca);
+    // vhcerti sin índice por placa ni serial: se lee sin bloqueos para no esperar certificados sin confirmar de otro
+    // proceso (también ve los de una emisión en curso, que es lo prudente para detectar la placa repetida).
     const placaResult = await placaReq.query(`
       SELECT CASE WHEN EXISTS (
-        SELECT 1 FROM vhcerti
+        SELECT 1 FROM vhcerti WITH (NOLOCK)
         WHERE xplaca = @xplaca AND istatcer = 'V' AND fhasta >= GETDATE()
       ) THEN 1 ELSE 0 END AS existsPlaca
     `);
@@ -817,7 +819,7 @@ export class EmissionsService {
     serialReq.input('xsercar', T.VarChar(60), xsercar);
     const serialResult = await serialReq.query(`
       SELECT CASE WHEN EXISTS (
-        SELECT 1 FROM vhcerti
+        SELECT 1 FROM vhcerti WITH (NOLOCK)
         WHERE xsercar = @xsercar AND istatcer = 'V' AND fhasta >= GETDATE()
       ) THEN 1 ELSE 0 END AS existsSerial
     `);
@@ -1288,13 +1290,16 @@ export class EmissionsService {
     upd.input('fmespol', T.TinyInt, fmes);
     // Texto y conversión en SQL: un parámetro Numeric(19) también pasa por number de JS y se redondea.
     upd.input('cpoliza', T.VarChar(20), cpoliza);
+    // vhcerti por cpoliza (su clave) y no solo por cnpoliza: sin índice por cnpoliza, el UPDATE recorría toda la
+    // tabla con bloqueos y esperaba a cualquier certificado sin confirmar de otro proceso (bloqueo 20-nov-2026).
     await upd.query(`
+      DECLARE @cpoliza_num NUMERIC(19, 0) = TRY_CONVERT(NUMERIC(19, 0), @cpoliza);
       UPDATE adpoliza SET cbeneficiario = @rif
       WHERE cnpoliza = @cnpoliza AND fanopol = @fanopol AND fmespol = @fmespol;
       UPDATE adrecibos SET cbeneficiario = @rif
       WHERE cnpoliza = @cnpoliza AND fanopol = @fanopol AND fmespol = @fmespol;
-      UPDATE vhofcert SET cbeneficiario = @rif WHERE cpoliza = TRY_CONVERT(NUMERIC(19, 0), @cpoliza);
-      UPDATE vhcerti SET cbeneficiario = @rif WHERE cnpoliza = @cnpoliza;
+      UPDATE vhofcert SET cbeneficiario = @rif WHERE cpoliza = @cpoliza_num;
+      UPDATE vhcerti SET cbeneficiario = @rif WHERE cpoliza = @cpoliza_num AND cnpoliza = @cnpoliza;
     `);
 
     this.logger.log(`applyBeneficiario OK cnpoliza=${cnpoliza} rif=${rif}`);
