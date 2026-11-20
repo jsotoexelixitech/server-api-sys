@@ -1,4 +1,5 @@
-import { Body, Controller, HttpCode, HttpStatus, Post } from '@nestjs/common';
+import { EmisionUnicaInterceptor } from '../../common/interceptors/emision-unica.interceptor';
+import { Body, Controller, HttpCode, HttpStatus, Post, UseInterceptors } from '@nestjs/common';
 import { ApiBody, ApiHeader, ApiOperation, ApiResponse, ApiSecurity, ApiTags } from '@nestjs/swagger';
 import { PersonasService } from './personas.service';
 import { GetPlanesPerDto } from './dto/get-planes-per.dto';
@@ -122,6 +123,7 @@ export class PersonasController {
 
   // ── POST /api/v1/personas/emision ─────────────────────────────────────────
 
+  @UseInterceptors(EmisionUnicaInterceptor)
   @Post('emision')
   @HttpCode(HttpStatus.OK)
   @NestProtected(NEST_AUTH_SCOPES.EMISSIONS_PERSON)
