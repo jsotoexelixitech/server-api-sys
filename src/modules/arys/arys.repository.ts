@@ -84,9 +84,12 @@ export class ArysRepository {
         v.xplaca,
         v.casegurado,
         m.cid
-      FROM adpoliza p
-      INNER JOIN vhcerti v ON v.cnpoliza = p.cnpoliza
-      LEFT JOIN maclient m ON m.cci_rif = v.casegurado
+      FROM adpoliza p WITH (NOLOCK)
+      -- Sin bloqueos y por cpoliza (vhcerti no tiene índice por cnpoliza): corre 1,5 s después de cada emisión RCV y,
+      -- leyendo con bloqueos toda vhcerti, una fila sin confirmar de otro proceso la dejaba esperando y las emisiones
+      -- siguientes hacían fila detrás (Sis2000 prod 20-nov-2026).
+      INNER JOIN vhcerti v WITH (NOLOCK) ON v.cpoliza = p.cpoliza AND v.cnpoliza = p.cnpoliza
+      LEFT JOIN maclient m WITH (NOLOCK) ON m.cci_rif = v.casegurado
       WHERE ${whereClause}
         AND v.casegurado IS NOT NULL
       ORDER BY p.fanopol DESC, p.fmespol DESC
@@ -218,11 +221,12 @@ export class ArysRepository {
         CAST(NULL AS VARCHAR(1)) AS xtransm,
         inm.mvalor,
         inm.npasajero
-      FROM adpoliza p
-      INNER JOIN vhcerti v ON v.cnpoliza = p.cnpoliza
+      FROM adpoliza p WITH (NOLOCK)
+      -- Sin bloqueos y por cpoliza: ver el comentario de la consulta de cliente (bloqueo 20-nov-2026).
+      INNER JOIN vhcerti v WITH (NOLOCK) ON v.cpoliza = p.cpoliza AND v.cnpoliza = p.cnpoliza
       OUTER APPLY (
         SELECT TOP 1 xmarca, xmodelo, xversion
-        FROM TMEMISION_AUTOMOVIL_RCV2
+        FROM TMEMISION_AUTOMOVIL_RCV2 WITH (NOLOCK)
         WHERE cnpoliza = p.cnpoliza
         ORDER BY fingreso DESC
       ) t
