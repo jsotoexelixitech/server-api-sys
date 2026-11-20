@@ -1,11 +1,4 @@
-import {
-  BadRequestException,
-  Injectable,
-  InternalServerErrorException,
-  Logger,
-  ServiceUnavailableException,
-} from '@nestjs/common';
-import { ConfigService } from '@nestjs/config';
+import { BadRequestException, Injectable, InternalServerErrorException, Logger } from '@nestjs/common';
 import { MssqlService } from '../../database/mssql.service';
 import { RegistrarSiniestroDto, TIPOS_PERDIDA } from './dto/registrar-siniestro.dto';
 import { MOTIVOS_RECHAZO, RechazarSiniestroDto } from './dto/rechazar-siniestro.dto';
@@ -25,23 +18,19 @@ export interface SiniestroRegistrado {
  * Alta de un siniestro de Automóvil en SIS2000 (`snsinies` es el registro, D14) mediante `sp_registra_siniestro_nexus`,
  * que envuelve `sp_genera_siniestro_nexus` con idempotencia, moneda de la póliza y tipo de pérdida.
  * El usuario de SIS2000 que queda en el siniestro es el de la sesión de quien declara (personal/productor, o la cédula del
- * cliente) y, si no llega, `SINIESTROS_CUSUARIO`. Nunca 999: es el de la sincronización con RMS.
+ * cliente). Es obligatorio: no hay usuario de servicio de respaldo. Nunca 999: es el de la sincronización con RMS.
  */
 @Injectable()
 export class SiniestrosRegistroService {
   private readonly logger = new Logger(SiniestrosRegistroService.name);
 
-  constructor(
-    private readonly db: MssqlService,
-    private readonly config: ConfigService,
-  ) {}
+  constructor(private readonly db: MssqlService) {}
 
-  /** Usuario de la sesión (o cédula del cliente) si llega; si no, el usuario de servicio configurado. */
-  private cusuario(delSolicitante?: number): number {
-    const n = delSolicitante ?? Number(this.config.get('SINIESTROS_CUSUARIO'));
-    if (!Number.isInteger(n) || n <= 0 || n === 999) {
-      this.logger.error('No hay usuario de Sis2000 válido: falta cusuario o SINIESTROS_CUSUARIO (o es 999, reservado a RMS).');
-      throw new ServiceUnavailableException('El registro de siniestros no está habilitado en este ambiente.');
+  /** Usuario de Sis2000 de quien hace la operación. El DTO ya lo exige; esto protege a quien llame al servicio directamente. */
+  private cusuario(delSolicitante: number | undefined): number {
+    const n = Number(delSolicitante);
+    if (delSolicitante == null || !Number.isInteger(n) || n <= 0 || n === 999) {
+      throw new BadRequestException('cusuario es obligatorio: usuario de Sis2000 de quien declara o rechaza (nunca 999).');
     }
     return n;
   }

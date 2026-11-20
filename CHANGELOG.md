@@ -7,6 +7,10 @@ Formato basado en [Keep a Changelog](https://keepachangelog.com/es/1.0.0/).
 
 ## [Unreleased]
 
+### Cambiado
+
+- **Siniestros**: `cusuario` es **obligatorio** en `POST /api/v1/client/siniestros` y `POST /api/v1/client/siniestros/rechazar` (400 si falta o es 999). Se elimina el respaldo `SINIESTROS_CUSUARIO`: todo siniestro queda con el usuario real de quien lo declara o rechaza. Antes, sin ninguno de los dos, respondía 503.
+
 ### Añadido
 
 - **`ClientModule`**: `GET /api/v1/client/siniestros/existentes?cnpoliza=&placa=&focurrencia=&soloAbiertos=` (scope `client:read`) — siniestros de Automóvil/RCV registrados en `snsinies` para una póliza y/o placa (placa desde `vhcerti`); por defecto solo abiertos (pendientes, `P`). Solo lectura, sin SP ni DDL.

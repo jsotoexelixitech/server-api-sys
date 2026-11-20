@@ -52,17 +52,11 @@ export class RegistrarSiniestroDto {
   @Min(1)
   ccobertura?: number;
 
-  @ApiPropertyOptional({
-    example: 15504158,
-    description:
-      'Usuario de Sis2000 que registra: el de la sesión (personal/productor) o la cédula del cliente que declara. ' +
-      'Si falta se usa SINIESTROS_CUSUARIO. Nunca 999 (reservado a RMS).',
-  })
-  @IsOptional()
-  @IsInt()
+  @ApiProperty({ example: 15504158, description: 'Usuario de Sis2000 que registra: el de la sesión (personal/productor) o la cédula del cliente. Obligatorio. Nunca 999 (reservado a RMS).' })
+  @IsInt({ message: 'cusuario es obligatorio y debe ser un número entero' })
   @Min(1)
   @NotEquals(999, { message: 'cusuario 999 está reservado a RMS' })
-  cusuario?: number;
+  cusuario: number;
 
   @ApiPropertyOptional({ example: 58 })
   @IsOptional()
